@@ -215,6 +215,13 @@ def get_latest_stock_counts() -> dict:
     return result
 
 
+def upsert_stock_count(data: dict) -> None:
+    """Insert หรือ update stock count ตาม product_id + count_date"""
+    db = get_supabase()
+    db.table("stock_counts").delete().eq("product_id", data["product_id"]).eq("count_date", data["count_date"]).execute()
+    db.table("stock_counts").insert(data).execute()
+
+
 def insert_stock_count(data: dict) -> None:
     get_supabase().table("stock_counts").insert(data).execute()
 
