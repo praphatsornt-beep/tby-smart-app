@@ -181,7 +181,7 @@ def get_all_transactions_df(customer_id: str = None) -> pd.DataFrame:
         outstanding_amount = float(t["total_amount"]) - total_paid
         outstanding_qty = t["qty"] - total_received
 
-        cleared = outstanding_amount <= 0.01 and outstanding_qty <= 0
+        cleared = outstanding_amount <= 0.01 and outstanding_qty <= 0 and t["bill_status"] == "เปิดบิลแล้ว"
         customer_name = (t.get("customers") or {}).get("name", t["customer_id"])
         rows.append({
             "id": tid,

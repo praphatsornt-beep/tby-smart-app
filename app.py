@@ -720,7 +720,7 @@ with tab5:
         show_df = all_df[display_cols_h].reset_index(drop=True)
 
         def _style_hist_row(row):
-            if row["ค้างจ่าย"] <= 0.01 and row["ค้างรับ"] <= 0:
+            if row["ค้างจ่าย"] <= 0.01 and row["ค้างรับ"] <= 0 and row["สถานะบิล"] == "เปิดบิลแล้ว":
                 return ["background-color:#0d2b1a"] * len(row)
             if row["ค้างรับ"] > 0 and row["สถานะบิล"] == "เปิดบิลแล้ว":
                 return ["background-color:#2b1e00"] * len(row)
