@@ -934,20 +934,27 @@ with tab6:
 
         if st.button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary", key="save_stock"):
             saved = 0
-            for i, row in edited_stock.iterrows():
+            errors = []
+            for pid, (_, row) in zip(product_ids, edited_stock.iterrows()):
                 new_sys  = int(row["คอม"]     or 0)
                 new_phys = int(row["นับจริง"] or 0)
-                db.insert_stock_count({
-                    "id":           str(uuid.uuid4()),
-                    "product_id":   product_ids[i],
-                    "count_date":   str(cnt_date),
-                    "qty_system":   new_sys,
-                    "qty_physical": new_phys,
-                    "notes":        "",
-                })
-                saved += 1
-            st.success(f"✅ บันทึก {saved} รายการแล้ว")
-            st.rerun()
+                try:
+                    db.insert_stock_count({
+                        "id":           str(uuid.uuid4()),
+                        "product_id":   pid,
+                        "count_date":   str(cnt_date),
+                        "qty_system":   new_sys,
+                        "qty_physical": new_phys,
+                        "notes":        "",
+                    })
+                    saved += 1
+                except Exception as e:
+                    errors.append(f"{row['สินค้า']}: {e}")
+            if errors:
+                st.error("❌ บันทึกไม่สำเร็จบางรายการ:\n" + "\n".join(errors))
+            if saved:
+                st.success(f"✅ บันทึก {saved} รายการแล้ว")
+                st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
