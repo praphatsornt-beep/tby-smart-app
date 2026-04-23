@@ -717,15 +717,24 @@ with tab5:
         display_cols_h = ["วันที่", "ลูกค้า", "สินค้า", "สั่ง", "รับแล้ว",
                           "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ",
                           "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
-        show_df = all_df[display_cols_h].copy()
+        show_df = all_df[display_cols_h].reset_index(drop=True)
+
+        def _style_hist_row(row):
+            if row["ค้างจ่าย"] <= 0.01 and row["ค้างรับ"] <= 0:
+                return ["background-color:#0d2b1a"] * len(row)
+            if row["ค้างรับ"] > 0 and row["สถานะบิล"] == "เปิดบิลแล้ว":
+                return ["background-color:#2b1e00"] * len(row)
+            return [""] * len(row)
 
         st.dataframe(
-            show_df.style.format({
-                "ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}",
-            }).map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"]),
+            show_df.style
+                .format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
+                .apply(_style_hist_row, axis=1)
+                .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"]),
             use_container_width=True,
             hide_index=True,
         )
+        st.caption("🟢 เคลียร์แล้ว (จ่ายและรับครบ)  |  🟠 มีของฝาก (เปิดบิลแล้วยังไม่รับของ)")
 
         st.divider()
         with st.expander("✏️ แก้ไขรายการ"):
