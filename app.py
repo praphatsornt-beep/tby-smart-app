@@ -892,10 +892,8 @@ with tab6:
         billed_not_rcv  = db.get_billed_not_received_qty_by_product()
 
         # เก็บ product_ids แยก เพื่อใช้ตอน save (ไม่พึ่ง hidden column)
-        product_ids  = [p["id"] for p in products]
-        stock_rows   = []
-        unbilled_by_pid   = []
-        billedwait_by_pid = []
+        product_ids = [p["id"] for p in products]
+        stock_rows  = []
 
         for p in products:
             pid             = p["id"]
@@ -904,15 +902,15 @@ with tab6:
             qty_physical    = int(count.get("qty_physical", 0) or 0)
             qty_unbilled    = unbilled_qty.get(pid, 0)
             qty_billed_wait = billed_not_rcv.get(pid, 0)
-            unbilled_by_pid.append(qty_unbilled)
-            billedwait_by_pid.append(qty_billed_wait)
+            diff = qty_system - qty_physical + qty_billed_wait - qty_unbilled
             stock_rows.append({
-                "สินค้า":              p["name"],
-                "คอม":                 qty_system,
-                "นับจริง":             qty_physical,
-                "เบิกไปไม่มีบิล":      qty_unbilled,
-                "เปิดบิลยังไม่รับของ": qty_billed_wait,
-                "วันนับล่าสุด":        count.get("count_date", "—"),
+                "สินค้า":   p["name"],
+                "คอม":      qty_system,
+                "นับจริง":  qty_physical,
+                "เบิก":     qty_unbilled,
+                "ฝาก":      qty_billed_wait,
+                "ส่วนต่าง": diff,
+                "สถานะ":   "🔴 เกิน" if diff > 0 else ("🟡 ขาด" if diff < 0 else "✅ ตรง"),
             })
 
         stock_df = pd.DataFrame(stock_rows)
@@ -922,31 +920,17 @@ with tab6:
             stock_df,
             use_container_width=True,
             hide_index=True,
-            disabled=["สินค้า", "เบิกไปไม่มีบิล", "เปิดบิลยังไม่รับของ", "วันนับล่าสุด"],
+            disabled=["สินค้า", "เบิก", "ฝาก", "ส่วนต่าง", "สถานะ"],
             column_config={
-                "คอม":                 st.column_config.NumberColumn("คอม", min_value=0, step=1, format="%d"),
-                "นับจริง":             st.column_config.NumberColumn("นับจริง", min_value=0, step=1, format="%d"),
-                "เบิกไปไม่มีบิล":      st.column_config.NumberColumn("เบิกไปไม่มีบิล", format="%d"),
-                "เปิดบิลยังไม่รับของ": st.column_config.NumberColumn("เปิดบิลยังไม่รับของ", format="%d"),
+                "คอม":      st.column_config.NumberColumn("คอม",     min_value=0, step=1, format="%d"),
+                "นับจริง":  st.column_config.NumberColumn("นับจริง", min_value=0, step=1, format="%d"),
+                "เบิก":     st.column_config.NumberColumn("เบิก(ไม่มีบิล)",    format="%d"),
+                "ฝาก":      st.column_config.NumberColumn("ฝาก(รอรับของ)", format="%d"),
+                "ส่วนต่าง": st.column_config.NumberColumn("ส่วนต่าง", format="%d"),
             },
             key="stock_editor",
         )
-
-        # คำนวณ ส่วนต่าง จากค่าที่กรอกใน editor แบบ live
-        diff_rows = []
-        for i, row in edited_stock.iterrows():
-            sys_v   = int(row["คอม"]     or 0)
-            phys_v  = int(row["นับจริง"] or 0)
-            unbill  = unbilled_by_pid[i]
-            bwait   = billedwait_by_pid[i]
-            diff    = sys_v - phys_v + bwait - unbill
-            diff_rows.append({
-                "สินค้า":   row["สินค้า"],
-                "ส่วนต่าง": diff,
-                "สถานะ":   "🔴 เกิน" if diff > 0 else ("🟡 ขาด" if diff < 0 else "✅ ตรง"),
-            })
-        st.dataframe(pd.DataFrame(diff_rows), use_container_width=True, hide_index=True)
-        st.caption("ส่วนต่าง = คอม − นับจริง + เปิดบิลยังไม่รับของ − เบิกไปไม่มีบิล")
+        st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก")
 
         if st.button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary", key="save_stock"):
             saved = 0
