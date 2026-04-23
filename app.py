@@ -930,22 +930,7 @@ with tab6:
             },
             key="stock_editor",
         )
-
-        # ส่วนต่าง live จาก edited values
-        diff_data = []
-        for i, row in edited_stock.iterrows():
-            sys_v  = int(row["คอม"]    or 0)
-            phys_v = int(row["นับจริง"] or 0)
-            unbill = int(row["เบิก"]   or 0)
-            bwait  = int(row["ฝาก"]    or 0)
-            diff   = sys_v - phys_v + bwait - unbill
-            diff_data.append({
-                "สินค้า":   row["สินค้า"],
-                "ส่วนต่าง": diff,
-                "สถานะ":   "🔴 เกิน" if diff > 0 else ("🟡 ขาด" if diff < 0 else "✅ ตรง"),
-            })
-        st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก")
-        st.dataframe(pd.DataFrame(diff_data), use_container_width=True, hide_index=True)
+        st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก  |  ส่วนต่างอัปเดตหลังกด บันทึก")
 
         if st.button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary", key="save_stock"):
             saved = 0
