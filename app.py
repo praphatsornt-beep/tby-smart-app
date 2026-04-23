@@ -38,13 +38,13 @@ thead tr th {
 
 st.title("🛍️ TBY SMART APP")
 
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
+tab1, tab2, tab3, tab5, tab6, tab4 = st.tabs([
     "📋 บันทึกรายการ",
     "💰 รับของ / จ่ายเงิน",
     "📊 ยอดค้าง",
-    "⚙️ จัดการข้อมูล",
     "🗂️ ประวัติทั้งหมด",
     "📦 สต๊อก",
+    "⚙️ จัดการข้อมูล",
 ])
 
 
