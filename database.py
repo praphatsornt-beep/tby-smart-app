@@ -257,6 +257,25 @@ def get_deposit_qty_by_product() -> dict:
     return dict(result)
 
 
+def get_billed_not_received_qty_by_product() -> dict:
+    """qty ที่เปิดบิลแล้วแต่ลูกค้ายังไม่รับของ (ของยังอยู่ที่สาขา)"""
+    db = get_supabase()
+    txns = db.table("transactions").select("id, product_id, qty, initial_qty_received").eq("bill_status", "เปิดบิลแล้ว").execute().data
+    if not txns:
+        return {}
+    txn_ids = [t["id"] for t in txns]
+    events = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", txn_ids).execute().data
+    events_by_txn = defaultdict(int)
+    for e in events:
+        events_by_txn[e["transaction_id"]] += e["qty_received"]
+    result = defaultdict(int)
+    for t in txns:
+        outstanding = t["qty"] - (t["initial_qty_received"] + events_by_txn[t["id"]])
+        if outstanding > 0:
+            result[t["product_id"]] += outstanding
+    return dict(result)
+
+
 def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
     """รายการที่ยังค้างชำระหรือค้างรับของ"""
     db = get_supabase()
