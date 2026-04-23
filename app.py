@@ -68,28 +68,34 @@ with tab1:
         with st.form("new_transaction", clear_on_submit=True):
             col1, col2, col3 = st.columns([2, 2, 1])
             with col1:
-                customer_label = st.selectbox("ลูกค้า", list(customer_map.keys()))
+                customer_label = st.selectbox(
+                    "ลูกค้า",
+                    ["— เลือกลูกค้า —"] + list(customer_map.keys()),
+                )
             with col2:
-                product_label = st.selectbox("สินค้า", list(product_map.keys()))
+                product_label = st.selectbox(
+                    "สินค้า",
+                    ["— เลือกสินค้า —"] + list(product_map.keys()),
+                )
             with col3:
                 qty = st.number_input("จำนวน", min_value=1, value=1, step=1)
 
-            selected_product = product_map[product_label]
-            total = float(selected_product["price"]) * qty
-            total_pts = float(selected_product["points_per_unit"]) * qty
-
-            c1, c2, c3 = st.columns(3)
-            c1.metric("ราคา/ชิ้น", f"{float(selected_product['price']):,.0f} บาท")
-            c2.metric("ยอดรวม", f"{total:,.0f} บาท")
-            c3.metric("PV รวม", f"{total_pts:.0f}")
+            if product_label != "— เลือกสินค้า —":
+                selected_product = product_map[product_label]
+                total = float(selected_product["price"]) * qty
+                total_pts = float(selected_product["points_per_unit"]) * qty
+                c1, c2, c3 = st.columns(3)
+                c1.metric("ราคา/ชิ้น", f"{float(selected_product['price']):,.0f} บาท")
+                c2.metric("ยอดรวม", f"{total:,.0f} บาท")
+                c3.metric("PV รวม", f"{total_pts:.0f}")
 
             sc1, sc2, sc3 = st.columns(3)
             with sc1:
-                bill_status = st.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], horizontal=True)
+                bill_status = st.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True)
             with sc2:
-                pay_status = st.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"], horizontal=True)
+                pay_status = st.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"], index=None, horizontal=True)
             with sc3:
-                receipt_status = st.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"], horizontal=True)
+                receipt_status = st.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"], index=None, horizontal=True)
 
             col4, col5 = st.columns([3, 1])
             with col4:
@@ -100,30 +106,44 @@ with tab1:
             submitted = st.form_submit_button("💾 บันทึก", use_container_width=True, type="primary")
 
             if submitted:
-                receive_now = receipt_status == "รับของแล้ว"
-                initial_qty_received = int(qty) if receive_now else 0
-                if bill_status == "ยังไม่เปิดบิล" and receive_now:
-                    txn_type = "เบิกของก่อน"
+                errors = []
+                if customer_label == "— เลือกลูกค้า —":
+                    errors.append("กรุณาเลือกลูกค้า")
+                if product_label == "— เลือกสินค้า —":
+                    errors.append("กรุณาเลือกสินค้า")
+                if bill_status is None:
+                    errors.append("กรุณาเลือกสถานะบิล")
+                if pay_status is None:
+                    errors.append("กรุณาเลือกสถานะจ่าย")
+                if receipt_status is None:
+                    errors.append("กรุณาเลือกสถานะของ")
+                if errors:
+                    for e in errors:
+                        st.error(e)
                 else:
-                    txn_type = "ขายปกติ"
-                customer = customer_map[customer_label]
-                db.insert_transaction({
-                    "id": str(uuid.uuid4()),
-                    "date": str(txn_date),
-                    "customer_id": customer["id"],
-                    "product_id": selected_product["id"],
-                    "product_name": selected_product["name"],
-                    "qty": int(qty),
-                    "price_per_unit": float(selected_product["price"]),
-                    "points_per_unit": float(selected_product["points_per_unit"]),
-                    "total_amount": total,
-                    "initial_qty_received": initial_qty_received,
-                    "transaction_type": txn_type,
-                    "bill_status": bill_status,
-                    "pay_status": pay_status,
-                    "notes": notes,
-                })
-                st.success(f"✅ บันทึกแล้ว: {selected_product['name']} × {qty} ชิ้น = {total:,.0f} บาท")
+                    selected_product = product_map[product_label]
+                    total = float(selected_product["price"]) * qty
+                    receive_now = receipt_status == "รับของแล้ว"
+                    initial_qty_received = int(qty) if receive_now else 0
+                    txn_type = "เบิกของก่อน" if bill_status == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ"
+                    customer = customer_map[customer_label]
+                    db.insert_transaction({
+                        "id": str(uuid.uuid4()),
+                        "date": str(txn_date),
+                        "customer_id": customer["id"],
+                        "product_id": selected_product["id"],
+                        "product_name": selected_product["name"],
+                        "qty": int(qty),
+                        "price_per_unit": float(selected_product["price"]),
+                        "points_per_unit": float(selected_product["points_per_unit"]),
+                        "total_amount": total,
+                        "initial_qty_received": initial_qty_received,
+                        "transaction_type": txn_type,
+                        "bill_status": bill_status,
+                        "pay_status": pay_status,
+                        "notes": notes,
+                    })
+                    st.success(f"✅ บันทึกแล้ว: {selected_product['name']} × {qty} ชิ้น = {total:,.0f} บาท")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -397,15 +417,51 @@ with tab4:
 
     with sub1:
         products = db.get_products()
+
+        prod_cols = ["id", "name", "price", "points_per_unit", "bv_per_unit", "weight_grams"]
+        col_rename = {
+            "id": "รหัส", "name": "ชื่อสินค้า", "price": "ราคา (บาท)",
+            "points_per_unit": "PV/หน่วย", "bv_per_unit": "BV/หน่วย", "weight_grams": "น้ำหนัก (g)",
+        }
         if products:
-            st.dataframe(
-                pd.DataFrame(products)[["id", "name", "price", "points_per_unit", "bv_per_unit", "weight_grams"]].rename(columns={
-                    "id": "รหัส", "name": "ชื่อสินค้า", "price": "ราคา",
-                    "points_per_unit": "PV", "bv_per_unit": "BV", "weight_grams": "น้ำหนัก (g)",
-                }),
-                use_container_width=True,
-                hide_index=True,
-            )
+            prod_df = pd.DataFrame(products)[prod_cols].rename(columns=col_rename)
+        else:
+            prod_df = pd.DataFrame(columns=list(col_rename.values()))
+
+        st.write("**แก้ไขหรือเพิ่มสินค้า** — แก้ในตารางได้โดยตรง กด `+` ที่มุมล่างขวาเพื่อเพิ่มแถวใหม่")
+        edited_prod_df = st.data_editor(
+            prod_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="prod_editor",
+            column_config={
+                "รหัส":        st.column_config.TextColumn("รหัส", required=True),
+                "ชื่อสินค้า":  st.column_config.TextColumn("ชื่อสินค้า", required=True),
+                "ราคา (บาท)":  st.column_config.NumberColumn("ราคา (บาท)", min_value=0, step=10.0, format="%.2f"),
+                "PV/หน่วย":    st.column_config.NumberColumn("PV/หน่วย",   min_value=0, step=1.0,  format="%.2f"),
+                "BV/หน่วย":    st.column_config.NumberColumn("BV/หน่วย",   min_value=0, step=1.0,  format="%.2f"),
+                "น้ำหนัก (g)": st.column_config.NumberColumn("น้ำหนัก (g)", min_value=0, step=10.0, format="%.0f"),
+            },
+        )
+        if st.button("💾 บันทึกทั้งหมด", key="save_prod_editor", use_container_width=True, type="primary"):
+            valid = edited_prod_df.dropna(subset=["รหัส", "ชื่อสินค้า"])
+            valid = valid[valid["รหัส"].astype(str).str.strip() != ""]
+            if valid.empty:
+                st.error("ไม่มีข้อมูลที่จะบันทึก")
+            else:
+                for _, row in valid.iterrows():
+                    db.upsert_product({
+                        "id":              str(row["รหัส"]).strip(),
+                        "name":            str(row["ชื่อสินค้า"]).strip(),
+                        "price":           float(row["ราคา (บาท)"]  or 0),
+                        "points_per_unit": float(row["PV/หน่วย"]    or 0),
+                        "bv_per_unit":     float(row["BV/หน่วย"]    or 0),
+                        "weight_grams":    float(row["น้ำหนัก (g)"] or 0),
+                    })
+                st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
+                st.rerun()
+
+        if products:
             with st.expander("🗑️ ลบสินค้า"):
                 prod_opts = {f"{p['id']} — {p['name']}": p["id"] for p in products}
                 pc1, pc2, pc3 = st.columns([4, 1, 1])
@@ -423,72 +479,6 @@ with tab4:
                             st.rerun()
                         except Exception:
                             st.error("❌ ลบไม่ได้ — สินค้านี้มีรายการขายอยู่")
-
-        st.write("**เพิ่มสินค้าหลายรายการพร้อมกัน**")
-        bulk_template = pd.DataFrame({
-            "รหัส": pd.Series(dtype=str),
-            "ชื่อสินค้า": pd.Series(dtype=str),
-            "ราคา (บาท)": pd.Series(dtype=float),
-            "PV/หน่วย": pd.Series(dtype=float),
-            "BV/หน่วย": pd.Series(dtype=float),
-            "น้ำหนัก (g)": pd.Series(dtype=float),
-        })
-        bulk_df = st.data_editor(
-            bulk_template,
-            num_rows="dynamic",
-            use_container_width=True,
-            key="bulk_products",
-            column_config={
-                "รหัส":       st.column_config.TextColumn("รหัส", required=True),
-                "ชื่อสินค้า": st.column_config.TextColumn("ชื่อสินค้า", required=True),
-                "ราคา (บาท)": st.column_config.NumberColumn("ราคา (บาท)", min_value=0, step=10.0),
-                "PV/หน่วย":   st.column_config.NumberColumn("PV/หน่วย",  min_value=0, step=1.0),
-                "BV/หน่วย":   st.column_config.NumberColumn("BV/หน่วย",  min_value=0, step=1.0),
-                "น้ำหนัก (g)":st.column_config.NumberColumn("น้ำหนัก (g)", min_value=0, step=10.0),
-            },
-        )
-        if st.button("💾 บันทึกทั้งหมด", key="bulk_save_prod", use_container_width=True, type="primary"):
-            valid = bulk_df.dropna(subset=["รหัส", "ชื่อสินค้า"])
-            valid = valid[valid["รหัส"].astype(str).str.strip() != ""]
-            if valid.empty:
-                st.error("กรุณากรอกรหัสและชื่อสินค้าอย่างน้อย 1 แถว")
-            else:
-                for _, row in valid.iterrows():
-                    db.upsert_product({
-                        "id":             str(row["รหัส"]).strip(),
-                        "name":           str(row["ชื่อสินค้า"]).strip(),
-                        "price":          float(row["ราคา (บาท)"] or 0),
-                        "points_per_unit":float(row["PV/หน่วย"]   or 0),
-                        "bv_per_unit":    float(row["BV/หน่วย"]   or 0),
-                        "weight_grams":   float(row["น้ำหนัก (g)"] or 0),
-                    })
-                st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
-                st.rerun()
-
-        st.divider()
-        st.write("**เพิ่ม / แก้ไขสินค้า (ทีละรายการ)**")
-        with st.form("add_product", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            p_name = c1.text_input("ชื่อสินค้า")
-            next_pid = f"P-{len(products)+1:03d}"
-            p_id = c2.text_input("รหัสสินค้า (แก้ไขได้)", value=next_pid)
-            c3, c4, c5, c6 = st.columns(4)
-            p_price = c3.number_input("ราคา (บาท)", min_value=0.0, step=10.0)
-            p_points = c4.number_input("PV/หน่วย", min_value=0.0, step=1.0)
-            p_bv = c5.number_input("BV/หน่วย", min_value=0.0, step=1.0)
-            p_weight = c6.number_input("น้ำหนัก (กรัม)", min_value=0.0, step=10.0)
-
-            if st.form_submit_button("💾 บันทึก", use_container_width=True):
-                if p_id.strip() and p_name.strip():
-                    db.upsert_product({
-                        "id": p_id.strip(), "name": p_name.strip(),
-                        "price": p_price, "points_per_unit": p_points,
-                        "bv_per_unit": p_bv, "weight_grams": p_weight,
-                    })
-                    st.success(f"✅ บันทึก {p_name} แล้ว")
-                    st.rerun()
-                else:
-                    st.error("กรุณากรอก รหัส และ ชื่อสินค้า")
 
     with sub2:
         customers = db.get_customers()
