@@ -633,11 +633,40 @@ with tab4:
     with sub2:
         customers = db.get_customers()
         if customers:
-            st.dataframe(
-                pd.DataFrame(customers)[["id", "name", "phone"]],
-                use_container_width=True,
-                hide_index=True,
+            cust_df = pd.DataFrame(customers)[["id", "name", "phone"]].rename(
+                columns={"id": "รหัส", "name": "ชื่อลูกค้า", "phone": "เบอร์โทร"}
             )
+        else:
+            cust_df = pd.DataFrame(columns=["รหัส", "ชื่อลูกค้า", "เบอร์โทร"])
+
+        st.write("**แก้ไขหรือเพิ่มลูกค้า** — แก้ในตารางได้โดยตรง กด `+` ที่มุมล่างขวาเพื่อเพิ่มแถวใหม่")
+        edited_cust_df = st.data_editor(
+            cust_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="cust_editor",
+            column_config={
+                "รหัส":      st.column_config.TextColumn("รหัส", required=True),
+                "ชื่อลูกค้า": st.column_config.TextColumn("ชื่อลูกค้า", required=True),
+                "เบอร์โทร":  st.column_config.TextColumn("เบอร์โทร"),
+            },
+        )
+        if st.button("💾 บันทึกทั้งหมด", key="save_cust_editor", use_container_width=True, type="primary"):
+            valid = edited_cust_df.dropna(subset=["รหัส", "ชื่อลูกค้า"])
+            valid = valid[valid["รหัส"].astype(str).str.strip() != ""]
+            if valid.empty:
+                st.error("ไม่มีข้อมูลที่จะบันทึก")
+            else:
+                for _, row in valid.iterrows():
+                    db.upsert_customer({
+                        "id":    str(row["รหัส"]).strip(),
+                        "name":  str(row["ชื่อลูกค้า"]).strip(),
+                        "phone": str(row["เบอร์โทร"]).strip() if pd.notna(row["เบอร์โทร"]) else "",
+                    })
+                st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
+                st.rerun()
+
+        if customers:
             with st.expander("🗑️ ลบลูกค้า"):
                 cust_opts = {f"{c['id']} — {c['name']}": c["id"] for c in customers}
                 cc1, cc2, cc3 = st.columns([4, 1, 1])
@@ -655,24 +684,6 @@ with tab4:
                             st.rerun()
                         except Exception:
                             st.error("❌ ลบไม่ได้ — ลูกค้านี้มีรายการขายอยู่")
-
-        st.write("**เพิ่ม / แก้ไขลูกค้า**")
-        with st.form("add_customer", clear_on_submit=True):
-            c1, c2 = st.columns(2)
-            c_name = c1.text_input("ชื่อลูกค้า")
-            next_cid = f"C-{len(customers)+1:03d}"
-            c_id = c2.text_input("รหัสลูกค้า (แก้ไขได้)", value=next_cid)
-            c_phone = st.text_input("เบอร์โทร")
-
-            if st.form_submit_button("💾 บันทึก", use_container_width=True):
-                if c_id.strip() and c_name.strip():
-                    db.upsert_customer({
-                        "id": c_id.strip(), "name": c_name.strip(), "phone": c_phone.strip(),
-                    })
-                    st.success(f"✅ บันทึก {c_name} แล้ว")
-                    st.rerun()
-                else:
-                    st.error("กรุณากรอก รหัส และ ชื่อลูกค้า")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
