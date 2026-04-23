@@ -870,53 +870,68 @@ with tab6:
         unbilled_qty    = db.get_unbilled_received_qty_by_product()
         billed_not_rcv  = db.get_billed_not_received_qty_by_product()
 
-        rows = []
+        # Build table — คอม/นับจริง แก้ได้, คอลัมน์คำนวณ read-only
+        stock_rows = []
         for p in products:
-            pid              = p["id"]
-            count            = latest_counts.get(pid, {})
-            qty_system       = int(count.get("qty_system",   0) or 0)
-            qty_physical     = int(count.get("qty_physical", 0) or 0)
-            qty_unbilled     = unbilled_qty.get(pid, 0)
-            qty_billed_wait  = billed_not_rcv.get(pid, 0)
+            pid             = p["id"]
+            count           = latest_counts.get(pid, {})
+            qty_system      = int(count.get("qty_system",   0) or 0)
+            qty_physical    = int(count.get("qty_physical", 0) or 0)
+            qty_unbilled    = unbilled_qty.get(pid, 0)
+            qty_billed_wait = billed_not_rcv.get(pid, 0)
             diff = qty_system - qty_physical + qty_billed_wait - qty_unbilled
-            if diff > 0:
-                status = "🔴 ของเกิน"
-            elif diff < 0:
-                status = "🟡 ของขาด"
-            else:
-                status = "✅ ตรง"
-            rows.append({
+            stock_rows.append({
+                "_pid":                pid,
                 "สินค้า":              p["name"],
                 "คอม":                 qty_system,
                 "นับจริง":             qty_physical,
                 "เบิกไปไม่มีบิล":      qty_unbilled,
                 "เปิดบิลยังไม่รับของ": qty_billed_wait,
                 "ส่วนต่าง":            diff,
-                "สถานะ":               status,
+                "สถานะ":               "🔴 เกิน" if diff > 0 else ("🟡 ขาด" if diff < 0 else "✅ ตรง"),
                 "วันนับล่าสุด":        count.get("count_date", "—"),
             })
 
-        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        stock_df = pd.DataFrame(stock_rows)
+        original_df = stock_df[["_pid", "คอม", "นับจริง"]].copy()
+
+        cnt_date = st.date_input("วันที่นับ", value=date.today(), key="stock_cnt_date")
+
+        edited_stock = st.data_editor(
+            stock_df,
+            use_container_width=True,
+            hide_index=True,
+            disabled=["สินค้า", "เบิกไปไม่มีบิล", "เปิดบิลยังไม่รับของ", "ส่วนต่าง", "สถานะ", "วันนับล่าสุด"],
+            column_config={
+                "_pid":                None,
+                "คอม":                 st.column_config.NumberColumn("คอม", min_value=0, step=1, format="%d"),
+                "นับจริง":             st.column_config.NumberColumn("นับจริง", min_value=0, step=1, format="%d"),
+                "เบิกไปไม่มีบิล":      st.column_config.NumberColumn("เบิกไปไม่มีบิล", format="%d"),
+                "เปิดบิลยังไม่รับของ": st.column_config.NumberColumn("เปิดบิลยังไม่รับของ", format="%d"),
+                "ส่วนต่าง":            st.column_config.NumberColumn("ส่วนต่าง", format="%d"),
+            },
+            key="stock_editor",
+        )
         st.caption("ส่วนต่าง = คอม − นับจริง + เปิดบิลยังไม่รับของ − เบิกไปไม่มีบิล")
 
-        st.divider()
-        st.write("**📝 บันทึกการนับสต๊อก**")
-        prod_opts = {p["name"]: p["id"] for p in products}
-        with st.form("stock_count_form", clear_on_submit=True):
-            sc1, sc2, sc3, sc4 = st.columns([3, 2, 2, 1])
-            sel_prod  = sc1.selectbox("สินค้า", list(prod_opts.keys()))
-            qty_sys   = sc2.number_input("คอม (สต๊อกระบบ)", min_value=0, step=1)
-            qty_phys  = sc3.number_input("นับจริง", min_value=0, step=1)
-            cnt_date  = sc4.date_input("วันที่", value=date.today())
-            cnt_notes = st.text_input("หมายเหตุ")
-            if st.form_submit_button("💾 บันทึก", use_container_width=True, type="primary"):
-                db.insert_stock_count({
-                    "id": str(uuid.uuid4()),
-                    "product_id": prod_opts[sel_prod],
-                    "count_date": str(cnt_date),
-                    "qty_system": int(qty_sys),
-                    "qty_physical": int(qty_phys),
-                    "notes": cnt_notes,
-                })
-                st.success(f"✅ บันทึกการนับ {sel_prod} แล้ว")
+        if st.button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary", key="save_stock"):
+            saved = 0
+            for i, row in edited_stock.iterrows():
+                orig = original_df.iloc[i]
+                new_sys  = int(row["คอม"]     or 0)
+                new_phys = int(row["นับจริง"] or 0)
+                if new_sys != int(orig["คอม"]) or new_phys != int(orig["นับจริง"]):
+                    db.insert_stock_count({
+                        "id":           str(uuid.uuid4()),
+                        "product_id":   row["_pid"],
+                        "count_date":   str(cnt_date),
+                        "qty_system":   new_sys,
+                        "qty_physical": new_phys,
+                        "notes":        "",
+                    })
+                    saved += 1
+            if saved:
+                st.success(f"✅ บันทึก {saved} รายการแล้ว")
                 st.rerun()
+            else:
+                st.info("ไม่มีข้อมูลที่เปลี่ยนแปลง")
