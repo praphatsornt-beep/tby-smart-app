@@ -38,12 +38,13 @@ thead tr th {
 
 st.title("🛍️ TBY SMART APP")
 
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "📋 บันทึกรายการ",
     "💰 รับของ / จ่ายเงิน",
     "📊 ยอดค้าง",
     "⚙️ จัดการข้อมูล",
     "🗂️ ประวัติทั้งหมด",
+    "📦 สต๊อก",
 ])
 
 
@@ -705,3 +706,124 @@ with tab5:
                     db.delete_transaction(tid)
                 st.success(f"✅ ลบ {len(cleared_ids)} รายการแล้ว")
                 st.rerun()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tab 6: สต๊อก
+# ─────────────────────────────────────────────────────────────────────────────
+with tab6:
+    st.subheader("สรุปสต๊อก")
+
+    products = db.get_products()
+    if not products:
+        st.warning("⚠️ ยังไม่มีข้อมูลสินค้า")
+    else:
+        latest_counts    = db.get_latest_stock_counts()
+        unbilled_qty     = db.get_unbilled_received_qty_by_product()
+        deposited_qty    = db.get_deposit_qty_by_product()
+
+        rows = []
+        for p in products:
+            pid          = p["id"]
+            count        = latest_counts.get(pid, {})
+            qty_system   = int(count.get("qty_system",   0) or 0)
+            qty_physical = int(count.get("qty_physical", 0) or 0)
+            qty_unbilled = unbilled_qty.get(pid, 0)
+            qty_deposit  = deposited_qty.get(pid, 0)
+            diff = qty_system - qty_physical + qty_deposit - qty_unbilled
+            if diff > 0:
+                status = "🔴 ของเกิน"
+            elif diff < 0:
+                status = "🟡 ของขาด"
+            else:
+                status = "✅ ตรง"
+            rows.append({
+                "สินค้า":           p["name"],
+                "คอม":              qty_system,
+                "นับจริง":          qty_physical,
+                "เบิกไปไม่มีบิล":   qty_unbilled,
+                "ของฝากไม่มีคะแนน": qty_deposit,
+                "ส่วนต่าง":         diff,
+                "สถานะ":            status,
+                "วันนับล่าสุด":     count.get("count_date", "—"),
+            })
+
+        st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+        st.divider()
+        s1, s2 = st.tabs(["📝 บันทึกการนับสต๊อก", "📥 ของฝากไม่มีคะแนน"])
+
+        with s1:
+            prod_opts = {p["name"]: p["id"] for p in products}
+            with st.form("stock_count_form", clear_on_submit=True):
+                sc1, sc2, sc3, sc4 = st.columns([3, 2, 2, 1])
+                sel_prod  = sc1.selectbox("สินค้า", list(prod_opts.keys()))
+                qty_sys   = sc2.number_input("คอม (สต๊อกระบบ)", min_value=0, step=1)
+                qty_phys  = sc3.number_input("นับจริง", min_value=0, step=1)
+                cnt_date  = sc4.date_input("วันที่", value=date.today())
+                cnt_notes = st.text_input("หมายเหตุ")
+                if st.form_submit_button("💾 บันทึก", use_container_width=True, type="primary"):
+                    db.insert_stock_count({
+                        "id": str(uuid.uuid4()),
+                        "product_id": prod_opts[sel_prod],
+                        "count_date": str(cnt_date),
+                        "qty_system": int(qty_sys),
+                        "qty_physical": int(qty_phys),
+                        "notes": cnt_notes,
+                    })
+                    st.success(f"✅ บันทึกการนับ {sel_prod} แล้ว")
+                    st.rerun()
+
+        with s2:
+            deposits = db.get_stock_deposits()
+            if deposits:
+                dep_rows = [{
+                    "id":       d["id"],
+                    "สินค้า":   (d.get("products") or {}).get("name", d["product_id"]),
+                    "ลูกค้า":   d["customer_name"],
+                    "จำนวน":    d["qty"],
+                    "วันที่":   d["deposit_date"],
+                    "หมายเหตุ": d.get("notes", "") or "",
+                } for d in deposits]
+                st.dataframe(pd.DataFrame(dep_rows).drop(columns=["id"]),
+                             use_container_width=True, hide_index=True)
+
+                dep_opts = {
+                    f"{r['สินค้า']} — {r['ลูกค้า']} ×{r['จำนวน']}": r["id"]
+                    for r in dep_rows
+                }
+                dc1, dc2, dc3 = st.columns([4, 1, 1])
+                sel_dep     = dc1.selectbox("เลือกรายการที่คืนแล้ว", list(dep_opts.keys()), key="dep_ret_sel")
+                with dc2:
+                    st.write("")
+                    confirm_ret = st.checkbox("ยืนยัน", key="dep_ret_chk")
+                with dc3:
+                    st.write("")
+                    if st.button("✅ คืนแล้ว", key="dep_ret_btn", disabled=not confirm_ret):
+                        db.return_stock_deposit(dep_opts[sel_dep])
+                        st.rerun()
+                st.divider()
+
+            prod_opts2 = {p["name"]: p["id"] for p in products}
+            with st.form("add_deposit_form", clear_on_submit=True):
+                st.write("**เพิ่มของฝาก**")
+                da1, da2, da3, da4 = st.columns([3, 2, 1, 1])
+                dep_prod = da1.selectbox("สินค้า", list(prod_opts2.keys()), key="dep_prod_sel")
+                dep_cust = da2.text_input("ชื่อลูกค้า")
+                dep_qty  = da3.number_input("จำนวน", min_value=1, step=1)
+                dep_date = da4.date_input("วันที่", value=date.today(), key="dep_date_inp")
+                dep_notes = st.text_input("หมายเหตุ", key="dep_notes_inp")
+                if st.form_submit_button("💾 บันทึก", use_container_width=True, type="primary"):
+                    if dep_cust.strip():
+                        db.insert_stock_deposit({
+                            "id": str(uuid.uuid4()),
+                            "product_id": prod_opts2[dep_prod],
+                            "customer_name": dep_cust.strip(),
+                            "qty": int(dep_qty),
+                            "deposit_date": str(dep_date),
+                            "notes": dep_notes,
+                        })
+                        st.success("✅ บันทึกของฝากแล้ว")
+                        st.rerun()
+                    else:
+                        st.error("กรุณากรอกชื่อลูกค้า")

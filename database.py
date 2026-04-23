@@ -203,6 +203,60 @@ def get_all_transactions_df(customer_id: str = None) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+# ─── Stock ───────────────────────────────────────────────────────────────────
+
+def get_latest_stock_counts() -> dict:
+    rows = get_supabase().table("stock_counts").select("*").order("count_date", desc=True).execute().data
+    result = {}
+    for row in rows:
+        pid = row["product_id"]
+        if pid not in result:
+            result[pid] = row
+    return result
+
+
+def insert_stock_count(data: dict) -> None:
+    get_supabase().table("stock_counts").insert(data).execute()
+
+
+def get_stock_deposits() -> list[dict]:
+    return get_supabase().table("stock_deposits").select("*, products(name)").eq("is_returned", False).execute().data
+
+
+def insert_stock_deposit(data: dict) -> None:
+    get_supabase().table("stock_deposits").insert(data).execute()
+
+
+def return_stock_deposit(deposit_id: str) -> None:
+    get_supabase().table("stock_deposits").update({"is_returned": True}).eq("id", deposit_id).execute()
+
+
+def get_unbilled_received_qty_by_product() -> dict:
+    db = get_supabase()
+    txns = db.table("transactions").select("id, product_id, initial_qty_received").eq("bill_status", "ยังไม่เปิดบิล").execute().data
+    if not txns:
+        return {}
+    txn_ids = [t["id"] for t in txns]
+    events = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", txn_ids).execute().data
+    events_by_txn = defaultdict(int)
+    for e in events:
+        events_by_txn[e["transaction_id"]] += e["qty_received"]
+    result = defaultdict(int)
+    for t in txns:
+        received = t["initial_qty_received"] + events_by_txn[t["id"]]
+        if received > 0:
+            result[t["product_id"]] += received
+    return dict(result)
+
+
+def get_deposit_qty_by_product() -> dict:
+    deposits = get_stock_deposits()
+    result = defaultdict(int)
+    for d in deposits:
+        result[d["product_id"]] += d["qty"]
+    return dict(result)
+
+
 def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
     """รายการที่ยังค้างชำระหรือค้างรับของ"""
     db = get_supabase()
