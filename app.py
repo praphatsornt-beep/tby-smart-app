@@ -424,7 +424,49 @@ with tab4:
                         except Exception:
                             st.error("❌ ลบไม่ได้ — สินค้านี้มีรายการขายอยู่")
 
-        st.write("**เพิ่ม / แก้ไขสินค้า**")
+        st.write("**เพิ่มสินค้าหลายรายการพร้อมกัน**")
+        bulk_template = pd.DataFrame({
+            "รหัส": pd.Series(dtype=str),
+            "ชื่อสินค้า": pd.Series(dtype=str),
+            "ราคา (บาท)": pd.Series(dtype=float),
+            "PV/หน่วย": pd.Series(dtype=float),
+            "BV/หน่วย": pd.Series(dtype=float),
+            "น้ำหนัก (g)": pd.Series(dtype=float),
+        })
+        bulk_df = st.data_editor(
+            bulk_template,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="bulk_products",
+            column_config={
+                "รหัส":       st.column_config.TextColumn("รหัส", required=True),
+                "ชื่อสินค้า": st.column_config.TextColumn("ชื่อสินค้า", required=True),
+                "ราคา (บาท)": st.column_config.NumberColumn("ราคา (บาท)", min_value=0, step=10.0),
+                "PV/หน่วย":   st.column_config.NumberColumn("PV/หน่วย",  min_value=0, step=1.0),
+                "BV/หน่วย":   st.column_config.NumberColumn("BV/หน่วย",  min_value=0, step=1.0),
+                "น้ำหนัก (g)":st.column_config.NumberColumn("น้ำหนัก (g)", min_value=0, step=10.0),
+            },
+        )
+        if st.button("💾 บันทึกทั้งหมด", key="bulk_save_prod", use_container_width=True, type="primary"):
+            valid = bulk_df.dropna(subset=["รหัส", "ชื่อสินค้า"])
+            valid = valid[valid["รหัส"].astype(str).str.strip() != ""]
+            if valid.empty:
+                st.error("กรุณากรอกรหัสและชื่อสินค้าอย่างน้อย 1 แถว")
+            else:
+                for _, row in valid.iterrows():
+                    db.upsert_product({
+                        "id":             str(row["รหัส"]).strip(),
+                        "name":           str(row["ชื่อสินค้า"]).strip(),
+                        "price":          float(row["ราคา (บาท)"] or 0),
+                        "points_per_unit":float(row["PV/หน่วย"]   or 0),
+                        "bv_per_unit":    float(row["BV/หน่วย"]   or 0),
+                        "weight_grams":   float(row["น้ำหนัก (g)"] or 0),
+                    })
+                st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
+                st.rerun()
+
+        st.divider()
+        st.write("**เพิ่ม / แก้ไขสินค้า (ทีละรายการ)**")
         with st.form("add_product", clear_on_submit=True):
             c1, c2 = st.columns(2)
             p_name = c1.text_input("ชื่อสินค้า")
