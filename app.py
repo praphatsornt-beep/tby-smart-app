@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date
 from math import floor
@@ -38,12 +39,13 @@ thead tr th {
 
 st.title("🛍️ TBY SMART APP")
 
-tab1, tab2, tab3, tab5, tab6, tab4 = st.tabs([
+tab1, tab2, tab3, tab5, tab6, tab7, tab4 = st.tabs([
     "📋 บันทึกรายการ",
     "💰 จัดการออเดอร์",
     "📊 ยอดค้าง",
     "🗂️ ประวัติทั้งหมด",
     "📦 สต๊อก",
+    "🖨️ พิมพ์บิล",
     "⚙️ จัดการข้อมูล",
 ])
 
@@ -943,3 +945,106 @@ with tab6:
                 st.rerun()
             else:
                 st.info("ไม่มีข้อมูลที่เปลี่ยนแปลง")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tab 7: พิมพ์บิล
+# ─────────────────────────────────────────────────────────────────────────────
+with tab7:
+    st.subheader("พิมพ์บิล")
+
+    customers_p = db.get_customers()
+    if not customers_p:
+        st.info("ยังไม่มีข้อมูลลูกค้า")
+    else:
+        cust_map_p = {c["name"]: c for c in customers_p}
+        pc1, pc2 = st.columns([3, 1])
+        sel_p    = pc1.selectbox("เลือกลูกค้า", ["— เลือก —"] + list(cust_map_p.keys()), key="print_cust")
+        filter_p = pc2.radio("แสดงรายการ", ["ค้างอยู่", "ทั้งหมด"], horizontal=True, key="print_filter")
+
+        if sel_p != "— เลือก —":
+            customer_p  = cust_map_p[sel_p]
+            all_df_p    = db.get_all_transactions_df(customer_id=customer_p["id"])
+
+            if all_df_p.empty:
+                st.info("ไม่มีรายการ")
+            else:
+                show_p = all_df_p[~all_df_p["เคลียร์แล้ว"]].copy() if filter_p == "ค้างอยู่" else all_df_p.copy()
+
+                if show_p.empty:
+                    st.success(f"✅ {sel_p} ไม่มียอดค้าง")
+                else:
+                    rows_html = ""
+                    for _, r in show_p.iterrows():
+                        bill_color  = "#b8860b" if r["สถานะบิล"] == "ยังไม่เปิดบิล" else "#1a7a3a"
+                        owed_color  = "#c0392b" if r["ค้างจ่าย"] > 0.01 else "#1a7a3a"
+                        rows_html += f"""
+                        <tr>
+                          <td>{r['วันที่']}</td>
+                          <td>{r['สินค้า']}</td>
+                          <td style="text-align:center">{int(r['สั่ง'])}</td>
+                          <td style="text-align:center">{int(r['รับแล้ว'])}</td>
+                          <td style="text-align:right">{r['ยอดรวม']:,.0f}</td>
+                          <td style="text-align:right">{r['จ่ายแล้ว']:,.0f}</td>
+                          <td style="text-align:right;color:{owed_color};font-weight:600">{r['ค้างจ่าย']:,.0f}</td>
+                          <td style="text-align:center;color:{bill_color}">{r['สถานะบิล']}</td>
+                          <td>{r.get('หมายเหตุ','') or ''}</td>
+                        </tr>"""
+
+                    total_amount      = show_p["ยอดรวม"].sum()
+                    total_paid        = show_p["จ่ายแล้ว"].sum()
+                    total_outstanding = show_p["ค้างจ่าย"].sum()
+                    today_str         = date.today().strftime("%d/%m/%Y")
+                    filter_label      = "รายการค้างอยู่" if filter_p == "ค้างอยู่" else "รายการทั้งหมด"
+
+                    bill_html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0}}
+  body{{font-family:'Sarabun',sans-serif;padding:24px;color:#111;background:#fff;font-size:14px}}
+  .header{{border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}}
+  .header h1{{font-size:18px;font-weight:700}}
+  .header h2{{font-size:15px;font-weight:600;margin-top:4px}}
+  .info{{color:#666;font-size:12px;margin-top:4px}}
+  table{{width:100%;border-collapse:collapse;margin-top:8px}}
+  th{{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:13px}}
+  td{{padding:6px 10px;border-bottom:1px solid #e0e0e0;font-size:13px}}
+  tr:nth-child(even) td{{background:#f7f7f7}}
+  .summary{{margin-top:18px;border-top:2px solid #222;padding-top:12px;text-align:right}}
+  .summary table{{width:auto;margin-left:auto}}
+  .summary td{{padding:4px 12px;border:none;font-size:14px}}
+  .summary .big td{{font-weight:700;font-size:16px;border-top:1px solid #ccc;padding-top:8px}}
+  .btn{{display:block;margin:0 auto 20px;padding:10px 36px;background:#c0392b;color:#fff;
+        border:none;border-radius:6px;font-size:15px;cursor:pointer;font-family:'Sarabun',sans-serif}}
+  @media print{{.btn{{display:none}}}}
+</style>
+</head><body>
+<button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+<div class="header">
+  <h1>TBY SMART APP — สรุปรายการ</h1>
+  <h2>ลูกค้า: {sel_p}</h2>
+  <div class="info">วันที่พิมพ์: {today_str} &nbsp;|&nbsp; {filter_label} ({len(show_p)} รายการ)</div>
+</div>
+<table>
+  <thead><tr>
+    <th>วันที่</th><th>สินค้า</th>
+    <th style="text-align:center">สั่ง</th><th style="text-align:center">รับแล้ว</th>
+    <th style="text-align:right">ยอดรวม</th><th style="text-align:right">จ่ายแล้ว</th>
+    <th style="text-align:right">ค้างจ่าย</th><th style="text-align:center">สถานะบิล</th>
+    <th>หมายเหตุ</th>
+  </tr></thead>
+  <tbody>{rows_html}</tbody>
+</table>
+<div class="summary">
+  <table>
+    <tr><td>ยอดรวมทั้งหมด</td><td><b>{total_amount:,.0f} บาท</b></td></tr>
+    <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
+    <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
+  </table>
+</div>
+<br>
+<button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+</body></html>"""
+
+                    components.html(bill_html, height=700, scrolling=True)
