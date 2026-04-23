@@ -937,25 +937,20 @@ with tab6:
 
         if st.button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary", key="save_stock"):
             saved = 0
-            for i, row in edited_stock.iterrows():
-                orig = original_df.iloc[i]
+            for _, row in edited_stock.iterrows():
                 new_sys  = int(row["คอม"]     or 0)
                 new_phys = int(row["นับจริง"] or 0)
-                if new_sys != int(orig["คอม"]) or new_phys != int(orig["นับจริง"]):
-                    db.insert_stock_count({
-                        "id":           str(uuid.uuid4()),
-                        "product_id":   row["_pid"],
-                        "count_date":   str(cnt_date),
-                        "qty_system":   new_sys,
-                        "qty_physical": new_phys,
-                        "notes":        "",
-                    })
-                    saved += 1
-            if saved:
-                st.success(f"✅ บันทึก {saved} รายการแล้ว")
-                st.rerun()
-            else:
-                st.info("ไม่มีข้อมูลที่เปลี่ยนแปลง")
+                db.insert_stock_count({
+                    "id":           str(uuid.uuid4()),
+                    "product_id":   row["_pid"],
+                    "count_date":   str(cnt_date),
+                    "qty_system":   new_sys,
+                    "qty_physical": new_phys,
+                    "notes":        "",
+                })
+                saved += 1
+            st.success(f"✅ บันทึก {saved} รายการแล้ว")
+            st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
