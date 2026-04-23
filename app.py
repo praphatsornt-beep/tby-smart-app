@@ -952,11 +952,11 @@ with tab6:
                     saved += 1
                 except Exception as e:
                     errors.append(f"{row['สินค้า']}: {e}")
-            st.info("🔍 debug:\n" + "\n".join(debug_lines))
             if errors:
                 st.error("❌ บันทึกไม่สำเร็จบางรายการ:\n" + "\n".join(errors))
             if saved:
                 st.success(f"✅ บันทึก {saved} รายการแล้ว")
+                st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
