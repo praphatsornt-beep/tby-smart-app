@@ -308,7 +308,7 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
         outstanding_amount = float(t["total_amount"]) - total_paid
         outstanding_qty = t["qty"] - total_received
 
-        if outstanding_amount > 0.01 or outstanding_qty > 0:
+        if outstanding_amount > 0.01 or outstanding_qty > 0 or t["bill_status"] == "ยังไม่เปิดบิล":
             customer_name = (t.get("customers") or {}).get("name", t["customer_id"])
             rows.append({
                 "id": tid,
