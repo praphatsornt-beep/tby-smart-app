@@ -23,7 +23,7 @@ def get_supabase() -> Client:
 # ─── Master data ────────────────────────────────────────────────────────────
 
 def get_products() -> list[dict]:
-    return get_supabase().table("products").select("*").order("name").execute().data
+    return get_supabase().table("products").select("*").order("id").execute().data
 
 
 def get_customers() -> list[dict]:
