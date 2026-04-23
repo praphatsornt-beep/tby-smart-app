@@ -399,7 +399,10 @@ with tab4:
         products = db.get_products()
         if products:
             st.dataframe(
-                pd.DataFrame(products)[["id", "name", "price", "points_per_unit"]],
+                pd.DataFrame(products)[["id", "name", "price", "points_per_unit", "bv_per_unit", "weight_grams"]].rename(columns={
+                    "id": "รหัส", "name": "ชื่อสินค้า", "price": "ราคา",
+                    "points_per_unit": "PV", "bv_per_unit": "BV", "weight_grams": "น้ำหนัก (g)",
+                }),
                 use_container_width=True,
                 hide_index=True,
             )
@@ -427,15 +430,18 @@ with tab4:
             p_name = c1.text_input("ชื่อสินค้า")
             next_pid = f"P-{len(products)+1:03d}"
             p_id = c2.text_input("รหัสสินค้า (แก้ไขได้)", value=next_pid)
-            c3, c4 = st.columns(2)
+            c3, c4, c5, c6 = st.columns(4)
             p_price = c3.number_input("ราคา (บาท)", min_value=0.0, step=10.0)
             p_points = c4.number_input("PV/หน่วย", min_value=0.0, step=1.0)
+            p_bv = c5.number_input("BV/หน่วย", min_value=0.0, step=1.0)
+            p_weight = c6.number_input("น้ำหนัก (กรัม)", min_value=0.0, step=10.0)
 
             if st.form_submit_button("💾 บันทึก", use_container_width=True):
                 if p_id.strip() and p_name.strip():
                     db.upsert_product({
                         "id": p_id.strip(), "name": p_name.strip(),
                         "price": p_price, "points_per_unit": p_points,
+                        "bv_per_unit": p_bv, "weight_grams": p_weight,
                     })
                     st.success(f"✅ บันทึก {p_name} แล้ว")
                     st.rerun()
