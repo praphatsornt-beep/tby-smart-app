@@ -329,38 +329,30 @@ with tab2:
                     mc3.metric("รับแล้ว",  f"{balance['total_received']} ชิ้น")
                     mc4.metric("ค้างรับ",  f"{balance['outstanding_qty']} ชิ้น")
 
-                    # Bill open / cancel
-                    if txn["bill_status"] == "ยังไม่เปิดบิล":
-                        st.divider()
-                        bb1, bb2, bb3 = st.columns([3, 2, 1])
-                        bb1.markdown("**📄 เปิดบิล**")
-                        qty_to_open = bb2.number_input(
-                            "จำนวนที่เปิดบิล", min_value=1,
-                            max_value=int(txn["qty"]), value=int(txn["qty"]),
-                            step=1, key=f"qty_open_{txn_id}",
-                        )
-                        with bb3:
-                            st.write("")
-                            if st.button("📄 เปิดบิล", key=f"open_{txn_id}", use_container_width=True, type="primary"):
-                                if qty_to_open == int(txn["qty"]):
-                                    db.update_transaction_status(txn_id, bill_status="เปิดบิลแล้ว")
-                                else:
-                                    db.split_and_open_bill(txn_id, qty_to_open)
-                                st.rerun()
-                    else:
-                        cb1, cb2 = st.columns([5, 1])
-                        with cb2:
-                            if st.button("↩️ ยกเลิกบิล", key=f"cancel_{txn_id}", use_container_width=True):
-                                db.update_transaction_status(txn_id, bill_status="ยังไม่เปิดบิล")
-                                st.rerun()
+                    st.divider()
 
-                    # Payment / receipt
-                    if balance["outstanding_amount"] > 0.01 or balance["outstanding_qty"] > 0:
-                        st.divider()
-                        evt_type = st.radio(
-                            "บันทึก", ["จ่ายเงิน", "รับของ", "จ่ายเงิน + รับของ"],
-                            horizontal=True, key=f"etype_{txn_id}",
-                        )
+                    is_unbilled = txn["bill_status"] == "ยังไม่เปิดบิล"
+                    radio_opts  = (["📄 เปิดบิล"] if is_unbilled else []) + ["💵 จ่ายเงิน", "📦 รับของ", "💵+📦 จ่ายเงิน + รับของ"]
+                    action = st.radio("บันทึก", radio_opts, horizontal=True, key=f"etype_{txn_id}")
+
+                    if action == "📄 เปิดบิล":
+                        with st.form(f"bill_{txn_id}", clear_on_submit=True):
+                            bc1, bc2 = st.columns([3, 1])
+                            qty_to_open = bc1.number_input(
+                                "จำนวนที่เปิดบิล", min_value=1,
+                                max_value=int(txn["qty"]), value=int(txn["qty"]), step=1,
+                            )
+                            bc2.write("")
+                            submit_bill = bc2.form_submit_button("📄 เปิดบิล", use_container_width=True, type="primary")
+                        if submit_bill:
+                            if qty_to_open == int(txn["qty"]):
+                                db.update_transaction_status(txn_id, bill_status="เปิดบิลแล้ว")
+                            else:
+                                db.split_and_open_bill(txn_id, qty_to_open)
+                            st.rerun()
+                    else:
+                        evt_map  = {"💵 จ่ายเงิน": "จ่ายเงิน", "📦 รับของ": "รับของ", "💵+📦 จ่ายเงิน + รับของ": "จ่ายเงิน + รับของ"}
+                        evt_type = evt_map[action]
                         with st.form(f"evt_{txn_id}", clear_on_submit=True):
                             fc1, fc2, fc3 = st.columns([2, 2, 1])
                             amount_paid  = fc1.number_input("เงินที่จ่าย (บาท)", min_value=0.0, step=100.0,
@@ -394,6 +386,13 @@ with tab2:
                                 })
                                 st.success("✅ บันทึกแล้ว")
                                 st.rerun()
+
+                    # ยกเลิกบิล (เฉพาะที่เปิดบิลแล้ว)
+                    if not is_unbilled:
+                        st.divider()
+                        if st.button("↩️ ยกเลิกบิล", key=f"cancel_{txn_id}"):
+                            db.update_transaction_status(txn_id, bill_status="ยังไม่เปิดบิล")
+                            st.rerun()
 
                 else:
                     # ── Multi: proportional payment ───────────────────────
