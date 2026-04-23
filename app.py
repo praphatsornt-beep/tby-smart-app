@@ -924,13 +924,28 @@ with tab6:
             column_config={
                 "คอม":      st.column_config.NumberColumn("คอม",     min_value=0, step=1, format="%d"),
                 "นับจริง":  st.column_config.NumberColumn("นับจริง", min_value=0, step=1, format="%d"),
-                "เบิก":     st.column_config.NumberColumn("เบิก(ไม่มีบิล)",    format="%d"),
-                "ฝาก":      st.column_config.NumberColumn("ฝาก(รอรับของ)", format="%d"),
+                "เบิก":     st.column_config.NumberColumn("เบิก",    format="%d"),
+                "ฝาก":      st.column_config.NumberColumn("ฝาก",     format="%d"),
                 "ส่วนต่าง": st.column_config.NumberColumn("ส่วนต่าง", format="%d"),
             },
             key="stock_editor",
         )
+
+        # ส่วนต่าง live จาก edited values
+        diff_data = []
+        for i, row in edited_stock.iterrows():
+            sys_v  = int(row["คอม"]    or 0)
+            phys_v = int(row["นับจริง"] or 0)
+            unbill = int(row["เบิก"]   or 0)
+            bwait  = int(row["ฝาก"]    or 0)
+            diff   = sys_v - phys_v + bwait - unbill
+            diff_data.append({
+                "สินค้า":   row["สินค้า"],
+                "ส่วนต่าง": diff,
+                "สถานะ":   "🔴 เกิน" if diff > 0 else ("🟡 ขาด" if diff < 0 else "✅ ตรง"),
+            })
         st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก")
+        st.dataframe(pd.DataFrame(diff_data), use_container_width=True, hide_index=True)
 
         if st.button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary", key="save_stock"):
             saved = 0
