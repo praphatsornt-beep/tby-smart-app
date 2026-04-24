@@ -9,7 +9,7 @@ import io
 import database as db
 import shopee_api
 from math import ceil
-from flash_zones import lookup_zone, zone_surcharge, ZONE_LABELS
+from flash_zones import lookup_zone, zone_surcharge, ZONE_LABELS, carrier_fees
 
 BOX_WEIGHT_G = 500  # น้ำหนักกล่อง 0.5 kg (ไม่แสดงในระบบ)
 
@@ -203,14 +203,23 @@ with tab1:
         m_delivery = ms4.radio("การรับสินค้า", ["รับหน้าร้าน", "ส่งพัสดุ"], index=0, horizontal=True, key="m_delivery")
         m_postcode = ""
         m_zone     = "normal"
+        m_carrier  = "Flash Express"
+        m_ship_fee = 0
         if m_delivery == "ส่งพัสดุ":
-            m_postcode = st.text_input("รหัสไปรษณีย์ปลายทาง", max_chars=5, key="m_postcode",
-                                       placeholder="เช่น 10400")
-            if m_postcode:
-                m_zone       = lookup_zone(m_postcode)
-                zone_label, zone_fee = ZONE_LABELS[m_zone]
-                if m_zone != "normal":
-                    st.info(f"📍 {zone_label} (+{zone_fee} บาท)")
+            pc_col, _ = st.columns([1, 3])
+            m_postcode = pc_col.text_input("รหัสไปรษณีย์ปลายทาง", max_chars=5, key="m_postcode",
+                                            placeholder="เช่น 10400")
+            if m_postcode and len(m_postcode) == 5:
+                m_zone    = lookup_zone(m_postcode)
+                fees      = carrier_fees(0, m_postcode)  # น้ำหนักคำนวณทีหลัง
+                # แสดงตาราง 2 ขนส่ง
+                c_f, c_s = st.columns(2)
+                f = fees["Flash Express"]
+                s = fees["SPX Express"]
+                c_f.info(f"**Flash Express**\n\nค่าพื้นที่: {f['zone'] or 'ปกติ'} (+{f['surcharge']} บาท)")
+                c_s.info(f"**SPX Express**\n\nค่าพื้นที่: {s['zone'] or 'ปกติ'} (+{s['surcharge']} บาท)")
+                m_carrier = st.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"],
+                                     horizontal=True, key="m_carrier")
 
         # แสดง "รหัส — ชื่อ" เพื่อเลือก/ค้นหาด้วยรหัสได้
         product_display = {f"{p['id']} — {p['name']}": p for p in products}
@@ -244,13 +253,14 @@ with tab1:
             total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
             total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
             if m_delivery == "ส่งพัสดุ":
-                ship_fee = calc_shipping(total_weight, m_postcode)
+                fees_all  = carrier_fees(total_weight, m_postcode)
+                ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(total_weight, m_postcode)
                 vm1, vm2, vm3, vm4, vm5 = st.columns(5)
                 vm1.metric("รายการ",       f"{len(valid_items)} สินค้า")
                 vm2.metric("ยอดสินค้า",    f"{total_amt:,.0f} ฿")
                 vm3.metric("PV รวม",       f"{total_pv:.0f}")
                 vm4.metric("⚖️ น้ำหนัก",  f"{(total_weight/1000):.2f} kg")
-                vm5.metric("🚚 ค่าส่ง",   f"{ship_fee:.0f} ฿")
+                vm5.metric(f"🚚 {m_carrier}", f"{ship_fee:.0f} ฿")
             else:
                 vm1, vm2, vm3 = st.columns(3)
                 vm1.metric("รายการ",   f"{len(valid_items)} สินค้า")
@@ -270,9 +280,14 @@ with tab1:
             receive_now  = m_receipt == "รับของแล้ว"
             is_shipping  = m_delivery == "ส่งพัสดุ"
             total_w_g    = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
-            ship_fee     = calc_shipping(total_w_g, m_postcode) if is_shipping else 0
-            zone_tag     = f"|{ZONE_LABELS[m_zone][0]}" if is_shipping and m_zone != "normal" else ""
-            delivery_tag = f"[ส่งพัสดุ|{m_postcode}|น้ำหนัก={total_w_g/1000:.2f}kg|ค่าส่ง={ship_fee:.0f}{zone_tag}]" if is_shipping else ""
+            if is_shipping:
+                fees_save = carrier_fees(total_w_g, m_postcode)
+                ship_fee  = fees_save[m_carrier]["total"]
+                zone_name = fees_save[m_carrier]["zone"]
+                zone_tag  = f"|{zone_name}" if zone_name else ""
+                delivery_tag = f"[ส่งพัสดุ|{m_carrier}|{m_postcode}|น้ำหนัก={total_w_g/1000:.2f}kg|ค่าส่ง={ship_fee:.0f}{zone_tag}]"
+            else:
+                ship_fee = delivery_tag = 0
             for p, qty, note in valid_items:
                 full_note = f"{delivery_tag} {note}".strip() if delivery_tag else note
                 db.insert_transaction({
@@ -1074,23 +1089,27 @@ with tab7:
                     first_note = str(show_p.iloc[0].get("หมายเหตุ", "") or "")
                     is_ship_bill = "[ส่งพัสดุ|" in first_note
                     ship_weight_str, ship_fee_str, ship_remote = "", "", False
+                    ship_carrier = ship_postcode = ship_weight_str = ship_fee_str = ship_remote = ""
                     if is_ship_bill:
                         import re as _re
-                        _m = _re.search(r"\[ส่งพัสดุ\|(\d{5})?\|?น้ำหนัก=([\d.]+)kg\|ค่าส่ง=(\d+)([^\]]*)\]", first_note)
+                        _m = _re.search(
+                            r"\[ส่งพัสดุ\|([^|]+)?\|?(\d{5})?\|?น้ำหนัก=([\d.]+)kg\|ค่าส่ง=(\d+)([^\]]*)\]",
+                            first_note
+                        )
                         if _m:
-                            ship_postcode   = _m.group(1) or ""
-                            ship_weight_str = _m.group(2)
-                            ship_fee_str    = _m.group(3)
-                            ship_remote     = _m.group(4).strip("|") if _m.group(4) else ""
-                        else:
-                            ship_postcode = ship_weight_str = ship_fee_str = ship_remote = ""
+                            ship_carrier    = _m.group(1) or ""
+                            ship_postcode   = _m.group(2) or ""
+                            ship_weight_str = _m.group(3) or ""
+                            ship_fee_str    = _m.group(4) or ""
+                            ship_remote     = _m.group(5).strip("|") if _m.group(5) else ""
 
                     bm1, bm2, bm3, bm4 = st.columns(4)
                     bm1.metric("💸 ยอดค้างจ่ายรวม",   f"{total_outstanding:,.0f} บาท")
                     bm2.metric("⭐ PV ยังไม่เปิดบิล",  f"{unbilled_pv:,.0f}")
                     if is_ship_bill:
-                        bm3.metric("⚖️ น้ำหนัก", f"{ship_weight_str} kg" + (f" (ปณ. {ship_postcode})" if ship_postcode else ""))
-                        bm4.metric("🚚 ค่าส่ง",   f"{ship_fee_str} บาท" + (f" ({ship_remote})" if ship_remote else ""))
+                        carrier_label = ship_carrier if ship_carrier else "ขนส่ง"
+                        bm3.metric("⚖️ น้ำหนัก",          f"{ship_weight_str} kg" + (f"  ปณ.{ship_postcode}" if ship_postcode else ""))
+                        bm4.metric(f"🚚 {carrier_label}", f"{ship_fee_str} บาท"  + (f" ({ship_remote})"    if ship_remote    else ""))
 
                     bill_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">

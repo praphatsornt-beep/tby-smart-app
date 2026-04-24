@@ -88,3 +88,60 @@ def lookup_zone(postcode: str) -> str:
 
 def zone_surcharge(postcode: str) -> int:
     return ZONE_LABELS[lookup_zone(postcode)][1]
+
+
+# ─── SPX Express — พื้นที่ห่างไกล (+50) ───────────────────────────────────────
+SPX_REMOTE: set[str] = {
+    # ภาคกลาง
+    "67260", "71180", "71240",
+    # ภาคตะวันตก
+    "63170",
+    # ภาคตะวันออก
+    "20120", "23170",
+    # ภาคใต้
+    "81120", "81150", "81210",
+    "82160",
+    "84280", "84360", "84370",
+    "94120", "94230",
+    "95110", "95130", "95150", "95160", "95170",
+    "96110", "96120", "96130", "96140", "96150",
+    "96160", "96190", "96210", "96220",
+    # ภาคเหนือ
+    "50160", "50240", "50250", "50260", "50270", "50310", "50350",
+    "51160",
+    "52160", "52180", "52230",
+    "55220",
+    "56160",
+    "57170", "57180", "57260", "57310", "57340",
+    "58000", "58110", "58120", "58130", "58140", "58150",
+}
+
+
+def spx_surcharge(postcode: str) -> int:
+    return 50 if str(postcode).strip() in SPX_REMOTE else 0
+
+
+def carrier_fees(weight_grams: float, postcode: str, box_weight_g: int = 500) -> dict:
+    """คืน {carrier: (base_fee, surcharge, total)} สำหรับทั้ง 2 ขนส่ง"""
+    from math import ceil
+    kg   = (weight_grams + box_weight_g) / 1000
+    base = 39 + max(0, ceil(kg - 5)) * 10
+
+    flash_sur  = zone_surcharge(postcode)
+    spx_sur    = spx_surcharge(postcode)
+    flash_zone = lookup_zone(postcode)
+
+    return {
+        "Flash Express": {
+            "base":      base,
+            "surcharge": flash_sur,
+            "total":     base + flash_sur,
+            "zone":      ZONE_LABELS[flash_zone][0] if flash_zone != "normal" else "",
+        },
+        "SPX Express": {
+            "base":      base,
+            "surcharge": spx_sur,
+            "total":     base + spx_sur,
+            "zone":      "พื้นที่ห่างไกล" if spx_sur else "",
+        },
+    }
