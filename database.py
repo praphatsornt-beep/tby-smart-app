@@ -227,7 +227,9 @@ def get_finance_df() -> pd.DataFrame:
     df["bv_cum"] = df["bv_amount"].cumsum()
     df["ยอดค้างโอน"] = df["net"].apply(lambda x: max(0.0, -x))
     df["เงินโอนเกิน"] = df["net"].apply(lambda x: max(0.0, x))
-    df["สิทธิ์สั่งของ"] = (1_100_000 + df["net"] + df["bv_cum"]) / 1.07 - df["stock_value"]
+    # forward-fill stock: ใช้ค่าล่าสุดที่กรอก ไม่ต้องกรอกทุกวัน
+    df["stock_ff"] = df["stock_value"].replace(0.0, float("nan")).ffill().fillna(0.0)
+    df["สิทธิ์สั่งของ"] = (1_100_000 + df["net"] + df["bv_cum"]) / 1.07 - df["stock_ff"]
     return df
 
 

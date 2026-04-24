@@ -1067,19 +1067,19 @@ with tab_fin:
         _ex = db.get_finance_entry(str(fin_date)) or {}
         if _ex:
             st.info("📋 มีข้อมูลวันนี้แล้ว — แก้ไขแล้วกด บันทึก เพื่ออัปเดต")
-        fc1, fc2, fc3 = st.columns(3)
+        fc1, fc2 = st.columns(2)
         with fc1:
             fin_transfer = st.number_input("ยอดโอนให้บริษัท (฿)", min_value=0.0, step=100.0, value=float(_ex.get("transfer_amount", 0)), key=f"fin_transfer_{fin_date}")
-            fin_reg      = st.number_input("ค่าสมัคร (฿)",         min_value=0.0, step=100.0, value=float(_ex.get("registration_fee", 0)), key=f"fin_reg_{fin_date}")
-        with fc2:
             fin_sales    = st.number_input("ยอดขาย (฿)",            min_value=0.0, step=100.0, value=float(_ex.get("sales_amount", 0)), key=f"fin_sales_{fin_date}")
-            fin_bv       = st.number_input("BV / โบนัส (฿)",        min_value=0.0, step=100.0, value=float(_ex.get("bv_amount", 0)), key=f"fin_bv_{fin_date}")
-        with fc3:
             fin_po       = st.number_input("PO สั่งของ ไม่รวม VAT (฿)", min_value=0.0, step=100.0, value=float(_ex.get("po_amount", 0)), key=f"fin_po_{fin_date}")
-            fin_stock    = st.number_input("สต๊อก ไม่รวม VAT (฿)",      min_value=0.0, step=100.0, value=float(_ex.get("stock_value", 0)), key=f"fin_stock_{fin_date}")
-        st.caption("ยอดยกมา (กรอกครั้งแรก หรือปรับยอด) — โอนเกินยกมา: ใส่บวก, ค้างโอนยกมา: ใส่ลบ")
-        fin_adj   = st.number_input("ยอดปรับ/ยกมา (฿) เช่น +706021.55 หรือ -50000", step=100.0, value=float(_ex.get("adjustment", 0)), key=f"fin_adj_{fin_date}")
+        with fc2:
+            fin_reg      = st.number_input("ค่าสมัคร (฿)",          min_value=0.0, step=100.0, value=float(_ex.get("registration_fee", 0)), key=f"fin_reg_{fin_date}")
+            fin_bv       = st.number_input("BV / โบนัส (฿)",         min_value=0.0, step=100.0, value=float(_ex.get("bv_amount", 0)), key=f"fin_bv_{fin_date}")
+            fin_adj      = st.number_input("ยอดปรับ/ยกมา (฿) บวก=โอนเกิน, ลบ=ค้างโอน", step=100.0, value=float(_ex.get("adjustment", 0)), key=f"fin_adj_{fin_date}")
         fin_notes = st.text_input("หมายเหตุ", value=_ex.get("notes", "") or "", key=f"fin_notes_{fin_date}")
+        st.divider()
+        st.caption("📦 สต๊อก — กรอกครั้งแรกของเดือน หรือเมื่อนับสต๊อกใหม่ ระบบจะใช้ค่าล่าสุดอัตโนมัติ")
+        fin_stock = st.number_input("สต๊อก ไม่รวม VAT (฿)", min_value=0.0, step=100.0, value=float(_ex.get("stock_value", 0)), key=f"fin_stock_{fin_date}")
 
         if st.button("💾 บันทึก", type="primary", use_container_width=True, key="fin_save"):
             db.upsert_finance_entry({
