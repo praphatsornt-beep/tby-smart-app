@@ -181,86 +181,81 @@ with tab1:
                             st.rerun()
 
         st.divider()
-        # ── บันทึกทีละรายการ ─────────────────────────────────────────────
-        with st.form("new_transaction", clear_on_submit=True):
-            col1, col2, col3 = st.columns([2, 2, 1])
-            with col1:
-                customer_label = st.selectbox(
-                    "ลูกค้า",
-                    ["— เลือกลูกค้า —"] + list(customer_map.keys()),
-                )
-            with col2:
-                product_label = st.selectbox(
-                    "สินค้า",
-                    ["— เลือกสินค้า —"] + list(product_map.keys()),
-                )
-            with col3:
-                qty = st.number_input("จำนวน", min_value=1, value=1, step=1)
+        # ── บันทึกหลายรายการพร้อมกัน ────────────────────────────────────
+        mc1, mc2 = st.columns([3, 1])
+        m_customer = mc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="m_cust")
+        m_date     = mc2.date_input("วันที่", value=date.today(), key="m_date")
 
-            if product_label != "— เลือกสินค้า —":
-                selected_product = product_map[product_label]
-                total = float(selected_product["price"]) * qty
-                total_pts = float(selected_product["points_per_unit"]) * qty
-                c1, c2, c3 = st.columns(3)
-                c1.metric("ราคา/ชิ้น", f"{float(selected_product['price']):,.0f} บาท")
-                c2.metric("ยอดรวม", f"{total:,.0f} บาท")
-                c3.metric("PV รวม", f"{total_pts:.0f}")
+        ms1, ms2, ms3 = st.columns(3)
+        m_bill    = ms1.radio("สถานะบิล",  ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True, key="m_bill")
+        m_pay     = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"],         index=None, horizontal=True, key="m_pay")
+        m_receipt = ms3.radio("สถานะของ",  ["รับของแล้ว", "ฝากของ"],          index=None, horizontal=True, key="m_receipt")
 
-            sc1, sc2, sc3 = st.columns(3)
-            with sc1:
-                bill_status = st.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True)
-            with sc2:
-                pay_status = st.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"], index=None, horizontal=True)
-            with sc3:
-                receipt_status = st.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"], index=None, horizontal=True)
+        product_names = list(product_map.keys())
+        cart_df = pd.DataFrame({
+            "สินค้า":   pd.Series([""] * 5, dtype="object"),
+            "จำนวน":   pd.Series([0]  * 5, dtype="int64"),
+            "หมายเหตุ": pd.Series([""] * 5, dtype="object"),
+        })
+        edited_cart = st.data_editor(
+            cart_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "สินค้า":  st.column_config.SelectboxColumn("สินค้า", options=product_names, required=False),
+                "จำนวน":  st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
+                "หมายเหตุ": st.column_config.TextColumn("หมายเหตุ"),
+            },
+            key="m_cart",
+        )
 
-            col4, col5 = st.columns([3, 1])
-            with col4:
-                notes = st.text_input("หมายเหตุ (ถ้ามี)")
-            with col5:
-                txn_date = st.date_input("วันที่", value=date.today())
+        valid_items = [
+            (product_map[row["สินค้า"]], int(row["จำนวน"] or 0), str(row["หมายเหตุ"] or ""))
+            for _, row in edited_cart.iterrows()
+            if str(row.get("สินค้า", "")) in product_map and int(row.get("จำนวน") or 0) > 0
+        ]
 
-            submitted = st.form_submit_button("💾 บันทึก", use_container_width=True, type="primary")
+        if valid_items:
+            total_amt = sum(float(p["price"]) * q for p, q, _ in valid_items)
+            total_pv  = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
+            vm1, vm2, vm3 = st.columns(3)
+            vm1.metric("รายการ",   f"{len(valid_items)} สินค้า")
+            vm2.metric("ยอดรวม",   f"{total_amt:,.0f} บาท")
+            vm3.metric("PV รวม",   f"{total_pv:.0f}")
 
-            if submitted:
-                errors = []
-                if customer_label == "— เลือกลูกค้า —":
-                    errors.append("กรุณาเลือกลูกค้า")
-                if product_label == "— เลือกสินค้า —":
-                    errors.append("กรุณาเลือกสินค้า")
-                if bill_status is None:
-                    errors.append("กรุณาเลือกสถานะบิล")
-                if pay_status is None:
-                    errors.append("กรุณาเลือกสถานะจ่าย")
-                if receipt_status is None:
-                    errors.append("กรุณาเลือกสถานะของ")
-                if errors:
-                    for e in errors:
-                        st.error(e)
-                else:
-                    selected_product = product_map[product_label]
-                    total = float(selected_product["price"]) * qty
-                    receive_now = receipt_status == "รับของแล้ว"
-                    initial_qty_received = int(qty) if receive_now else 0
-                    txn_type = "เบิกของก่อน" if bill_status == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ"
-                    customer = customer_map[customer_label]
-                    db.insert_transaction({
-                        "id": str(uuid.uuid4()),
-                        "date": str(txn_date),
-                        "customer_id": customer["id"],
-                        "product_id": selected_product["id"],
-                        "product_name": selected_product["name"],
-                        "qty": int(qty),
-                        "price_per_unit": float(selected_product["price"]),
-                        "points_per_unit": float(selected_product["points_per_unit"]),
-                        "total_amount": total,
-                        "initial_qty_received": initial_qty_received,
-                        "transaction_type": txn_type,
-                        "bill_status": bill_status,
-                        "pay_status": pay_status,
-                        "notes": notes,
-                    })
-                    st.success(f"✅ บันทึกแล้ว: {selected_product['name']} × {qty} ชิ้น = {total:,.0f} บาท")
+        m_errors = []
+        if m_customer == "— เลือกลูกค้า —": m_errors.append("เลือกลูกค้าก่อน")
+        if m_bill is None:    m_errors.append("เลือกสถานะบิล")
+        if m_pay is None:     m_errors.append("เลือกสถานะจ่าย")
+        if m_receipt is None: m_errors.append("เลือกสถานะของ")
+        if not valid_items:   m_errors.append("กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ")
+
+        if st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True, key="m_submit",
+                     disabled=bool(m_errors)):
+            customer = customer_map[m_customer]
+            receive_now = m_receipt == "รับของแล้ว"
+            for p, qty, note in valid_items:
+                db.insert_transaction({
+                    "id":                   str(uuid.uuid4()),
+                    "date":                 str(m_date),
+                    "customer_id":          customer["id"],
+                    "product_id":           p["id"],
+                    "product_name":         p["name"],
+                    "qty":                  qty,
+                    "price_per_unit":       float(p["price"]),
+                    "points_per_unit":      float(p["points_per_unit"]),
+                    "total_amount":         float(p["price"]) * qty,
+                    "initial_qty_received": qty if receive_now else 0,
+                    "transaction_type":     "เบิกของก่อน" if m_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
+                    "bill_status":          m_bill,
+                    "pay_status":           m_pay,
+                    "notes":                note,
+                })
+            st.success(f"✅ บันทึก {len(valid_items)} รายการแล้ว")
+            st.rerun()
+        elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
+            st.caption("⚠️ " + " | ".join(m_errors))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
