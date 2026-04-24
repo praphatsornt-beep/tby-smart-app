@@ -8,6 +8,15 @@ import io
 
 import database as db
 import shopee_api
+from math import ceil
+
+BOX_WEIGHT_G = 500  # น้ำหนักกล่อง 0.5 kg (ไม่แสดงในระบบ)
+
+def calc_shipping(weight_grams: float, remote: bool = False) -> float:
+    """ค่าส่ง: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท, ห่างไกล +50 บาท"""
+    kg = (weight_grams + BOX_WEIGHT_G) / 1000
+    fee = 39 + max(0, ceil(kg - 5)) * 10
+    return fee + (50 if remote else 0)
 
 st.set_page_config(page_title="TBY SMART APP", page_icon="🛍️", layout="wide")
 
@@ -186,10 +195,14 @@ with tab1:
         m_customer = mc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="m_cust")
         m_date     = mc2.date_input("วันที่", value=date.today(), key="m_date")
 
-        ms1, ms2, ms3 = st.columns(3)
-        m_bill    = ms1.radio("สถานะบิล",  ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True, key="m_bill")
-        m_pay     = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"],         index=None, horizontal=True, key="m_pay")
-        m_receipt = ms3.radio("สถานะของ",  ["รับของแล้ว", "ฝากของ"],          index=None, horizontal=True, key="m_receipt")
+        ms1, ms2, ms3, ms4 = st.columns(4)
+        m_bill     = ms1.radio("สถานะบิล",    ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True, key="m_bill")
+        m_pay      = ms2.radio("สถานะจ่าย",   ["จ่ายแล้ว", "ค้างจ่าย"],         index=None, horizontal=True, key="m_pay")
+        m_receipt  = ms3.radio("สถานะของ",    ["รับของแล้ว", "ฝากของ"],          index=None, horizontal=True, key="m_receipt")
+        m_delivery = ms4.radio("การรับสินค้า", ["รับหน้าร้าน", "ส่งพัสดุ"],      index=0,    horizontal=True, key="m_delivery")
+        m_remote   = False
+        if m_delivery == "ส่งพัสดุ":
+            m_remote = st.checkbox("📍 พื้นที่ห่างไกล (+50 บาท)", key="m_remote")
 
         # แสดง "รหัส — ชื่อ" เพื่อเลือก/ค้นหาด้วยรหัสได้
         product_display = {f"{p['id']} — {p['name']}": p for p in products}
@@ -219,12 +232,22 @@ with tab1:
         ]
 
         if valid_items:
-            total_amt = sum(float(p["price"]) * q for p, q, _ in valid_items)
-            total_pv  = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
-            vm1, vm2, vm3 = st.columns(3)
-            vm1.metric("รายการ",   f"{len(valid_items)} สินค้า")
-            vm2.metric("ยอดรวม",   f"{total_amt:,.0f} บาท")
-            vm3.metric("PV รวม",   f"{total_pv:.0f}")
+            total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
+            total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
+            total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
+            if m_delivery == "ส่งพัสดุ":
+                ship_fee = calc_shipping(total_weight, m_remote)
+                vm1, vm2, vm3, vm4, vm5 = st.columns(5)
+                vm1.metric("รายการ",       f"{len(valid_items)} สินค้า")
+                vm2.metric("ยอดสินค้า",    f"{total_amt:,.0f} ฿")
+                vm3.metric("PV รวม",       f"{total_pv:.0f}")
+                vm4.metric("⚖️ น้ำหนัก",  f"{(total_weight/1000):.2f} kg")
+                vm5.metric("🚚 ค่าส่ง",   f"{ship_fee:.0f} ฿")
+            else:
+                vm1, vm2, vm3 = st.columns(3)
+                vm1.metric("รายการ",   f"{len(valid_items)} สินค้า")
+                vm2.metric("ยอดรวม",   f"{total_amt:,.0f} บาท")
+                vm3.metric("PV รวม",   f"{total_pv:.0f}")
 
         m_errors = []
         if m_customer == "— เลือกลูกค้า —": m_errors.append("เลือกลูกค้าก่อน")
@@ -236,8 +259,13 @@ with tab1:
         if st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True, key="m_submit",
                      disabled=bool(m_errors)):
             customer = customer_map[m_customer]
-            receive_now = m_receipt == "รับของแล้ว"
+            receive_now  = m_receipt == "รับของแล้ว"
+            is_shipping  = m_delivery == "ส่งพัสดุ"
+            total_w_g    = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
+            ship_fee     = calc_shipping(total_w_g, m_remote) if is_shipping else 0
+            delivery_tag = f"[ส่งพัสดุ|น้ำหนัก={total_w_g/1000:.2f}kg|ค่าส่ง={ship_fee:.0f}{'|ห่างไกล' if m_remote else ''}]" if is_shipping else ""
             for p, qty, note in valid_items:
+                full_note = f"{delivery_tag} {note}".strip() if delivery_tag else note
                 db.insert_transaction({
                     "id":                   str(uuid.uuid4()),
                     "date":                 str(m_date),
@@ -252,9 +280,9 @@ with tab1:
                     "transaction_type":     "เบิกของก่อน" if m_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
                     "bill_status":          m_bill,
                     "pay_status":           m_pay,
-                    "notes":                note,
+                    "notes":                full_note,
                 })
-            st.success(f"✅ บันทึก {len(valid_items)} รายการแล้ว")
+            st.success(f"✅ บันทึก {len(valid_items)} รายการ" + (f" | 🚚 ค่าส่ง {ship_fee:.0f} บาท" if is_shipping else ""))
             st.rerun()
         elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
             st.caption("⚠️ " + " | ".join(m_errors))
@@ -1033,9 +1061,24 @@ with tab7:
                     today_str         = date.today().strftime("%d/%m/%Y")
                     filter_label      = "รายการค้างอยู่" if filter_p == "ค้างอยู่" else "รายการทั้งหมด"
 
-                    bm1, bm2 = st.columns(2)
-                    bm1.metric("💸 ยอดค้างจ่ายรวม", f"{total_outstanding:,.0f} บาท")
-                    bm2.metric("⭐ PV ยังไม่เปิดบิล", f"{unbilled_pv:,.0f}")
+                    # ตรวจสอบว่ามี tag ส่งพัสดุจาก notes ของรายการแรก
+                    first_note = str(show_p.iloc[0].get("หมายเหตุ", "") or "")
+                    is_ship_bill = "[ส่งพัสดุ|" in first_note
+                    ship_weight_str, ship_fee_str, ship_remote = "", "", False
+                    if is_ship_bill:
+                        import re as _re
+                        _m = _re.search(r"\[ส่งพัสดุ\|น้ำหนัก=([\d.]+)kg\|ค่าส่ง=(\d+)(|\|ห่างไกล)\]", first_note)
+                        if _m:
+                            ship_weight_str = _m.group(1)
+                            ship_fee_str    = _m.group(2)
+                            ship_remote     = "|ห่างไกล" in _m.group(3)
+
+                    bm1, bm2, bm3, bm4 = st.columns(4)
+                    bm1.metric("💸 ยอดค้างจ่ายรวม",   f"{total_outstanding:,.0f} บาท")
+                    bm2.metric("⭐ PV ยังไม่เปิดบิล",  f"{unbilled_pv:,.0f}")
+                    if is_ship_bill:
+                        bm3.metric("⚖️ น้ำหนัก", f"{ship_weight_str} kg")
+                        bm4.metric("🚚 ค่าส่ง",   f"{ship_fee_str} บาท" + (" (ห่างไกล)" if ship_remote else ""))
 
                     bill_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -1063,7 +1106,7 @@ with tab7:
 <button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
 <div class="header">
   <h1>TBY SMART APP — สรุปรายการ</h1>
-  <h2>ลูกค้า: {sel_p}</h2>
+  <h2>ลูกค้า: {sel_p}{"&nbsp;&nbsp;🚚 ส่งพัสดุ" if is_ship_bill else ""}</h2>
   <div class="info">วันที่พิมพ์: {today_str} &nbsp;|&nbsp; {filter_label} ({len(show_p)} รายการ)</div>
 </div>
 <table>
@@ -1081,6 +1124,7 @@ with tab7:
     <tr><td>ยอดรวมทั้งหมด</td><td><b>{total_amount:,.0f} บาท</b></td></tr>
     <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
     <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
+    {"<tr><td>⚖️ น้ำหนัก</td><td><b>" + ship_weight_str + " kg</b></td></tr><tr><td>🚚 ค่าส่ง</td><td><b style='color:#1a5c8e'>" + ship_fee_str + " บาท" + (" (ห่างไกล)" if ship_remote else "") + "</b></td></tr>" if is_ship_bill else ""}
   </table>
 </div>
 <br>
