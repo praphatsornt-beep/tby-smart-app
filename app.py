@@ -942,15 +942,17 @@ with tab6:
             key="stock_editor",
         )
         # ── สรุปยอดรวม ──────────────────────────────────────────────────────
-        pv_by_name = {p["name"]: float(p.get("points_per_unit") or 0) for p in products}
-        total_kom   = int(stock_df["คอม"].sum())
-        total_real  = int(stock_df["นับจริง"].sum())
-        total_pv    = sum(int(row["ส่วนต่าง"]) * pv_by_name.get(row["สินค้า"], 0)
-                          for _, row in stock_df.iterrows())
-        sm1, sm2, sm3 = st.columns(3)
-        sm1.metric("📦 ยอดรวมในคอม", f"{total_kom:,} ชิ้น")
-        sm2.metric("🔍 ยอดรวมจริง",  f"{total_real:,} ชิ้น")
-        sm3.metric("⭐ คะแนนที่คีย์ได้", f"{total_pv:,.0f} PV")
+        price_by_name = {p["name"]: float(p.get("price") or 0) for p in products}
+        pv_by_name    = {p["name"]: float(p.get("points_per_unit") or 0) for p in products}
+        total_kom_amt  = sum(int(row["คอม"])     * price_by_name.get(row["สินค้า"], 0) for _, row in stock_df.iterrows())
+        total_real_amt = sum(int(row["นับจริง"]) * price_by_name.get(row["สินค้า"], 0) for _, row in stock_df.iterrows())
+        total_pv       = sum(int(row["ส่วนต่าง"]) * pv_by_name.get(row["สินค้า"], 0)   for _, row in stock_df.iterrows())
+        diff_amt       = total_kom_amt - total_real_amt
+        sm1, sm2, sm3, sm4 = st.columns(4)
+        sm1.metric("📦 ยอดในคอม (฿)", f"{total_kom_amt:,.0f}")
+        sm2.metric("🔍 ยอดจริง (฿)",  f"{total_real_amt:,.0f}")
+        sm3.metric("⚖️ ส่วนต่าง (฿)", f"{diff_amt:,.0f}", delta=f"{diff_amt:,.0f}" if diff_amt != 0 else None)
+        sm4.metric("⭐ คะแนนที่คีย์ได้", f"{total_pv:,.0f} PV")
         st.divider()
 
         st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก  |  ส่วนต่างอัปเดตหลังกด บันทึก")
