@@ -197,6 +197,7 @@ def get_all_transactions_df(customer_id: str = None) -> pd.DataFrame:
             "สถานะบิล": t["bill_status"],
             "สถานะจ่าย": t["pay_status"],
             "หมายเหตุ": t.get("notes", "") or "",
+            "PV รวม": float(t["points_per_unit"]) * t["qty"],
             "เคลียร์แล้ว": cleared,
         })
 

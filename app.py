@@ -941,6 +941,18 @@ with tab6:
             },
             key="stock_editor",
         )
+        # ── สรุปยอดรวม ──────────────────────────────────────────────────────
+        pv_by_name = {p["name"]: float(p.get("points_per_unit") or 0) for p in products}
+        total_kom   = int(stock_df["คอม"].sum())
+        total_real  = int(stock_df["นับจริง"].sum())
+        total_pv    = sum(int(row["นับจริง"]) * pv_by_name.get(row["สินค้า"], 0)
+                          for _, row in stock_df.iterrows())
+        sm1, sm2, sm3 = st.columns(3)
+        sm1.metric("📦 ยอดรวมในคอม", f"{total_kom:,} ชิ้น")
+        sm2.metric("🔍 ยอดรวมจริง",  f"{total_real:,} ชิ้น")
+        sm3.metric("⭐ คะแนนที่คีย์ได้", f"{total_pv:,.0f} PV")
+        st.divider()
+
         st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก  |  ส่วนต่างอัปเดตหลังกด บันทึก")
 
         if st.button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary", key="save_stock"):
@@ -1017,8 +1029,13 @@ with tab7:
                     total_amount      = show_p["ยอดรวม"].sum()
                     total_paid        = show_p["จ่ายแล้ว"].sum()
                     total_outstanding = show_p["ค้างจ่าย"].sum()
+                    unbilled_pv       = show_p.loc[show_p["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in show_p.columns else 0
                     today_str         = date.today().strftime("%d/%m/%Y")
                     filter_label      = "รายการค้างอยู่" if filter_p == "ค้างอยู่" else "รายการทั้งหมด"
+
+                    bm1, bm2 = st.columns(2)
+                    bm1.metric("💸 ยอดค้างจ่ายรวม", f"{total_outstanding:,.0f} บาท")
+                    bm2.metric("⭐ PV ยังไม่เปิดบิล", f"{unbilled_pv:,.0f}")
 
                     bill_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
