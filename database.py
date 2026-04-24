@@ -390,3 +390,61 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
             })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+# ─── E-commerce ──────────────────────────────────────────────────────────────
+
+def get_ecommerce_shops() -> list[dict]:
+    return get_supabase().table("ecommerce_shops").select("*").order("shop_name").execute().data
+
+
+def upsert_ecommerce_shop(data: dict) -> None:
+    db = get_supabase()
+    db.table("ecommerce_shops").delete().eq("id", data["id"]).execute()
+    db.table("ecommerce_shops").insert(data).execute()
+
+
+def insert_ecommerce_sales(rows: list[dict]) -> None:
+    if rows:
+        get_supabase().table("ecommerce_sales").insert(rows).execute()
+
+
+def get_ecommerce_sales_df(start_date: str, end_date: str) -> pd.DataFrame:
+    rows = get_supabase().table("ecommerce_sales").select(
+        "sale_date,platform,shop_name,qty,item_price,product_id,products(name)"
+    ).gte("sale_date", start_date).lte("sale_date", end_date).order("sale_date", desc=True).execute().data
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame([{
+        "วันที่": r["sale_date"],
+        "ร้าน": r["shop_name"],
+        "สินค้า": (r.get("products") or {}).get("name", r.get("product_id") or "ยังไม่ map"),
+        "จำนวน": r["qty"],
+        "ยอด": float(r["item_price"] or 0),
+    } for r in rows])
+
+
+def get_ecommerce_product_map() -> dict:
+    rows = get_supabase().table("ecommerce_product_map").select("*").execute().data
+    return {(r["platform"], r["platform_item_id"]): r["product_id"] for r in rows}
+
+
+def upsert_ecommerce_product_map(rows: list[dict]) -> None:
+    for row in rows:
+        get_supabase().table("ecommerce_product_map").upsert(
+            row, on_conflict="platform,platform_item_id"
+        ).execute()
+
+
+def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
+    rows = get_supabase().table("ecommerce_sales").select(
+        "item_id_platform,shop_name"
+    ).eq("platform", platform).is_("product_id", "null").execute().data
+    seen = set()
+    result = []
+    for r in rows:
+        key = (r["item_id_platform"], r["shop_name"])
+        if key not in seen:
+            seen.add(key)
+            result.append({"item_id": r["item_id_platform"], "shop_name": r["shop_name"]})
+    return result
