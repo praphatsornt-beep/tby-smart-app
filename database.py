@@ -203,6 +203,41 @@ def get_all_transactions_df(customer_id: str = None) -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+# ─── Finance ─────────────────────────────────────────────────────────────────
+
+def upsert_finance_entry(data: dict) -> None:
+    db = get_supabase()
+    db.table("finance_daily").delete().eq("entry_date", data["entry_date"]).execute()
+    db.table("finance_daily").insert(data).execute()
+
+
+def get_finance_df() -> pd.DataFrame:
+    rows = get_supabase().table("finance_daily").select("*").order("entry_date").execute().data
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df["ต้องโอน"] = df["sales_amount"] + df["registration_fee"]
+    df["net"] = df["transfer_amount"].cumsum() - df["ต้องโอน"].cumsum()
+    df["bv_cum"] = df["bv_amount"].cumsum()
+    df["ยอดค้างโอน"] = df["net"].apply(lambda x: max(0.0, -x))
+    df["เงินโอนเกิน"] = df["net"].apply(lambda x: max(0.0, x))
+    df["สิทธิ์สั่งของ"] = (1_100_000 + df["net"] + df["bv_cum"]) / 1.07 - df["stock_value"]
+    return df
+
+
+def get_finance_summary() -> dict:
+    df = get_finance_df()
+    if df.empty:
+        return {"outstanding": 0.0, "overpaid": 0.0, "stock": 0.0, "credit": 0.0}
+    last = df.iloc[-1]
+    return {
+        "outstanding": float(last["ยอดค้างโอน"]),
+        "overpaid": float(last["เงินโอนเกิน"]),
+        "stock": float(last["stock_value"]),
+        "credit": float(last["สิทธิ์สั่งของ"]),
+    }
+
+
 # ─── Stock ───────────────────────────────────────────────────────────────────
 
 def get_latest_stock_counts() -> dict:

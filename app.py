@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import date
 from math import floor
 import uuid
+import io
 
 import database as db
 
@@ -28,13 +29,14 @@ st.markdown("""
 
 st.title("🛍️ TBY SMART APP")
 
-tab1, tab2, tab3, tab5, tab6, tab7, tab4 = st.tabs([
+tab1, tab2, tab3, tab5, tab6, tab7, tab_fin, tab4 = st.tabs([
     "📋 บันทึกรายการ",
     "💰 จัดการออเดอร์",
     "📊 ยอดค้าง",
     "🗂️ ประวัติทั้งหมด",
     "📦 สต๊อก",
     "🖨️ พิมพ์บิล",
+    "💵 การเงิน",
     "⚙️ จัดการข้อมูล",
 ])
 
@@ -1041,3 +1043,86 @@ with tab7:
 </body></html>"""
 
                     components.html(bill_html, height=700, scrolling=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tab การเงิน: บันทึกยอดรายวัน + วงเงินสั่งของ
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_fin:
+    st.subheader("💵 การเงิน")
+
+    fin_summary = db.get_finance_summary()
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("🚩 ยอดค้างโอน (฿)", f"{fin_summary['outstanding']:,.2f}")
+    m2.metric("💰 เงินโอนเกิน (฿)", f"{fin_summary['overpaid']:,.2f}")
+    m3.metric("📦 สต๊อก ไม่รวม VAT (฿)", f"{fin_summary['stock']:,.2f}")
+    credit_val = fin_summary["credit"]
+    m4.metric("🛒 สิทธิ์สั่งของคงเหลือ (฿)", f"{credit_val:,.2f}",
+              delta=None if credit_val >= 0 else "⚠️ เกินวงเงิน")
+
+    st.divider()
+
+    with st.expander("➕ กรอกข้อมูลประจำวัน", expanded=True):
+        fin_date = st.date_input("วันที่", value=date.today(), key="fin_date")
+        fc1, fc2, fc3 = st.columns(3)
+        with fc1:
+            fin_transfer = st.number_input("ยอดโอนให้บริษัท (฿)", min_value=0.0, step=100.0, key="fin_transfer")
+            fin_reg      = st.number_input("ค่าสมัคร (฿)",         min_value=0.0, step=100.0, key="fin_reg")
+        with fc2:
+            fin_sales    = st.number_input("ยอดขาย (฿)",            min_value=0.0, step=100.0, key="fin_sales")
+            fin_bv       = st.number_input("BV / โบนัส (฿)",        min_value=0.0, step=100.0, key="fin_bv")
+        with fc3:
+            fin_po       = st.number_input("PO สั่งของ ไม่รวม VAT (฿)", min_value=0.0, step=100.0, key="fin_po")
+            fin_stock    = st.number_input("สต๊อก ไม่รวม VAT (฿)",      min_value=0.0, step=100.0, key="fin_stock")
+        fin_notes = st.text_input("หมายเหตุ", key="fin_notes")
+
+        if st.button("💾 บันทึก", type="primary", use_container_width=True, key="fin_save"):
+            db.upsert_finance_entry({
+                "id":               str(uuid.uuid4()),
+                "entry_date":       str(fin_date),
+                "transfer_amount":  fin_transfer,
+                "registration_fee": fin_reg,
+                "sales_amount":     fin_sales,
+                "bv_amount":        fin_bv,
+                "po_amount":        fin_po,
+                "stock_value":      fin_stock,
+                "notes":            fin_notes,
+            })
+            st.success("✅ บันทึกแล้ว")
+            st.rerun()
+
+    st.divider()
+
+    fin_df = db.get_finance_df()
+    if fin_df.empty:
+        st.info("ยังไม่มีข้อมูล — กรอกข้อมูลด้านบนก่อนครับ")
+    else:
+        display_fin = fin_df[[
+            "entry_date", "transfer_amount", "registration_fee",
+            "sales_amount", "bv_amount", "po_amount",
+            "stock_value", "ยอดค้างโอน", "เงินโอนเกิน", "สิทธิ์สั่งของ",
+        ]].copy()
+        display_fin.columns = [
+            "วันที่", "โอน", "สมัคร", "ขาย", "BV", "PO",
+            "สต๊อก", "ค้างโอน", "โอนเกิน", "สิทธิ์สั่งของ",
+        ]
+        st.dataframe(
+            display_fin.sort_values("วันที่", ascending=False).style.format({
+                "โอน": "{:,.2f}", "สมัคร": "{:,.2f}", "ขาย": "{:,.2f}",
+                "BV": "{:,.2f}", "PO": "{:,.2f}", "สต๊อก": "{:,.2f}",
+                "ค้างโอน": "{:,.2f}", "โอนเกิน": "{:,.2f}", "สิทธิ์สั่งของ": "{:,.2f}",
+            }).map(lambda v: "background-color:#6b1a1a;color:white" if isinstance(v, float) and v > 0.01 else "",
+                  subset=["ค้างโอน"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        buf = io.BytesIO()
+        with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+            display_fin.to_excel(writer, index=False, sheet_name="การเงิน")
+        st.download_button(
+            "📥 Export Excel",
+            data=buf.getvalue(),
+            file_name=f"finance_{date.today()}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
