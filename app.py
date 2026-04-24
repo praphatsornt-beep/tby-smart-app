@@ -23,17 +23,6 @@ st.markdown("""
 <style>
 [data-testid="stMetricValue"] { font-size: 1.4rem; }
 [data-testid="stMetricLabel"] { font-size: 0.8rem; }
-th {
-    background-color: #1e1e1e !important;
-    color: white !important;
-    text-align: center !important;
-    font-weight: 700 !important;
-    opacity: 1 !important;
-}
-thead tr th {
-    background-color: #1e1e1e !important;
-    opacity: 1 !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
@@ -732,22 +721,14 @@ with tab5:
                           "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
         show_df = all_df[display_cols_h].reset_index(drop=True)
 
-        def _style_hist_row(row):
-            if row["ค้างจ่าย"] <= 0.01 and row["ค้างรับ"] <= 0 and row["สถานะบิล"] == "เปิดบิลแล้ว":
-                return ["background-color:#0d2b1a"] * len(row)
-            if row["ค้างรับ"] > 0 and row["สถานะบิล"] == "เปิดบิลแล้ว":
-                return ["background-color:#2b1e00"] * len(row)
-            return [""] * len(row)
-
         st.dataframe(
             show_df.style
                 .format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
-                .apply(_style_hist_row, axis=1)
-                .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"]),
+                .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"])
+                .map(lambda v: "background-color:#6b1a1a;color:white" if isinstance(v, (int, float)) and v > 0 else "", subset=["ค้างรับ"]),
             use_container_width=True,
             hide_index=True,
         )
-        st.caption("🟢 เคลียร์แล้ว (จ่ายและรับครบ)  |  🟠 มีของฝาก (เปิดบิลแล้วยังไม่รับของ)")
 
         st.divider()
         with st.expander("✏️ แก้ไขรายการ"):
