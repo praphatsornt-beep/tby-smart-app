@@ -1104,21 +1104,23 @@ with tab_fin:
         st.info("ยังไม่มีข้อมูล — กรอกข้อมูลด้านบนก่อนครับ")
     else:
         display_fin = fin_df[[
-            "entry_date", "transfer_amount", "registration_fee",
+            "entry_date", "transfer_amount", "adjustment", "registration_fee",
             "sales_amount", "bv_amount", "po_amount",
-            "stock_value", "ยอดค้างโอน", "เงินโอนเกิน", "สิทธิ์สั่งของ",
+            "stock_ff", "ยอดค้างโอน", "เงินโอนเกิน", "สิทธิ์สั่งของ",
         ]].copy()
         display_fin.columns = [
-            "วันที่", "โอน", "สมัคร", "ขาย", "BV", "PO",
-            "สต๊อก", "ค้างโอน", "โอนเกิน", "สิทธิ์สั่งของ",
+            "วันที่", "โอน", "ปรับ", "สมัคร", "ขาย", "BV", "PO",
+            "สต๊อก (ใช้)", "ค้างโอน", "โอนเกิน", "สิทธิ์สั่งของ",
         ]
         st.dataframe(
             display_fin.sort_values("วันที่", ascending=False).style.format({
-                "โอน": "{:,.2f}", "สมัคร": "{:,.2f}", "ขาย": "{:,.2f}",
-                "BV": "{:,.2f}", "PO": "{:,.2f}", "สต๊อก": "{:,.2f}",
+                "โอน": "{:,.2f}", "ปรับ": "{:,.2f}", "สมัคร": "{:,.2f}", "ขาย": "{:,.2f}",
+                "BV": "{:,.2f}", "PO": "{:,.2f}", "สต๊อก (ใช้)": "{:,.2f}",
                 "ค้างโอน": "{:,.2f}", "โอนเกิน": "{:,.2f}", "สิทธิ์สั่งของ": "{:,.2f}",
             }).map(lambda v: "background-color:#6b1a1a;color:white" if isinstance(v, float) and v > 0.01 else "",
-                  subset=["ค้างโอน"]),
+                  subset=["ค้างโอน"])
+            .map(lambda v: "background-color:#6b1a1a;color:white" if isinstance(v, float) and v < -0.01 else "",
+                  subset=["สิทธิ์สั่งของ"]),
             use_container_width=True,
             hide_index=True,
         )
