@@ -9,14 +9,15 @@ import io
 import database as db
 import shopee_api
 from math import ceil
+from flash_zones import lookup_zone, zone_surcharge, ZONE_LABELS
 
 BOX_WEIGHT_G = 500  # น้ำหนักกล่อง 0.5 kg (ไม่แสดงในระบบ)
 
-def calc_shipping(weight_grams: float, remote: bool = False) -> float:
-    """ค่าส่ง: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท, ห่างไกล +50 บาท"""
-    kg = (weight_grams + BOX_WEIGHT_G) / 1000
+def calc_shipping(weight_grams: float, postcode: str = "") -> float:
+    """ค่าส่ง Flash Express: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท + ค่าพื้นที่"""
+    kg  = (weight_grams + BOX_WEIGHT_G) / 1000
     fee = 39 + max(0, ceil(kg - 5)) * 10
-    return fee + (50 if remote else 0)
+    return fee + zone_surcharge(postcode)
 
 st.set_page_config(page_title="TBY SMART APP", page_icon="🛍️", layout="wide")
 
@@ -199,10 +200,17 @@ with tab1:
         m_bill     = ms1.radio("สถานะบิล",    ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True, key="m_bill")
         m_pay      = ms2.radio("สถานะจ่าย",   ["จ่ายแล้ว", "ค้างจ่าย"],         index=None, horizontal=True, key="m_pay")
         m_receipt  = ms3.radio("สถานะของ",    ["รับของแล้ว", "ฝากของ"],          index=None, horizontal=True, key="m_receipt")
-        m_delivery = ms4.radio("การรับสินค้า", ["รับหน้าร้าน", "ส่งพัสดุ"],      index=0,    horizontal=True, key="m_delivery")
-        m_remote   = False
+        m_delivery = ms4.radio("การรับสินค้า", ["รับหน้าร้าน", "ส่งพัสดุ"], index=0, horizontal=True, key="m_delivery")
+        m_postcode = ""
+        m_zone     = "normal"
         if m_delivery == "ส่งพัสดุ":
-            m_remote = st.checkbox("📍 พื้นที่ห่างไกล (+50 บาท)", key="m_remote")
+            m_postcode = st.text_input("รหัสไปรษณีย์ปลายทาง", max_chars=5, key="m_postcode",
+                                       placeholder="เช่น 10400")
+            if m_postcode:
+                m_zone       = lookup_zone(m_postcode)
+                zone_label, zone_fee = ZONE_LABELS[m_zone]
+                if m_zone != "normal":
+                    st.info(f"📍 {zone_label} (+{zone_fee} บาท)")
 
         # แสดง "รหัส — ชื่อ" เพื่อเลือก/ค้นหาด้วยรหัสได้
         product_display = {f"{p['id']} — {p['name']}": p for p in products}
@@ -236,7 +244,7 @@ with tab1:
             total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
             total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
             if m_delivery == "ส่งพัสดุ":
-                ship_fee = calc_shipping(total_weight, m_remote)
+                ship_fee = calc_shipping(total_weight, m_postcode)
                 vm1, vm2, vm3, vm4, vm5 = st.columns(5)
                 vm1.metric("รายการ",       f"{len(valid_items)} สินค้า")
                 vm2.metric("ยอดสินค้า",    f"{total_amt:,.0f} ฿")
@@ -262,8 +270,9 @@ with tab1:
             receive_now  = m_receipt == "รับของแล้ว"
             is_shipping  = m_delivery == "ส่งพัสดุ"
             total_w_g    = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
-            ship_fee     = calc_shipping(total_w_g, m_remote) if is_shipping else 0
-            delivery_tag = f"[ส่งพัสดุ|น้ำหนัก={total_w_g/1000:.2f}kg|ค่าส่ง={ship_fee:.0f}{'|ห่างไกล' if m_remote else ''}]" if is_shipping else ""
+            ship_fee     = calc_shipping(total_w_g, m_postcode) if is_shipping else 0
+            zone_tag     = f"|{ZONE_LABELS[m_zone][0]}" if is_shipping and m_zone != "normal" else ""
+            delivery_tag = f"[ส่งพัสดุ|{m_postcode}|น้ำหนัก={total_w_g/1000:.2f}kg|ค่าส่ง={ship_fee:.0f}{zone_tag}]" if is_shipping else ""
             for p, qty, note in valid_items:
                 full_note = f"{delivery_tag} {note}".strip() if delivery_tag else note
                 db.insert_transaction({
@@ -1067,18 +1076,21 @@ with tab7:
                     ship_weight_str, ship_fee_str, ship_remote = "", "", False
                     if is_ship_bill:
                         import re as _re
-                        _m = _re.search(r"\[ส่งพัสดุ\|น้ำหนัก=([\d.]+)kg\|ค่าส่ง=(\d+)(|\|ห่างไกล)\]", first_note)
+                        _m = _re.search(r"\[ส่งพัสดุ\|(\d{5})?\|?น้ำหนัก=([\d.]+)kg\|ค่าส่ง=(\d+)([^\]]*)\]", first_note)
                         if _m:
-                            ship_weight_str = _m.group(1)
-                            ship_fee_str    = _m.group(2)
-                            ship_remote     = "|ห่างไกล" in _m.group(3)
+                            ship_postcode   = _m.group(1) or ""
+                            ship_weight_str = _m.group(2)
+                            ship_fee_str    = _m.group(3)
+                            ship_remote     = _m.group(4).strip("|") if _m.group(4) else ""
+                        else:
+                            ship_postcode = ship_weight_str = ship_fee_str = ship_remote = ""
 
                     bm1, bm2, bm3, bm4 = st.columns(4)
                     bm1.metric("💸 ยอดค้างจ่ายรวม",   f"{total_outstanding:,.0f} บาท")
                     bm2.metric("⭐ PV ยังไม่เปิดบิล",  f"{unbilled_pv:,.0f}")
                     if is_ship_bill:
-                        bm3.metric("⚖️ น้ำหนัก", f"{ship_weight_str} kg")
-                        bm4.metric("🚚 ค่าส่ง",   f"{ship_fee_str} บาท" + (" (ห่างไกล)" if ship_remote else ""))
+                        bm3.metric("⚖️ น้ำหนัก", f"{ship_weight_str} kg" + (f" (ปณ. {ship_postcode})" if ship_postcode else ""))
+                        bm4.metric("🚚 ค่าส่ง",   f"{ship_fee_str} บาท" + (f" ({ship_remote})" if ship_remote else ""))
 
                     bill_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -1124,7 +1136,7 @@ with tab7:
     <tr><td>ยอดรวมทั้งหมด</td><td><b>{total_amount:,.0f} บาท</b></td></tr>
     <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
     <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
-    {"<tr><td>⚖️ น้ำหนัก</td><td><b>" + ship_weight_str + " kg</b></td></tr><tr><td>🚚 ค่าส่ง</td><td><b style='color:#1a5c8e'>" + ship_fee_str + " บาท" + (" (ห่างไกล)" if ship_remote else "") + "</b></td></tr>" if is_ship_bill else ""}
+    {"<tr><td>⚖️ น้ำหนัก</td><td><b>" + ship_weight_str + " kg</b></td></tr><tr><td>🚚 ค่าส่ง</td><td><b style='color:#1a5c8e'>" + ship_fee_str + " บาท" + (f" ({ship_remote})" if ship_remote else "") + "</b></td></tr>" if is_ship_bill else ""}
   </table>
 </div>
 <br>
