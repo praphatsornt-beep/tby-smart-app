@@ -196,11 +196,22 @@ with tab1:
         m_customer = mc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="m_cust")
         m_date     = mc2.date_input("วันที่", value=date.today(), key="m_date")
 
+        # ── COD shortcut ────────────────────────────────────────────────────
+        m_cod = st.toggle("🚚 COD (เก็บเงินปลายทาง)", key="m_cod")
+        if m_cod:
+            st.caption("COD: สถานะของ = รับของแล้ว, สถานะจ่าย = ค้างจ่าย (รอขนส่งโอนเงิน)")
+
         ms1, ms2, ms3, ms4 = st.columns(4)
-        m_bill     = ms1.radio("สถานะบิล",    ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True, key="m_bill")
-        m_pay      = ms2.radio("สถานะจ่าย",   ["จ่ายแล้ว", "ค้างจ่าย"],         index=None, horizontal=True, key="m_pay")
-        m_receipt  = ms3.radio("สถานะของ",    ["รับของแล้ว", "ฝากของ"],          index=None, horizontal=True, key="m_receipt")
-        m_delivery = ms4.radio("การรับสินค้า", ["รับหน้าร้าน", "ส่งพัสดุ"], index=0, horizontal=True, key="m_delivery")
+        m_bill = ms1.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"],
+                            index=0 if m_cod else None, horizontal=True, key="m_bill")
+        m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"],
+                            index=1 if m_cod else None, horizontal=True, key="m_pay",
+                            disabled=m_cod)
+        m_receipt = ms3.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"],
+                               index=0 if m_cod else None, horizontal=True, key="m_receipt",
+                               disabled=m_cod)
+        m_delivery = ms4.radio("การรับสินค้า", ["รับหน้าร้าน", "ส่งพัสดุ"],
+                                index=1 if m_cod else 0, horizontal=True, key="m_delivery")
         m_postcode = ""
         m_zone     = "normal"
         m_carrier  = "Flash Express"
@@ -248,6 +259,8 @@ with tab1:
             if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
         ]
 
+        COD_FEE_RATE = 0.00321  # 0.321%
+
         if valid_items:
             total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
             total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
@@ -255,13 +268,29 @@ with tab1:
             if m_delivery == "ส่งพัสดุ":
                 fees_all  = carrier_fees(total_weight, m_postcode)
                 ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(total_weight, m_postcode)
-                vm1, vm2, vm3, vm4, vm5 = st.columns(5)
-                vm1.metric("รายการ",       f"{len(valid_items)} สินค้า")
-                vm2.metric("ยอดสินค้า",    f"{total_amt:,.0f} ฿")
-                vm3.metric("PV รวม",       f"{total_pv:.0f}")
-                vm4.metric("⚖️ น้ำหนัก",  f"{(total_weight/1000):.2f} kg")
-                vm5.metric(f"🚚 {m_carrier}", f"{ship_fee:.0f} ฿")
+                collect   = total_amt + ship_fee
+                cod_fee   = round(collect * COD_FEE_RATE, 2) if m_cod else 0
+                net_recv  = collect - cod_fee
+                if m_cod:
+                    vm1, vm2, vm3, vm4, vm5, vm6, vm7 = st.columns(7)
+                    vm1.metric("รายการ",           f"{len(valid_items)} สินค้า")
+                    vm2.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
+                    vm3.metric("PV รวม",           f"{total_pv:.0f}")
+                    vm4.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
+                    vm5.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
+                    vm6.metric("💸 ค่า COD",       f"{cod_fee:,.2f} ฿")
+                    vm7.metric("✅ ได้รับจริง",    f"{net_recv:,.2f} ฿")
+                else:
+                    vm1, vm2, vm3, vm4, vm5 = st.columns(5)
+                    vm1.metric("รายการ",           f"{len(valid_items)} สินค้า")
+                    vm2.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
+                    vm3.metric("PV รวม",           f"{total_pv:.0f}")
+                    vm4.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
+                    vm5.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
             else:
+                ship_fee = cod_fee = 0
+                collect  = total_amt
+                net_recv = total_amt
                 vm1, vm2, vm3 = st.columns(3)
                 vm1.metric("รายการ",   f"{len(valid_items)} สินค้า")
                 vm2.metric("ยอดรวม",   f"{total_amt:,.0f} บาท")
@@ -276,10 +305,13 @@ with tab1:
 
         if st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True, key="m_submit",
                      disabled=bool(m_errors)):
-            customer = customer_map[m_customer]
-            receive_now  = m_receipt == "รับของแล้ว"
-            is_shipping  = m_delivery == "ส่งพัสดุ"
-            total_w_g    = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
+            customer     = customer_map[m_customer]
+            # COD override statuses
+            actual_pay     = "ค้างจ่าย"   if m_cod else m_pay
+            actual_receipt = "รับของแล้ว" if m_cod else m_receipt
+            receive_now    = actual_receipt == "รับของแล้ว"
+            is_shipping    = m_delivery == "ส่งพัสดุ"
+            total_w_g      = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
             if is_shipping:
                 fees_save = carrier_fees(total_w_g, m_postcode)
                 ship_fee  = fees_save[m_carrier]["total"]
@@ -287,9 +319,16 @@ with tab1:
                 zone_tag  = f"|{zone_name}" if zone_name else ""
                 delivery_tag = f"[ส่งพัสดุ|{m_carrier}|{m_postcode}|น้ำหนัก={total_w_g/1000:.2f}kg|ค่าส่ง={ship_fee:.0f}{zone_tag}]"
             else:
-                ship_fee = delivery_tag = 0
+                ship_fee = 0
+                delivery_tag = ""
+            if m_cod:
+                collect    = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
+                cod_amount = round(collect * COD_FEE_RATE, 2)
+                cod_tag    = f"[COD|ค่าธรรมเนียม={cod_amount:.2f}฿|ยอดรับจริง={collect-cod_amount:.2f}฿]"
+            else:
+                cod_tag = ""
             for p, qty, note in valid_items:
-                full_note = f"{delivery_tag} {note}".strip() if delivery_tag else note
+                full_note = " ".join(filter(None, [delivery_tag, cod_tag, note])).strip()
                 db.insert_transaction({
                     "id":                   str(uuid.uuid4()),
                     "date":                 str(m_date),
@@ -303,10 +342,13 @@ with tab1:
                     "initial_qty_received": qty if receive_now else 0,
                     "transaction_type":     "เบิกของก่อน" if m_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
                     "bill_status":          m_bill,
-                    "pay_status":           m_pay,
+                    "pay_status":           actual_pay,
                     "notes":                full_note,
                 })
-            st.success(f"✅ บันทึก {len(valid_items)} รายการ" + (f" | 🚚 ค่าส่ง {ship_fee:.0f} บาท" if is_shipping else ""))
+            msg = f"✅ บันทึก {len(valid_items)} รายการ"
+            if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
+            if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
+            st.success(msg)
             st.rerun()
         elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
             st.caption("⚠️ " + " | ".join(m_errors))
