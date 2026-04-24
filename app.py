@@ -191,7 +191,9 @@ with tab1:
         m_pay     = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"],         index=None, horizontal=True, key="m_pay")
         m_receipt = ms3.radio("สถานะของ",  ["รับของแล้ว", "ฝากของ"],          index=None, horizontal=True, key="m_receipt")
 
-        product_names = list(product_map.keys())
+        # แสดง "รหัส — ชื่อ" เพื่อเลือก/ค้นหาด้วยรหัสได้
+        product_display = {f"{p['id']} — {p['name']}": p for p in products}
+        product_display_keys = list(product_display.keys())
         cart_df = pd.DataFrame({
             "สินค้า":   pd.Series([""] * 5, dtype="object"),
             "จำนวน":   pd.Series([0]  * 5, dtype="int64"),
@@ -203,7 +205,7 @@ with tab1:
             use_container_width=True,
             hide_index=True,
             column_config={
-                "สินค้า":  st.column_config.SelectboxColumn("สินค้า", options=product_names, required=False),
+                "สินค้า":  st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
                 "จำนวน":  st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
                 "หมายเหตุ": st.column_config.TextColumn("หมายเหตุ"),
             },
@@ -211,9 +213,9 @@ with tab1:
         )
 
         valid_items = [
-            (product_map[row["สินค้า"]], int(row["จำนวน"] or 0), str(row["หมายเหตุ"] or ""))
+            (product_display[row["สินค้า"]], int(row["จำนวน"] or 0), str(row["หมายเหตุ"] or ""))
             for _, row in edited_cart.iterrows()
-            if str(row.get("สินค้า", "")) in product_map and int(row.get("จำนวน") or 0) > 0
+            if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
         ]
 
         if valid_items:
@@ -496,7 +498,7 @@ with tab3:
                 pending_qty = int(grp["ค้างรับ"].sum())
                 label = f"**{customer_name}**  —  ค้างจ่าย {owed:,.0f} บาท  |  ค้างรับ {pending_qty} ชิ้น"
                 with st.expander(label, expanded=True):
-                    display_cols = ["วันที่", "สินค้า", "สั่ง", "รับแล้ว", "ค้างรับ", "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "สถานะบิล", "ประเภท"]
+                    display_cols = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ค้างรับ", "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "สถานะบิล", "ประเภท"]
                     st.dataframe(
                         grp[display_cols].style.format({
                             "ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}",
@@ -741,7 +743,7 @@ with tab5:
         m2.metric("เคลียร์แล้ว", int(all_df["เคลียร์แล้ว"].sum()))
         m3.metric("ยังค้างอยู่", int((~all_df["เคลียร์แล้ว"]).sum()))
 
-        display_cols_h = ["วันที่", "ลูกค้า", "สินค้า", "สั่ง", "รับแล้ว",
+        display_cols_h = ["วันที่", "ลูกค้า", "รหัส", "สินค้า", "สั่ง", "รับแล้ว",
                           "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ",
                           "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
         show_df = all_df[display_cols_h].reset_index(drop=True)
@@ -1013,6 +1015,7 @@ with tab7:
                         rows_html += f"""
                         <tr>
                           <td>{r['วันที่']}</td>
+                          <td style="font-size:11px;color:#666">{r.get('รหัส','')}</td>
                           <td>{r['สินค้า']}</td>
                           <td style="text-align:center">{int(r['สั่ง'])}</td>
                           <td style="text-align:center">{int(r['รับแล้ว'])}</td>
@@ -1065,7 +1068,7 @@ with tab7:
 </div>
 <table>
   <thead><tr>
-    <th>วันที่</th><th>สินค้า</th>
+    <th>วันที่</th><th>รหัส</th><th>สินค้า</th>
     <th style="text-align:center">สั่ง</th><th style="text-align:center">รับแล้ว</th>
     <th style="text-align:right">ยอดรวม</th><th style="text-align:right">จ่ายแล้ว</th>
     <th style="text-align:right">ค้างจ่าย</th><th style="text-align:center">สถานะบิล</th>
