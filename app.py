@@ -945,7 +945,7 @@ with tab6:
         pv_by_name = {p["name"]: float(p.get("points_per_unit") or 0) for p in products}
         total_kom   = int(stock_df["คอม"].sum())
         total_real  = int(stock_df["นับจริง"].sum())
-        total_pv    = sum(int(row["นับจริง"]) * pv_by_name.get(row["สินค้า"], 0)
+        total_pv    = sum(int(row["ส่วนต่าง"]) * pv_by_name.get(row["สินค้า"], 0)
                           for _, row in stock_df.iterrows())
         sm1, sm2, sm3 = st.columns(3)
         sm1.metric("📦 ยอดรวมในคอม", f"{total_kom:,} ชิ้น")
