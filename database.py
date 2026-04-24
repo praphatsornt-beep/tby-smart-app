@@ -227,9 +227,10 @@ def get_finance_df() -> pd.DataFrame:
     df["net"] = (df["transfer_amount"] + df["bv_amount"] + df["adjustment"]).cumsum() - df["ต้องโอน"].cumsum()
     df["ยอดค้างโอน"] = df["net"].apply(lambda x: max(0.0, -x))
     df["เงินโอนเกิน"] = df["net"].apply(lambda x: max(0.0, x))
-    # stock อัตโนมัติ: สต๊อกยกมา + Σ(PO) - Σ((ยอดขาย - ค่าสมัคร) ÷ 1.07)
+    # stock อัตโนมัติ: สต๊อกยกมา + Σ(PO) - Σ(ยอดขาย ÷ 1.07)
+    # ยอดขาย = สินค้าเท่านั้น (ไม่รวมค่าสมัคร), ค่าสมัครไม่กระทบสต๊อก
     opening_stock = float(df["stock_value"].where(df["stock_value"] > 0).iloc[0]) if (df["stock_value"] > 0).any() else 0.0
-    df["auto_stock"] = opening_stock + df["po_amount"].cumsum() - ((df["sales_amount"] - df["registration_fee"]) / 1.07).cumsum()
+    df["auto_stock"] = opening_stock + df["po_amount"].cumsum() - (df["sales_amount"] / 1.07).cumsum()
     df["สิทธิ์สั่งของ"] = (1_100_000 + df["net"]) / 1.07 - df["auto_stock"]
     return df
 
