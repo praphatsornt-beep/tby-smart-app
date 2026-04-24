@@ -1062,6 +1062,31 @@ with tab_fin:
 
     st.divider()
 
+    with st.expander("🗓️ เปิดเดือนใหม่ (กรอกครั้งเดียวต้นเดือน)"):
+        ob_date  = st.date_input("วันที่เปิดเดือน", value=date.today().replace(day=1), key="ob_date")
+        _ob = db.get_finance_entry(str(ob_date)) or {}
+        ob_adj = float(_ob.get("adjustment", 0))
+        ob1, ob2 = st.columns(2)
+        with ob1:
+            ob_overpaid = st.number_input("โอนเกินยกมา (฿)", min_value=0.0, step=100.0,
+                value=max(0.0, ob_adj), key=f"ob_over_{ob_date}")
+            ob_stock    = st.number_input("สต๊อกยกมา ไม่รวม VAT (฿)", min_value=0.0, step=100.0,
+                value=float(_ob.get("stock_value", 0)), key=f"ob_stock_{ob_date}")
+        with ob2:
+            ob_owed     = st.number_input("ค้างโอนยกมา (฿)", min_value=0.0, step=100.0,
+                value=max(0.0, -ob_adj), key=f"ob_owed_{ob_date}")
+        if st.button("💾 บันทึกยอดยกมา", type="secondary", use_container_width=True, key="ob_save"):
+            db.upsert_finance_entry({
+                "id": str(uuid.uuid4()), "entry_date": str(ob_date),
+                "transfer_amount": 0, "registration_fee": 0,
+                "sales_amount": 0, "bv_amount": 0, "po_amount": 0,
+                "stock_value": ob_stock,
+                "adjustment": ob_overpaid - ob_owed,
+                "notes": "ยอดยกมา",
+            })
+            st.success("✅ บันทึกยอดยกมาแล้ว")
+            st.rerun()
+
     with st.expander("➕ กรอกข้อมูลประจำวัน", expanded=True):
         fin_date = st.date_input("วันที่", value=date.today(), key="fin_date")
         _ex = db.get_finance_entry(str(fin_date)) or {}
@@ -1070,16 +1095,12 @@ with tab_fin:
         fc1, fc2 = st.columns(2)
         with fc1:
             fin_transfer = st.number_input("ยอดโอนให้บริษัท (฿)", min_value=0.0, step=100.0, value=float(_ex.get("transfer_amount", 0)), key=f"fin_transfer_{fin_date}")
-            fin_sales    = st.number_input("ยอดขาย (฿)",            min_value=0.0, step=100.0, value=float(_ex.get("sales_amount", 0)), key=f"fin_sales_{fin_date}")
+            fin_sales    = st.number_input("ยอดขาย รวม VAT (฿)",   min_value=0.0, step=100.0, value=float(_ex.get("sales_amount", 0)), key=f"fin_sales_{fin_date}")
             fin_po       = st.number_input("PO สั่งของ ไม่รวม VAT (฿)", min_value=0.0, step=100.0, value=float(_ex.get("po_amount", 0)), key=f"fin_po_{fin_date}")
         with fc2:
-            fin_reg      = st.number_input("ค่าสมัคร (฿)",          min_value=0.0, step=100.0, value=float(_ex.get("registration_fee", 0)), key=f"fin_reg_{fin_date}")
-            fin_bv       = st.number_input("BV / โบนัส (฿)",         min_value=0.0, step=100.0, value=float(_ex.get("bv_amount", 0)), key=f"fin_bv_{fin_date}")
-            fin_adj      = st.number_input("ยอดปรับ/ยกมา (฿) บวก=โอนเกิน, ลบ=ค้างโอน", step=100.0, value=float(_ex.get("adjustment", 0)), key=f"fin_adj_{fin_date}")
+            fin_reg      = st.number_input("ค่าสมัคร (฿)",    min_value=0.0, step=100.0, value=float(_ex.get("registration_fee", 0)), key=f"fin_reg_{fin_date}")
+            fin_bv       = st.number_input("BV (หักยอดค้าง) (฿)", min_value=0.0, step=100.0, value=float(_ex.get("bv_amount", 0)), key=f"fin_bv_{fin_date}")
         fin_notes = st.text_input("หมายเหตุ", value=_ex.get("notes", "") or "", key=f"fin_notes_{fin_date}")
-        st.divider()
-        st.caption("📦 สต๊อก — กรอกครั้งแรกของเดือน หรือเมื่อนับสต๊อกใหม่ ระบบจะใช้ค่าล่าสุดอัตโนมัติ")
-        fin_stock = st.number_input("สต๊อก ไม่รวม VAT (฿)", min_value=0.0, step=100.0, value=float(_ex.get("stock_value", 0)), key=f"fin_stock_{fin_date}")
 
         if st.button("💾 บันทึก", type="primary", use_container_width=True, key="fin_save"):
             db.upsert_finance_entry({
@@ -1090,8 +1111,8 @@ with tab_fin:
                 "sales_amount":     fin_sales,
                 "bv_amount":        fin_bv,
                 "po_amount":        fin_po,
-                "stock_value":      fin_stock,
-                "adjustment":       fin_adj,
+                "stock_value":      0,
+                "adjustment":       0,
                 "notes":            fin_notes,
             })
             st.success("✅ บันทึกแล้ว")
@@ -1104,18 +1125,18 @@ with tab_fin:
         st.info("ยังไม่มีข้อมูล — กรอกข้อมูลด้านบนก่อนครับ")
     else:
         display_fin = fin_df[[
-            "entry_date", "transfer_amount", "adjustment", "registration_fee",
-            "sales_amount", "bv_amount", "po_amount",
-            "stock_ff", "ยอดค้างโอน", "เงินโอนเกิน", "สิทธิ์สั่งของ",
+            "entry_date", "transfer_amount", "bv_amount", "registration_fee",
+            "sales_amount", "po_amount",
+            "auto_stock", "ยอดค้างโอน", "เงินโอนเกิน", "สิทธิ์สั่งของ",
         ]].copy()
         display_fin.columns = [
-            "วันที่", "โอน", "ปรับ", "สมัคร", "ขาย", "BV", "PO",
-            "สต๊อก (ใช้)", "ค้างโอน", "โอนเกิน", "สิทธิ์สั่งของ",
+            "วันที่", "โอน", "BV", "สมัคร", "ขาย", "PO",
+            "สต๊อก", "ค้างโอน", "โอนเกิน", "สิทธิ์สั่งของ",
         ]
         st.dataframe(
             display_fin.sort_values("วันที่", ascending=False).style.format({
-                "โอน": "{:,.2f}", "ปรับ": "{:,.2f}", "สมัคร": "{:,.2f}", "ขาย": "{:,.2f}",
-                "BV": "{:,.2f}", "PO": "{:,.2f}", "สต๊อก (ใช้)": "{:,.2f}",
+                "โอน": "{:,.2f}", "BV": "{:,.2f}", "สมัคร": "{:,.2f}", "ขาย": "{:,.2f}",
+                "PO": "{:,.2f}", "สต๊อก": "{:,.2f}",
                 "ค้างโอน": "{:,.2f}", "โอนเกิน": "{:,.2f}", "สิทธิ์สั่งของ": "{:,.2f}",
             }).map(lambda v: "background-color:#6b1a1a;color:white" if isinstance(v, float) and v > 0.01 else "",
                   subset=["ค้างโอน"])

@@ -223,13 +223,14 @@ def get_finance_df() -> pd.DataFrame:
     df = pd.DataFrame(rows)
     df["adjustment"] = df.get("adjustment", pd.Series(0.0, index=df.index)).fillna(0.0)
     df["ต้องโอน"] = df["sales_amount"] + df["registration_fee"]
-    df["net"] = (df["transfer_amount"] + df["adjustment"]).cumsum() - df["ต้องโอน"].cumsum()
-    df["bv_cum"] = df["bv_amount"].cumsum()
+    # BV ถือเป็นยอดโอนให้บริษัทอีกแบบหนึ่ง รวมเข้ากับ transfer และ adjustment
+    df["net"] = (df["transfer_amount"] + df["bv_amount"] + df["adjustment"]).cumsum() - df["ต้องโอน"].cumsum()
     df["ยอดค้างโอน"] = df["net"].apply(lambda x: max(0.0, -x))
     df["เงินโอนเกิน"] = df["net"].apply(lambda x: max(0.0, x))
-    # forward-fill stock: ใช้ค่าล่าสุดที่กรอก ไม่ต้องกรอกทุกวัน
-    df["stock_ff"] = df["stock_value"].replace(0.0, float("nan")).ffill().fillna(0.0)
-    df["สิทธิ์สั่งของ"] = (1_100_000 + df["net"] + df["bv_cum"]) / 1.07 - df["stock_ff"]
+    # stock อัตโนมัติ: สต๊อกยกมา + Σ(PO) - Σ(ยอดขาย ÷ 1.07)
+    opening_stock = float(df["stock_value"].where(df["stock_value"] > 0).iloc[0]) if (df["stock_value"] > 0).any() else 0.0
+    df["auto_stock"] = opening_stock + df["po_amount"].cumsum() - (df["sales_amount"] / 1.07).cumsum()
+    df["สิทธิ์สั่งของ"] = (1_100_000 + df["net"]) / 1.07 - df["auto_stock"]
     return df
 
 
@@ -241,7 +242,7 @@ def get_finance_summary() -> dict:
     return {
         "outstanding": float(last["ยอดค้างโอน"]),
         "overpaid": float(last["เงินโอนเกิน"]),
-        "stock": float(last["stock_value"]),
+        "stock": float(last["auto_stock"]),
         "credit": float(last["สิทธิ์สั่งของ"]),
     }
 
