@@ -205,6 +205,11 @@ def get_all_transactions_df(customer_id: str = None) -> pd.DataFrame:
 
 # ─── Finance ─────────────────────────────────────────────────────────────────
 
+def get_finance_entry(entry_date: str) -> dict | None:
+    rows = get_supabase().table("finance_daily").select("*").eq("entry_date", entry_date).execute().data
+    return rows[0] if rows else None
+
+
 def upsert_finance_entry(data: dict) -> None:
     db = get_supabase()
     db.table("finance_daily").delete().eq("entry_date", data["entry_date"]).execute()
