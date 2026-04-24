@@ -216,8 +216,9 @@ def get_finance_df() -> pd.DataFrame:
     if not rows:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
+    df["adjustment"] = df.get("adjustment", pd.Series(0.0, index=df.index)).fillna(0.0)
     df["ต้องโอน"] = df["sales_amount"] + df["registration_fee"]
-    df["net"] = df["transfer_amount"].cumsum() - df["ต้องโอน"].cumsum()
+    df["net"] = (df["transfer_amount"] + df["adjustment"]).cumsum() - df["ต้องโอน"].cumsum()
     df["bv_cum"] = df["bv_amount"].cumsum()
     df["ยอดค้างโอน"] = df["net"].apply(lambda x: max(0.0, -x))
     df["เงินโอนเกิน"] = df["net"].apply(lambda x: max(0.0, x))

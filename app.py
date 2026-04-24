@@ -1074,6 +1074,8 @@ with tab_fin:
         with fc3:
             fin_po       = st.number_input("PO สั่งของ ไม่รวม VAT (฿)", min_value=0.0, step=100.0, key="fin_po")
             fin_stock    = st.number_input("สต๊อก ไม่รวม VAT (฿)",      min_value=0.0, step=100.0, key="fin_stock")
+        st.caption("ยอดยกมา (กรอกครั้งแรก หรือปรับยอด) — โอนเกินยกมา: ใส่บวก, ค้างโอนยกมา: ใส่ลบ")
+        fin_adj   = st.number_input("ยอดปรับ/ยกมา (฿) เช่น +706021.55 หรือ -50000", step=100.0, key="fin_adj")
         fin_notes = st.text_input("หมายเหตุ", key="fin_notes")
 
         if st.button("💾 บันทึก", type="primary", use_container_width=True, key="fin_save"):
@@ -1086,6 +1088,7 @@ with tab_fin:
                 "bv_amount":        fin_bv,
                 "po_amount":        fin_po,
                 "stock_value":      fin_stock,
+                "adjustment":       fin_adj,
                 "notes":            fin_notes,
             })
             st.success("✅ บันทึกแล้ว")
