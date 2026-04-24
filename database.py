@@ -222,15 +222,26 @@ def get_finance_df() -> pd.DataFrame:
         return pd.DataFrame()
     df = pd.DataFrame(rows)
     df["adjustment"] = df.get("adjustment", pd.Series(0.0, index=df.index)).fillna(0.0)
+
+    # ── Overpaid / ค้างโอน ──────────────────────────────────────────────────
+    # net = Σ(โอน + BV + ปรับ) − Σ(ขาย + สมัคร)
+    # BV = ยอดโอนให้บริษัทชนิดหนึ่ง (หักยอดค้างได้)
+    # ค่าสมัคร = ค่าใช้จ่ายจ่ายทิ้ง ลด Overpaid แต่ไม่กระทบสต๊อก
     df["ต้องโอน"] = df["sales_amount"] + df["registration_fee"]
-    # BV ถือเป็นยอดโอนให้บริษัทอีกแบบหนึ่ง รวมเข้ากับ transfer และ adjustment
     df["net"] = (df["transfer_amount"] + df["bv_amount"] + df["adjustment"]).cumsum() - df["ต้องโอน"].cumsum()
     df["ยอดค้างโอน"] = df["net"].apply(lambda x: max(0.0, -x))
     df["เงินโอนเกิน"] = df["net"].apply(lambda x: max(0.0, x))
-    # stock อัตโนมัติ: สต๊อกยกมา + Σ(PO) - Σ(ยอดขาย ÷ 1.07)
-    # ยอดขาย = สินค้าเท่านั้น (ไม่รวมค่าสมัคร), ค่าสมัครไม่กระทบสต๊อก
-    opening_stock = float(df["stock_value"].where(df["stock_value"] > 0).iloc[0]) if (df["stock_value"] > 0).any() else 0.0
+
+    # ── Stock สะสม ───────────────────────────────────────────────────────────
+    # Actual_Stock = สต๊อกยกมา + Σ(PO) − Σ(ยอดขาย ÷ 1.07)
+    # PO บวกสต๊อก, ยอดขาย (สินค้าเท่านั้น) หักสต๊อก ÷ 1.07 เพื่อถอด VAT
+    # ค่าสมัครและ BV ไม่กระทบสต๊อก
+    non_zero = df[df["stock_value"] > 0]["stock_value"]
+    opening_stock = float(non_zero.iloc[0]) if not non_zero.empty else 0.0
     df["auto_stock"] = opening_stock + df["po_amount"].cumsum() - (df["sales_amount"] / 1.07).cumsum()
+
+    # ── สิทธิ์สั่งของ ────────────────────────────────────────────────────────
+    # สิทธิ์ = (1,100,000 + net) / 1.07 − Actual_Stock
     df["สิทธิ์สั่งของ"] = (1_100_000 + df["net"]) / 1.07 - df["auto_stock"]
     return df
 
