@@ -562,16 +562,14 @@ with tab1:
                         if _parsed["zipcode"]:     st.session_state["_staged_pc"] = _parsed["zipcode"]
                         st.rerun()
                     st.divider()
-                    col_a, col_b = st.columns(2)
-                    r_name       = col_a.text_input("ชื่อผู้รับ",    key="r_name")
-                    r_phone      = col_b.text_input("เบอร์โทร",      key="r_phone")
-                    # Auto-lookup เมื่อพิมพ์เบอร์ครบ 10 หลัก
-                    if len(r_phone.strip()) == 10 and st.session_state.get("_last_rph_fill") != r_phone.strip():
+                    # Auto-lookup ก่อน widget render — อ่านจาก session_state ที่ frontend ส่งมา
+                    _cur_rph = st.session_state.get("r_phone", "")
+                    if len(_cur_rph.strip()) == 10 and st.session_state.get("_last_rph_fill") != _cur_rph.strip():
                         try:
-                            _rph_addr = db.get_address_by_phone(r_phone.strip())
+                            _rph_addr = db.get_address_by_phone(_cur_rph.strip())
                         except Exception:
                             _rph_addr = None
-                        st.session_state["_last_rph_fill"] = r_phone.strip()
+                        st.session_state["_last_rph_fill"] = _cur_rph.strip()
                         if _rph_addr:
                             for _k, _v in [
                                 ("r_name", _rph_addr.get("recipient_name") or ""),
@@ -587,7 +585,9 @@ with tab1:
                             if _rph_cust and not st.session_state.get("_cust_picked"):
                                 st.session_state["_cust_picked"] = _rph_cust
                                 st.session_state["_prev_shipping_cid"] = _rph_addr.get("customer_id", "")
-                            st.rerun()
+                    col_a, col_b = st.columns(2)
+                    r_name       = col_a.text_input("ชื่อผู้รับ",    key="r_name")
+                    r_phone      = col_b.text_input("เบอร์โทร",      key="r_phone")
                     r_addr_line  = st.text_input("บ้านเลขที่/ถนน",  key="r_al")
                     col_c, col_d, col_e = st.columns(3)
                     r_district   = col_c.text_input("ตำบล/แขวง",    key="r_dt")

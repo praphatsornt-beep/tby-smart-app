@@ -51,7 +51,10 @@ def get_address_by_phone(phone: str) -> dict | None:
 
 
 def upsert_customer_address(data: dict) -> None:
-    get_supabase().table("customer_addresses").upsert(data).execute()
+    db = get_supabase()
+    if data.get("phone"):
+        db.table("customer_addresses").delete().eq("phone", data["phone"].strip()).execute()
+    db.table("customer_addresses").insert(data).execute()
 
 
 def delete_customer_address(address_id: str) -> None:
