@@ -319,6 +319,8 @@ with tab1:
         m_zone     = "normal"
         m_carrier  = "Flash Express"
         if m_delivery == "ส่งพัสดุ":
+            if "_staged_pc" in st.session_state:
+                st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
             pc_col, fc_col, sc_col, car_col = st.columns([1, 1, 1, 1])
             m_postcode = pc_col.text_input("รหัสไปรษณีย์", max_chars=5, key="m_postcode",
                                             placeholder="เช่น 10400")
@@ -373,7 +375,7 @@ with tab1:
                         if _parsed["province"]:
                             st.session_state[f"r_pv_{_cid}"]    = _parsed["province"]
                         if _parsed["zipcode"]:
-                            st.session_state["m_postcode"]       = _parsed["zipcode"]
+                            st.session_state["_staged_pc"] = _parsed["zipcode"]
                         st.rerun()
                     st.divider()
                     col_a, col_b = st.columns(2)
