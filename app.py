@@ -317,11 +317,12 @@ with tab1:
             s_zone = fees["SPX Express"]["zone"]        if fees else "—"
             fc_col.caption(f"Flash Express: {f_zone or 'ปกติ'} | +{f_sur} ฿")
             sc_col.caption(f"SPX Express: {s_zone or 'ปกติ'} | +{s_sur} ฿")
-            # auto-select carrier ที่ถูกกว่าเมื่อ postcode เปลี่ยน
+            # auto-select carrier: ต่างจังหวัด+<=3kg → Flash, อื่นๆ → SPX
+            def _pick_carrier(pc: str, kg: float = 0) -> str:
+                return "Flash Express" if (kg <= 3 and not pc.startswith("10")) else "SPX Express"
             if fees and m_postcode != st.session_state.get("_prev_pc", ""):
-                cheaper = "Flash Express" if f_sur <= s_sur else "SPX Express"
-                st.session_state["m_carrier"]  = cheaper
-                st.session_state["_prev_pc"]   = m_postcode
+                st.session_state["m_carrier"] = _pick_carrier(m_postcode)
+                st.session_state["_prev_pc"]  = m_postcode
             m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"],
                                        key="m_carrier")
 
@@ -411,6 +412,17 @@ with tab1:
             for _, row in edited_cart.iterrows()
             if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
         ]
+
+        # auto-select carrier จาก weight + location (รันทุกครั้งที่ items หรือ postcode เปลี่ยน)
+        if m_delivery == "ส่งพัสดุ" and len(m_postcode.strip()) == 5:
+            _w_kg = (sum(float(p.get("weight_grams") or 0) * q
+                         for p, q, _ in valid_items) + 500) / 1000
+            _optimal = _pick_carrier(m_postcode.strip(), _w_kg)
+            _sig = (m_postcode.strip(), round(_w_kg, 2))
+            if _sig != st.session_state.get("_carrier_sig"):
+                st.session_state["_carrier_sig"] = _sig
+                st.session_state["m_carrier"]    = _optimal
+                st.rerun()
 
         COD_FEE_RATE = 0.0321  # 3.21%
 
