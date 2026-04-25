@@ -412,21 +412,7 @@ with tab2:
                 exp_label = f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
 
                 with st.expander(exp_label, expanded=single_cust):
-                    # ── Styled table (มีสี) ───────────────────────────────
-                    _dcols = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ค้างรับ",
-                              "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "สถานะบิล"]
-                    st.dataframe(
-                        grp[_dcols].style
-                            .format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
-                            .map(_style_status, subset=["สถานะบิล"])
-                            .map(lambda v: "background-color:#6b1a1a;color:white"
-                                 if isinstance(v, (int, float)) and v > 0 else "",
-                                 subset=["ค้างรับ", "ค้างจ่าย"]),
-                        use_container_width=True, hide_index=True,
-                    )
-
-                    # ── Compact checkboxes ────────────────────────────────
-                    st.caption("เลือกรายการที่ต้องการดำเนินการ:")
+                    # ── Checkboxes พร้อมสถานะ ─────────────────────────────
                     ctl1, ctl2, ctl3 = st.columns([2, 2, 3])
                     if ctl1.button("เลือกทั้งหมด", key=f"sel_all_{customer_name}"):
                         for tid in txn_ids:
