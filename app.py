@@ -412,50 +412,34 @@ with tab2:
                 exp_label = f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
 
                 with st.expander(exp_label, expanded=single_cust):
-                    # ── ตารางรายละเอียด ────────────────────────────────────
+                    # ── ตารางพร้อม checkbox ────────────────────────────────
                     _dcols = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ค้างรับ",
                               "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "สถานะบิล"]
-                    st.dataframe(
-                        grp[_dcols].style
-                            .format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
-                            .map(_style_status, subset=["สถานะบิล"])
-                            .map(lambda v: "background-color:#6b1a1a;color:white"
-                                 if isinstance(v, (int, float)) and v > 0 else "",
-                                 subset=["ค้างรับ", "ค้างจ่าย"]),
-                        use_container_width=True, hide_index=True,
+                    _grp_disp = grp[_dcols].reset_index(drop=True).copy()
+                    _grp_disp.insert(0, "☑", False)
+                    _id_map = grp["id"].reset_index(drop=True)
+
+                    _edited = st.data_editor(
+                        _grp_disp,
+                        use_container_width=True,
+                        hide_index=True,
+                        column_config={
+                            "☑":       st.column_config.CheckboxColumn("☑", default=False, width="small"),
+                            "ยอดรวม":  st.column_config.NumberColumn("ยอดรวม",  format="%,.0f"),
+                            "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
+                            "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
+                        },
+                        disabled=[c for c in _grp_disp.columns if c != "☑"],
+                        key=f"chk_tbl_{customer_name}",
                     )
-                    st.divider()
 
-                    # Select all / deselect
-                    ctl1, ctl2, ctl3 = st.columns([2, 2, 3])
-                    if ctl1.button("เลือกทั้งหมด", key=f"sel_all_{customer_name}"):
-                        for tid in txn_ids:
-                            st.session_state[f"chk_{tid}"] = True
-                        st.rerun()
-                    if ctl2.button("ยกเลิก", key=f"desel_{customer_name}"):
-                        for tid in txn_ids:
-                            st.session_state[f"chk_{tid}"] = False
-                        st.rerun()
-
-                    # Checkboxes
-                    st.divider()
-                    for _, row in grp.iterrows():
-                        txn_id    = row["id"]
-                        bill_icon = "🟡" if row["สถานะบิล"] == "ยังไม่เปิดบิล" else "🟢"
-                        label     = f"{bill_icon} **{row['สินค้า']}** × {row['สั่ง']}"
-                        if row["ค้างจ่าย"] > 0.01:
-                            label += f"  —  ค้างจ่าย **{row['ค้างจ่าย']:,.0f}** บาท"
-                        if row["ค้างรับ"] > 0:
-                            label += f"  —  ค้างรับ **{row['ค้างรับ']}** ชิ้น"
-                        st.checkbox(label, key=f"chk_{txn_id}")
-
-                    selected_ids = [tid for tid in txn_ids
-                                    if st.session_state.get(f"chk_{tid}", False)]
+                    selected_ids = [_id_map.iloc[i] for i, checked
+                                    in enumerate(_edited["☑"]) if checked]
 
                     if selected_ids:
-                        sel_rows      = grp[grp["id"].isin(selected_ids)]
+                        sel_rows       = grp[grp["id"].isin(selected_ids)]
                         total_selected = sel_rows["ค้างจ่าย"].sum()
-                        ctl3.metric("ยอดที่เลือก", f"{total_selected:,.0f} บาท")
+                        st.info(f"เลือก {len(selected_ids)} รายการ — ยอดค้างจ่ายรวม **{total_selected:,.0f} บาท**")
 
                     st.divider()
 
