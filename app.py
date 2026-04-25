@@ -90,11 +90,16 @@ def _parse_iship_address(text: str) -> dict:
     if m:
         r["dst_phone"] = m.group()
 
-    # Zipcode + address line: "10250  14 Rama IX Soi 41 Yaek 18 . ..."
-    m = _re.search(r'(\d{5})\s{1,5}(.+?)(?:\s*\.\s*[฀-๿]|$)', text, _re.DOTALL)
+    # Zipcode + address line: "10250  14 Rama IX Soi 41 ..."
+    # ใช้ (?<!\d)(\d{5})(?!\d) เพื่อไม่ให้จับตัวเลขยาวเช่น เบอร์โทร
+    m = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)\s+(.+?)(?=\s*(?:\.\s*[฀-๿]|$))', text, _re.DOTALL)
     if m:
         r["zipcode"]      = m.group(1)
-        r["address_line"] = m.group(2).strip()
+        addr_raw          = m.group(2).strip()
+        # ลบเบอร์โทรออกถ้าปนมาในที่อยู่
+        if r["dst_phone"] and r["dst_phone"] in addr_raw:
+            addr_raw = addr_raw.replace(r["dst_phone"], "").strip()
+        r["address_line"] = addr_raw
 
     # ชื่อไทย/English pattern → district, (amphure,) province
     parts = _re.findall(r'([฀-๿][฀-๿\s]*?)\s*/\s*[A-Za-z]', text)
