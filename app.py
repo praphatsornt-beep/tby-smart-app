@@ -1342,7 +1342,8 @@ with tab7:
 <div class="header">
   <h1>TBY SMART APP — สรุปรายการ</h1>
   <h2>ลูกค้า: {sel_p}{"&nbsp;&nbsp;🚚 ส่งพัสดุ" if is_ship_bill else ""}</h2>
-  <div class="info">{"เลขที่บิล: " + bill_nos_str + " &nbsp;|&nbsp; " if bill_nos_str else ""}วันที่พิมพ์: {today_str} &nbsp;|&nbsp; {filter_label} ({len(show_p)} รายการ)</div>
+  <div style="font-size:14px;font-weight:600;margin-top:6px">เลขที่บิล: {bill_nos_str if bill_nos_str else "—"}</div>
+  <div class="info">วันที่พิมพ์: {today_str} &nbsp;|&nbsp; {filter_label} ({len(show_p)} รายการ)</div>
 </div>
 <table>
   <thead><tr>
@@ -1356,10 +1357,11 @@ with tab7:
 </table>
 <div class="summary">
   <table>
-    <tr><td>ยอดรวมทั้งหมด</td><td><b>{total_amount:,.0f} บาท</b></td></tr>
+    <tr><td>ยอดสินค้า</td><td><b>{total_amount:,.0f} บาท</b></td></tr>
+    {"<tr><td>⚖️ น้ำหนัก " + ship_weight_str + " kg &nbsp; 🚚 ค่าส่ง</td><td><b style='color:#1a5c8e'>" + ship_fee_str + " บาท</b></td></tr>" if is_ship_bill and ship_fee_str else ""}
+    <tr><td>ยอดรวม (รวมค่าส่ง)</td><td><b>{total_amount + int(ship_fee_str or 0):,.0f} บาท</b></td></tr>
     <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
     <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
-    {"<tr><td>⚖️ น้ำหนัก</td><td><b>" + ship_weight_str + " kg</b></td></tr><tr><td>🚚 ค่าส่ง</td><td><b style='color:#1a5c8e'>" + ship_fee_str + " บาท" + (f" ({ship_remote})" if ship_remote else "") + "</b></td></tr>" if is_ship_bill else ""}
   </table>
 </div>
 <br>
