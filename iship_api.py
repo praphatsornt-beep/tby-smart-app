@@ -9,6 +9,17 @@ COURIER_MAP = {
     "SPX Express":   "ShopeeExpress",
 }
 
+_PROVINCE_MAP = {
+    "กรุงเทพ": "กรุงเทพมหานคร",
+    "กทม":     "กรุงเทพมหานคร",
+    "bangkok":  "กรุงเทพมหานคร",
+    "Bangkok":  "กรุงเทพมหานคร",
+}
+
+def _norm_province(p: str) -> str:
+    return _PROVINCE_MAP.get(p.strip(), p.strip())
+
+
 _SRC_KEYS = [
     "ISHIP_SRC_NAME", "ISHIP_SRC_PHONE", "ISHIP_SRC_ADDRESS",
     "ISHIP_SRC_DISTRICT", "ISHIP_SRC_AMPHURE", "ISHIP_SRC_PROVINCE",
@@ -52,7 +63,7 @@ def create_order(
         "dst_address":   f"{address_line} {district} {amphure} {province}".strip(),
         "dst_district":  district,
         "dst_amphure":   amphure,
-        "dst_province":  province,
+        "dst_province":  _norm_province(province),
         "dst_zipcode":   zipcode,
         "weight":        round(max(weight_kg, 0.01), 2),
         "cod_amount":    int(cod_amount),
