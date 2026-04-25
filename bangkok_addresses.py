@@ -224,3 +224,20 @@ BKK_DISTRICT: dict[tuple[str, str], str] = {
 def lookup_khet(khwaeng: str, zipcode: str) -> str:
     """คืน เขต จาก แขวง + รหัสไปรษณีย์ หรือ '' ถ้าไม่พบ"""
     return BKK_DISTRICT.get((khwaeng.strip(), zipcode.strip()), "")
+
+
+# รหัสไปรษณีย์ → (จังหวัด, อำเภอ) สำหรับจังหวัดปริมณฑล/ต่างจังหวัดที่ใช้บ่อย
+ZIPCODE_TO_AMPHURE: dict[str, tuple[str, str]] = {
+    # นนทบุรี
+    "11000": ("นนทบุรี", "เมืองนนทบุรี"),
+    "11110": ("นนทบุรี", "บางบัวทอง"),
+    "11120": ("นนทบุรี", "ปากเกร็ด"),
+    "11130": ("นนทบุรี", "บางกรวย"),
+    "11140": ("นนทบุรี", "บางใหญ่"),
+    "11150": ("นนทบุรี", "ไทรน้อย"),
+}
+
+
+def lookup_from_zipcode(zipcode: str) -> tuple[str, str]:
+    """คืน (จังหวัด, อำเภอ) จากรหัสไปรษณีย์ หรือ ('', '') ถ้าไม่พบ"""
+    return ZIPCODE_TO_AMPHURE.get(zipcode.strip(), ("", ""))
