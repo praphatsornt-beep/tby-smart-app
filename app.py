@@ -585,7 +585,7 @@ with tab1:
                     "amphure":     r_amphure,
                     "province":    r_province,
                     "zipcode":     m_postcode,
-                    "weight_kg":   total_w_g / 1000,
+                    "weight_kg":   (total_w_g + 500) / 1000,  # +500g กล่อง
                     "cod_amount":  ceil(collect - cod_amount) if m_cod else 0,
                     "carrier":     m_carrier,
                     "remark":      f"{bill_no} {product_line}",
