@@ -201,17 +201,18 @@ with tab1:
         if m_cod:
             st.caption("COD: สถานะของ = รับของแล้ว, สถานะจ่าย = ค้างจ่าย (รอขนส่งโอนเงิน)")
 
-        ms1, ms2, ms3, ms4 = st.columns(4)
+        ms1, ms2, ms3 = st.columns(3)
         m_bill = ms1.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"],
                             index=0 if m_cod else None, horizontal=True, key="m_bill")
         m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"],
                             index=1 if m_cod else None, horizontal=True, key="m_pay",
                             disabled=m_cod)
-        m_receipt = ms3.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"],
-                               index=0 if m_cod else None, horizontal=True, key="m_receipt",
-                               disabled=m_cod)
-        m_delivery = ms4.radio("การรับสินค้า", ["รับหน้าร้าน", "ส่งพัสดุ"],
-                                index=1 if m_cod else 0, horizontal=True, key="m_delivery")
+        # รวม สถานะของ + การรับสินค้า เป็นตัวเลือกเดียว
+        _delivery_opts = ["ฝากของ (รอรับ)", "รับหน้าร้าน", "ส่งพัสดุ"]
+        m_delivery = ms3.radio("การรับ / สถานะของ", _delivery_opts,
+                                index=2 if m_cod else None, horizontal=True, key="m_delivery")
+        # map ไปยัง receipt_status สำหรับ DB
+        m_receipt = "ฝากของ" if m_delivery == "ฝากของ (รอรับ)" else "รับของแล้ว"
         m_postcode = ""
         m_zone     = "normal"
         m_carrier  = "Flash Express"
@@ -298,18 +299,17 @@ with tab1:
 
         m_errors = []
         if m_customer == "— เลือกลูกค้า —": m_errors.append("เลือกลูกค้าก่อน")
-        if m_bill is None:    m_errors.append("เลือกสถานะบิล")
-        if m_pay is None:     m_errors.append("เลือกสถานะจ่าย")
-        if m_receipt is None: m_errors.append("เลือกสถานะของ")
-        if not valid_items:   m_errors.append("กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ")
+        if m_bill is None:     m_errors.append("เลือกสถานะบิล")
+        if m_pay is None:      m_errors.append("เลือกสถานะจ่าย")
+        if m_delivery is None: m_errors.append("เลือกการรับสินค้า")
+        if not valid_items:    m_errors.append("กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ")
 
         if st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True, key="m_submit",
                      disabled=bool(m_errors)):
             customer     = customer_map[m_customer]
-            # COD override statuses
-            actual_pay     = "ค้างจ่าย"   if m_cod else m_pay
-            actual_receipt = "รับของแล้ว" if m_cod else m_receipt
-            receive_now    = actual_receipt == "รับของแล้ว"
+            actual_pay  = "ค้างจ่าย" if m_cod else m_pay
+            # m_receipt ถูก map จาก m_delivery แล้ว (ฝากของ/รับของแล้ว)
+            receive_now = m_receipt == "รับของแล้ว"
             is_shipping    = m_delivery == "ส่งพัสดุ"
             total_w_g      = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
             if is_shipping:
