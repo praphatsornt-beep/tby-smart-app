@@ -419,6 +419,14 @@ with tab1:
             if _cust_picked:
                 cp1, cp2 = st.columns([5, 1])
                 cp1.markdown(f"👤 **{_cust_picked}**")
+                _r_preview = " · ".join(filter(None, [
+                    st.session_state.get("r_name", ""),
+                    st.session_state.get("r_al", ""),
+                    st.session_state.get("r_am", ""),
+                    st.session_state.get("r_pv", ""),
+                ]))
+                if _r_preview:
+                    cp1.caption(_r_preview)
                 if cp2.button("✕", key="cust_clear", help="เลือกลูกค้าใหม่"):
                     st.session_state.pop("_cust_picked", None)
                     st.session_state.pop("_prev_shipping_cid", None)
