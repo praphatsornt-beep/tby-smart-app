@@ -420,7 +420,8 @@ with tab2:
                             .format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
                             .map(_style_status, subset=["สถานะบิล"])
                             .map(lambda v: "background-color:#6b1a1a;color:white"
-                                 if isinstance(v, (int, float)) and v > 0 else "", subset=["ค้างรับ"]),
+                                 if isinstance(v, (int, float)) and v > 0 else "",
+                                 subset=["ค้างรับ", "ค้างจ่าย"]),
                         use_container_width=True, hide_index=True,
                     )
                     st.divider()
