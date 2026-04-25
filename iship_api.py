@@ -65,7 +65,7 @@ def create_order(
         "dst_amphure":   amphure,
         "dst_province":  _norm_province(province),
         "dst_zipcode":   zipcode,
-        "weight":        round(max(weight_kg, 0.01), 2),
+        "weight":        1,
         "cod_amount":    int(cod_amount),
         "remark":        remark,
     }
