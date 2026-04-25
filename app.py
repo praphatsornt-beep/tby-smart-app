@@ -845,15 +845,35 @@ with tab5:
                           "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ",
                           "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
         show_df = all_df[display_cols_h].reset_index(drop=True)
+        id_map  = all_df["id"].reset_index(drop=True)
 
-        st.dataframe(
-            show_df.style
-                .format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
-                .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"])
-                .map(lambda v: "background-color:#6b1a1a;color:white" if isinstance(v, (int, float)) and v > 0 else "", subset=["ค้างรับ"]),
+        chk_df = show_df.copy()
+        chk_df.insert(0, "🗑️", False)
+
+        edited_h = st.data_editor(
+            chk_df,
             use_container_width=True,
             hide_index=True,
+            column_config={
+                "🗑️":      st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
+                "ยอดรวม":  st.column_config.NumberColumn("ยอดรวม",  format="%,.0f"),
+                "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
+                "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
+            },
+            disabled=[c for c in chk_df.columns if c != "🗑️"],
+            key="hist_table",
         )
+
+        to_del_idx = edited_h[edited_h["🗑️"]].index.tolist()
+        if to_del_idx:
+            d1, d2 = st.columns([2, 1])
+            d1.warning(f"เลือก {len(to_del_idx)} รายการ")
+            if d2.button("🗑️ ลบรายการที่เลือก", type="secondary", use_container_width=True, key="hist_del_chk_btn"):
+                for i in to_del_idx:
+                    db.delete_transaction(id_map.iloc[i])
+                st.success(f"✅ ลบ {len(to_del_idx)} รายการแล้ว")
+                st.session_state.pop("hist_table", None)
+                st.rerun()
 
         st.divider()
         with st.expander("✏️ แก้ไขรายการ"):
@@ -941,42 +961,15 @@ with tab5:
                     st.success("✅ แก้ไขแล้ว")
                     st.rerun()
 
-        st.divider()
-        st.write("**ลบรายการ**")
-
-        del_col1, del_col2 = st.columns([3, 1])
-        with del_col1:
-            h_del_opts = {
-                f"{r['วันที่']}  {r['ลูกค้า']}  {r['สินค้า']} ×{r['สั่ง']}  {'✅' if all_df.loc[i,'เคลียร์แล้ว'] else '⏳'}": r["id"]
-                for i, r in all_df.iterrows()
-            }
-            h_del_sel = st.selectbox("เลือกรายการที่จะลบ", list(h_del_opts.keys()), key="hist_del_sel")
-        with del_col2:
-            st.write("")
-            h_confirm = st.checkbox("ยืนยัน", key="hist_del_chk")
-
-        bcol1, bcol2 = st.columns(2)
-        with bcol1:
-            if st.button("🗑️ ลบรายการที่เลือก", disabled=not h_confirm,
-                         use_container_width=True, key="hist_del_one"):
-                db.delete_transaction(h_del_opts[h_del_sel])
-                st.success("✅ ลบแล้ว")
-                st.rerun()
-
+        # ── ลบที่เคลียร์แล้วทั้งหมด ──────────────────────────────────────────
         cleared_ids = all_df[all_df["เคลียร์แล้ว"]]["id"].tolist()
-        with bcol2:
-            h_confirm_bulk = st.checkbox(
-                f"ยืนยันลบทั้งหมดที่เคลียร์แล้ว ({len(cleared_ids)} รายการ)",
-                key="hist_bulk_chk",
-                disabled=len(cleared_ids) == 0,
-            )
-            if st.button(
-                f"🗑️ ลบทั้งหมดที่เคลียร์แล้ว ({len(cleared_ids)})",
-                disabled=not h_confirm_bulk or len(cleared_ids) == 0,
-                use_container_width=True,
-                key="hist_del_bulk",
-                type="primary",
-            ):
+        if cleared_ids:
+            st.divider()
+            bc1, bc2 = st.columns([3, 1])
+            bc1.caption(f"มี {len(cleared_ids)} รายการที่เคลียร์แล้ว (จ่ายและรับครบ)")
+            h_confirm_bulk = bc1.checkbox(f"ยืนยันลบทั้งหมดที่เคลียร์แล้ว", key="hist_bulk_chk")
+            if bc2.button(f"🗑️ ลบเคลียร์แล้วทั้งหมด ({len(cleared_ids)})",
+                          disabled=not h_confirm_bulk, use_container_width=True, key="hist_del_bulk"):
                 for tid in cleared_ids:
                     db.delete_transaction(tid)
                 st.success(f"✅ ลบ {len(cleared_ids)} รายการแล้ว")
