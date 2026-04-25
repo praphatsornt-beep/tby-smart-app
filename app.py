@@ -223,8 +223,11 @@ with tab1:
             col_s1, col_s2 = st.columns([3, 1])
             if col_s1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="do_iship"):
                 if iship_api.is_configured():
+                    _api_keys = {"dst_name","dst_phone","address_line","district",
+                                 "amphure","province","zipcode","weight_kg",
+                                 "cod_amount","carrier","remark"}
                     with st.spinner("กำลังสร้างรายการใน iShip..."):
-                        resp = iship_api.create_order(**_p)
+                        resp = iship_api.create_order(**{k: v for k, v in _p.items() if k in _api_keys})
                     if resp.get("status"):
                         tracking = (resp.get("data") or {}).get("tracking_code", "")
                         st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
