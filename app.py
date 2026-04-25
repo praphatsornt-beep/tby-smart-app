@@ -280,9 +280,19 @@ with tab1:
                     else:
                         _err_msg = resp.get("message") or resp.get("msg") or str(resp)
                         if "NotSupportAddress" in _err_msg:
-                            st.error("❌ ที่อยู่ไม่ถูกต้อง — กรุณาตรวจสอบ ตำบล / อำเภอ / จังหวัด ให้ตรงกับฐานข้อมูล iShip")
+                            st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
+                            with st.expander("🔍 ดู response จาก iShip"):
+                                st.json(resp)
+                                st.write("ที่ส่งไป →", {
+                                    "district": _call.get("district"),
+                                    "amphure":  _call.get("amphure"),
+                                    "province": _call.get("province"),
+                                    "zipcode":  _call.get("zipcode"),
+                                })
                         else:
                             st.error(f"❌ iShip Error: {_err_msg}")
+                            with st.expander("🔍 raw response"):
+                                st.json(resp)
                 else:
                     st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
             if col_s2.button("ปิด", key="cancel_iship", use_container_width=True):
