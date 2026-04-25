@@ -154,6 +154,31 @@ def _parse_iship_address(text: str) -> dict:
         else:
             r["dst_name"] = clean.strip()
 
+    elif _re.search(r'0[6-9]\d{8}', text):
+        # ── Format 4: single line, name first ────────────────────────────
+        # {name}  {phone}   {address} {amphure} {province} {zipcode}
+        _all_f4 = ' '.join(_lines)
+        _m4 = _re.match(r'^(.+?)\s+(0[6-9]\d{8})\s+(.+)$', _all_f4.strip())
+        if _m4:
+            r["dst_name"]  = _m4.group(1).strip()
+            r["dst_phone"] = _m4.group(2)
+            _rest4 = _m4.group(3).strip()
+            _m4z = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)', _rest4)
+            if _m4z:
+                r["zipcode"] = _m4z.group(1)
+                _wz = _rest4[:_m4z.start()].strip().split()
+                # last 2 Thai words before zipcode = amphure + province
+                if len(_wz) >= 2:
+                    r["province"]     = _wz[-1]
+                    r["amphure"]      = _wz[-2]
+                    r["address_line"] = ' '.join(_wz[:-2])
+                elif len(_wz) == 1:
+                    r["province"]     = _wz[0]
+                else:
+                    r["address_line"] = _rest4[:_m4z.start()].strip()
+            else:
+                r["address_line"] = _rest4
+
     # lookup เขต/อำเภอ จากฐานข้อมูล (shared)
     from bangkok_addresses import lookup_khet, lookup_from_zipcode
     if r["district"] and r["zipcode"] and not r["amphure"]:
@@ -465,20 +490,17 @@ with tab1:
                     )
                     if st.button("📍 แยกอัตโนมัติ", key=f"parse_btn_{_cid}"):
                         _parsed = _parse_iship_address(paste_txt)
-                        if _parsed["dst_name"]:
-                            st.session_state["r_name"]  = _parsed["dst_name"]
-                        if _parsed["dst_phone"]:
-                            st.session_state["r_phone"] = _parsed["dst_phone"]
-                        if _parsed["address_line"]:
-                            st.session_state["r_al"]    = _parsed["address_line"]
-                        if _parsed["district"]:
-                            st.session_state["r_dt"]    = _parsed["district"]
-                        if _parsed["amphure"]:
-                            st.session_state["r_am"]    = _parsed["amphure"]
-                        if _parsed["province"]:
-                            st.session_state["r_pv"]    = _parsed["province"]
-                        if _parsed["zipcode"]:
-                            st.session_state["_staged_pc"] = _parsed["zipcode"]
+                        # clear all fields before filling — ป้องกันข้อมูลเก่าค้าง
+                        for _sk in ["r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv"]:
+                            st.session_state[_sk] = ""
+                        st.session_state["_staged_pc"] = ""
+                        if _parsed["dst_name"]:    st.session_state["r_name"]  = _parsed["dst_name"]
+                        if _parsed["dst_phone"]:   st.session_state["r_phone"] = _parsed["dst_phone"]
+                        if _parsed["address_line"]: st.session_state["r_al"]   = _parsed["address_line"]
+                        if _parsed["district"]:    st.session_state["r_dt"]    = _parsed["district"]
+                        if _parsed["amphure"]:     st.session_state["r_am"]    = _parsed["amphure"]
+                        if _parsed["province"]:    st.session_state["r_pv"]    = _parsed["province"]
+                        if _parsed["zipcode"]:     st.session_state["_staged_pc"] = _parsed["zipcode"]
                         st.rerun()
                     st.divider()
                     col_a, col_b = st.columns(2)
