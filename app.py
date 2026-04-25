@@ -671,6 +671,7 @@ with tab1:
             # สร้าง iship text สำหรับวางใน iship.com
             if is_shipping and r_addr_line:
                 product_line = ", ".join(f"{p['name']} ×{qty}" for p, qty, _ in valid_items)
+                _prod_codes  = " ".join(f"{p['id'].upper()}-{qty}" for p, qty, _ in valid_items)
                 st.session_state["_iship_pending"] = {
                     "dst_name":    r_name or customer["name"],
                     "dst_phone":   r_phone,
@@ -682,7 +683,7 @@ with tab1:
                     "weight_kg":   (total_w_g + 500) / 1000,  # +500g กล่อง
                     "cod_amount":  ceil(collect - cod_amount) if m_cod else 0,
                     "carrier":      m_carrier,
-                    "remark":       f"{bill_no} {product_line}",
+                    "remark":       f"{customer['name']} {_prod_codes}",
                     "sender_name":  customer["name"],
                 }
             # ล้างฟอร์มสำหรับลูกค้าถัดไป
