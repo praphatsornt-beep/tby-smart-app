@@ -73,67 +73,77 @@ def _fmt_note(note: str) -> str:
 
 
 def _parse_iship_address(text: str) -> dict:
-    """Parse iShip address format ที่ share มาจาก LINE
-    รูปแบบ:
-      ชื่อ
-      ตำบล/ English,
-      จังหวัด/ English,
-      NNNNN  บ้านเลขที่/ถนน . ตำบล/ English, Receiver: ชื่อผู้รับ (type)
-      0XXXXXXXXX
+    """Parse 2 formats:
+    1. iShip LINE: ตำบล/ English, + Receiver: ชื่อ
+    2. Thai standard: ชื่อ บ้านเลขที่ ต.ตำบล อ.อำเภอ จ.จังหวัด รหัสปณ.
     """
     import re as _re
     r = {"dst_name": "", "dst_phone": "", "address_line": "",
          "district": "", "amphure": "", "province": "", "zipcode": ""}
 
-    # Phone
+    # Phone (shared)
     m = _re.search(r'0[6-9]\d{8}', text)
     if m:
         r["dst_phone"] = m.group()
 
-    # Zipcode + address line: "10250  14 Rama IX Soi 41 ..."
-    # ใช้ (?<!\d)(\d{5})(?!\d) เพื่อไม่ให้จับตัวเลขยาวเช่น เบอร์โทร
-    m = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)\s+(.+?)(?=\s*(?:\.\s*[฀-๿]|$))', text, _re.DOTALL)
-    if m:
-        r["zipcode"]      = m.group(1)
-        addr_raw          = m.group(2).strip()
-        # ลบเบอร์โทรออกถ้าปนมาในที่อยู่
-        if r["dst_phone"] and r["dst_phone"] in addr_raw:
-            addr_raw = addr_raw.replace(r["dst_phone"], "").strip()
-        r["address_line"] = addr_raw
+    # Zipcode standalone (shared)
+    m_zip = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)', text)
+    if m_zip:
+        r["zipcode"] = m_zip.group(1)
 
-    # ชื่อไทย/English pattern → district, (amphure,) province
-    parts = _re.findall(r'([฀-๿][฀-๿\s]*?)\s*/\s*[A-Za-z]', text)
-    seen, unique = set(), []
-    for p in parts:
-        p = p.strip()
-        if p and p not in seen:
-            seen.add(p)
-            unique.append(p)
-    if len(unique) >= 1:
-        r["district"] = unique[0]
-    if len(unique) == 2:
-        r["province"] = unique[1]
-    elif len(unique) >= 3:
-        r["amphure"]  = unique[1]
-        r["province"] = unique[2]
+    if _re.search(r'[฀-๿]+/\s*[A-Za-z]', text):
+        # ── Format 1: iShip LINE format ──────────────────────────────────
+        m = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)\s+(.+?)(?=\s*\.\s*[฀-๿]|[\r\n]|$)',
+                       text, _re.DOTALL)
+        if m:
+            addr_raw = m.group(2).strip()
+            if r["dst_phone"] and r["dst_phone"] in addr_raw:
+                addr_raw = addr_raw.replace(r["dst_phone"], "").strip()
+            r["address_line"] = addr_raw
 
-    # lookup เขต/อำเภอ จากฐานข้อมูล
+        parts = _re.findall(r'([฀-๿][฀-๿\s]*?)\s*/\s*[A-Za-z]', text)
+        seen, unique = set(), []
+        for p in parts:
+            p = p.strip()
+            if p and p not in seen:
+                seen.add(p); unique.append(p)
+        if len(unique) >= 1: r["district"] = unique[0]
+        if len(unique) == 2: r["province"] = unique[1]
+        elif len(unique) >= 3: r["amphure"] = unique[1]; r["province"] = unique[2]
+
+        m = _re.search(r'Receiver:\s*([^(\n]+)', text, _re.IGNORECASE)
+        if m:
+            r["dst_name"] = m.group(1).strip()
+
+    elif _re.search(r'[ตอจ]\.\s*\S', text):
+        # ── Format 2: Thai standard format (ต./อ./จ.) ────────────────────
+        _dt = _re.search(r'ต\.\s*([^\s,]+)', text)
+        _am = _re.search(r'อ\.\s*([^\s,]+)', text)
+        _pv = _re.search(r'จ\.\s*([^\s,\d]+)', text)
+        if _dt: r["district"] = _dt.group(1).strip()
+        if _am: r["amphure"]  = _am.group(1).strip()
+        if _pv: r["province"] = _pv.group(1).strip()
+
+        # ชื่อ + บ้านเลขที่ จากบรรทัดแรก
+        first_line = text.strip().splitlines()[0].strip()
+        clean = _re.sub(r'(?<!\d)[1-9]\d{4}(?!\d)', '', first_line)  # ลบรหัสปณ.
+        clean = _re.sub(r'\s*[ตอจ]\.\s*[^\s,]+', '', clean).strip()  # ลบ ต./อ./จ.
+        nm = _re.match(r'^([^\d]+?)\s{1,}(\d.+)$', clean.strip())
+        if nm:
+            r["dst_name"]    = nm.group(1).strip()
+            r["address_line"] = nm.group(2).strip()
+        else:
+            r["dst_name"] = clean.strip()
+
+    # lookup เขต/อำเภอ จากฐานข้อมูล (shared)
     from bangkok_addresses import lookup_khet, lookup_from_zipcode
     if r["district"] and r["zipcode"] and not r["amphure"]:
         khet = lookup_khet(r["district"], r["zipcode"])
-        if khet:
-            r["amphure"] = khet
+        if khet: r["amphure"] = khet
     if r["zipcode"] and not r["amphure"]:
         prov, amph = lookup_from_zipcode(r["zipcode"])
-        if amph:
-            r["amphure"] = amph
-        if prov and not r["province"]:
-            r["province"] = prov
-
-    # Receiver name
-    m = _re.search(r'Receiver:\s*([^(\n]+)', text, _re.IGNORECASE)
-    if m:
-        r["dst_name"] = m.group(1).strip()
+        if amph: r["amphure"] = amph
+        if prov and not r["province"]: r["province"] = prov
 
     return r
 
