@@ -363,12 +363,12 @@ with tab1:
                     if _cust_of_addr:
                         st.session_state["m_cust"] = _cust_of_addr
                     for _k, _v in [
-                        (f"r_name_{_cid_ph}",  _ph_addr.get("recipient_name") or ""),
-                        (f"r_phone_{_cid_ph}", _ph_addr.get("phone") or ""),
-                        (f"r_al_{_cid_ph}",    _ph_addr.get("address_line") or ""),
-                        (f"r_dt_{_cid_ph}",    _ph_addr.get("district") or ""),
-                        (f"r_am_{_cid_ph}",    _ph_addr.get("amphure") or ""),
-                        (f"r_pv_{_cid_ph}",    _ph_addr.get("province") or ""),
+                        ("r_name",  _ph_addr.get("recipient_name") or ""),
+                        ("r_phone", _ph_addr.get("phone") or ""),
+                        ("r_al",    _ph_addr.get("address_line") or ""),
+                        ("r_dt",    _ph_addr.get("district") or ""),
+                        ("r_am",    _ph_addr.get("amphure") or ""),
+                        ("r_pv",    _ph_addr.get("province") or ""),
                     ]:
                         st.session_state[_k] = _v
                     if _ph_addr.get("postal_code"):
@@ -389,12 +389,12 @@ with tab1:
                 st.session_state["_prev_shipping_cid"] = _cid_detect
                 _ca_d = customer_map[m_customer]
                 for _k, _v in [
-                    (f"r_name_{_cid_detect}",  _ca_d.get("name", "")),
-                    (f"r_phone_{_cid_detect}", ""),
-                    (f"r_al_{_cid_detect}",    ""),
-                    (f"r_dt_{_cid_detect}",    ""),
-                    (f"r_am_{_cid_detect}",    ""),
-                    (f"r_pv_{_cid_detect}",    ""),
+                    ("r_name",  _ca_d.get("name", "")),
+                    ("r_phone", ""),
+                    ("r_al",    ""),
+                    ("r_dt",    ""),
+                    ("r_am",    ""),
+                    ("r_pv",    ""),
                 ]:
                     st.session_state[_k] = _v
                 st.session_state["_staged_pc"] = ""
@@ -466,29 +466,29 @@ with tab1:
                     if st.button("📍 แยกอัตโนมัติ", key=f"parse_btn_{_cid}"):
                         _parsed = _parse_iship_address(paste_txt)
                         if _parsed["dst_name"]:
-                            st.session_state[f"r_name_{_cid}"]  = _parsed["dst_name"]
+                            st.session_state["r_name"]  = _parsed["dst_name"]
                         if _parsed["dst_phone"]:
-                            st.session_state[f"r_phone_{_cid}"] = _parsed["dst_phone"]
+                            st.session_state["r_phone"] = _parsed["dst_phone"]
                         if _parsed["address_line"]:
-                            st.session_state[f"r_al_{_cid}"]    = _parsed["address_line"]
+                            st.session_state["r_al"]    = _parsed["address_line"]
                         if _parsed["district"]:
-                            st.session_state[f"r_dt_{_cid}"]    = _parsed["district"]
+                            st.session_state["r_dt"]    = _parsed["district"]
                         if _parsed["amphure"]:
-                            st.session_state[f"r_am_{_cid}"]    = _parsed["amphure"]
+                            st.session_state["r_am"]    = _parsed["amphure"]
                         if _parsed["province"]:
-                            st.session_state[f"r_pv_{_cid}"]    = _parsed["province"]
+                            st.session_state["r_pv"]    = _parsed["province"]
                         if _parsed["zipcode"]:
                             st.session_state["_staged_pc"] = _parsed["zipcode"]
                         st.rerun()
                     st.divider()
                     col_a, col_b = st.columns(2)
-                    r_name       = col_a.text_input("ชื่อผู้รับ",    value=_pre_rn, key=f"r_name_{_cid}")
-                    r_phone      = col_b.text_input("เบอร์โทร",      value=_pre_rp, key=f"r_phone_{_cid}")
-                    r_addr_line  = st.text_input("บ้านเลขที่/ถนน",  value=_pre_al, key=f"r_al_{_cid}")
+                    r_name       = col_a.text_input("ชื่อผู้รับ",    key="r_name")
+                    r_phone      = col_b.text_input("เบอร์โทร",      key="r_phone")
+                    r_addr_line  = st.text_input("บ้านเลขที่/ถนน",  key="r_al")
                     col_c, col_d, col_e = st.columns(3)
-                    r_district   = col_c.text_input("ตำบล/แขวง",    value=_pre_dt, key=f"r_dt_{_cid}")
-                    r_amphure    = col_d.text_input("อำเภอ/เขต",     value=_pre_am, key=f"r_am_{_cid}")
-                    r_province   = col_e.text_input("จังหวัด",        value=_pre_pv, key=f"r_pv_{_cid}")
+                    r_district   = col_c.text_input("ตำบล/แขวง",    key="r_dt")
+                    r_amphure    = col_d.text_input("อำเภอ/เขต",     key="r_am")
+                    r_province   = col_e.text_input("จังหวัด",        key="r_pv")
                     st.caption(f"รหัสไปรษณีย์: {m_postcode or '—'} (จากช่องด้านบน)")
                     if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                         db.upsert_customer_address({
