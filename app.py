@@ -315,8 +315,8 @@ with tab1:
             s_sur  = fees["SPX Express"]["surcharge"]   if fees else 0
             f_zone = fees["Flash Express"]["zone"]      if fees else "—"
             s_zone = fees["SPX Express"]["zone"]        if fees else "—"
-            fc_col.info(f"**Flash Express**\n\n{f_zone or 'ปกติ'}\n\nค่าพื้นที่ +{f_sur} ฿")
-            sc_col.info(f"**SPX Express**\n\n{s_zone or 'ปกติ'}\n\nค่าพื้นที่ +{s_sur} ฿")
+            fc_col.caption(f"Flash Express: {f_zone or 'ปกติ'} | +{f_sur} ฿")
+            sc_col.caption(f"SPX Express: {s_zone or 'ปกติ'} | +{s_sur} ฿")
             # auto-select carrier ที่ถูกกว่าเมื่อ postcode เปลี่ยน
             if fees and m_postcode != st.session_state.get("_prev_pc", ""):
                 cheaper = "Flash Express" if f_sur <= s_sur else "SPX Express"
