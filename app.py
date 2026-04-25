@@ -1222,7 +1222,7 @@ with tab5:
     with h_col2:
         h_filter_status = st.selectbox(
             "กรองตามสถานะ",
-            ["ทั้งหมด", "ค้างอยู่", "เคลียร์แล้ว"],
+            ["ทั้งหมด", "ค้างจ่าย", "ค้างรับของ", "ยังไม่เปิดบิล", "เคลียร์แล้ว"],
             key="hist_status",
         )
 
@@ -1233,8 +1233,12 @@ with tab5:
     all_df = db.get_all_transactions_df(customer_id=h_cid)
 
     if not all_df.empty:
-        if h_filter_status == "ค้างอยู่":
-            all_df = all_df[~all_df["เคลียร์แล้ว"]]
+        if h_filter_status == "ค้างจ่าย":
+            all_df = all_df[all_df["ค้างจ่าย"] > 0]
+        elif h_filter_status == "ค้างรับของ":
+            all_df = all_df[all_df["ค้างรับ"] > 0]
+        elif h_filter_status == "ยังไม่เปิดบิล":
+            all_df = all_df[all_df["สถานะบิล"] == "ยังไม่เปิดบิล"]
         elif h_filter_status == "เคลียร์แล้ว":
             all_df = all_df[all_df["เคลียร์แล้ว"]]
 
