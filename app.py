@@ -554,7 +554,7 @@ with tab1:
                             ]:
                                 if _v: st.session_state[_k] = _v
                             if _rph_addr.get("postal_code"):
-                                st.session_state["_staged_pc"] = _rph_addr["postal_code"]
+                                st.session_state["m_postcode"] = _rph_addr["postal_code"]
                             _rph_cust = (_rph_addr.get("customers") or {}).get("name", "")
                             if _rph_cust and not st.session_state.get("_cust_picked"):
                                 st.session_state["_cust_picked"] = _rph_cust
@@ -567,6 +567,8 @@ with tab1:
                     r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
                     r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
                     r_province  = col_e.text_input("จังหวัด",       key="r_pv")
+                    if "_staged_pc" in st.session_state:
+                        st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
                     m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
                                                 key="m_postcode", placeholder="เช่น 10400")
                     if m_customer != "— เลือกลูกค้า —":
