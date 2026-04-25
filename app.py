@@ -355,6 +355,8 @@ with tab1:
             if fees and m_postcode != st.session_state.get("_prev_pc", ""):
                 st.session_state["m_carrier"] = _pick_carrier(m_postcode)
                 st.session_state["_prev_pc"]  = m_postcode
+            if "_staged_carrier" in st.session_state:
+                st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
             m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"],
                                        key="m_carrier")
 
@@ -452,8 +454,8 @@ with tab1:
             _optimal = _pick_carrier(m_postcode.strip(), _w_kg)
             _sig = (m_postcode.strip(), round(_w_kg, 2))
             if _sig != st.session_state.get("_carrier_sig"):
-                st.session_state["_carrier_sig"] = _sig
-                st.session_state["m_carrier"]    = _optimal
+                st.session_state["_carrier_sig"]    = _sig
+                st.session_state["_staged_carrier"] = _optimal
                 st.rerun()
 
         COD_FEE_RATE = 0.0321  # 3.21%
