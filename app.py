@@ -259,7 +259,7 @@ with tab1:
             if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
         ]
 
-        COD_FEE_RATE = 0.00321  # 0.321%
+        COD_FEE_RATE = 0.0321  # 3.21%
 
         if valid_items:
             total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
