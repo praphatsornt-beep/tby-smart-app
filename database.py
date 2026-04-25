@@ -45,8 +45,8 @@ def insert_transaction(data: dict) -> None:
 
 
 def get_next_bill_no(date_str: str) -> str:
-    """สร้างเลขบิล YYYYMMDD-NNN ถัดไปสำหรับวันที่นั้น"""
-    prefix = str(date_str).replace("-", "")
+    """สร้างเลขบิล YYMMDD-NNN ถัดไปสำหรับวันที่นั้น"""
+    prefix = str(date_str).replace("-", "")[2:]  # "2026-04-25" → "260425"
     rows = (get_supabase()
             .table("transactions")
             .select("bill_no")
