@@ -229,19 +229,16 @@ with tab1:
                     _call = {k: v for k, v in _p.items() if k in _api_keys}
                     with st.spinner("กำลังสร้างรายการใน iShip..."):
                         resp = iship_api.create_order(**_call)
-                        # ถ้า SPX ไม่ cover พื้นที่ → retry ด้วย Flash อัตโนมัติ
-                        _err = resp.get("message") or resp.get("msg") or ""
-                        if not resp.get("status") and "NotSupportAddress" in str(_err) and _call["carrier"] != "Flash Express":
-                            _call["carrier"] = "Flash Express"
-                            resp = iship_api.create_order(**_call)
-                            if resp.get("status"):
-                                st.info("ℹ️ SPX ไม่ cover พื้นที่นี้ — ส่งด้วย Flash Express แทน")
                     if resp.get("status"):
                         tracking = (resp.get("data") or {}).get("tracking_code", "")
                         st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
                         del st.session_state["_iship_pending"]
                     else:
-                        st.error(f"❌ iShip Error: {resp.get('message') or resp.get('msg') or resp}")
+                        _err_msg = resp.get("message") or resp.get("msg") or str(resp)
+                        if "NotSupportAddress" in _err_msg:
+                            st.error("❌ ที่อยู่ไม่ถูกต้อง — กรุณาตรวจสอบ ตำบล / อำเภอ / จังหวัด ให้ตรงกับฐานข้อมูล iShip")
+                        else:
+                            st.error(f"❌ iShip Error: {_err_msg}")
                 else:
                     st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
             if col_s2.button("ปิด", key="cancel_iship", use_container_width=True):
