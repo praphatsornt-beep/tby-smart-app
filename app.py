@@ -126,6 +126,15 @@ with tab1:
         product_map = {p["name"]: p for p in products}
         customer_map = {c["name"]: c for c in customers}
 
+        # ── iship text (แสดงหลัง save ส่งพัสดุ) ─────────────────────────
+        if st.session_state.get("_last_iship"):
+            st.info("📋 คัดลอกข้อความด้านล่างไปวางใน iship.com")
+            st.text_area("", value=st.session_state["_last_iship"], height=110, key="_iship_display")
+            if st.button("✕ ปิด", key="close_iship"):
+                del st.session_state["_last_iship"]
+                st.rerun()
+            st.divider()
+
         # ── บันทึกแบบเร็ว ────────────────────────────────────────────────
         with st.expander("⚡ บันทึกแบบเร็ว — วางข้อความจากไลน์", expanded=False):
             qc1, qc2 = st.columns([2, 2])
@@ -248,6 +257,32 @@ with tab1:
             m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"],
                                        key="m_carrier")
 
+            # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
+            if m_customer != "— เลือกลูกค้า —":
+                _cust_a = customer_map[m_customer]
+                _cid    = _cust_a["id"]
+                _pre_rn = _cust_a.get("recipient_name") or _cust_a.get("name", "")
+                _pre_rp = _cust_a.get("phone") or ""
+                _pre_ra = _cust_a.get("address") or ""
+                with st.expander("📦 ที่อยู่ผู้รับ", expanded=not bool(_pre_ra)):
+                    col_a, col_b = st.columns(2)
+                    r_name  = col_a.text_input("ชื่อผู้รับ", value=_pre_rn, key=f"r_name_{_cid}")
+                    r_phone = col_b.text_input("เบอร์โทร",   value=_pre_rp, key=f"r_phone_{_cid}")
+                    r_addr  = st.text_area("ที่อยู่", value=_pre_ra, key=f"r_addr_{_cid}", height=80)
+                    st.caption(f"รหัสไปรษณีย์: {m_postcode or '—'} (จากช่องด้านบน)")
+                    if st.button("💾 บันทึกที่อยู่ไว้กับลูกค้านี้", key="save_addr_btn"):
+                        db.update_customer_address(_cid, {
+                            "recipient_name": r_name,
+                            "phone":          r_phone,
+                            "address":        r_addr,
+                            "postal_code":    m_postcode,
+                        })
+                        st.success("✅ บันทึกแล้ว — ครั้งถัดไปเลือกลูกค้านี้จะ auto-fill")
+            else:
+                r_name = r_phone = r_addr = ""
+        else:
+            r_name = r_phone = r_addr = ""
+
         # แสดง "รหัส — ชื่อ" เพื่อเลือก/ค้นหาด้วยรหัสได้
         product_display = {f"{p['id']} — {p['name']}": p for p in products}
         product_display_keys = list(product_display.keys())
@@ -365,7 +400,14 @@ with tab1:
             msg = f"✅ บันทึก {len(valid_items)} รายการ"
             if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
             if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
-            st.success(msg)
+            # สร้าง iship text สำหรับวางใน iship.com
+            if is_shipping and r_addr:
+                product_line = ", ".join(f"{p['name']} ×{qty}" for p, qty, _ in valid_items)
+                st.session_state["_last_iship"] = (
+                    f"{r_name or customer['name']}  {r_phone}\n"
+                    f"{r_addr}  {m_postcode}\n"
+                    f"หมายเหตุ: {bill_no} {product_line}"
+                )
             # ล้างฟอร์มสำหรับลูกค้าถัดไป
             for _k in ["m_cust", "m_bill", "m_pay", "m_delivery", "m_cod",
                        "m_cart", "m_postcode", "m_carrier", "m_zone"]:
@@ -708,6 +750,25 @@ with tab4:
                     })
                 st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
                 st.rerun()
+
+        if customers:
+            with st.expander("📦 แก้ไขที่อยู่จัดส่ง"):
+                addr_sel = st.selectbox("เลือกลูกค้า", [c["name"] for c in customers], key="addr_edit_sel")
+                _ec = next(c for c in customers if c["name"] == addr_sel)
+                col_a2, col_b2 = st.columns(2)
+                ea_rn   = col_a2.text_input("ชื่อผู้รับ",      value=_ec.get("recipient_name") or _ec["name"], key="ea_rn")
+                ea_rp   = col_b2.text_input("เบอร์โทร",         value=_ec.get("phone") or "",                  key="ea_rp")
+                ea_addr = st.text_area("ที่อยู่",               value=_ec.get("address") or "",                key="ea_addr", height=80)
+                ea_pc   = st.text_input("รหัสไปรษณีย์",        value=_ec.get("postal_code") or "",            key="ea_pc", max_chars=5)
+                if st.button("💾 บันทึกที่อยู่", key="ea_save", type="primary"):
+                    db.update_customer_address(_ec["id"], {
+                        "recipient_name": ea_rn,
+                        "phone":          ea_rp,
+                        "address":        ea_addr,
+                        "postal_code":    ea_pc,
+                    })
+                    st.success("✅ บันทึกที่อยู่แล้ว")
+                    st.rerun()
 
         if customers:
             with st.expander("🗑️ ลบลูกค้า"):

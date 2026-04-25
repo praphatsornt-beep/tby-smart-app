@@ -38,6 +38,12 @@ def upsert_customer(data: dict) -> None:
     get_supabase().table("customers").upsert(data).execute()
 
 
+def update_customer_address(customer_id: str, data: dict) -> None:
+    """อัปเดตที่อยู่จัดส่งของลูกค้า (recipient_name, phone, address, postal_code)"""
+    get_supabase().table("customers").update(data).eq("id", customer_id).execute()
+
+
+
 # ─── Transactions ────────────────────────────────────────────────────────────
 
 def insert_transaction(data: dict) -> None:
