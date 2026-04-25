@@ -331,7 +331,10 @@ with tab1:
             sc_col.caption(f"SPX Express: {s_zone or 'ปกติ'} | +{s_sur} ฿")
             # auto-select carrier: ต่างจังหวัด+<=3kg → Flash, อื่นๆ → SPX
             def _pick_carrier(pc: str, kg: float = 0) -> str:
-                return "Flash Express" if (kg <= 3 and not pc.startswith("10")) else "SPX Express"
+                # 10xxx = กรุงเทพฯ + สมุทรปราการ
+                # 11xxx = นนทบุรี, 12xxx = ปทุมธานี
+                is_metro = pc[:2] in {"10", "11", "12"}
+                return "Flash Express" if (kg <= 3 and not is_metro) else "SPX Express"
             if fees and m_postcode != st.session_state.get("_prev_pc", ""):
                 st.session_state["m_carrier"] = _pick_carrier(m_postcode)
                 st.session_state["_prev_pc"]  = m_postcode
