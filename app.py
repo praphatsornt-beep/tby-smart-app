@@ -57,6 +57,20 @@ def _style_status(val):
     return colors.get(val, "")
 
 
+def _fmt_note(note: str) -> str:
+    """แปลง raw tag → label กระชับ เช่น 'ส่งพัสดุ COD'"""
+    import re as _re
+    labels = []
+    if "[ส่งพัสดุ|" in note:
+        labels.append("ส่งพัสดุ")
+    if "[COD|" in note:
+        labels.append("COD")
+    free = _re.sub(r"\[[^\]]+\]", "", note).strip()
+    if free:
+        labels.append(free)
+    return " ".join(labels)
+
+
 st.markdown("""
 <style>
 [data-testid="stMetricValue"] { font-size: 1.4rem; }
@@ -760,6 +774,7 @@ with tab5:
                           "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ",
                           "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
         show_df = all_df[display_cols_h].reset_index(drop=True)
+        show_df["หมายเหตุ"] = show_df["หมายเหตุ"].fillna("").apply(_fmt_note)
         id_map  = all_df["id"].reset_index(drop=True)
 
         chk_df = show_df.copy()
@@ -1040,7 +1055,7 @@ with tab7:
                           <td style="text-align:right">{r['จ่ายแล้ว']:,.0f}</td>
                           <td style="text-align:right;color:{owed_color};font-weight:600">{r['ค้างจ่าย']:,.0f}</td>
                           <td style="text-align:center;color:{bill_color}">{r['สถานะบิล']}</td>
-                          <td>{r.get('หมายเหตุ','') or ''}</td>
+                          <td>{_fmt_note(r.get('หมายเหตุ','') or '')}</td>
                         </tr>"""
 
                     total_amount      = show_p["ยอดรวม"].sum()
