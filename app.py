@@ -108,10 +108,16 @@ def _parse_iship_address(text: str) -> dict:
         r["district"] = unique[0]
     if len(unique) == 2:
         r["province"] = unique[1]
-        r["amphure"]  = unique[0]   # Bangkok: เขต ≈ แขวง
     elif len(unique) >= 3:
         r["amphure"]  = unique[1]
         r["province"] = unique[2]
+
+    # ถ้าเป็นกรุงเทพฯ → ใช้ lookup เขต จากแขวง+รหัสปณ.
+    if r["district"] and r["zipcode"] and not r["amphure"]:
+        from bangkok_addresses import lookup_khet
+        khet = lookup_khet(r["district"], r["zipcode"])
+        if khet:
+            r["amphure"] = khet
 
     # Receiver name
     m = _re.search(r'Receiver:\s*([^(\n]+)', text, _re.IGNORECASE)
