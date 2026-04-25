@@ -72,6 +72,55 @@ def _fmt_note(note: str) -> str:
     return " ".join(labels)
 
 
+def _parse_iship_address(text: str) -> dict:
+    """Parse iShip address format ที่ share มาจาก LINE
+    รูปแบบ:
+      ชื่อ
+      ตำบล/ English,
+      จังหวัด/ English,
+      NNNNN  บ้านเลขที่/ถนน . ตำบล/ English, Receiver: ชื่อผู้รับ (type)
+      0XXXXXXXXX
+    """
+    import re as _re
+    r = {"dst_name": "", "dst_phone": "", "address_line": "",
+         "district": "", "amphure": "", "province": "", "zipcode": ""}
+
+    # Phone
+    m = _re.search(r'0[6-9]\d{8}', text)
+    if m:
+        r["dst_phone"] = m.group()
+
+    # Zipcode + address line: "10250  14 Rama IX Soi 41 Yaek 18 . ..."
+    m = _re.search(r'(\d{5})\s{1,5}(.+?)(?:\s*\.\s*[฀-๿]|$)', text, _re.DOTALL)
+    if m:
+        r["zipcode"]      = m.group(1)
+        r["address_line"] = m.group(2).strip()
+
+    # ชื่อไทย/English pattern → district, (amphure,) province
+    parts = _re.findall(r'([฀-๿][฀-๿\s]*?)\s*/\s*[A-Za-z]', text)
+    seen, unique = set(), []
+    for p in parts:
+        p = p.strip()
+        if p and p not in seen:
+            seen.add(p)
+            unique.append(p)
+    if len(unique) >= 1:
+        r["district"] = unique[0]
+    if len(unique) == 2:
+        r["province"] = unique[1]
+        r["amphure"]  = unique[0]   # Bangkok: เขต ≈ แขวง
+    elif len(unique) >= 3:
+        r["amphure"]  = unique[1]
+        r["province"] = unique[2]
+
+    # Receiver name
+    m = _re.search(r'Receiver:\s*([^(\n]+)', text, _re.IGNORECASE)
+    if m:
+        r["dst_name"] = m.group(1).strip()
+
+    return r
+
+
 st.markdown("""
 <style>
 [data-testid="stMetricValue"] { font-size: 1.4rem; }
@@ -287,6 +336,29 @@ with tab1:
                 _pre_am = _cust_a.get("amphure") or ""
                 _pre_pv = _cust_a.get("province") or ""
                 with st.expander("📦 ที่อยู่ผู้รับ", expanded=not bool(_pre_al)):
+                    paste_txt = st.text_area(
+                        "📋 วางที่อยู่จาก LINE (iShip format) — ระบบจะแยก field ให้อัตโนมัติ",
+                        key=f"paste_{_cid}", height=90, placeholder=
+                        "Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976"
+                    )
+                    if st.button("📍 แยกอัตโนมัติ", key=f"parse_btn_{_cid}"):
+                        _parsed = _parse_iship_address(paste_txt)
+                        if _parsed["dst_name"]:
+                            st.session_state[f"r_name_{_cid}"]  = _parsed["dst_name"]
+                        if _parsed["dst_phone"]:
+                            st.session_state[f"r_phone_{_cid}"] = _parsed["dst_phone"]
+                        if _parsed["address_line"]:
+                            st.session_state[f"r_al_{_cid}"]    = _parsed["address_line"]
+                        if _parsed["district"]:
+                            st.session_state[f"r_dt_{_cid}"]    = _parsed["district"]
+                        if _parsed["amphure"]:
+                            st.session_state[f"r_am_{_cid}"]    = _parsed["amphure"]
+                        if _parsed["province"]:
+                            st.session_state[f"r_pv_{_cid}"]    = _parsed["province"]
+                        if _parsed["zipcode"]:
+                            st.session_state["m_postcode"]       = _parsed["zipcode"]
+                        st.rerun()
+                    st.divider()
                     col_a, col_b = st.columns(2)
                     r_name       = col_a.text_input("ชื่อผู้รับ",    value=_pre_rn, key=f"r_name_{_cid}")
                     r_phone      = col_b.text_input("เบอร์โทร",      value=_pre_rp, key=f"r_phone_{_cid}")
