@@ -5,7 +5,7 @@ import streamlit as st
 BASE_URL = "https://app.iship.cloud/api"
 
 COURIER_MAP = {
-    "Flash Express": "FlashLive",      # Flash Pro OK
+    "Flash Express": "FlashExpressA",  # Flash Thunder
     "SPX Express":   "ShopeeExpress",
 }
 
