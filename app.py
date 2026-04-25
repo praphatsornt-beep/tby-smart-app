@@ -416,6 +416,16 @@ with tab2:
                     _dcols = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ค้างรับ",
                               "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "สถานะบิล"]
                     _grp_disp = grp[_dcols].reset_index(drop=True).copy()
+                    # emoji indicator แทน background color
+                    _grp_disp["ค้างจ่าย"] = _grp_disp["ค้างจ่าย"].apply(
+                        lambda v: f"🔴 {v:,.0f}" if v > 0.01 else f"{v:,.0f}"
+                    )
+                    _grp_disp["ค้างรับ"] = _grp_disp["ค้างรับ"].apply(
+                        lambda v: f"🔴 {int(v)}" if v > 0 else "0"
+                    )
+                    _grp_disp["สถานะบิล"] = _grp_disp["สถานะบิล"].apply(
+                        lambda v: "🟡 ยังไม่เปิดบิล" if v == "ยังไม่เปิดบิล" else "🟢 เปิดบิลแล้ว"
+                    )
                     _grp_disp.insert(0, "☑", False)
                     _id_map = grp["id"].reset_index(drop=True)
 
@@ -424,10 +434,9 @@ with tab2:
                         use_container_width=True,
                         hide_index=True,
                         column_config={
-                            "☑":       st.column_config.CheckboxColumn("☑", default=False, width="small"),
+                            "☑": st.column_config.CheckboxColumn("☑", default=False, width="small"),
                             "ยอดรวม":  st.column_config.NumberColumn("ยอดรวม",  format="%,.0f"),
                             "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
-                            "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
                         },
                         disabled=[c for c in _grp_disp.columns if c != "☑"],
                         key=f"chk_tbl_{customer_name}",
