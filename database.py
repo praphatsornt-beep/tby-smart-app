@@ -35,6 +35,29 @@ def get_customer_by_phone(phone: str) -> dict | None:
     return rows[0] if rows else None
 
 
+# ─── Customer Addresses (แยก table — 1 ลูกค้า มีได้หลายที่อยู่) ────────────
+
+def get_customer_addresses(customer_id: str = None) -> list[dict]:
+    q = get_supabase().table("customer_addresses").select("*, customers(name)")
+    if customer_id:
+        q = q.eq("customer_id", customer_id)
+    return q.order("phone").execute().data
+
+
+def get_address_by_phone(phone: str) -> dict | None:
+    rows = (get_supabase().table("customer_addresses")
+            .select("*, customers(name)").eq("phone", phone.strip()).execute().data)
+    return rows[0] if rows else None
+
+
+def upsert_customer_address(data: dict) -> None:
+    get_supabase().table("customer_addresses").upsert(data).execute()
+
+
+def delete_customer_address(address_id: str) -> None:
+    get_supabase().table("customer_addresses").delete().eq("id", address_id).execute()
+
+
 def upsert_product(data: dict) -> None:
     get_supabase().table("products").upsert(data).execute()
 

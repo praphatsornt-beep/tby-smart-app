@@ -323,25 +323,29 @@ with tab1:
         ph_lookup = ph_col.text_input("🔍 ค้นหาจากเบอร์โทร", max_chars=10,
                                       key="ph_lookup", placeholder="0XXXXXXXXX")
         if len(ph_lookup.strip()) == 10:
-            _ph_cust = db.get_customer_by_phone(ph_lookup.strip())
-            if _ph_cust:
-                _cid_ph = _ph_cust["id"]
-                if st.session_state.get("m_cust") != _ph_cust["name"]:
-                    st.session_state["m_cust"] = _ph_cust["name"]
+            _ph_addr = db.get_address_by_phone(ph_lookup.strip())
+            if _ph_addr:
+                _cust_of_addr = (_ph_addr.get("customers") or {}).get("name", "")
+                _cid_ph = _ph_addr.get("customer_id", "")
+                st.caption(f"พบที่อยู่: {_ph_addr.get('recipient_name','')} — ลูกค้า: {_cust_of_addr}")
+                if st.session_state.get("_last_ph_fill") != ph_lookup.strip():
+                    st.session_state["_last_ph_fill"] = ph_lookup.strip()
+                    if _cust_of_addr:
+                        st.session_state["m_cust"] = _cust_of_addr
                     for _k, _v in [
-                        (f"r_name_{_cid_ph}",  _ph_cust.get("recipient_name") or _ph_cust["name"]),
-                        (f"r_phone_{_cid_ph}", _ph_cust.get("phone") or ""),
-                        (f"r_al_{_cid_ph}",    _ph_cust.get("address_line") or ""),
-                        (f"r_dt_{_cid_ph}",    _ph_cust.get("district") or ""),
-                        (f"r_am_{_cid_ph}",    _ph_cust.get("amphure") or ""),
-                        (f"r_pv_{_cid_ph}",    _ph_cust.get("province") or ""),
+                        (f"r_name_{_cid_ph}",  _ph_addr.get("recipient_name") or ""),
+                        (f"r_phone_{_cid_ph}", _ph_addr.get("phone") or ""),
+                        (f"r_al_{_cid_ph}",    _ph_addr.get("address_line") or ""),
+                        (f"r_dt_{_cid_ph}",    _ph_addr.get("district") or ""),
+                        (f"r_am_{_cid_ph}",    _ph_addr.get("amphure") or ""),
+                        (f"r_pv_{_cid_ph}",    _ph_addr.get("province") or ""),
                     ]:
                         st.session_state[_k] = _v
-                    if _ph_cust.get("postal_code"):
-                        st.session_state["_staged_pc"] = _ph_cust["postal_code"]
+                    if _ph_addr.get("postal_code"):
+                        st.session_state["_staged_pc"] = _ph_addr["postal_code"]
                     st.rerun()
             else:
-                st.caption("ไม่พบเบอร์นี้ในระบบ")
+                st.caption("ไม่พบเบอร์นี้ — กรอกที่อยู่ใหม่แล้วกด บันทึกที่อยู่")
 
         mc1, mc2 = st.columns([3, 1])
         m_customer = mc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="m_cust")
@@ -438,8 +442,10 @@ with tab1:
                     r_amphure    = col_d.text_input("อำเภอ/เขต",     value=_pre_am, key=f"r_am_{_cid}")
                     r_province   = col_e.text_input("จังหวัด",        value=_pre_pv, key=f"r_pv_{_cid}")
                     st.caption(f"รหัสไปรษณีย์: {m_postcode or '—'} (จากช่องด้านบน)")
-                    if st.button("💾 บันทึกที่อยู่ไว้กับลูกค้านี้", key="save_addr_btn"):
-                        db.update_customer_address(_cid, {
+                    if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
+                        db.upsert_customer_address({
+                            "id":             str(uuid.uuid4()),
+                            "customer_id":    _cid,
                             "recipient_name": r_name,
                             "phone":          r_phone,
                             "address_line":   r_addr_line,
@@ -448,7 +454,7 @@ with tab1:
                             "province":       r_province,
                             "postal_code":    m_postcode,
                         })
-                        st.success("✅ บันทึกแล้ว — ครั้งถัดไปเลือกลูกค้านี้จะ auto-fill")
+                        st.success("✅ บันทึกแล้ว — ค้นหาจากเบอร์ได้เลยครั้งถัดไป")
             else:
                 r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
         else:
@@ -988,26 +994,60 @@ with tab4:
                             st.error("❌ ลบไม่ได้ — ลูกค้านี้มีรายการขายอยู่")
 
     with sub3:
-        st.write("**ที่อยู่จัดส่งลูกค้า** — คลิกเลือกเพื่อแก้ไข")
-        addr_customers = db.get_customers()
-        if not addr_customers:
-            st.info("ยังไม่มีลูกค้า")
+        # ── ค้นหาจากเบอร์ ──────────────────────────────────────────────────
+        sa_ph, sa_btn = st.columns([3, 1])
+        sa_phone = sa_ph.text_input("🔍 ค้นหาจากเบอร์โทร", max_chars=10,
+                                    key="addr3_ph", placeholder="0XXXXXXXXX")
+        all_addr = db.get_customer_addresses()
+
+        # กรองตามเบอร์ถ้ากรอก
+        if sa_phone.strip():
+            show_addr = [a for a in all_addr if sa_phone.strip() in (a.get("phone") or "")]
         else:
-            addr_sel_name = st.selectbox("เลือกลูกค้า", [c["name"] for c in addr_customers],
-                                         key="addr3_sel")
-            _ac = next(c for c in addr_customers if c["name"] == addr_sel_name)
-            with st.form("addr3_form"):
+            show_addr = all_addr
+
+        # ── ตาราง ─────────────────────────────────────────────────────────
+        if show_addr:
+            addr_df = pd.DataFrame([{
+                "เบอร์":      a.get("phone", ""),
+                "ชื่อผู้รับ": a.get("recipient_name", ""),
+                "ที่อยู่":    f"{a.get('address_line','')} {a.get('district','')} {a.get('amphure','')} {a.get('province','')} {a.get('postal_code','')}".strip(),
+                "ลูกค้า":    (a.get("customers") or {}).get("name", ""),
+            } for a in show_addr])
+            st.dataframe(addr_df, use_container_width=True, hide_index=True)
+        else:
+            st.info("ยังไม่มีที่อยู่" if not sa_phone.strip() else "ไม่พบเบอร์นี้")
+
+        # ── แก้ไข / เพิ่ม ─────────────────────────────────────────────────
+        all_custs = db.get_customers()
+        with st.expander("✏️ เพิ่ม / แก้ไขที่อยู่"):
+            # เลือก row ถ้ามี
+            addr_opts = {"— เพิ่มใหม่ —": None} | {
+                f"{a.get('phone','')} — {a.get('recipient_name','')}": a
+                for a in show_addr
+            }
+            sel_addr = st.selectbox("เลือกที่อยู่เพื่อแก้ไข หรือ เพิ่มใหม่",
+                                    list(addr_opts.keys()), key="addr3_edit_sel")
+            _ea = addr_opts[sel_addr] or {}
+            cust_names3 = [c["name"] for c in all_custs]
+            _ea_cust_name = (_ea.get("customers") or {}).get("name", "")
+            _ea_cust_idx  = cust_names3.index(_ea_cust_name) if _ea_cust_name in cust_names3 else 0
+            with st.form("addr3_edit_form"):
+                ea3_cust = st.selectbox("ลูกค้า (ผู้ส่ง)", cust_names3, index=_ea_cust_idx)
                 a1, a2 = st.columns(2)
-                ea3_rn  = a1.text_input("ชื่อผู้รับ",    value=_ac.get("recipient_name") or _ac["name"])
-                ea3_rp  = a2.text_input("เบอร์โทร",      value=_ac.get("phone") or "")
-                ea3_al  = st.text_input("บ้านเลขที่/ถนน", value=_ac.get("address_line") or "")
+                ea3_rn = a1.text_input("ชื่อผู้รับ",    value=_ea.get("recipient_name", ""))
+                ea3_rp = a2.text_input("เบอร์โทร",      value=_ea.get("phone", ""))
+                ea3_al = st.text_input("บ้านเลขที่/ถนน", value=_ea.get("address_line", ""))
                 b1, b2, b3 = st.columns(3)
-                ea3_dt  = b1.text_input("ตำบล/แขวง",    value=_ac.get("district") or "")
-                ea3_am  = b2.text_input("อำเภอ/เขต",     value=_ac.get("amphure") or "")
-                ea3_pv  = b3.text_input("จังหวัด",        value=_ac.get("province") or "")
-                ea3_pc  = st.text_input("รหัสไปรษณีย์",   value=_ac.get("postal_code") or "", max_chars=5)
+                ea3_dt = b1.text_input("ตำบล/แขวง",    value=_ea.get("district", ""))
+                ea3_am = b2.text_input("อำเภอ/เขต",     value=_ea.get("amphure", ""))
+                ea3_pv = b3.text_input("จังหวัด",        value=_ea.get("province", ""))
+                ea3_pc = st.text_input("รหัสไปรษณีย์",   value=_ea.get("postal_code", ""), max_chars=5)
+                _ea_cust_id = next((c["id"] for c in all_custs if c["name"] == ea3_cust), "")
                 if st.form_submit_button("💾 บันทึก", type="primary", use_container_width=True):
-                    db.update_customer_address(_ac["id"], {
+                    db.upsert_customer_address({
+                        "id":             _ea.get("id") or str(uuid.uuid4()),
+                        "customer_id":    _ea_cust_id,
                         "recipient_name": ea3_rn,
                         "phone":          ea3_rp,
                         "address_line":   ea3_al,
