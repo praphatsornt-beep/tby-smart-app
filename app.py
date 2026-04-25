@@ -326,7 +326,10 @@ with tab1:
         ph_lookup = ph_col.text_input("🔍 ค้นหาจากเบอร์โทร", max_chars=10,
                                       key="ph_lookup", placeholder="0XXXXXXXXX")
         if len(ph_lookup.strip()) == 10:
-            _ph_addr = db.get_address_by_phone(ph_lookup.strip())
+            try:
+                _ph_addr = db.get_address_by_phone(ph_lookup.strip())
+            except Exception:
+                _ph_addr = None
             if _ph_addr:
                 _cust_of_addr = (_ph_addr.get("customers") or {}).get("name", "")
                 _cid_ph = _ph_addr.get("customer_id", "")
@@ -1001,7 +1004,18 @@ with tab4:
         sa_ph, sa_btn = st.columns([3, 1])
         sa_phone = sa_ph.text_input("🔍 ค้นหาจากเบอร์โทร", max_chars=10,
                                     key="addr3_ph", placeholder="0XXXXXXXXX")
-        all_addr = db.get_customer_addresses()
+        try:
+            all_addr = db.get_customer_addresses()
+        except Exception:
+            st.warning("⚙️ ยังไม่ได้สร้าง table customer_addresses ใน Supabase — รัน SQL ด้านล่างก่อน")
+            st.code("""CREATE TABLE IF NOT EXISTS customer_addresses (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  customer_id   TEXT REFERENCES customers(id),
+  recipient_name TEXT, phone TEXT,
+  address_line  TEXT, district TEXT,
+  amphure TEXT, province TEXT, postal_code TEXT
+);""", language="sql")
+            all_addr = []
 
         # กรองตามเบอร์ถ้ากรอก
         if sa_phone.strip():
