@@ -226,8 +226,16 @@ with tab1:
                     _api_keys = {"dst_name","dst_phone","address_line","district",
                                  "amphure","province","zipcode","weight_kg",
                                  "cod_amount","carrier","remark"}
+                    _call = {k: v for k, v in _p.items() if k in _api_keys}
                     with st.spinner("กำลังสร้างรายการใน iShip..."):
-                        resp = iship_api.create_order(**{k: v for k, v in _p.items() if k in _api_keys})
+                        resp = iship_api.create_order(**_call)
+                        # ถ้า SPX ไม่ cover พื้นที่ → retry ด้วย Flash อัตโนมัติ
+                        _err = resp.get("message") or resp.get("msg") or ""
+                        if not resp.get("status") and "NotSupportAddress" in str(_err) and _call["carrier"] != "Flash Express":
+                            _call["carrier"] = "Flash Express"
+                            resp = iship_api.create_order(**_call)
+                            if resp.get("status"):
+                                st.info("ℹ️ SPX ไม่ cover พื้นที่นี้ — ส่งด้วย Flash Express แทน")
                     if resp.get("status"):
                         tracking = (resp.get("data") or {}).get("tracking_code", "")
                         st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
