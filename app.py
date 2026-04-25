@@ -515,10 +515,8 @@ with tab1:
             m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"], key="m_carrier")
 
             # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
-            if m_customer != "— เลือกลูกค้า —":
-                _cust_a = customer_map[m_customer]
-                _cid    = _cust_a["id"]
-                with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
+            _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
+            with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
                     st.caption("📋 วางที่อยู่จาก LINE (iShip format) แล้วกด แยกอัตโนมัติ")
                     paste_txt = st.text_area(
                         "", label_visibility="collapsed",
@@ -571,21 +569,20 @@ with tab1:
                     r_province  = col_e.text_input("จังหวัด",       key="r_pv")
                     m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
                                                 key="m_postcode", placeholder="เช่น 10400")
-                    if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
-                        db.upsert_customer_address({
-                            "id":             str(uuid.uuid4()),
-                            "customer_id":    _cid,
-                            "recipient_name": r_name,
-                            "phone":          r_phone,
-                            "address_line":   r_addr_line,
-                            "district":       r_district,
-                            "amphure":        r_amphure,
-                            "province":       r_province,
-                            "postal_code":    m_postcode,
-                        })
-                        st.success("✅ บันทึกแล้ว — ค้นหาจากเบอร์ได้เลยครั้งถัดไป")
-            else:
-                r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
+                    if m_customer != "— เลือกลูกค้า —":
+                        if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
+                            db.upsert_customer_address({
+                                "id":             str(uuid.uuid4()),
+                                "customer_id":    _cid,
+                                "recipient_name": r_name,
+                                "phone":          r_phone,
+                                "address_line":   r_addr_line,
+                                "district":       r_district,
+                                "amphure":        r_amphure,
+                                "province":       r_province,
+                                "postal_code":    m_postcode,
+                            })
+                            st.success("✅ บันทึกแล้ว — ค้นหาจากเบอร์ได้เลยครั้งถัดไป")
         else:
             r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
 
