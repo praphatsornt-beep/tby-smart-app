@@ -328,6 +328,7 @@ with tab1:
                 cod_tag    = f"[COD|ค่าธรรมเนียม={cod_amount:.2f}฿|ยอดรับจริง={collect-cod_amount:.2f}฿]"
             else:
                 cod_tag = ""
+            bill_no = db.get_next_bill_no(str(m_date))
             for p, qty, note in valid_items:
                 full_note = " ".join(filter(None, [delivery_tag, cod_tag, note])).strip()
                 db.insert_transaction({
@@ -345,6 +346,7 @@ with tab1:
                     "bill_status":          m_bill,
                     "pay_status":           actual_pay,
                     "notes":                full_note,
+                    "bill_no":              bill_no,
                 })
             msg = f"✅ บันทึก {len(valid_items)} รายการ"
             if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
@@ -413,7 +415,7 @@ with tab2:
 
                 with st.expander(exp_label, expanded=single_cust):
                     # ── Styled table + row selection ──────────────────────
-                    _dcols  = ["วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
+                    _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
                                "ยอดรวม", "ค้างจ่าย", "สถานะบิล"]
                     _id_map = grp["id"].reset_index(drop=True)
                     st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
@@ -754,7 +756,7 @@ with tab5:
         m2.metric("เคลียร์แล้ว", int(all_df["เคลียร์แล้ว"].sum()))
         m3.metric("ยังค้างอยู่", int((~all_df["เคลียร์แล้ว"]).sum()))
 
-        display_cols_h = ["วันที่", "ลูกค้า", "รหัส", "สินค้า", "สั่ง", "รับแล้ว",
+        display_cols_h = ["เลขที่บิล", "วันที่", "ลูกค้า", "รหัส", "สินค้า", "สั่ง", "รับแล้ว",
                           "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ",
                           "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
         show_df = all_df[display_cols_h].reset_index(drop=True)
@@ -1000,6 +1002,10 @@ with tab7:
         sel_p    = pc1.selectbox("เลือกลูกค้า", ["— เลือก —"] + list(cust_map_p.keys()), key="print_cust")
         filter_p = pc2.radio("แสดงรายการ", ["ค้างอยู่", "ทั้งหมด"], horizontal=True, key="print_filter")
 
+        pd1, pd2 = st.columns(2)
+        date_from_p = pd1.date_input("ตั้งแต่วันที่", value=None, key="print_date_from")
+        date_to_p   = pd2.date_input("ถึงวันที่",     value=None, key="print_date_to")
+
         if sel_p != "— เลือก —":
             customer_p  = cust_map_p[sel_p]
             all_df_p    = db.get_all_transactions_df(customer_id=customer_p["id"])
@@ -1008,6 +1014,13 @@ with tab7:
                 st.info("ไม่มีรายการ")
             else:
                 show_p = all_df_p[~all_df_p["เคลียร์แล้ว"]].copy() if filter_p == "ค้างอยู่" else all_df_p.copy()
+
+                if date_from_p or date_to_p:
+                    _dates = pd.to_datetime(show_p["วันที่"], dayfirst=True, errors="coerce").dt.date
+                    if date_from_p:
+                        show_p = show_p[_dates >= date_from_p]
+                    if date_to_p:
+                        show_p = show_p[_dates <= date_to_p]
 
                 if show_p.empty:
                     st.success(f"✅ {sel_p} ไม่มียอดค้าง")
@@ -1036,6 +1049,8 @@ with tab7:
                     unbilled_pv       = show_p.loc[show_p["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in show_p.columns else 0
                     today_str         = date.today().strftime("%d/%m/%Y")
                     filter_label      = "รายการค้างอยู่" if filter_p == "ค้างอยู่" else "รายการทั้งหมด"
+                    bill_nos          = show_p["เลขที่บิล"].dropna().unique().tolist() if "เลขที่บิล" in show_p.columns else []
+                    bill_nos_str      = ", ".join(b for b in bill_nos if b) or ""
 
                     # ตรวจสอบว่ามี tag ส่งพัสดุจาก notes ของรายการแรก
                     first_note = str(show_p.iloc[0].get("หมายเหตุ", "") or "")
@@ -1055,13 +1070,9 @@ with tab7:
                             ship_fee_str    = _m.group(4) or ""
                             ship_remote     = _m.group(5).strip("|") if _m.group(5) else ""
 
-                    bm1, bm2, bm3, bm4 = st.columns(4)
-                    bm1.metric("💸 ยอดค้างจ่ายรวม",   f"{total_outstanding:,.0f} บาท")
-                    bm2.metric("⭐ PV ยังไม่เปิดบิล",  f"{unbilled_pv:,.0f}")
-                    if is_ship_bill:
-                        carrier_label = ship_carrier if ship_carrier else "ขนส่ง"
-                        bm3.metric("⚖️ น้ำหนัก",          f"{ship_weight_str} kg" + (f"  ปณ.{ship_postcode}" if ship_postcode else ""))
-                        bm4.metric(f"🚚 {carrier_label}", f"{ship_fee_str} บาท"  + (f" ({ship_remote})"    if ship_remote    else ""))
+                    bm1, bm2 = st.columns(2)
+                    bm1.metric("💸 ยอดค้างจ่ายรวม",  f"{total_outstanding:,.0f} บาท")
+                    bm2.metric("⭐ PV ยังไม่เปิดบิล", f"{unbilled_pv:,.0f}")
 
                     bill_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -1090,7 +1101,7 @@ with tab7:
 <div class="header">
   <h1>TBY SMART APP — สรุปรายการ</h1>
   <h2>ลูกค้า: {sel_p}{"&nbsp;&nbsp;🚚 ส่งพัสดุ" if is_ship_bill else ""}</h2>
-  <div class="info">วันที่พิมพ์: {today_str} &nbsp;|&nbsp; {filter_label} ({len(show_p)} รายการ)</div>
+  <div class="info">{"เลขที่บิล: " + bill_nos_str + " &nbsp;|&nbsp; " if bill_nos_str else ""}วันที่พิมพ์: {today_str} &nbsp;|&nbsp; {filter_label} ({len(show_p)} รายการ)</div>
 </div>
 <table>
   <thead><tr>

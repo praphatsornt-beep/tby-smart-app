@@ -44,6 +44,25 @@ def insert_transaction(data: dict) -> None:
     get_supabase().table("transactions").insert(data).execute()
 
 
+def get_next_bill_no(date_str: str) -> str:
+    """สร้างเลขบิล YYYYMMDD-NNN ถัดไปสำหรับวันที่นั้น"""
+    prefix = str(date_str).replace("-", "")
+    rows = (get_supabase()
+            .table("transactions")
+            .select("bill_no")
+            .like("bill_no", f"{prefix}-%")
+            .execute().data)
+    nums = []
+    for r in rows:
+        bn = r.get("bill_no") or ""
+        if bn.startswith(f"{prefix}-"):
+            try:
+                nums.append(int(bn.split("-")[1]))
+            except ValueError:
+                pass
+    return f"{prefix}-{max(nums, default=0) + 1:03d}"
+
+
 def insert_partial_event(data: dict) -> None:
     get_supabase().table("partial_events").insert(data).execute()
 
@@ -199,6 +218,7 @@ def get_all_transactions_df(customer_id: str = None) -> pd.DataFrame:
             "สถานะจ่าย": t["pay_status"],
             "หมายเหตุ": t.get("notes", "") or "",
             "PV รวม": float(t["points_per_unit"]) * t["qty"],
+            "เลขที่บิล": t.get("bill_no") or "",
             "เคลียร์แล้ว": cleared,
         })
 
@@ -390,6 +410,7 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
                 "PV รวม": float(t["points_per_unit"]) * t["qty"],
                 "ประเภท": t["transaction_type"],
                 "สถานะบิล": t["bill_status"],
+                "เลขที่บิล": t.get("bill_no") or "",
             })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
