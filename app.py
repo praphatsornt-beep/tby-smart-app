@@ -216,22 +216,19 @@ with tab1:
         m_postcode = ""
         m_zone     = "normal"
         m_carrier  = "Flash Express"
-        m_ship_fee = 0
         if m_delivery == "ส่งพัสดุ":
-            pc_col, _ = st.columns([1, 3])
-            m_postcode = pc_col.text_input("รหัสไปรษณีย์ปลายทาง", max_chars=5, key="m_postcode",
+            pc_col, fc_col, sc_col, car_col = st.columns([1, 1, 1, 1])
+            m_postcode = pc_col.text_input("รหัสไปรษณีย์", max_chars=5, key="m_postcode",
                                             placeholder="เช่น 10400")
-            if m_postcode and len(m_postcode) == 5:
-                m_zone    = lookup_zone(m_postcode)
-                fees      = carrier_fees(0, m_postcode)  # น้ำหนักคำนวณทีหลัง
-                # แสดงตาราง 2 ขนส่ง
-                c_f, c_s = st.columns(2)
-                f = fees["Flash Express"]
-                s = fees["SPX Express"]
-                c_f.info(f"**Flash Express**\n\nค่าพื้นที่: {f['zone'] or 'ปกติ'} (+{f['surcharge']} บาท)")
-                c_s.info(f"**SPX Express**\n\nค่าพื้นที่: {s['zone'] or 'ปกติ'} (+{s['surcharge']} บาท)")
-                m_carrier = st.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"],
-                                     horizontal=True, key="m_carrier")
+            fees = carrier_fees(0, m_postcode.strip()) if len(m_postcode.strip()) == 5 else None
+            f_sur = fees["Flash Express"]["surcharge"] if fees else 0
+            s_sur = fees["SPX Express"]["surcharge"]   if fees else 0
+            f_zone = fees["Flash Express"]["zone"] if fees else "—"
+            s_zone = fees["SPX Express"]["zone"]   if fees else "—"
+            fc_col.info(f"**Flash Express**\n\n{f_zone or 'ปกติ'}\n\nค่าพื้นที่ +{f_sur} ฿")
+            sc_col.info(f"**SPX Express**\n\n{s_zone or 'ปกติ'}\n\nค่าพื้นที่ +{s_sur} ฿")
+            m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"],
+                                       key="m_carrier")
 
         # แสดง "รหัส — ชื่อ" เพื่อเลือก/ค้นหาด้วยรหัสได้
         product_display = {f"{p['id']} — {p['name']}": p for p in products}
