@@ -73,9 +73,10 @@ def _fmt_note(note: str) -> str:
 
 
 def _parse_iship_address(text: str) -> dict:
-    """Parse 2 formats:
-    1. iShip LINE: ตำบล/ English, + Receiver: ชื่อ
+    """Parse 3 formats:
+    1. iShip LINE bilingual: ตำบล/ English + Receiver: ชื่อ
     2. Thai standard: ชื่อ บ้านเลขที่ ต.ตำบล อ.อำเภอ จ.จังหวัด รหัสปณ.
+    3. iShip compact: {phone}  {name}    {address}\\n{district} {amphure} {province} {zipcode}
     """
     import re as _re
     r = {"dst_name": "", "dst_phone": "", "address_line": "",
@@ -91,7 +92,25 @@ def _parse_iship_address(text: str) -> dict:
     if m_zip:
         r["zipcode"] = m_zip.group(1)
 
-    if _re.search(r'[฀-๿]+/\s*[A-Za-z]', text):
+    _lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+
+    # ── Format 3: iShip compact LINE format ─────────────────────────────
+    # L1: {phone}  {name}    {address}   (2+ spaces separate name from address)
+    # Ln: {district} {amphure} {province} {zipcode} [extra]
+    _m3_l1 = (_re.match(r'^(0[6-9]\d{8})\s+(.+?)\s{2,}(\S.+)$', _lines[0])
+               if _lines else None)
+    _m3_ln = (_re.match(r'^([^\d\s]+)\s+([^\d\s]+)\s+([^\d\s]+)\s+(\d{5})', _lines[-1])
+               if len(_lines) >= 2 else None)
+    if _m3_l1 and _m3_ln:
+        r["dst_phone"]    = _m3_l1.group(1)
+        r["dst_name"]     = _m3_l1.group(2).strip()
+        r["address_line"] = _m3_l1.group(3).strip()
+        r["district"]     = _m3_ln.group(1)
+        r["amphure"]      = _m3_ln.group(2)
+        r["province"]     = _m3_ln.group(3)
+        r["zipcode"]      = _m3_ln.group(4)
+
+    elif _re.search(r'[฀-๿]+/\s*[A-Za-z]', text):
         # ── Format 1: iShip LINE format ──────────────────────────────────
         m = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)\s+(.+?)(?=\s*\.\s*[฀-๿]|[\r\n]|$)',
                        text, _re.DOTALL)
