@@ -292,15 +292,15 @@ with tab1:
             st.caption("COD: สถานะของ = รับของแล้ว, สถานะจ่าย = ค้างจ่าย (รอขนส่งโอนเงิน)")
 
         ms1, ms2, ms3 = st.columns(3)
-        m_bill = ms1.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"],
-                            index=0 if m_cod else None, horizontal=True, key="m_bill")
+        # รวม สถานะของ + การรับสินค้า เป็นตัวเลือกเดียว
+        _delivery_opts = ["ฝากของ (รอรับ)", "รับหน้าร้าน", "ส่งพัสดุ"]
+        m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts,
+                                index=2 if m_cod else None, horizontal=True, key="m_delivery")
         m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"],
                             index=1 if m_cod else None, horizontal=True, key="m_pay",
                             disabled=m_cod)
-        # รวม สถานะของ + การรับสินค้า เป็นตัวเลือกเดียว
-        _delivery_opts = ["ฝากของ (รอรับ)", "รับหน้าร้าน", "ส่งพัสดุ"]
-        m_delivery = ms3.radio("การรับ / สถานะของ", _delivery_opts,
-                                index=2 if m_cod else None, horizontal=True, key="m_delivery")
+        m_bill = ms3.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"],
+                            index=0 if m_cod else None, horizontal=True, key="m_bill")
         # map ไปยัง receipt_status สำหรับ DB
         m_receipt = "ฝากของ" if m_delivery == "ฝากของ (รอรับ)" else "รับของแล้ว"
         m_postcode = ""
