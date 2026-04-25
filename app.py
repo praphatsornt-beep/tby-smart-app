@@ -412,34 +412,31 @@ with tab2:
                 exp_label = f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
 
                 with st.expander(exp_label, expanded=single_cust):
-                    # ── Checkboxes พร้อมสถานะ ─────────────────────────────
-                    ctl1, ctl2, ctl3 = st.columns([2, 2, 3])
-                    if ctl1.button("เลือกทั้งหมด", key=f"sel_all_{customer_name}"):
-                        for tid in txn_ids:
-                            st.session_state[f"chk_{tid}"] = True
-                        st.rerun()
-                    if ctl2.button("ยกเลิก", key=f"desel_{customer_name}"):
-                        for tid in txn_ids:
-                            st.session_state[f"chk_{tid}"] = False
-                        st.rerun()
-
-                    for _, row in grp.iterrows():
-                        tid  = row["id"]
-                        icon = "🟡" if row["สถานะบิล"] == "ยังไม่เปิดบิล" else "🟢"
-                        lbl  = f"{icon} **{row['รหัส']}** {row['สินค้า']} ×{row['สั่ง']}"
-                        if row["ค้างจ่าย"] > 0.01:
-                            lbl += f"  —  💸 {row['ค้างจ่าย']:,.0f}฿"
-                        if row["ค้างรับ"] > 0:
-                            lbl += f"  —  📦 ค้างรับ {row['ค้างรับ']} ชิ้น"
-                        st.checkbox(lbl, key=f"chk_{tid}")
-
-                    selected_ids = [tid for tid in txn_ids
-                                    if st.session_state.get(f"chk_{tid}", False)]
+                    # ── Styled table + row selection ──────────────────────
+                    _dcols  = ["วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
+                               "ยอดรวม", "ค้างจ่าย", "สถานะบิล"]
+                    _id_map = grp["id"].reset_index(drop=True)
+                    st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
+                    _evt = st.dataframe(
+                        grp[_dcols].reset_index(drop=True).style
+                            .format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
+                            .map(_style_status, subset=["สถานะบิล"])
+                            .map(lambda v: "background-color:#6b1a1a;color:white"
+                                 if isinstance(v, (int, float)) and v > 0 else "",
+                                 subset=["ค้างรับ", "ค้างจ่าย"]),
+                        use_container_width=True,
+                        hide_index=True,
+                        selection_mode="multi-row",
+                        on_select="rerun",
+                        key=f"sel_tbl_{customer_name}",
+                    )
+                    _sel_idx  = _evt.selection.rows if hasattr(_evt, "selection") else []
+                    selected_ids = [_id_map.iloc[i] for i in _sel_idx]
 
                     if selected_ids:
                         sel_rows       = grp[grp["id"].isin(selected_ids)]
                         total_selected = sel_rows["ค้างจ่าย"].sum()
-                        ctl3.metric("ยอดที่เลือก", f"{total_selected:,.0f} บาท")
+                        st.info(f"เลือก {len(selected_ids)} รายการ — ค้างจ่ายรวม **{total_selected:,.0f} บาท**")
 
                     st.divider()
 
