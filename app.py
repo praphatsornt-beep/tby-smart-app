@@ -1339,11 +1339,16 @@ with tab7:
 </style>
 </head><body>
 <button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
-<div class="header">
-  <h1>TBY SMART APP — สรุปรายการ</h1>
-  <h2>ลูกค้า: {sel_p}{"&nbsp;&nbsp;🚚 ส่งพัสดุ" if is_ship_bill else ""}</h2>
-  <div style="font-size:14px;font-weight:600;margin-top:6px">เลขที่บิล: {bill_nos_str if bill_nos_str else "—"}</div>
-  <div class="info">วันที่พิมพ์: {today_str} &nbsp;|&nbsp; {filter_label} ({len(show_p)} รายการ)</div>
+<div class="header" style="display:flex;justify-content:space-between;align-items:flex-start">
+  <div>
+    <h1>ใบรับสินค้า ZHULIAN TBY</h1>
+    <h2>ลูกค้า: {sel_p}{"&nbsp;&nbsp;🚚 ส่งพัสดุ" if is_ship_bill else ""}</h2>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:14px;font-weight:600">เลขที่บิล: {bill_nos_str if bill_nos_str else "—"}</div>
+    <div class="info" style="margin-top:4px">วันที่พิมพ์: {today_str}</div>
+    <div class="info">{filter_label} ({len(show_p)} รายการ)</div>
+  </div>
 </div>
 <table>
   <thead><tr>
