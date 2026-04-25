@@ -373,6 +373,7 @@ with tab1:
                         st.session_state[_k] = _v
                     if _ph_addr.get("postal_code"):
                         st.session_state["_staged_pc"] = _ph_addr["postal_code"]
+                    st.session_state["_prev_shipping_cid"] = _cid_ph  # ป้องกัน reset ทับ
                     st.rerun()
             else:
                 st.caption("ไม่พบเบอร์นี้ — กรอกที่อยู่ใหม่แล้วกด บันทึกที่อยู่")
@@ -380,6 +381,23 @@ with tab1:
         mc1, mc2 = st.columns([3, 1])
         m_customer = mc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="m_cust")
         m_date     = mc2.date_input("วันที่", value=date.today(), key="m_date")
+
+        # ── Reset recipient fields when customer changes ─────────────────────
+        if m_customer != "— เลือกลูกค้า —":
+            _cid_detect = customer_map[m_customer]["id"]
+            if st.session_state.get("_prev_shipping_cid") != _cid_detect:
+                st.session_state["_prev_shipping_cid"] = _cid_detect
+                _ca_d = customer_map[m_customer]
+                for _k, _v in [
+                    (f"r_name_{_cid_detect}",  _ca_d.get("name", "")),
+                    (f"r_phone_{_cid_detect}", ""),
+                    (f"r_al_{_cid_detect}",    ""),
+                    (f"r_dt_{_cid_detect}",    ""),
+                    (f"r_am_{_cid_detect}",    ""),
+                    (f"r_pv_{_cid_detect}",    ""),
+                ]:
+                    st.session_state[_k] = _v
+                st.session_state["_staged_pc"] = ""
 
         # ── COD shortcut ────────────────────────────────────────────────────
         m_cod = st.toggle("🚚 COD (เก็บเงินปลายทาง)", key="m_cod")
