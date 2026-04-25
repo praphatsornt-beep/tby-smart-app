@@ -56,7 +56,7 @@ def create_order(
         "src_zipcode":   src["ISHIP_SRC_ZIPCODE"],
         "use_onlabel":   "1",
         "label_name":    src["ISHIP_LABEL_NAME"],
-        "label_address": src["ISHIP_LABEL_PHONE"],
+        "label_address": src["ISHIP_SRC_ADDRESS"],
         "label_zipcode": src["ISHIP_SRC_ZIPCODE"],
         "dst_name":      dst_name,
         "dst_phone":     dst_phone,
