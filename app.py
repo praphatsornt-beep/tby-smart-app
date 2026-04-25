@@ -926,7 +926,7 @@ with tab2:
 with tab4:
     st.subheader("จัดการข้อมูลหลัก")
 
-    sub1, sub2, sub3 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่"])
+    sub1, sub2, sub3, sub4 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "🗑️ ลบบิล"])
 
     with sub1:
         products = db.get_products()
@@ -1150,6 +1150,18 @@ with tab4:
                     })
                     st.success("✅ บันทึกแล้ว")
                     st.rerun()
+
+    with sub4:
+        st.caption("เลือกเลขที่บิลที่ต้องการลบ — จะลบทุกรายการในบิลนั้น")
+        _bill_list = db.get_bill_list()
+        if _bill_list:
+            _sel_bill = st.selectbox("เลขที่บิล", _bill_list, key="del_bill_sel")
+            if st.button("🗑️ ลบบิลนี้", type="primary", key="del_bill_btn"):
+                _n = db.delete_bill(_sel_bill)
+                st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")
+                st.rerun()
+        else:
+            st.info("ไม่มีบิลในระบบ")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -182,6 +182,27 @@ def delete_transaction(transaction_id: str) -> None:
     db.table("transactions").delete().eq("id", transaction_id).execute()
 
 
+def delete_bill(bill_no: str) -> int:
+    db = get_supabase()
+    rows = db.table("transactions").select("id").eq("bill_no", bill_no).execute().data
+    for r in rows:
+        db.table("partial_events").delete().eq("transaction_id", r["id"]).execute()
+    db.table("transactions").delete().eq("bill_no", bill_no).execute()
+    return len(rows)
+
+
+def get_bill_list() -> list[str]:
+    rows = (get_supabase().table("transactions")
+            .select("bill_no").not_.is_("bill_no", "null")
+            .order("bill_no", desc=True).execute().data)
+    seen, result = set(), []
+    for r in rows:
+        bn = r.get("bill_no")
+        if bn and bn not in seen:
+            seen.add(bn); result.append(bn)
+    return result
+
+
 def delete_product(product_id: str) -> None:
     get_supabase().table("products").delete().eq("id", product_id).execute()
 
