@@ -336,8 +336,9 @@ with tab1:
                 _pre_am = _cust_a.get("amphure") or ""
                 _pre_pv = _cust_a.get("province") or ""
                 with st.expander("📦 ที่อยู่ผู้รับ", expanded=not bool(_pre_al)):
+                    st.caption("📋 วางที่อยู่จาก LINE (iShip format) แล้วกด แยกอัตโนมัติ")
                     paste_txt = st.text_area(
-                        "📋 วางที่อยู่จาก LINE (iShip format) — ระบบจะแยก field ให้อัตโนมัติ",
+                        "", label_visibility="collapsed",
                         key=f"paste_{_cid}", height=90, placeholder=
                         "Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976"
                     )
