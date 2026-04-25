@@ -309,6 +309,32 @@ with tab1:
 
         st.divider()
         # ── บันทึกหลายรายการพร้อมกัน ────────────────────────────────────
+
+        # ── ค้นหาลูกค้าจากเบอร์โทร ─────────────────────────────────────
+        ph_col, _ = st.columns([2, 3])
+        ph_lookup = ph_col.text_input("🔍 ค้นหาจากเบอร์โทร", max_chars=10,
+                                      key="ph_lookup", placeholder="0XXXXXXXXX")
+        if len(ph_lookup.strip()) == 10:
+            _ph_cust = db.get_customer_by_phone(ph_lookup.strip())
+            if _ph_cust:
+                _cid_ph = _ph_cust["id"]
+                if st.session_state.get("m_cust") != _ph_cust["name"]:
+                    st.session_state["m_cust"] = _ph_cust["name"]
+                    for _k, _v in [
+                        (f"r_name_{_cid_ph}",  _ph_cust.get("recipient_name") or _ph_cust["name"]),
+                        (f"r_phone_{_cid_ph}", _ph_cust.get("phone") or ""),
+                        (f"r_al_{_cid_ph}",    _ph_cust.get("address_line") or ""),
+                        (f"r_dt_{_cid_ph}",    _ph_cust.get("district") or ""),
+                        (f"r_am_{_cid_ph}",    _ph_cust.get("amphure") or ""),
+                        (f"r_pv_{_cid_ph}",    _ph_cust.get("province") or ""),
+                    ]:
+                        st.session_state[_k] = _v
+                    if _ph_cust.get("postal_code"):
+                        st.session_state["_staged_pc"] = _ph_cust["postal_code"]
+                    st.rerun()
+            else:
+                st.caption("ไม่พบเบอร์นี้ในระบบ")
+
         mc1, mc2 = st.columns([3, 1])
         m_customer = mc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="m_cust")
         m_date     = mc2.date_input("วันที่", value=date.today(), key="m_date")
@@ -804,7 +830,7 @@ with tab2:
 with tab4:
     st.subheader("จัดการข้อมูลหลัก")
 
-    sub1, sub2 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า"])
+    sub1, sub2, sub3 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่"])
 
     with sub1:
         products = db.get_products()
@@ -951,6 +977,38 @@ with tab4:
                             st.rerun()
                         except Exception:
                             st.error("❌ ลบไม่ได้ — ลูกค้านี้มีรายการขายอยู่")
+
+    with sub3:
+        st.write("**ที่อยู่จัดส่งลูกค้า** — คลิกเลือกเพื่อแก้ไข")
+        addr_customers = db.get_customers()
+        if not addr_customers:
+            st.info("ยังไม่มีลูกค้า")
+        else:
+            addr_sel_name = st.selectbox("เลือกลูกค้า", [c["name"] for c in addr_customers],
+                                         key="addr3_sel")
+            _ac = next(c for c in addr_customers if c["name"] == addr_sel_name)
+            with st.form("addr3_form"):
+                a1, a2 = st.columns(2)
+                ea3_rn  = a1.text_input("ชื่อผู้รับ",    value=_ac.get("recipient_name") or _ac["name"])
+                ea3_rp  = a2.text_input("เบอร์โทร",      value=_ac.get("phone") or "")
+                ea3_al  = st.text_input("บ้านเลขที่/ถนน", value=_ac.get("address_line") or "")
+                b1, b2, b3 = st.columns(3)
+                ea3_dt  = b1.text_input("ตำบล/แขวง",    value=_ac.get("district") or "")
+                ea3_am  = b2.text_input("อำเภอ/เขต",     value=_ac.get("amphure") or "")
+                ea3_pv  = b3.text_input("จังหวัด",        value=_ac.get("province") or "")
+                ea3_pc  = st.text_input("รหัสไปรษณีย์",   value=_ac.get("postal_code") or "", max_chars=5)
+                if st.form_submit_button("💾 บันทึก", type="primary", use_container_width=True):
+                    db.update_customer_address(_ac["id"], {
+                        "recipient_name": ea3_rn,
+                        "phone":          ea3_rp,
+                        "address_line":   ea3_al,
+                        "district":       ea3_dt,
+                        "amphure":        ea3_am,
+                        "province":       ea3_pv,
+                        "postal_code":    ea3_pc,
+                    })
+                    st.success("✅ บันทึกแล้ว")
+                    st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

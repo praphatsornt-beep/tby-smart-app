@@ -30,6 +30,11 @@ def get_customers() -> list[dict]:
     return get_supabase().table("customers").select("*").order("name").execute().data
 
 
+def get_customer_by_phone(phone: str) -> dict | None:
+    rows = get_supabase().table("customers").select("*").eq("phone", phone.strip()).execute().data
+    return rows[0] if rows else None
+
+
 def upsert_product(data: dict) -> None:
     get_supabase().table("products").upsert(data).execute()
 
