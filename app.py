@@ -1029,8 +1029,10 @@ with tab5:
 
             prod_names = list(product_map_e.keys())
             cust_names = list(customer_map_e.keys())
-            cur_prod_idx = next((i for i, p in enumerate(all_products_e) if p["id"] == et["product_id"]), 0)
-            cur_cust_idx = next((i for i, c in enumerate(all_customers_e) if c["id"] == et["customer_id"]), 0)
+            _tgt_prod = next((p["name"] for p in all_products_e if p["id"] == et["product_id"]), "")
+            _tgt_cust = next((c["name"] for c in all_customers_e if c["id"] == et["customer_id"]), "")
+            cur_prod_idx = prod_names.index(_tgt_prod) if _tgt_prod in prod_names else 0
+            cur_cust_idx = cust_names.index(_tgt_cust) if _tgt_cust in cust_names else 0
             cur_bill_idx = 0 if et["bill_status"] == "เปิดบิลแล้ว" else 1
             cur_pay_idx = 0 if et["pay_status"] == "จ่ายแล้ว" else 1
             cur_receipt_idx = 0 if et["initial_qty_received"] > 0 else 1
