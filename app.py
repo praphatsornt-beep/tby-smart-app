@@ -8,6 +8,7 @@ import io
 
 import database as db
 import shopee_api
+import iship_api
 from math import ceil
 from flash_zones import lookup_zone, zone_surcharge, ZONE_LABELS, carrier_fees
 
@@ -126,12 +127,30 @@ with tab1:
         product_map = {p["name"]: p for p in products}
         customer_map = {c["name"]: c for c in customers}
 
-        # ── iship text (แสดงหลัง save ส่งพัสดุ) ─────────────────────────
-        if st.session_state.get("_last_iship"):
-            st.info("📋 คัดลอกข้อความด้านล่างไปวางใน iship.com")
-            st.text_area("", value=st.session_state["_last_iship"], height=110, key="_iship_display")
-            if st.button("✕ ปิด", key="close_iship"):
-                del st.session_state["_last_iship"]
+        # ── iShip pending (แสดงหลัง save ส่งพัสดุ) ──────────────────────
+        if st.session_state.get("_iship_pending"):
+            _p = st.session_state["_iship_pending"]
+            addr_full = f"{_p['address_line']} {_p['district']} {_p['amphure']} {_p['province']} {_p['zipcode']}".strip()
+            st.info(
+                f"📦 **{_p['dst_name']}**  {_p['dst_phone']}\n\n"
+                f"{addr_full}\n\n"
+                f"น้ำหนัก {_p['weight_kg']:.2f} kg  |  {_p['carrier']}  |  COD {_p['cod_amount']:,} ฿"
+            )
+            col_s1, col_s2 = st.columns([3, 1])
+            if col_s1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="do_iship"):
+                if iship_api.is_configured():
+                    with st.spinner("กำลังสร้างรายการใน iShip..."):
+                        resp = iship_api.create_order(**_p)
+                    if resp.get("status"):
+                        tracking = (resp.get("data") or {}).get("tracking_code", "")
+                        st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
+                        del st.session_state["_iship_pending"]
+                    else:
+                        st.error(f"❌ iShip Error: {resp.get('message') or resp.get('msg') or resp}")
+                else:
+                    st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
+            if col_s2.button("ปิด", key="cancel_iship", use_container_width=True):
+                del st.session_state["_iship_pending"]
                 st.rerun()
             st.divider()
 
@@ -263,25 +282,35 @@ with tab1:
                 _cid    = _cust_a["id"]
                 _pre_rn = _cust_a.get("recipient_name") or _cust_a.get("name", "")
                 _pre_rp = _cust_a.get("phone") or ""
-                _pre_ra = _cust_a.get("address") or ""
-                with st.expander("📦 ที่อยู่ผู้รับ", expanded=not bool(_pre_ra)):
+                _pre_al = _cust_a.get("address_line") or ""
+                _pre_dt = _cust_a.get("district") or ""
+                _pre_am = _cust_a.get("amphure") or ""
+                _pre_pv = _cust_a.get("province") or ""
+                with st.expander("📦 ที่อยู่ผู้รับ", expanded=not bool(_pre_al)):
                     col_a, col_b = st.columns(2)
-                    r_name  = col_a.text_input("ชื่อผู้รับ", value=_pre_rn, key=f"r_name_{_cid}")
-                    r_phone = col_b.text_input("เบอร์โทร",   value=_pre_rp, key=f"r_phone_{_cid}")
-                    r_addr  = st.text_area("ที่อยู่", value=_pre_ra, key=f"r_addr_{_cid}", height=80)
+                    r_name       = col_a.text_input("ชื่อผู้รับ",    value=_pre_rn, key=f"r_name_{_cid}")
+                    r_phone      = col_b.text_input("เบอร์โทร",      value=_pre_rp, key=f"r_phone_{_cid}")
+                    r_addr_line  = st.text_input("บ้านเลขที่/ถนน",  value=_pre_al, key=f"r_al_{_cid}")
+                    col_c, col_d, col_e = st.columns(3)
+                    r_district   = col_c.text_input("ตำบล/แขวง",    value=_pre_dt, key=f"r_dt_{_cid}")
+                    r_amphure    = col_d.text_input("อำเภอ/เขต",     value=_pre_am, key=f"r_am_{_cid}")
+                    r_province   = col_e.text_input("จังหวัด",        value=_pre_pv, key=f"r_pv_{_cid}")
                     st.caption(f"รหัสไปรษณีย์: {m_postcode or '—'} (จากช่องด้านบน)")
                     if st.button("💾 บันทึกที่อยู่ไว้กับลูกค้านี้", key="save_addr_btn"):
                         db.update_customer_address(_cid, {
                             "recipient_name": r_name,
                             "phone":          r_phone,
-                            "address":        r_addr,
+                            "address_line":   r_addr_line,
+                            "district":       r_district,
+                            "amphure":        r_amphure,
+                            "province":       r_province,
                             "postal_code":    m_postcode,
                         })
                         st.success("✅ บันทึกแล้ว — ครั้งถัดไปเลือกลูกค้านี้จะ auto-fill")
             else:
-                r_name = r_phone = r_addr = ""
+                r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
         else:
-            r_name = r_phone = r_addr = ""
+            r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
 
         # แสดง "รหัส — ชื่อ" เพื่อเลือก/ค้นหาด้วยรหัสได้
         product_display = {f"{p['id']} — {p['name']}": p for p in products}
@@ -401,13 +430,21 @@ with tab1:
             if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
             if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
             # สร้าง iship text สำหรับวางใน iship.com
-            if is_shipping and r_addr:
+            if is_shipping and r_addr_line:
                 product_line = ", ".join(f"{p['name']} ×{qty}" for p, qty, _ in valid_items)
-                st.session_state["_last_iship"] = (
-                    f"{r_name or customer['name']}  {r_phone}\n"
-                    f"{r_addr}  {m_postcode}\n"
-                    f"หมายเหตุ: {bill_no} {product_line}"
-                )
+                st.session_state["_iship_pending"] = {
+                    "dst_name":    r_name or customer["name"],
+                    "dst_phone":   r_phone,
+                    "address_line": r_addr_line,
+                    "district":    r_district,
+                    "amphure":     r_amphure,
+                    "province":    r_province,
+                    "zipcode":     m_postcode,
+                    "weight_kg":   total_w_g / 1000,
+                    "cod_amount":  ceil(collect - cod_amount) if m_cod else 0,
+                    "carrier":     m_carrier,
+                    "remark":      f"{bill_no} {product_line}",
+                }
             # ล้างฟอร์มสำหรับลูกค้าถัดไป
             for _k in ["m_cust", "m_bill", "m_pay", "m_delivery", "m_cod",
                        "m_cart", "m_postcode", "m_carrier", "m_zone"]:
@@ -756,15 +793,22 @@ with tab4:
                 addr_sel = st.selectbox("เลือกลูกค้า", [c["name"] for c in customers], key="addr_edit_sel")
                 _ec = next(c for c in customers if c["name"] == addr_sel)
                 col_a2, col_b2 = st.columns(2)
-                ea_rn   = col_a2.text_input("ชื่อผู้รับ",      value=_ec.get("recipient_name") or _ec["name"], key="ea_rn")
-                ea_rp   = col_b2.text_input("เบอร์โทร",         value=_ec.get("phone") or "",                  key="ea_rp")
-                ea_addr = st.text_area("ที่อยู่",               value=_ec.get("address") or "",                key="ea_addr", height=80)
-                ea_pc   = st.text_input("รหัสไปรษณีย์",        value=_ec.get("postal_code") or "",            key="ea_pc", max_chars=5)
+                ea_rn   = col_a2.text_input("ชื่อผู้รับ",    value=_ec.get("recipient_name") or _ec["name"], key="ea_rn")
+                ea_rp   = col_b2.text_input("เบอร์โทร",      value=_ec.get("phone") or "",                   key="ea_rp")
+                ea_al   = st.text_input("บ้านเลขที่/ถนน",    value=_ec.get("address_line") or "",            key="ea_al")
+                col_c2, col_d2, col_e2 = st.columns(3)
+                ea_dt   = col_c2.text_input("ตำบล/แขวง",    value=_ec.get("district") or "",                 key="ea_dt")
+                ea_am   = col_d2.text_input("อำเภอ/เขต",     value=_ec.get("amphure") or "",                 key="ea_am")
+                ea_pv   = col_e2.text_input("จังหวัด",        value=_ec.get("province") or "",               key="ea_pv")
+                ea_pc   = st.text_input("รหัสไปรษณีย์",      value=_ec.get("postal_code") or "",            key="ea_pc", max_chars=5)
                 if st.button("💾 บันทึกที่อยู่", key="ea_save", type="primary"):
                     db.update_customer_address(_ec["id"], {
                         "recipient_name": ea_rn,
                         "phone":          ea_rp,
-                        "address":        ea_addr,
+                        "address_line":   ea_al,
+                        "district":       ea_dt,
+                        "amphure":        ea_am,
+                        "province":       ea_pv,
                         "postal_code":    ea_pc,
                     })
                     st.success("✅ บันทึกที่อยู่แล้ว")
