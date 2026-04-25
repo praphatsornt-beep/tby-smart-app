@@ -207,11 +207,19 @@ with tab1:
         if st.session_state.get("_iship_pending"):
             _p = st.session_state["_iship_pending"]
             addr_full = f"{_p['address_line']} {_p['district']} {_p['amphure']} {_p['province']} {_p['zipcode']}".strip()
+            _sender_name = _p.get("sender_name", "")
             st.info(
+                f"{'👤 ลูกค้า: **' + _sender_name + '**  →  ' if _sender_name else ''}"
                 f"📦 **{_p['dst_name']}**  {_p['dst_phone']}\n\n"
                 f"{addr_full}\n\n"
-                f"น้ำหนัก {_p['weight_kg']:.2f} kg  |  {_p['carrier']}  |  COD {_p['cod_amount']:,} ฿"
+                f"น้ำหนัก {_p['weight_kg']:.2f} kg  |  COD {_p['cod_amount']:,} ฿"
             )
+            # เลือกขนส่งก่อนส่ง
+            _carrier_choice = st.radio("ขนส่ง", ["Flash Express", "SPX Express"],
+                                       index=0 if _p["carrier"] == "Flash Express" else 1,
+                                       horizontal=True, key="iship_carrier_pick")
+            _p["carrier"] = _carrier_choice
+
             col_s1, col_s2 = st.columns([3, 1])
             if col_s1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="do_iship"):
                 if iship_api.is_configured():
@@ -587,8 +595,9 @@ with tab1:
                     "zipcode":     m_postcode,
                     "weight_kg":   (total_w_g + 500) / 1000,  # +500g กล่อง
                     "cod_amount":  ceil(collect - cod_amount) if m_cod else 0,
-                    "carrier":     m_carrier,
-                    "remark":      f"{bill_no} {product_line}",
+                    "carrier":      m_carrier,
+                    "remark":       f"{bill_no} {product_line}",
+                    "sender_name":  customer["name"],
                 }
             # ล้างฟอร์มสำหรับลูกค้าถัดไป
             for _k in ["m_cust", "m_bill", "m_pay", "m_delivery", "m_cod",
