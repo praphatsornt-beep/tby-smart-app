@@ -274,28 +274,28 @@ with tab1:
                 net_recv  = collect - cod_fee
                 if m_cod:
                     vm1, vm2, vm3, vm4, vm5, vm6, vm7 = st.columns(7)
-                    vm1.metric("รายการ",           f"{len(valid_items)} สินค้า")
-                    vm2.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
-                    vm3.metric("PV รวม",           f"{total_pv:.0f}")
-                    vm4.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
-                    vm5.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
-                    vm6.metric("💸 ค่า COD",       f"{cod_fee:,.2f} ฿")
-                    vm7.metric("✅ ได้รับจริง",    f"{net_recv:,.2f} ฿")
+                    vm1.metric("ยอดสินค้า",       f"{total_amt:,.0f} ฿")
+                    vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
+                    vm3.metric("💰 ยอดเก็บ",       f"{collect:,.0f} ฿")
+                    vm4.metric("💸 ค่า COD",       f"{cod_fee:,.2f} ฿")
+                    vm5.metric("✅ ได้รับจริง",    f"{net_recv:,.2f} ฿")
+                    vm6.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
+                    vm7.metric("PV รวม",           f"{total_pv:.0f}")
                 else:
                     vm1, vm2, vm3, vm4, vm5 = st.columns(5)
-                    vm1.metric("รายการ",           f"{len(valid_items)} สินค้า")
-                    vm2.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
-                    vm3.metric("PV รวม",           f"{total_pv:.0f}")
+                    vm1.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
+                    vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
+                    vm3.metric("💰 ยอดรวม",        f"{collect:,.0f} ฿")
                     vm4.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
-                    vm5.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
+                    vm5.metric("PV รวม",           f"{total_pv:.0f}")
             else:
                 ship_fee = cod_fee = 0
                 collect  = total_amt
                 net_recv = total_amt
                 vm1, vm2, vm3 = st.columns(3)
-                vm1.metric("รายการ",   f"{len(valid_items)} สินค้า")
-                vm2.metric("ยอดรวม",   f"{total_amt:,.0f} บาท")
-                vm3.metric("PV รวม",   f"{total_pv:.0f}")
+                vm1.metric("ยอดรวม",   f"{total_amt:,.0f} ฿")
+                vm2.metric("PV รวม",   f"{total_pv:.0f}")
+                vm3.metric("รายการ",   f"{len(valid_items)} สินค้า")
 
         m_errors = []
         if m_customer == "— เลือกลูกค้า —": m_errors.append("เลือกลูกค้าก่อน")
@@ -349,6 +349,10 @@ with tab1:
             if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
             if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
             st.success(msg)
+            # ล้างฟอร์มสำหรับลูกค้าถัดไป
+            for _k in ["m_cust", "m_bill", "m_pay", "m_delivery", "m_cod",
+                       "m_cart", "m_postcode", "m_carrier", "m_zone"]:
+                st.session_state.pop(_k, None)
             st.rerun()
         elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
             st.caption("⚠️ " + " | ".join(m_errors))
