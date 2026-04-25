@@ -220,12 +220,17 @@ with tab1:
             m_postcode = pc_col.text_input("รหัสไปรษณีย์", max_chars=5, key="m_postcode",
                                             placeholder="เช่น 10400")
             fees = carrier_fees(0, m_postcode.strip()) if len(m_postcode.strip()) == 5 else None
-            f_sur = fees["Flash Express"]["surcharge"] if fees else 0
-            s_sur = fees["SPX Express"]["surcharge"]   if fees else 0
-            f_zone = fees["Flash Express"]["zone"] if fees else "—"
-            s_zone = fees["SPX Express"]["zone"]   if fees else "—"
+            f_sur  = fees["Flash Express"]["surcharge"] if fees else 0
+            s_sur  = fees["SPX Express"]["surcharge"]   if fees else 0
+            f_zone = fees["Flash Express"]["zone"]      if fees else "—"
+            s_zone = fees["SPX Express"]["zone"]        if fees else "—"
             fc_col.info(f"**Flash Express**\n\n{f_zone or 'ปกติ'}\n\nค่าพื้นที่ +{f_sur} ฿")
             sc_col.info(f"**SPX Express**\n\n{s_zone or 'ปกติ'}\n\nค่าพื้นที่ +{s_sur} ฿")
+            # auto-select carrier ที่ถูกกว่าเมื่อ postcode เปลี่ยน
+            if fees and m_postcode != st.session_state.get("_prev_pc", ""):
+                cheaper = "Flash Express" if f_sur <= s_sur else "SPX Express"
+                st.session_state["m_carrier"]  = cheaper
+                st.session_state["_prev_pc"]   = m_postcode
             m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"],
                                        key="m_carrier")
 
