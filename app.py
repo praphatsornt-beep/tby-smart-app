@@ -300,7 +300,7 @@ with tab1:
                             index=1 if m_cod else None, horizontal=True, key="m_pay",
                             disabled=m_cod)
         m_bill = ms3.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"],
-                            index=0 if m_cod else None, horizontal=True, key="m_bill")
+                            index=1 if m_cod else None, horizontal=True, key="m_bill")
         # map ไปยัง receipt_status สำหรับ DB
         m_receipt = "ฝากของ" if m_delivery == "ฝากของ (รอรับ)" else "รับของแล้ว"
         m_postcode = ""
