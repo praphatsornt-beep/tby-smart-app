@@ -396,7 +396,7 @@ with tab1:
                 if st.session_state.get("_last_ph_fill") != ph_lookup.strip():
                     st.session_state["_last_ph_fill"] = ph_lookup.strip()
                     if _cust_of_addr:
-                        st.session_state["m_cust"] = _cust_of_addr
+                        st.session_state["_cust_picked"] = _cust_of_addr
                     for _k, _v in [
                         ("r_name",  _ph_addr.get("recipient_name") or ""),
                         ("r_phone", _ph_addr.get("phone") or ""),
@@ -414,11 +414,51 @@ with tab1:
                 st.caption("ไม่พบเบอร์นี้ — กรอกที่อยู่ใหม่แล้วกด บันทึกที่อยู่")
 
         mc1, mc2 = st.columns([3, 1])
-        m_customer = mc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="m_cust")
-        m_date     = mc2.date_input("วันที่", value=date.today(), key="m_date")
+        with mc1:
+            _cust_picked = st.session_state.get("_cust_picked", "")
+            if _cust_picked:
+                cp1, cp2 = st.columns([5, 1])
+                cp1.markdown(f"👤 **{_cust_picked}**")
+                if cp2.button("✕", key="cust_clear", help="เลือกลูกค้าใหม่"):
+                    st.session_state.pop("_cust_picked", None)
+                    st.session_state.pop("_prev_shipping_cid", None)
+                    st.rerun()
+                m_customer = _cust_picked
+            else:
+                cust_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อเพื่อค้นหา...",
+                                             key="m_cust_search")
+                m_customer = "— เลือกลูกค้า —"
+                if cust_search.strip():
+                    _matches = [n for n in customer_map if cust_search.upper() in n.upper()][:6]
+                    for _mn in _matches:
+                        if st.button(f"👤 {_mn}", key=f"cp_{_mn}", use_container_width=True):
+                            st.session_state["_cust_picked"] = _mn
+                            st.rerun()
+                    if cust_search.upper() not in [n.upper() for n in _matches]:
+                        if st.button(f"➕ เพิ่ม '{cust_search}'", key="cust_add_btn",
+                                      use_container_width=True):
+                            st.session_state["_adding_cust"] = cust_search
+                if st.session_state.get("_adding_cust"):
+                    _new_cust_name = st.session_state["_adding_cust"]
+                    with st.form("add_cust_quick"):
+                        _fn = st.text_input("ชื่อลูกค้า", value=_new_cust_name)
+                        _fp = st.text_input("เบอร์โทร (ถ้ามี)")
+                        _fc1, _fc2 = st.columns(2)
+                        if _fc1.form_submit_button("💾 บันทึก", type="primary"):
+                            db.upsert_customer({"id": str(uuid.uuid4()),
+                                                "name": _fn.strip(), "phone": _fp.strip()})
+                            st.session_state["_cust_picked"] = _fn.strip()
+                            st.session_state.pop("_adding_cust", None)
+                            st.rerun()
+                        if _fc2.form_submit_button("ยกเลิก"):
+                            st.session_state.pop("_adding_cust", None)
+                            st.rerun()
+        m_date = mc2.date_input("วันที่", value=date.today(), key="m_date")
 
         # ── Reset recipient fields when customer changes ─────────────────────
         if m_customer != "— เลือกลูกค้า —":
+            if m_customer not in customer_map:
+                st.rerun()  # รอ customers reload หลังเพิ่งเพิ่มใหม่
             _cid_detect = customer_map[m_customer]["id"]
             if st.session_state.get("_prev_shipping_cid") != _cid_detect:
                 st.session_state["_prev_shipping_cid"] = _cid_detect
@@ -687,7 +727,8 @@ with tab1:
                     "sender_name":  customer["name"],
                 }
             # ล้างฟอร์มสำหรับลูกค้าถัดไป
-            for _k in ["m_cust", "m_bill", "m_pay", "m_delivery", "m_cod",
+            for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
+                       "m_bill", "m_pay", "m_delivery", "m_cod",
                        "m_cart", "m_postcode", "m_carrier", "m_zone"]:
                 st.session_state.pop(_k, None)
             st.rerun()
