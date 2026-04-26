@@ -783,7 +783,8 @@ with tab1:
         # ── iShip pending (แสดงหลัง save) ────────────────────────────────
         if st.session_state.get("_sp_iship_pending"):
             _spp = st.session_state["_sp_iship_pending"]
-            st.info(f"📦 พร้อมส่ง iShip: **{_spp['dst_name']}** | {_spp['zipcode']} | {_spp['carrier']}")
+            _spp_addr = f"{_spp.get('address_line','')} {_spp.get('district','')} {_spp.get('amphure','')} {_spp.get('province','')} {_spp.get('zipcode','')}".strip()
+            st.info(f"📦 **{_spp['dst_name']}** | ☎ {_spp.get('dst_phone','')}  \n{_spp_addr}")
             _si1, _si2 = st.columns([3, 1])
             _sp_car_pick = _si1.radio("ขนส่ง", ["Flash Express", "SPX Express"],
                                       index=0 if _spp["carrier"] == "Flash Express" else 1,
