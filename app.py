@@ -771,6 +771,15 @@ with tab1:
     with _sub_ship:
         st.subheader("บันทึกการส่งของ")
 
+        # ── แสดง tracking ล่าสุด ─────────────────────────────────────────
+        if st.session_state.get("_sp_last_tracking"):
+            _lt = st.session_state["_sp_last_tracking"]
+            _ltc1, _ltc2 = st.columns([5, 1])
+            _ltc1.success(f"✅ iShip สำเร็จ — Tracking: **{_lt}**")
+            if _ltc2.button("✕", key="sp_clear_tracking", use_container_width=True):
+                del st.session_state["_sp_last_tracking"]
+                st.rerun()
+
         # ── iShip pending (แสดงหลัง save) ────────────────────────────────
         if st.session_state.get("_sp_iship_pending"):
             _spp = st.session_state["_sp_iship_pending"]
@@ -792,7 +801,7 @@ with tab1:
                         _sp_tracking = (_sp_resp.get("data") or {}).get("tracking_code", "")
                         if _spp.get("_shipment_id") and _sp_tracking:
                             db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
-                        st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{_sp_tracking}**")
+                        st.session_state["_sp_last_tracking"] = _sp_tracking
                         del st.session_state["_sp_iship_pending"]
                         st.rerun()
                     else:
