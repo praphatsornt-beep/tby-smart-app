@@ -67,23 +67,13 @@ def create_order(
         "weight":       1,
         "cod_amount":   int(cod_amount),
         "remark":       remark,
-        "use_onlabel":  "1",
-        "label_name":   src["ISHIP_LABEL_NAME"],
-        "label_phone":  src["ISHIP_LABEL_PHONE"],
-        "label_address": src["ISHIP_SRC_ADDRESS"],
-        "label_zipcode": src["ISHIP_SRC_ZIPCODE"],
     }
-    if is_cod:
-        payload["products"] = [{
-            "name":   "สินค้าซูเลียน",
-            "qty":    1,
-            "width":  10,
-            "length": 10,
-            "height": 5,
-            "weight": 1,
-            "color":  "น้ำตาล",
-            "price":  2000,
-        }]
+    if not is_cod:
+        payload["use_onlabel"]   = "1"
+        payload["label_name"]    = src["ISHIP_LABEL_NAME"]
+        payload["label_phone"]   = src["ISHIP_LABEL_PHONE"]
+        payload["label_address"] = src["ISHIP_SRC_ADDRESS"]
+        payload["label_zipcode"] = src["ISHIP_SRC_ZIPCODE"]
     r = requests.post(
         f"{BASE_URL}/create_order",
         json=payload,
