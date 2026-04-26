@@ -504,19 +504,19 @@ with tab1:
             ]
 
             # ── สถานะ + การจัดส่ง ────────────────────────────────────────────
+            # auto-set COD ก่อน render (ต้องตั้ง session_state ก่อน widget)
+            _cur_pay = st.session_state.get("m_pay", "จ่ายแล้ว")
+            if _cur_pay == "COD" and st.session_state.get("_prev_pay") != "COD":
+                st.session_state["m_bill"]     = "ยังไม่เปิดบิล"
+                st.session_state["m_delivery"] = "ส่งพัสดุ"
+                st.session_state["_prev_pay"]  = "COD"
+            elif _cur_pay != "COD":
+                st.session_state["_prev_pay"] = _cur_pay
             ms1, ms2, ms3 = st.columns(3)
             _delivery_opts = ["ฝากของ (รอรับ)", "รับหน้าร้าน", "ส่งพัสดุ"]
             m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery")
             m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย", "COD"], horizontal=True, key="m_pay")
             m_bill = ms3.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], horizontal=True, key="m_bill")
-            # auto-set เมื่อเลือก COD
-            if m_pay == "COD" and st.session_state.get("_prev_pay") != "COD":
-                st.session_state["m_bill"]     = "ยังไม่เปิดบิล"
-                st.session_state["m_delivery"] = "ส่งพัสดุ"
-                st.session_state["_prev_pay"]  = "COD"
-                st.rerun()
-            elif m_pay != "COD":
-                st.session_state["_prev_pay"] = m_pay
             m_cod     = (m_pay == "COD")
             m_receipt = "ฝากของ" if m_delivery == "ฝากของ (รอรับ)" else "รับของแล้ว"
             m_postcode = ""
