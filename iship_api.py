@@ -87,6 +87,23 @@ def create_order(
             "product_price":  "2000",
             "product_remark": "",
         }]
+        payload.update({
+            "use_onlabel":       "1",
+            "label_name":        src["ISHIP_LABEL_NAME"],
+            "label_phone":       src["ISHIP_LABEL_PHONE"],
+            "label_address":     src["ISHIP_SRC_ADDRESS"],
+            "label_zipcode":     src["ISHIP_SRC_ZIPCODE"],
+            "create_mode":       "add",
+            "order_type":        "1",
+            "is_optional":       "0",
+            "category_id":       "2",
+            "save_dst_address":  "0",
+            "product_value":     "",
+            "weight":            "1",
+            "width":             "",
+            "length":            "",
+            "height":            "",
+        })
         form_data = {k: str(v) for k, v in payload.items()}
         form_data["product_lists"] = json.dumps(_prod_list, ensure_ascii=False)
         r = requests.post(
