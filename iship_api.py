@@ -74,6 +74,9 @@ def create_order(
         "parcel_detail":  item_detail or remark,
         "goods_name":     item_detail or remark,
         "product_detail": item_detail or remark,
+        "item_name":      item_detail or remark,
+        "content":        item_detail or remark,
+        "description":    item_detail or remark,
     }
     r = requests.post(
         f"{BASE_URL}/create_order",
