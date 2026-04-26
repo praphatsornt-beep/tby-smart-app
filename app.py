@@ -654,9 +654,10 @@ with tab1:
                 if m_delivery == "ส่งพัสดุ":
                     fees_all  = carrier_fees(total_weight, m_postcode)
                     ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(total_weight, m_postcode)
-                    collect   = total_amt + ship_fee
-                    cod_fee   = round(collect * COD_FEE_RATE, 2) if m_cod else 0
-                    net_recv  = collect - cod_fee
+                    _base     = total_amt + ship_fee
+                    cod_fee   = round(_base * COD_FEE_RATE, 2) if m_cod else 0
+                    collect   = _base + cod_fee if m_cod else _base
+                    net_recv  = _base
                     if m_cod:
                         vm1, vm2, vm3, vm4, vm5, vm6, vm7 = st.columns(7)
                         vm1.metric("ยอดสินค้า",       f"{total_amt:,.0f} ฿")
@@ -707,9 +708,10 @@ with tab1:
                     ship_fee = 0
                     delivery_tag = ""
                 if m_cod:
-                    collect    = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
-                    cod_amount = round(collect * COD_FEE_RATE, 2)
-                    cod_tag    = f"[COD|ค่าธรรมเนียม={cod_amount:.2f}฿|ยอดรับจริง={collect-cod_amount:.2f}฿]"
+                    _base_cod  = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
+                    cod_amount = round(_base_cod * COD_FEE_RATE, 2)
+                    collect    = _base_cod + cod_amount
+                    cod_tag    = f"[COD|ยอดเก็บ={collect:.0f}฿|ค่าธรรมเนียม={cod_amount:.2f}฿|ยอดรับจริง={_base_cod:.2f}฿]"
                 else:
                     cod_tag = ""
                 bill_no = db.get_next_bill_no(str(m_date))
@@ -748,7 +750,7 @@ with tab1:
                         "province":    r_province,
                         "zipcode":     m_postcode,
                         "weight_kg":   (total_w_g + 500) / 1000,  # +500g กล่อง
-                        "cod_amount":  ceil(collect - cod_amount) if m_cod else 0,
+                        "cod_amount":  ceil(collect) if m_cod else 0,
                         "carrier":      m_carrier,
                         "remark":       f"{customer['name']} {_prod_codes}",
                         "sender_name":  customer["name"],
