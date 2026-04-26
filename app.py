@@ -234,512 +234,668 @@ def _parse_quick_order(text: str, products: list) -> tuple:
     return found, unknown
 
 
+def _pick_carrier(pc: str, kg: float = 0) -> str:
+    is_metro = pc[:2] in {"10", "11", "12"}
+    return "Flash Express" if (kg <= 3 and not is_metro) else "SPX Express"
+
+
 with tab1:
-    st.subheader("บันทึกรายการขาย")
+    _sub_sale, _sub_ship = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ"])
 
-    products = db.get_products()
-    customers = db.get_customers()
+    with _sub_sale:
+        st.subheader("บันทึกรายการขาย")
 
-    if not products:
-        st.warning("⚠️ ยังไม่มีข้อมูลสินค้า กรุณาเพิ่มสินค้าใน Tab ⚙️ ก่อน")
-    elif not customers:
-        st.warning("⚠️ ยังไม่มีข้อมูลลูกค้า กรุณาเพิ่มลูกค้าใน Tab ⚙️ ก่อน")
-    else:
-        product_map = {p["name"]: p for p in products}
-        customer_map = {c["name"]: c for c in customers}
+        products = db.get_products()
+        customers = db.get_customers()
 
-        # ── iShip pending (แสดงหลัง save ส่งพัสดุ) ──────────────────────
-        if st.session_state.get("_iship_pending"):
-            _p = st.session_state["_iship_pending"]
-            addr_full = f"{_p['address_line']} {_p['district']} {_p['amphure']} {_p['province']} {_p['zipcode']}".strip()
-            _sender_name = _p.get("sender_name", "")
-            st.info(
-                f"{'👤 ลูกค้า: **' + _sender_name + '**  →  ' if _sender_name else ''}"
-                f"📦 **{_p['dst_name']}**  {_p['dst_phone']}\n\n"
-                f"{addr_full}\n\n"
-                f"น้ำหนัก {_p['weight_kg']:.2f} kg  |  COD {_p['cod_amount']:,} ฿"
-            )
-            # เลือกขนส่งก่อนส่ง
-            _carrier_choice = st.radio("ขนส่ง", ["Flash Express", "SPX Express"],
-                                       index=0 if _p["carrier"] == "Flash Express" else 1,
-                                       horizontal=True, key="iship_carrier_pick")
-            _p["carrier"] = _carrier_choice
+        if not products:
+            st.warning("⚠️ ยังไม่มีข้อมูลสินค้า กรุณาเพิ่มสินค้าใน Tab ⚙️ ก่อน")
+        elif not customers:
+            st.warning("⚠️ ยังไม่มีข้อมูลลูกค้า กรุณาเพิ่มลูกค้าใน Tab ⚙️ ก่อน")
+        else:
+            product_map = {p["name"]: p for p in products}
+            customer_map = {c["name"]: c for c in customers}
 
-            col_s1, col_s2 = st.columns([3, 1])
-            if col_s1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="do_iship"):
-                if iship_api.is_configured():
-                    _api_keys = {"dst_name","dst_phone","address_line","district",
-                                 "amphure","province","zipcode","weight_kg",
-                                 "cod_amount","carrier","remark"}
-                    _call = {k: v for k, v in _p.items() if k in _api_keys}
-                    with st.spinner("กำลังสร้างรายการใน iShip..."):
-                        resp = iship_api.create_order(**_call)
-                    if resp.get("status"):
-                        tracking = (resp.get("data") or {}).get("tracking_code", "")
-                        st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
-                        del st.session_state["_iship_pending"]
-                    else:
-                        _err_msg = resp.get("message") or resp.get("msg") or str(resp)
-                        if "NotSupportAddress" in _err_msg:
-                            st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
-                            with st.expander("🔍 ดู response จาก iShip"):
-                                st.json(resp)
-                                st.write("ที่ส่งไป →", {
-                                    "district": _call.get("district"),
-                                    "amphure":  _call.get("amphure"),
-                                    "province": _call.get("province"),
-                                    "zipcode":  _call.get("zipcode"),
-                                })
+            # ── iShip pending (แสดงหลัง save ส่งพัสดุ) ──────────────────────
+            if st.session_state.get("_iship_pending"):
+                _p = st.session_state["_iship_pending"]
+                addr_full = f"{_p['address_line']} {_p['district']} {_p['amphure']} {_p['province']} {_p['zipcode']}".strip()
+                _sender_name = _p.get("sender_name", "")
+                st.info(
+                    f"{'👤 ลูกค้า: **' + _sender_name + '**  →  ' if _sender_name else ''}"
+                    f"📦 **{_p['dst_name']}**  {_p['dst_phone']}\n\n"
+                    f"{addr_full}\n\n"
+                    f"น้ำหนัก {_p['weight_kg']:.2f} kg  |  COD {_p['cod_amount']:,} ฿"
+                )
+                # เลือกขนส่งก่อนส่ง
+                _carrier_choice = st.radio("ขนส่ง", ["Flash Express", "SPX Express"],
+                                           index=0 if _p["carrier"] == "Flash Express" else 1,
+                                           horizontal=True, key="iship_carrier_pick")
+                _p["carrier"] = _carrier_choice
+
+                col_s1, col_s2 = st.columns([3, 1])
+                if col_s1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="do_iship"):
+                    if iship_api.is_configured():
+                        _api_keys = {"dst_name","dst_phone","address_line","district",
+                                     "amphure","province","zipcode","weight_kg",
+                                     "cod_amount","carrier","remark"}
+                        _call = {k: v for k, v in _p.items() if k in _api_keys}
+                        with st.spinner("กำลังสร้างรายการใน iShip..."):
+                            resp = iship_api.create_order(**_call)
+                        if resp.get("status"):
+                            tracking = (resp.get("data") or {}).get("tracking_code", "")
+                            st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
+                            del st.session_state["_iship_pending"]
                         else:
-                            st.error(f"❌ iShip Error: {_err_msg}")
-                            with st.expander("🔍 raw response"):
-                                st.json(resp)
-                else:
-                    st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
-            if col_s2.button("ปิด", key="cancel_iship", use_container_width=True):
-                del st.session_state["_iship_pending"]
-                st.rerun()
+                            _err_msg = resp.get("message") or resp.get("msg") or str(resp)
+                            if "NotSupportAddress" in _err_msg:
+                                st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
+                                with st.expander("🔍 ดู response จาก iShip"):
+                                    st.json(resp)
+                                    st.write("ที่ส่งไป →", {
+                                        "district": _call.get("district"),
+                                        "amphure":  _call.get("amphure"),
+                                        "province": _call.get("province"),
+                                        "zipcode":  _call.get("zipcode"),
+                                    })
+                            else:
+                                st.error(f"❌ iShip Error: {_err_msg}")
+                                with st.expander("🔍 raw response"):
+                                    st.json(resp)
+                    else:
+                        st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
+                if col_s2.button("ปิด", key="cancel_iship", use_container_width=True):
+                    del st.session_state["_iship_pending"]
+                    st.rerun()
+                st.divider()
+
+            # ── บันทึกแบบเร็ว ────────────────────────────────────────────────
+            with st.expander("⚡ บันทึกแบบเร็ว — วางข้อความจากไลน์", expanded=False):
+                qc1, qc2 = st.columns([2, 2])
+                q_customer = qc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="q_cust")
+                q_date     = qc2.date_input("วันที่", value=date.today(), key="q_date")
+
+                qs1, qs2, qs3 = st.columns(3)
+                q_bill    = qs1.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True, key="q_bill")
+                q_pay     = qs2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"], index=None, horizontal=True, key="q_pay")
+                q_receipt = qs3.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"], index=None, horizontal=True, key="q_receipt")
+
+                q_text = st.text_area(
+                    "วางรายการสินค้า (รหัส-จำนวน คั่นด้วยเว้นวรรค)",
+                    placeholder="เช่น: tf2581-38 ty2006-1 rb2306-1 tu3315-1",
+                    height=80, key="q_text",
+                )
+
+                if st.button("🔍 ดูตัวอย่าง", key="q_preview"):
+                    st.session_state["q_parsed"] = True
+
+                if st.session_state.get("q_parsed") and q_text.strip():
+                    found, unknown = _parse_quick_order(q_text, products)
+                    if unknown:
+                        st.error(f"❌ รหัสไม่พบ: {', '.join(unknown)}")
+                    if found:
+                        preview_rows = [{
+                            "รหัส":      item["product"]["id"],
+                            "ชื่อสินค้า": item["product"]["name"],
+                            "จำนวน":    item["qty"],
+                            "ราคา/ชิ้น": float(item["product"]["price"]),
+                            "ยอดรวม":   float(item["product"]["price"]) * item["qty"],
+                            "PV":        float(item["product"]["points_per_unit"]) * item["qty"],
+                        } for item in found]
+                        prev_df = pd.DataFrame(preview_rows)
+                        st.dataframe(prev_df.style.format({
+                            "ราคา/ชิ้น": "{:,.0f}", "ยอดรวม": "{:,.0f}", "PV": "{:.0f}",
+                        }), use_container_width=True, hide_index=True)
+                        pc1, pc2, pc3 = st.columns(3)
+                        pc1.metric("รวมรายการ", f"{len(found)} สินค้า")
+                        pc2.metric("ยอดรวม", f"{prev_df['ยอดรวม'].sum():,.0f} บาท")
+                        pc3.metric("PV รวม", f"{prev_df['PV'].sum():.0f}")
+
+                        q_errors = []
+                        if q_customer == "— เลือกลูกค้า —": q_errors.append("กรุณาเลือกลูกค้า")
+                        if q_bill is None:    q_errors.append("กรุณาเลือกสถานะบิล")
+                        if q_pay is None:     q_errors.append("กรุณาเลือกสถานะจ่าย")
+                        if q_receipt is None: q_errors.append("กรุณาเลือกสถานะของ")
+
+                        if q_errors:
+                            for e in q_errors: st.warning(e)
+                        else:
+                            if st.button(f"💾 บันทึกทั้งหมด {len(found)} รายการ", key="q_submit", type="primary", use_container_width=True):
+                                customer = customer_map[q_customer]
+                                receive_now = q_receipt == "รับของแล้ว"
+                                for item in found:
+                                    p   = item["product"]
+                                    qty = item["qty"]
+                                    db.insert_transaction({
+                                        "id":                  str(uuid.uuid4()),
+                                        "date":                str(q_date),
+                                        "customer_id":         customer["id"],
+                                        "product_id":          p["id"],
+                                        "product_name":        p["name"],
+                                        "qty":                 qty,
+                                        "price_per_unit":      float(p["price"]),
+                                        "points_per_unit":     float(p["points_per_unit"]),
+                                        "total_amount":        float(p["price"]) * qty,
+                                        "initial_qty_received": qty if receive_now else 0,
+                                        "transaction_type":    "เบิกของก่อน" if q_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
+                                        "bill_status":         q_bill,
+                                        "pay_status":          q_pay,
+                                        "notes":               "",
+                                    })
+                                st.success(f"✅ บันทึก {len(found)} รายการแล้ว")
+                                st.session_state["q_parsed"] = False
+                                st.rerun()
+
             st.divider()
+            # ── บันทึกหลายรายการพร้อมกัน ────────────────────────────────────
 
-        # ── บันทึกแบบเร็ว ────────────────────────────────────────────────
-        with st.expander("⚡ บันทึกแบบเร็ว — วางข้อความจากไลน์", expanded=False):
-            qc1, qc2 = st.columns([2, 2])
-            q_customer = qc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="q_cust")
-            q_date     = qc2.date_input("วันที่", value=date.today(), key="q_date")
+            # ── ค้นหาลูกค้าจากเบอร์โทร ─────────────────────────────────────
+            mc1, mc2 = st.columns([3, 1])
+            with mc1:
+                _cust_picked = st.session_state.get("_cust_picked", "")
+                if _cust_picked:
+                    cp1, cp2 = st.columns([5, 1])
+                    cp1.markdown(f"👤 **{_cust_picked}**")
+                    _r_preview = " · ".join(filter(None, [
+                        st.session_state.get("r_name", ""),
+                        st.session_state.get("r_al", ""),
+                        st.session_state.get("r_am", ""),
+                        st.session_state.get("r_pv", ""),
+                        st.session_state.get("m_postcode", ""),
+                    ]))
+                    if _r_preview:
+                        cp1.caption(_r_preview)
+                    if cp2.button("✕", key="cust_clear", help="เลือกลูกค้าใหม่"):
+                        st.session_state.pop("_cust_picked", None)
+                        st.session_state.pop("_prev_shipping_cid", None)
+                        st.rerun()
+                    m_customer = _cust_picked
+                else:
+                    cust_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อเพื่อค้นหา...",
+                                                 key="m_cust_search")
+                    m_customer = "— เลือกลูกค้า —"
+                    if cust_search.strip():
+                        _matches = [n for n in customer_map if cust_search.upper() in n.upper()][:6]
+                        for _mn in _matches:
+                            if st.button(f"👤 {_mn}", key=f"cp_{_mn}", use_container_width=True):
+                                st.session_state["_cust_picked"] = _mn
+                                st.rerun()
+                        if cust_search.upper() not in [n.upper() for n in _matches]:
+                            if st.button(f"➕ เพิ่ม '{cust_search}'", key="cust_add_btn",
+                                          use_container_width=True):
+                                st.session_state["_adding_cust"] = cust_search
+                    if st.session_state.get("_adding_cust"):
+                        _new_cust_name = st.session_state["_adding_cust"]
+                        with st.form("add_cust_quick"):
+                            _fn = st.text_input("ชื่อลูกค้า", value=_new_cust_name)
+                            _fp = st.text_input("เบอร์โทร (ถ้ามี)")
+                            _fc1, _fc2 = st.columns(2)
+                            if _fc1.form_submit_button("💾 บันทึก", type="primary"):
+                                db.upsert_customer({"id": str(uuid.uuid4()),
+                                                    "name": _fn.strip(), "phone": _fp.strip()})
+                                st.session_state["_cust_picked"] = _fn.strip()
+                                st.session_state.pop("_adding_cust", None)
+                                st.rerun()
+                            if _fc2.form_submit_button("ยกเลิก"):
+                                st.session_state.pop("_adding_cust", None)
+                                st.rerun()
+            m_date = mc2.date_input("วันที่", value=date.today(), key="m_date")
 
-            qs1, qs2, qs3 = st.columns(3)
-            q_bill    = qs1.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True, key="q_bill")
-            q_pay     = qs2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"], index=None, horizontal=True, key="q_pay")
-            q_receipt = qs3.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"], index=None, horizontal=True, key="q_receipt")
+            # ── Reset recipient fields when customer changes ─────────────────────
+            if m_customer != "— เลือกลูกค้า —":
+                if m_customer not in customer_map:
+                    st.rerun()  # รอ customers reload หลังเพิ่งเพิ่มใหม่
+                _cid_detect = customer_map[m_customer]["id"]
+                if st.session_state.get("_prev_shipping_cid") != _cid_detect:
+                    st.session_state["_prev_shipping_cid"] = _cid_detect
+                    _ca_d = customer_map[m_customer]
+                    for _k, _v in [
+                        ("r_name",  _ca_d.get("name", "")),
+                        ("r_phone", ""),
+                        ("r_al",    ""),
+                        ("r_dt",    ""),
+                        ("r_am",    ""),
+                        ("r_pv",    ""),
+                    ]:
+                        st.session_state[_k] = _v
+                    st.session_state["_staged_pc"] = ""
 
-            q_text = st.text_area(
-                "วางรายการสินค้า (รหัส-จำนวน คั่นด้วยเว้นวรรค)",
-                placeholder="เช่น: tf2581-38 ty2006-1 rb2306-1 tu3315-1",
-                height=80, key="q_text",
+            # ── รายการสินค้า ─────────────────────────────────────────────────
+            product_display = {f"{p['id']} — {p['name']}": p for p in products}
+            product_display_keys = list(product_display.keys())
+            cart_df = pd.DataFrame({
+                "สินค้า":   pd.Series([""] * 3, dtype="object"),
+                "จำนวน":   pd.Series([0]  * 3, dtype="int64"),
+                "หมายเหตุ": pd.Series([""] * 3, dtype="object"),
+            })
+            edited_cart = st.data_editor(
+                cart_df,
+                num_rows="dynamic",
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "สินค้า":  st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
+                    "จำนวน":  st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
+                    "หมายเหตุ": st.column_config.TextColumn("หมายเหตุ"),
+                },
+                key="m_cart",
             )
 
-            if st.button("🔍 ดูตัวอย่าง", key="q_preview"):
-                st.session_state["q_parsed"] = True
+            valid_items = [
+                (product_display[row["สินค้า"]], int(row["จำนวน"] or 0), str(row["หมายเหตุ"] or ""))
+                for _, row in edited_cart.iterrows()
+                if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
+            ]
 
-            if st.session_state.get("q_parsed") and q_text.strip():
-                found, unknown = _parse_quick_order(q_text, products)
-                if unknown:
-                    st.error(f"❌ รหัสไม่พบ: {', '.join(unknown)}")
-                if found:
-                    preview_rows = [{
-                        "รหัส":      item["product"]["id"],
-                        "ชื่อสินค้า": item["product"]["name"],
-                        "จำนวน":    item["qty"],
-                        "ราคา/ชิ้น": float(item["product"]["price"]),
-                        "ยอดรวม":   float(item["product"]["price"]) * item["qty"],
-                        "PV":        float(item["product"]["points_per_unit"]) * item["qty"],
-                    } for item in found]
-                    prev_df = pd.DataFrame(preview_rows)
-                    st.dataframe(prev_df.style.format({
-                        "ราคา/ชิ้น": "{:,.0f}", "ยอดรวม": "{:,.0f}", "PV": "{:.0f}",
-                    }), use_container_width=True, hide_index=True)
-                    pc1, pc2, pc3 = st.columns(3)
-                    pc1.metric("รวมรายการ", f"{len(found)} สินค้า")
-                    pc2.metric("ยอดรวม", f"{prev_df['ยอดรวม'].sum():,.0f} บาท")
-                    pc3.metric("PV รวม", f"{prev_df['PV'].sum():.0f}")
+            # ── สถานะ + การจัดส่ง ────────────────────────────────────────────
+            ms1, ms2, ms3 = st.columns(3)
+            _delivery_opts = ["ฝากของ (รอรับ)", "รับหน้าร้าน", "ส่งพัสดุ"]
+            m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery")
+            m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย", "COD"], horizontal=True, key="m_pay")
+            m_bill = ms3.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], horizontal=True, key="m_bill")
+            m_cod     = (m_pay == "COD")
+            m_receipt = "ฝากของ" if m_delivery == "ฝากของ (รอรับ)" else "รับของแล้ว"
+            m_postcode = ""
+            m_zone     = "normal"
+            m_carrier  = "Flash Express"
 
-                    q_errors = []
-                    if q_customer == "— เลือกลูกค้า —": q_errors.append("กรุณาเลือกลูกค้า")
-                    if q_bill is None:    q_errors.append("กรุณาเลือกสถานะบิล")
-                    if q_pay is None:     q_errors.append("กรุณาเลือกสถานะจ่าย")
-                    if q_receipt is None: q_errors.append("กรุณาเลือกสถานะของ")
+            if m_delivery == "ส่งพัสดุ":
+                if "_staged_pc" in st.session_state:
+                    st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
+                m_postcode = st.session_state.get("m_postcode", "")
 
-                    if q_errors:
-                        for e in q_errors: st.warning(e)
-                    else:
-                        if st.button(f"💾 บันทึกทั้งหมด {len(found)} รายการ", key="q_submit", type="primary", use_container_width=True):
-                            customer = customer_map[q_customer]
-                            receive_now = q_receipt == "รับของแล้ว"
-                            for item in found:
-                                p   = item["product"]
-                                qty = item["qty"]
-                                db.insert_transaction({
-                                    "id":                  str(uuid.uuid4()),
-                                    "date":                str(q_date),
-                                    "customer_id":         customer["id"],
-                                    "product_id":          p["id"],
-                                    "product_name":        p["name"],
-                                    "qty":                 qty,
-                                    "price_per_unit":      float(p["price"]),
-                                    "points_per_unit":     float(p["points_per_unit"]),
-                                    "total_amount":        float(p["price"]) * qty,
-                                    "initial_qty_received": qty if receive_now else 0,
-                                    "transaction_type":    "เบิกของก่อน" if q_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
-                                    "bill_status":         q_bill,
-                                    "pay_status":          q_pay,
-                                    "notes":               "",
+
+
+                fees = carrier_fees(0, m_postcode.strip()) if len(m_postcode.strip()) == 5 else None
+                f_sur  = fees["Flash Express"]["surcharge"] if fees else 0
+                s_sur  = fees["SPX Express"]["surcharge"]   if fees else 0
+                f_zone = fees["Flash Express"]["zone"]      if fees else "—"
+                s_zone = fees["SPX Express"]["zone"]        if fees else "—"
+                fc_col, sc_col, car_col = st.columns(3)
+                fc_col.caption(f"Flash Express: {f_zone or 'ปกติ'} | +{f_sur} ฿")
+                sc_col.caption(f"SPX Express: {s_zone or 'ปกติ'} | +{s_sur} ฿")
+                if fees and m_postcode != st.session_state.get("_prev_pc", ""):
+                    st.session_state["m_carrier"] = _pick_carrier(m_postcode)
+                    st.session_state["_prev_pc"]  = m_postcode
+                if "_staged_carrier" in st.session_state:
+                    st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
+                m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"], key="m_carrier")
+
+                # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
+                _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
+                with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
+                        # ── quick-select ที่อยู่เดิมของลูกค้า ──────────────────
+                        if m_customer != "— เลือกลูกค้า —":
+                            try:
+                                _saved_addrs = db.get_customer_addresses(customer_id=_cid)
+                            except Exception:
+                                _saved_addrs = []
+                            if _saved_addrs:
+                                st.caption("⚡ เลือกที่อยู่เดิม")
+                                for _sa in _saved_addrs:
+                                    _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
+                                    if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
+                                        st.session_state["r_name"]  = _sa.get("recipient_name", "")
+                                        st.session_state["r_phone"] = _sa.get("phone", "")
+                                        st.session_state["r_al"]    = _sa.get("address_line", "")
+                                        st.session_state["r_dt"]    = _sa.get("district", "")
+                                        st.session_state["r_am"]    = _sa.get("amphure", "")
+                                        st.session_state["r_pv"]    = _sa.get("province", "")
+                                        st.session_state["_staged_pc"] = _sa.get("postal_code", "")
+                                        st.session_state["_last_rph_fill"] = _sa.get("phone", "")
+                                        st.rerun()
+                                st.divider()
+                        st.caption("📋 วางที่อยู่จาก LINE (iShip format) แล้วกด แยกอัตโนมัติ")
+                        paste_txt = st.text_area(
+                            "", label_visibility="collapsed",
+                            key=f"paste_{_cid}", height=90, placeholder=
+                            "Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976"
+                        )
+                        if st.button("📍 แยกอัตโนมัติ", key=f"parse_btn_{_cid}"):
+                            _parsed = _parse_iship_address(paste_txt)
+                            for _sk in ["r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv"]:
+                                st.session_state[_sk] = ""
+                            st.session_state["_staged_pc"] = ""
+                            if _parsed["dst_name"]:    st.session_state["r_name"]  = _parsed["dst_name"]
+                            if _parsed["dst_phone"]:   st.session_state["r_phone"] = _parsed["dst_phone"]
+                            if _parsed["address_line"]: st.session_state["r_al"]   = _parsed["address_line"]
+                            if _parsed["district"]:    st.session_state["r_dt"]    = _parsed["district"]
+                            if _parsed["amphure"]:     st.session_state["r_am"]    = _parsed["amphure"]
+                            if _parsed["province"]:    st.session_state["r_pv"]    = _parsed["province"]
+                            if _parsed["zipcode"]:     st.session_state["_staged_pc"] = _parsed["zipcode"]
+                            st.rerun()
+                        st.divider()
+                        _cur_rph = st.session_state.get("r_phone", "")
+                        if len(_cur_rph.strip()) == 10 and st.session_state.get("_last_rph_fill") != _cur_rph.strip():
+                            try:
+                                _rph_addr = db.get_address_by_phone(_cur_rph.strip())
+                            except Exception:
+                                _rph_addr = None
+                            st.session_state["_last_rph_fill"] = _cur_rph.strip()
+                            if _rph_addr:
+                                for _k, _v in [
+                                    ("r_name", _rph_addr.get("recipient_name") or ""),
+                                    ("r_al",   _rph_addr.get("address_line") or ""),
+                                    ("r_dt",   _rph_addr.get("district") or ""),
+                                    ("r_am",   _rph_addr.get("amphure") or ""),
+                                    ("r_pv",   _rph_addr.get("province") or ""),
+                                ]:
+                                    if _v: st.session_state[_k] = _v
+                                if _rph_addr.get("postal_code"):
+                                    st.session_state["m_postcode"] = _rph_addr["postal_code"]
+                                _rph_cust = (_rph_addr.get("customers") or {}).get("name", "")
+                                if _rph_cust and not st.session_state.get("_cust_picked"):
+                                    st.session_state["_cust_picked"] = _rph_cust
+                                    st.session_state["_prev_shipping_cid"] = _rph_addr.get("customer_id", "")
+                        col_a, col_b = st.columns(2)
+                        r_name      = col_a.text_input("ชื่อผู้รับ",   key="r_name")
+                        r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone")
+                        r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
+                        col_c, col_d, col_e = st.columns(3)
+                        r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
+                        r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
+                        r_province  = col_e.text_input("จังหวัด",       key="r_pv")
+                        if "_staged_pc" in st.session_state:
+                            st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
+                        m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
+                                                    key="m_postcode", placeholder="เช่น 10400")
+                        if m_customer != "— เลือกลูกค้า —":
+                            if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
+                                db.upsert_customer_address({
+                                    "id":             str(uuid.uuid4()),
+                                    "customer_id":    _cid,
+                                    "recipient_name": r_name,
+                                    "phone":          r_phone,
+                                    "address_line":   r_addr_line,
+                                    "district":       r_district,
+                                    "amphure":        r_amphure,
+                                    "province":       r_province,
+                                    "postal_code":    m_postcode,
                                 })
-                            st.success(f"✅ บันทึก {len(found)} รายการแล้ว")
-                            st.session_state["q_parsed"] = False
-                            st.rerun()
-
-        st.divider()
-        # ── บันทึกหลายรายการพร้อมกัน ────────────────────────────────────
-
-        # ── ค้นหาลูกค้าจากเบอร์โทร ─────────────────────────────────────
-        mc1, mc2 = st.columns([3, 1])
-        with mc1:
-            _cust_picked = st.session_state.get("_cust_picked", "")
-            if _cust_picked:
-                cp1, cp2 = st.columns([5, 1])
-                cp1.markdown(f"👤 **{_cust_picked}**")
-                _r_preview = " · ".join(filter(None, [
-                    st.session_state.get("r_name", ""),
-                    st.session_state.get("r_al", ""),
-                    st.session_state.get("r_am", ""),
-                    st.session_state.get("r_pv", ""),
-                    st.session_state.get("m_postcode", ""),
-                ]))
-                if _r_preview:
-                    cp1.caption(_r_preview)
-                if cp2.button("✕", key="cust_clear", help="เลือกลูกค้าใหม่"):
-                    st.session_state.pop("_cust_picked", None)
-                    st.session_state.pop("_prev_shipping_cid", None)
-                    st.rerun()
-                m_customer = _cust_picked
+                                st.success("✅ บันทึกแล้ว — ค้นหาจากเบอร์ได้เลยครั้งถัดไป")
             else:
-                cust_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อเพื่อค้นหา...",
-                                             key="m_cust_search")
-                m_customer = "— เลือกลูกค้า —"
-                if cust_search.strip():
-                    _matches = [n for n in customer_map if cust_search.upper() in n.upper()][:6]
-                    for _mn in _matches:
-                        if st.button(f"👤 {_mn}", key=f"cp_{_mn}", use_container_width=True):
-                            st.session_state["_cust_picked"] = _mn
-                            st.rerun()
-                    if cust_search.upper() not in [n.upper() for n in _matches]:
-                        if st.button(f"➕ เพิ่ม '{cust_search}'", key="cust_add_btn",
-                                      use_container_width=True):
-                            st.session_state["_adding_cust"] = cust_search
-                if st.session_state.get("_adding_cust"):
-                    _new_cust_name = st.session_state["_adding_cust"]
-                    with st.form("add_cust_quick"):
-                        _fn = st.text_input("ชื่อลูกค้า", value=_new_cust_name)
-                        _fp = st.text_input("เบอร์โทร (ถ้ามี)")
-                        _fc1, _fc2 = st.columns(2)
-                        if _fc1.form_submit_button("💾 บันทึก", type="primary"):
-                            db.upsert_customer({"id": str(uuid.uuid4()),
-                                                "name": _fn.strip(), "phone": _fp.strip()})
-                            st.session_state["_cust_picked"] = _fn.strip()
-                            st.session_state.pop("_adding_cust", None)
-                            st.rerun()
-                        if _fc2.form_submit_button("ยกเลิก"):
-                            st.session_state.pop("_adding_cust", None)
-                            st.rerun()
-        m_date = mc2.date_input("วันที่", value=date.today(), key="m_date")
+                r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
 
-        # ── Reset recipient fields when customer changes ─────────────────────
-        if m_customer != "— เลือกลูกค้า —":
-            if m_customer not in customer_map:
-                st.rerun()  # รอ customers reload หลังเพิ่งเพิ่มใหม่
-            _cid_detect = customer_map[m_customer]["id"]
-            if st.session_state.get("_prev_shipping_cid") != _cid_detect:
-                st.session_state["_prev_shipping_cid"] = _cid_detect
-                _ca_d = customer_map[m_customer]
-                for _k, _v in [
-                    ("r_name",  _ca_d.get("name", "")),
-                    ("r_phone", ""),
-                    ("r_al",    ""),
-                    ("r_dt",    ""),
-                    ("r_am",    ""),
-                    ("r_pv",    ""),
-                ]:
-                    st.session_state[_k] = _v
-                st.session_state["_staged_pc"] = ""
+            # auto-select carrier จาก weight + location (รันทุกครั้งที่ items หรือ postcode เปลี่ยน)
+            if m_delivery == "ส่งพัสดุ" and len(m_postcode.strip()) == 5:
+                _w_kg = (sum(float(p.get("weight_grams") or 0) * q
+                             for p, q, _ in valid_items) + 500) / 1000
+                _optimal = _pick_carrier(m_postcode.strip(), _w_kg)
+                _sig = (m_postcode.strip(), round(_w_kg, 2))
+                if _sig != st.session_state.get("_carrier_sig"):
+                    st.session_state["_carrier_sig"]    = _sig
+                    st.session_state["_staged_carrier"] = _optimal
+                    st.rerun()
 
-        # ── รายการสินค้า ─────────────────────────────────────────────────
-        product_display = {f"{p['id']} — {p['name']}": p for p in products}
-        product_display_keys = list(product_display.keys())
-        cart_df = pd.DataFrame({
-            "สินค้า":   pd.Series([""] * 3, dtype="object"),
-            "จำนวน":   pd.Series([0]  * 3, dtype="int64"),
-            "หมายเหตุ": pd.Series([""] * 3, dtype="object"),
-        })
-        edited_cart = st.data_editor(
-            cart_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            hide_index=True,
+            COD_FEE_RATE = 0.0321  # 3.21%
+
+            if valid_items:
+                total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
+                total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
+                total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
+                if m_delivery == "ส่งพัสดุ":
+                    fees_all  = carrier_fees(total_weight, m_postcode)
+                    ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(total_weight, m_postcode)
+                    collect   = total_amt + ship_fee
+                    cod_fee   = round(collect * COD_FEE_RATE, 2) if m_cod else 0
+                    net_recv  = collect - cod_fee
+                    if m_cod:
+                        vm1, vm2, vm3, vm4, vm5, vm6, vm7 = st.columns(7)
+                        vm1.metric("ยอดสินค้า",       f"{total_amt:,.0f} ฿")
+                        vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
+                        vm3.metric("💰 ยอดเก็บ",       f"{collect:,.0f} ฿")
+                        vm4.metric("💸 ค่า COD",       f"{cod_fee:,.2f} ฿")
+                        vm5.metric("✅ ได้รับจริง",    f"{net_recv:,.2f} ฿")
+                        vm6.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
+                        vm7.metric("PV รวม",           f"{total_pv:.0f}")
+                    else:
+                        vm1, vm2, vm3, vm4, vm5 = st.columns(5)
+                        vm1.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
+                        vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
+                        vm3.metric("💰 ยอดรวม",        f"{collect:,.0f} ฿")
+                        vm4.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
+                        vm5.metric("PV รวม",           f"{total_pv:.0f}")
+                else:
+                    ship_fee = cod_fee = 0
+                    collect  = total_amt
+                    net_recv = total_amt
+                    vm1, vm2, vm3 = st.columns(3)
+                    vm1.metric("ยอดรวม",   f"{total_amt:,.0f} ฿")
+                    vm2.metric("PV รวม",   f"{total_pv:.0f}")
+                    vm3.metric("รายการ",   f"{len(valid_items)} สินค้า")
+
+            m_errors = []
+            if m_customer == "— เลือกลูกค้า —": m_errors.append("เลือกลูกค้าก่อน")
+            if m_bill is None:     m_errors.append("เลือกสถานะบิล")
+            if m_pay is None:      m_errors.append("เลือกสถานะจ่าย")
+            if m_delivery is None: m_errors.append("เลือกการรับสินค้า")
+            if not valid_items:    m_errors.append("กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ")
+
+            if st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True, key="m_submit",
+                         disabled=bool(m_errors)):
+                customer     = customer_map[m_customer]
+                actual_pay  = "COD" if m_cod else m_pay
+                # m_receipt ถูก map จาก m_delivery แล้ว (ฝากของ/รับของแล้ว)
+                receive_now = m_receipt == "รับของแล้ว"
+                is_shipping    = m_delivery == "ส่งพัสดุ"
+                total_w_g      = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
+                if is_shipping:
+                    fees_save = carrier_fees(total_w_g, m_postcode)
+                    ship_fee  = fees_save[m_carrier]["total"]
+                    zone_name = fees_save[m_carrier]["zone"]
+                    zone_tag  = f"|{zone_name}" if zone_name else ""
+                    delivery_tag = f"[ส่งพัสดุ|{m_carrier}|{m_postcode}|น้ำหนัก={total_w_g/1000:.2f}kg|ค่าส่ง={ship_fee:.0f}{zone_tag}]"
+                else:
+                    ship_fee = 0
+                    delivery_tag = ""
+                if m_cod:
+                    collect    = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
+                    cod_amount = round(collect * COD_FEE_RATE, 2)
+                    cod_tag    = f"[COD|ค่าธรรมเนียม={cod_amount:.2f}฿|ยอดรับจริง={collect-cod_amount:.2f}฿]"
+                else:
+                    cod_tag = ""
+                bill_no = db.get_next_bill_no(str(m_date))
+                for p, qty, note in valid_items:
+                    full_note = " ".join(filter(None, [delivery_tag, cod_tag, note])).strip()
+                    db.insert_transaction({
+                        "id":                   str(uuid.uuid4()),
+                        "date":                 str(m_date),
+                        "customer_id":          customer["id"],
+                        "product_id":           p["id"],
+                        "product_name":         p["name"],
+                        "qty":                  qty,
+                        "price_per_unit":       float(p["price"]),
+                        "points_per_unit":      float(p["points_per_unit"]),
+                        "total_amount":         float(p["price"]) * qty,
+                        "initial_qty_received": qty if receive_now else 0,
+                        "transaction_type":     "เบิกของก่อน" if m_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
+                        "bill_status":          m_bill,
+                        "pay_status":           actual_pay,
+                        "notes":                full_note,
+                        "bill_no":              bill_no,
+                    })
+                msg = f"✅ บันทึก {len(valid_items)} รายการ"
+                if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
+                if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
+                # สร้าง iship text สำหรับวางใน iship.com
+                if is_shipping and r_addr_line:
+                    product_line = ", ".join(f"{p['name']} ×{qty}" for p, qty, _ in valid_items)
+                    _prod_codes  = " ".join(f"{p['id'].upper()}-{qty}" for p, qty, _ in valid_items)
+                    st.session_state["_iship_pending"] = {
+                        "dst_name":    r_name or customer["name"],
+                        "dst_phone":   r_phone,
+                        "address_line": r_addr_line,
+                        "district":    r_district,
+                        "amphure":     r_amphure,
+                        "province":    r_province,
+                        "zipcode":     m_postcode,
+                        "weight_kg":   (total_w_g + 500) / 1000,  # +500g กล่อง
+                        "cod_amount":  ceil(collect - cod_amount) if m_cod else 0,
+                        "carrier":      m_carrier,
+                        "remark":       f"{customer['name']} {_prod_codes}",
+                        "sender_name":  customer["name"],
+                    }
+                # ล้างฟอร์มสำหรับลูกค้าถัดไป
+                for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
+                           "m_bill", "m_pay", "m_delivery", "m_cod",
+                           "m_cart", "m_postcode", "m_carrier", "m_zone"]:
+                    st.session_state.pop(_k, None)
+                st.rerun()
+            elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
+                st.caption("⚠️ " + " | ".join(m_errors))
+
+
+    # ─────────────────────────────────────────────────────────────────────────────
+
+    with _sub_ship:
+        st.subheader("บันทึกการส่งของ")
+
+        _sp = db.get_products()
+        _sc = db.get_customers()
+        _sc_map = {c["name"]: c for c in _sc}
+
+        # ── เลือกลูกค้า + วันที่ ─────────────────────────────────────────
+        _sp_c1, _sp_c2 = st.columns([3, 1])
+        _sp_cust = _sp_c1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + [c["name"] for c in _sc], key="sp_cust")
+        _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
+        _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
+
+        # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────────
+        with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
+            # quick-select จากที่อยู่เดิมของลูกค้า
+            if _sp_cid:
+                try:
+                    _sp_saved = db.get_customer_addresses(customer_id=_sp_cid)
+                except Exception:
+                    _sp_saved = []
+                if _sp_saved:
+                    st.caption("⚡ เลือกที่อยู่เดิม")
+                    for _sa in _sp_saved:
+                        _lbl = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
+                        if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=True):
+                            for _k, _fld in [("sp_rname", "recipient_name"), ("sp_rphone", "phone"),
+                                             ("sp_al", "address_line"), ("sp_dt", "district"),
+                                             ("sp_am", "amphure"), ("sp_pv", "province")]:
+                                st.session_state[_k] = _sa.get(_fld, "")
+                            st.session_state["sp_pc"] = _sa.get("postal_code", "")
+                            st.rerun()
+                    st.divider()
+
+            _sa1, _sa2 = st.columns(2)
+            _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key="sp_rname")
+            _sp_rphone = _sa2.text_input("เบอร์โทร",      key="sp_rphone")
+            _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key="sp_al")
+            _sb1, _sb2, _sb3 = st.columns(3)
+            _sp_dt = _sb1.text_input("ตำบล/แขวง",  key="sp_dt")
+            _sp_am = _sb2.text_input("อำเภอ/เขต",   key="sp_am")
+            _sp_pv = _sb3.text_input("จังหวัด",      key="sp_pv")
+            _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
+
+        # ── รายการสินค้าที่ส่ง ───────────────────────────────────────────
+        st.caption("รายการสินค้าที่ส่ง (ไม่ตัด stock)")
+        _sp_prod_keys = [f"{p['id']} — {p['name']}" for p in _sp]
+        _sp_prod_map  = {f"{p['id']} — {p['name']}": p for p in _sp}
+        _sp_cart_df   = pd.DataFrame({"สินค้า": pd.Series([""] * 3, dtype="object"),
+                                      "จำนวน": pd.Series([0] * 3, dtype="int64")})
+        _sp_cart_edit = st.data_editor(
+            _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=True,
+            key="sp_cart",
             column_config={
-                "สินค้า":  st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
-                "จำนวน":  st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
-                "หมายเหตุ": st.column_config.TextColumn("หมายเหตุ"),
+                "สินค้า": st.column_config.SelectboxColumn("สินค้า", options=_sp_prod_keys),
+                "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
             },
-            key="m_cart",
         )
-
-        valid_items = [
-            (product_display[row["สินค้า"]], int(row["จำนวน"] or 0), str(row["หมายเหตุ"] or ""))
-            for _, row in edited_cart.iterrows()
-            if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
+        _sp_items = [
+            {"product_id": _sp_prod_map[r["สินค้า"]]["id"],
+             "name": _sp_prod_map[r["สินค้า"]]["name"],
+             "qty": int(r["จำนวน"] or 0)}
+            for _, r in _sp_cart_edit.iterrows()
+            if str(r.get("สินค้า","")) in _sp_prod_map and int(r.get("จำนวน") or 0) > 0
         ]
 
-        # ── สถานะ + การจัดส่ง ────────────────────────────────────────────
-        ms1, ms2, ms3 = st.columns(3)
-        _delivery_opts = ["ฝากของ (รอรับ)", "รับหน้าร้าน", "ส่งพัสดุ"]
-        m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery")
-        m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย", "COD"], horizontal=True, key="m_pay")
-        m_bill = ms3.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], horizontal=True, key="m_bill")
-        m_cod     = (m_pay == "COD")
-        m_receipt = "ฝากของ" if m_delivery == "ฝากของ (รอรับ)" else "รับของแล้ว"
-        m_postcode = ""
-        m_zone     = "normal"
-        m_carrier  = "Flash Express"
+        # ── ขนส่ง + ค่าส่ง ───────────────────────────────────────────────
+        _sp_fc1, _sp_fc2, _sp_fc3 = st.columns(3)
+        _sp_fees = carrier_fees(0, _sp_pc.strip()) if len((_sp_pc or "").strip()) == 5 else None
+        if _sp_fees:
+            _sp_fc1.caption(f"Flash: {_sp_fees['Flash Express']['zone'] or 'ปกติ'} | +{_sp_fees['Flash Express']['surcharge']} ฿")
+            _sp_fc2.caption(f"SPX:   {_sp_fees['SPX Express']['zone']   or 'ปกติ'} | +{_sp_fees['SPX Express']['surcharge']} ฿")
+            _auto_car = _pick_carrier(_sp_pc.strip())
+            if st.session_state.get("_sp_prev_pc") != _sp_pc:
+                st.session_state["sp_carrier"] = _auto_car
+                st.session_state["_sp_prev_pc"] = _sp_pc
+        _sp_carrier = _sp_fc3.radio("ขนส่ง", ["Flash Express", "SPX Express"], key="sp_carrier")
+        _sp_ship_base = {"Flash Express": 50, "SPX Express": 55}.get(_sp_carrier, 50)
+        _sp_sur = (_sp_fees[_sp_carrier]["surcharge"] if _sp_fees else 0)
+        _sp_cost = _sp_ship_base + _sp_sur
+        st.caption(f"ค่าส่งประมาณ: **{_sp_cost} บาท** ({_sp_carrier})")
 
-        if m_delivery == "ส่งพัสดุ":
-            if "_staged_pc" in st.session_state:
-                st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
-            m_postcode = st.session_state.get("m_postcode", "")
+        # ── tracking + หมายเหตุ ───────────────────────────────────────────
+        _sp_track = st.text_input("เลข tracking (กรอกทีหลังได้)", key="sp_track", placeholder="TH123456789")
+        _sp_notes = st.text_input("หมายเหตุ", key="sp_notes")
 
-            def _pick_carrier(pc: str, kg: float = 0) -> str:
-                is_metro = pc[:2] in {"10", "11", "12"}
-                return "Flash Express" if (kg <= 3 and not is_metro) else "SPX Express"
-
-            fees = carrier_fees(0, m_postcode.strip()) if len(m_postcode.strip()) == 5 else None
-            f_sur  = fees["Flash Express"]["surcharge"] if fees else 0
-            s_sur  = fees["SPX Express"]["surcharge"]   if fees else 0
-            f_zone = fees["Flash Express"]["zone"]      if fees else "—"
-            s_zone = fees["SPX Express"]["zone"]        if fees else "—"
-            fc_col, sc_col, car_col = st.columns(3)
-            fc_col.caption(f"Flash Express: {f_zone or 'ปกติ'} | +{f_sur} ฿")
-            sc_col.caption(f"SPX Express: {s_zone or 'ปกติ'} | +{s_sur} ฿")
-            if fees and m_postcode != st.session_state.get("_prev_pc", ""):
-                st.session_state["m_carrier"] = _pick_carrier(m_postcode)
-                st.session_state["_prev_pc"]  = m_postcode
-            if "_staged_carrier" in st.session_state:
-                st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
-            m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"], key="m_carrier")
-
-            # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
-            _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
-            with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
-                    # ── quick-select ที่อยู่เดิมของลูกค้า ──────────────────
-                    if m_customer != "— เลือกลูกค้า —":
-                        try:
-                            _saved_addrs = db.get_customer_addresses(customer_id=_cid)
-                        except Exception:
-                            _saved_addrs = []
-                        if _saved_addrs:
-                            st.caption("⚡ เลือกที่อยู่เดิม")
-                            for _sa in _saved_addrs:
-                                _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
-                                if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
-                                    st.session_state["r_name"]  = _sa.get("recipient_name", "")
-                                    st.session_state["r_phone"] = _sa.get("phone", "")
-                                    st.session_state["r_al"]    = _sa.get("address_line", "")
-                                    st.session_state["r_dt"]    = _sa.get("district", "")
-                                    st.session_state["r_am"]    = _sa.get("amphure", "")
-                                    st.session_state["r_pv"]    = _sa.get("province", "")
-                                    st.session_state["_staged_pc"] = _sa.get("postal_code", "")
-                                    st.session_state["_last_rph_fill"] = _sa.get("phone", "")
-                                    st.rerun()
-                            st.divider()
-                    st.caption("📋 วางที่อยู่จาก LINE (iShip format) แล้วกด แยกอัตโนมัติ")
-                    paste_txt = st.text_area(
-                        "", label_visibility="collapsed",
-                        key=f"paste_{_cid}", height=90, placeholder=
-                        "Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976"
-                    )
-                    if st.button("📍 แยกอัตโนมัติ", key=f"parse_btn_{_cid}"):
-                        _parsed = _parse_iship_address(paste_txt)
-                        for _sk in ["r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv"]:
-                            st.session_state[_sk] = ""
-                        st.session_state["_staged_pc"] = ""
-                        if _parsed["dst_name"]:    st.session_state["r_name"]  = _parsed["dst_name"]
-                        if _parsed["dst_phone"]:   st.session_state["r_phone"] = _parsed["dst_phone"]
-                        if _parsed["address_line"]: st.session_state["r_al"]   = _parsed["address_line"]
-                        if _parsed["district"]:    st.session_state["r_dt"]    = _parsed["district"]
-                        if _parsed["amphure"]:     st.session_state["r_am"]    = _parsed["amphure"]
-                        if _parsed["province"]:    st.session_state["r_pv"]    = _parsed["province"]
-                        if _parsed["zipcode"]:     st.session_state["_staged_pc"] = _parsed["zipcode"]
-                        st.rerun()
-                    st.divider()
-                    _cur_rph = st.session_state.get("r_phone", "")
-                    if len(_cur_rph.strip()) == 10 and st.session_state.get("_last_rph_fill") != _cur_rph.strip():
-                        try:
-                            _rph_addr = db.get_address_by_phone(_cur_rph.strip())
-                        except Exception:
-                            _rph_addr = None
-                        st.session_state["_last_rph_fill"] = _cur_rph.strip()
-                        if _rph_addr:
-                            for _k, _v in [
-                                ("r_name", _rph_addr.get("recipient_name") or ""),
-                                ("r_al",   _rph_addr.get("address_line") or ""),
-                                ("r_dt",   _rph_addr.get("district") or ""),
-                                ("r_am",   _rph_addr.get("amphure") or ""),
-                                ("r_pv",   _rph_addr.get("province") or ""),
-                            ]:
-                                if _v: st.session_state[_k] = _v
-                            if _rph_addr.get("postal_code"):
-                                st.session_state["m_postcode"] = _rph_addr["postal_code"]
-                            _rph_cust = (_rph_addr.get("customers") or {}).get("name", "")
-                            if _rph_cust and not st.session_state.get("_cust_picked"):
-                                st.session_state["_cust_picked"] = _rph_cust
-                                st.session_state["_prev_shipping_cid"] = _rph_addr.get("customer_id", "")
-                    col_a, col_b = st.columns(2)
-                    r_name      = col_a.text_input("ชื่อผู้รับ",   key="r_name")
-                    r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone")
-                    r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
-                    col_c, col_d, col_e = st.columns(3)
-                    r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
-                    r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
-                    r_province  = col_e.text_input("จังหวัด",       key="r_pv")
-                    if "_staged_pc" in st.session_state:
-                        st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
-                    m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
-                                                key="m_postcode", placeholder="เช่น 10400")
-                    if m_customer != "— เลือกลูกค้า —":
-                        if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
-                            db.upsert_customer_address({
-                                "id":             str(uuid.uuid4()),
-                                "customer_id":    _cid,
-                                "recipient_name": r_name,
-                                "phone":          r_phone,
-                                "address_line":   r_addr_line,
-                                "district":       r_district,
-                                "amphure":        r_amphure,
-                                "province":       r_province,
-                                "postal_code":    m_postcode,
-                            })
-                            st.success("✅ บันทึกแล้ว — ค้นหาจากเบอร์ได้เลยครั้งถัดไป")
-        else:
-            r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
-
-        # auto-select carrier จาก weight + location (รันทุกครั้งที่ items หรือ postcode เปลี่ยน)
-        if m_delivery == "ส่งพัสดุ" and len(m_postcode.strip()) == 5:
-            _w_kg = (sum(float(p.get("weight_grams") or 0) * q
-                         for p, q, _ in valid_items) + 500) / 1000
-            _optimal = _pick_carrier(m_postcode.strip(), _w_kg)
-            _sig = (m_postcode.strip(), round(_w_kg, 2))
-            if _sig != st.session_state.get("_carrier_sig"):
-                st.session_state["_carrier_sig"]    = _sig
-                st.session_state["_staged_carrier"] = _optimal
+        # ── บันทึก ────────────────────────────────────────────────────────
+        if st.button("💾 บันทึกการส่งของ", type="primary", use_container_width=True, key="sp_save"):
+            if not _sp_rname.strip():
+                st.error("กรุณากรอกชื่อผู้รับ")
+            elif not _sp_pc.strip():
+                st.error("กรุณากรอกรหัสไปรษณีย์")
+            else:
+                db.create_shipment({
+                    "created_at":     str(_sp_date),
+                    "customer_id":    _sp_cid or None,
+                    "recipient_name": _sp_rname.strip(),
+                    "phone":          _sp_rphone.strip(),
+                    "address_line":   _sp_al.strip(),
+                    "district":       _sp_dt.strip(),
+                    "amphure":        _sp_am.strip(),
+                    "province":       _sp_pv.strip(),
+                    "postal_code":    _sp_pc.strip(),
+                    "carrier":        _sp_carrier,
+                    "shipping_cost":  _sp_cost,
+                    "items":          _sp_items,
+                    "tracking_no":    _sp_track.strip(),
+                    "notes":          _sp_notes.strip(),
+                })
+                st.success("✅ บันทึกการส่งของแล้ว")
+                for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes"]:
+                    st.session_state.pop(_k, None)
+                st.session_state.pop("sp_cart", None)
                 st.rerun()
 
-        COD_FEE_RATE = 0.0321  # 3.21%
+        # ── ประวัติการส่ง ─────────────────────────────────────────────────
+        st.divider()
+        st.caption("ประวัติการส่งของ")
+        try:
+            _sp_hist = db.get_shipments()
+        except Exception:
+            st.warning("⚙️ ยังไม่ได้สร้าง table shipments — รัน SQL ใน supabase_setup.sql ก่อน")
+            _sp_hist = []
+        if _sp_hist:
+            _hist_df = pd.DataFrame([{
+                "วันที่":        (r.get("created_at") or "")[:10],
+                "ลูกค้า":       (r.get("customers") or {}).get("name", ""),
+                "ผู้รับ":        r.get("recipient_name", ""),
+                "เบอร์":         r.get("phone", ""),
+                "จังหวัด":      r.get("province", ""),
+                "ขนส่ง":        r.get("carrier", ""),
+                "tracking":     r.get("tracking_no", ""),
+                "_id":          r.get("id", ""),
+            } for r in _sp_hist])
+            _hist_edit = st.data_editor(
+                _hist_df.drop(columns=["_id"]),
+                hide_index=True, use_container_width=True, key="sp_hist_editor",
+                disabled=["วันที่","ลูกค้า","ผู้รับ","เบอร์","จังหวัด","ขนส่ง"],
+                column_config={"tracking": st.column_config.TextColumn("tracking")},
+            )
+            if st.button("💾 บันทึก tracking", key="sp_save_track"):
+                for i, row in _hist_edit.iterrows():
+                    _orig = _sp_hist[i].get("tracking_no", "")
+                    _new  = str(row.get("tracking", "") or "").strip()
+                    if _new != _orig:
+                        db.update_shipment_tracking(_hist_df.at[i, "_id"], _new)
+                st.success("✅ บันทึก tracking แล้ว")
+                st.rerun()
 
-        if valid_items:
-            total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
-            total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
-            total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
-            if m_delivery == "ส่งพัสดุ":
-                fees_all  = carrier_fees(total_weight, m_postcode)
-                ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(total_weight, m_postcode)
-                collect   = total_amt + ship_fee
-                cod_fee   = round(collect * COD_FEE_RATE, 2) if m_cod else 0
-                net_recv  = collect - cod_fee
-                if m_cod:
-                    vm1, vm2, vm3, vm4, vm5, vm6, vm7 = st.columns(7)
-                    vm1.metric("ยอดสินค้า",       f"{total_amt:,.0f} ฿")
-                    vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
-                    vm3.metric("💰 ยอดเก็บ",       f"{collect:,.0f} ฿")
-                    vm4.metric("💸 ค่า COD",       f"{cod_fee:,.2f} ฿")
-                    vm5.metric("✅ ได้รับจริง",    f"{net_recv:,.2f} ฿")
-                    vm6.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
-                    vm7.metric("PV รวม",           f"{total_pv:.0f}")
-                else:
-                    vm1, vm2, vm3, vm4, vm5 = st.columns(5)
-                    vm1.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
-                    vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
-                    vm3.metric("💰 ยอดรวม",        f"{collect:,.0f} ฿")
-                    vm4.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
-                    vm5.metric("PV รวม",           f"{total_pv:.0f}")
-            else:
-                ship_fee = cod_fee = 0
-                collect  = total_amt
-                net_recv = total_amt
-                vm1, vm2, vm3 = st.columns(3)
-                vm1.metric("ยอดรวม",   f"{total_amt:,.0f} ฿")
-                vm2.metric("PV รวม",   f"{total_pv:.0f}")
-                vm3.metric("รายการ",   f"{len(valid_items)} สินค้า")
-
-        m_errors = []
-        if m_customer == "— เลือกลูกค้า —": m_errors.append("เลือกลูกค้าก่อน")
-        if m_bill is None:     m_errors.append("เลือกสถานะบิล")
-        if m_pay is None:      m_errors.append("เลือกสถานะจ่าย")
-        if m_delivery is None: m_errors.append("เลือกการรับสินค้า")
-        if not valid_items:    m_errors.append("กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ")
-
-        if st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True, key="m_submit",
-                     disabled=bool(m_errors)):
-            customer     = customer_map[m_customer]
-            actual_pay  = "COD" if m_cod else m_pay
-            # m_receipt ถูก map จาก m_delivery แล้ว (ฝากของ/รับของแล้ว)
-            receive_now = m_receipt == "รับของแล้ว"
-            is_shipping    = m_delivery == "ส่งพัสดุ"
-            total_w_g      = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
-            if is_shipping:
-                fees_save = carrier_fees(total_w_g, m_postcode)
-                ship_fee  = fees_save[m_carrier]["total"]
-                zone_name = fees_save[m_carrier]["zone"]
-                zone_tag  = f"|{zone_name}" if zone_name else ""
-                delivery_tag = f"[ส่งพัสดุ|{m_carrier}|{m_postcode}|น้ำหนัก={total_w_g/1000:.2f}kg|ค่าส่ง={ship_fee:.0f}{zone_tag}]"
-            else:
-                ship_fee = 0
-                delivery_tag = ""
-            if m_cod:
-                collect    = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
-                cod_amount = round(collect * COD_FEE_RATE, 2)
-                cod_tag    = f"[COD|ค่าธรรมเนียม={cod_amount:.2f}฿|ยอดรับจริง={collect-cod_amount:.2f}฿]"
-            else:
-                cod_tag = ""
-            bill_no = db.get_next_bill_no(str(m_date))
-            for p, qty, note in valid_items:
-                full_note = " ".join(filter(None, [delivery_tag, cod_tag, note])).strip()
-                db.insert_transaction({
-                    "id":                   str(uuid.uuid4()),
-                    "date":                 str(m_date),
-                    "customer_id":          customer["id"],
-                    "product_id":           p["id"],
-                    "product_name":         p["name"],
-                    "qty":                  qty,
-                    "price_per_unit":       float(p["price"]),
-                    "points_per_unit":      float(p["points_per_unit"]),
-                    "total_amount":         float(p["price"]) * qty,
-                    "initial_qty_received": qty if receive_now else 0,
-                    "transaction_type":     "เบิกของก่อน" if m_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
-                    "bill_status":          m_bill,
-                    "pay_status":           actual_pay,
-                    "notes":                full_note,
-                    "bill_no":              bill_no,
-                })
-            msg = f"✅ บันทึก {len(valid_items)} รายการ"
-            if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
-            if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
-            # สร้าง iship text สำหรับวางใน iship.com
-            if is_shipping and r_addr_line:
-                product_line = ", ".join(f"{p['name']} ×{qty}" for p, qty, _ in valid_items)
-                _prod_codes  = " ".join(f"{p['id'].upper()}-{qty}" for p, qty, _ in valid_items)
-                st.session_state["_iship_pending"] = {
-                    "dst_name":    r_name or customer["name"],
-                    "dst_phone":   r_phone,
-                    "address_line": r_addr_line,
-                    "district":    r_district,
-                    "amphure":     r_amphure,
-                    "province":    r_province,
-                    "zipcode":     m_postcode,
-                    "weight_kg":   (total_w_g + 500) / 1000,  # +500g กล่อง
-                    "cod_amount":  ceil(collect - cod_amount) if m_cod else 0,
-                    "carrier":      m_carrier,
-                    "remark":       f"{customer['name']} {_prod_codes}",
-                    "sender_name":  customer["name"],
-                }
-            # ล้างฟอร์มสำหรับลูกค้าถัดไป
-            for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
-                       "m_bill", "m_pay", "m_delivery", "m_cod",
-                       "m_cart", "m_postcode", "m_carrier", "m_zone"]:
-                st.session_state.pop(_k, None)
-            st.rerun()
-        elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
-            st.caption("⚠️ " + " | ".join(m_errors))
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:

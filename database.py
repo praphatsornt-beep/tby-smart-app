@@ -536,3 +536,22 @@ def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
             seen.add(key)
             result.append({"item_id": r["item_id_platform"], "shop_name": r["shop_name"]})
     return result
+
+
+# ─── Shipments ────────────────────────────────────────────────────────────────
+
+def create_shipment(data: dict) -> None:
+    get_supabase().table("shipments").insert(data).execute()
+
+
+def get_shipments(customer_id: str = None) -> list[dict]:
+    q = get_supabase().table("shipments").select("*, customers(name)")
+    if customer_id:
+        q = q.eq("customer_id", customer_id)
+    return q.order("created_at", desc=True).execute().data
+
+
+def update_shipment_tracking(shipment_id: str, tracking_no: str) -> None:
+    get_supabase().table("shipments").update(
+        {"tracking_no": tracking_no}
+    ).eq("id", shipment_id).execute()
