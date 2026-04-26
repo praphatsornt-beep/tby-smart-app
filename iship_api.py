@@ -34,29 +34,30 @@ def _token() -> str:
     return os.environ.get("ISHIP_TOKEN") or st.secrets.get("ISHIP_TOKEN", "")
 
 
-def _web_session() -> requests.Session | None:
-    """Login to iShip web and return authenticated session with cookies."""
+def _web_session():
+    """Login to iShip web and return (session, debug_msg)."""
     email    = os.environ.get("ISHIP_EMAIL")    or st.secrets.get("ISHIP_EMAIL", "")
     password = os.environ.get("ISHIP_PASSWORD") or st.secrets.get("ISHIP_PASSWORD", "")
     if not email or not password:
-        return None
+        return None, "ไม่มี ISHIP_EMAIL/ISHIP_PASSWORD ใน secrets"
     s = requests.Session()
-    s.headers.update({"User-Agent": "Mozilla/5.0"})
+    s.headers.update({"User-Agent": "Mozilla/5.0",
+                       "Accept": "text/html,application/json,*/*"})
     try:
         r = s.get(f"{WEB_BASE}/login", timeout=10)
         m = re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', r.text)
         if not m:
-            return None
+            return None, f"หาไม่เจอ _token ใน login page (status={r.status_code})"
         r2 = s.post(f"{WEB_BASE}/login", data={
-            "_token": m.group(1),
+            "_token":   m.group(1),
             "email":    email,
             "password": password,
         }, timeout=10, allow_redirects=True)
-        if "login" in r2.url:  # still on login page = failed
-            return None
-        return s
-    except Exception:
-        return None
+        if "login" in r2.url:
+            return None, f"Login ไม่สำเร็จ — final URL: {r2.url}"
+        return s, f"Login OK → {r2.url}"
+    except Exception as e:
+        return None, f"Exception: {e}"
 
 
 def _src() -> dict:
@@ -133,9 +134,8 @@ def create_order(
         })
         form_data = {k: str(v) for k, v in payload.items()}
         form_data["product_lists"] = json.dumps(_prod_list, ensure_ascii=False)
-        _sess = _web_session()
+        _sess, _login_msg = _web_session()
         if _sess:
-            # ดึง XSRF-TOKEN ล่าสุดจาก session
             r_csrf = _sess.get(f"{WEB_BASE}/shipment/create", timeout=10)
             _m = re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', r_csrf.text)
             if _m:
@@ -147,12 +147,8 @@ def create_order(
                 timeout=15,
             )
         else:
-            r = requests.post(
-                f"{BASE_URL}/create_order",
-                data=form_data,
-                headers={"Authorization": f"Bearer {_token()}"},
-                timeout=15,
-            )
+            return {"status": False, "message": f"Login failed: {_login_msg}",
+                    "code": 0, "data": None}
     else:
         r = requests.post(
             f"{BASE_URL}/create_order",
