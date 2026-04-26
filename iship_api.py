@@ -52,9 +52,13 @@ def _web_session():
             "_token":   m.group(1),
             "email":    email,
             "password": password,
+            "remember": "0",
         }, timeout=10, allow_redirects=True)
         if "login" in r2.url:
-            return None, f"Login ไม่สำเร็จ — final URL: {r2.url}"
+            # ลอง parse error จาก response
+            _err = re.search(r'"message"\s*:\s*"([^"]+)"', r2.text)
+            _msg = _err.group(1) if _err else r2.text[:200]
+            return None, f"Login ไม่สำเร็จ: {_msg}"
         return s, f"Login OK → {r2.url}"
     except Exception as e:
         return None, f"Exception: {e}"
