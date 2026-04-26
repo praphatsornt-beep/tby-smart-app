@@ -790,6 +790,19 @@ with tab1:
             _sp_am = _sb2.text_input("อำเภอ/เขต",   key="sp_am")
             _sp_pv = _sb3.text_input("จังหวัด",      key="sp_pv")
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
+            if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
+                db.upsert_customer_address({
+                    "id":             str(uuid.uuid4()),
+                    "customer_id":    _sp_cid,
+                    "recipient_name": st.session_state.get("sp_rname", ""),
+                    "phone":          st.session_state.get("sp_rphone", ""),
+                    "address_line":   st.session_state.get("sp_al", ""),
+                    "district":       st.session_state.get("sp_dt", ""),
+                    "amphure":        st.session_state.get("sp_am", ""),
+                    "province":       st.session_state.get("sp_pv", ""),
+                    "postal_code":    st.session_state.get("sp_pc", ""),
+                })
+                st.success("✅ บันทึกที่อยู่แล้ว")
 
         # ── รายการสินค้าที่ส่ง ───────────────────────────────────────────
         st.caption("รายการสินค้าที่ส่ง (ไม่ตัด stock)")
@@ -840,23 +853,27 @@ with tab1:
             elif not _sp_pc.strip():
                 st.error("กรุณากรอกรหัสไปรษณีย์")
             else:
-                db.create_shipment({
-                    "created_at":     str(_sp_date),
-                    "customer_id":    _sp_cid or None,
-                    "recipient_name": _sp_rname.strip(),
-                    "phone":          _sp_rphone.strip(),
-                    "address_line":   _sp_al.strip(),
-                    "district":       _sp_dt.strip(),
-                    "amphure":        _sp_am.strip(),
-                    "province":       _sp_pv.strip(),
-                    "postal_code":    _sp_pc.strip(),
-                    "carrier":        _sp_carrier,
-                    "shipping_cost":  _sp_cost,
-                    "items":          _sp_items,
-                    "tracking_no":    _sp_track.strip(),
-                    "notes":          _sp_notes.strip(),
-                })
-                st.success("✅ บันทึกการส่งของแล้ว")
+                try:
+                    db.create_shipment({
+                        "created_at":     str(_sp_date),
+                        "customer_id":    _sp_cid or None,
+                        "recipient_name": _sp_rname.strip(),
+                        "phone":          _sp_rphone.strip(),
+                        "address_line":   _sp_al.strip(),
+                        "district":       _sp_dt.strip(),
+                        "amphure":        _sp_am.strip(),
+                        "province":       _sp_pv.strip(),
+                        "postal_code":    _sp_pc.strip(),
+                        "carrier":        _sp_carrier,
+                        "shipping_cost":  _sp_cost,
+                        "items":          _sp_items,
+                        "tracking_no":    _sp_track.strip(),
+                        "notes":          _sp_notes.strip(),
+                    })
+                    st.success("✅ บันทึกการส่งของแล้ว")
+                except Exception:
+                    st.error("❌ ยังไม่ได้สร้าง table shipments — รัน SQL ใน supabase_setup.sql ก่อน")
+                    st.stop()
                 for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes"]:
                     st.session_state.pop(_k, None)
                 st.session_state.pop("sp_cart", None)
