@@ -930,7 +930,6 @@ with tab1:
                 try:
                     db.create_shipment({
                         "id":             _sp_new_id,
-                        "created_at":     str(_sp_date),
                         "customer_id":    _sp_cid or None,
                         "recipient_name": _sp_rname.strip(),
                         "phone":          _sp_rphone.strip(),
@@ -986,7 +985,7 @@ with tab1:
 
             _sh_ids  = [r["id"] for r in _sh_all]
             _sh_df   = pd.DataFrame([{
-                "วันที่":    (r.get("created_at") or "")[:10],
+                "วันที่/เวลา": (r.get("created_at") or "")[:16].replace("T", " "),
                 "ลูกค้า":   (r.get("customers") or {}).get("name", ""),
                 "ผู้รับ":    r.get("recipient_name", ""),
                 "เบอร์":     r.get("phone", ""),
@@ -1001,7 +1000,7 @@ with tab1:
             _sh_edit = st.data_editor(
                 _sh_df,
                 hide_index=True, use_container_width=True, key="sh_hist_tbl",
-                disabled=["วันที่","ลูกค้า","ผู้รับ","เบอร์","จังหวัด","รายการ","ขนส่ง","หมายเหตุ"],
+                disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์","จังหวัด","รายการ","ขนส่ง","หมายเหตุ"],
                 column_config={
                     "tracking": st.column_config.TextColumn("tracking"),
                     "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
