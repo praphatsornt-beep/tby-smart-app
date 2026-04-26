@@ -731,7 +731,7 @@ with tab1:
                 bill_no = db.get_next_bill_no(str(m_date))
                 for p, qty, note in valid_items:
                     full_note = " ".join(filter(None, [delivery_tag, cod_tag, note])).strip()
-                    db.insert_transaction({
+                    _txn_data = {
                         "id":                   str(uuid.uuid4()),
                         "date":                 str(m_date),
                         "customer_id":          customer["id"],
@@ -747,7 +747,13 @@ with tab1:
                         "pay_status":           actual_pay,
                         "notes":                full_note,
                         "bill_no":              bill_no,
-                    })
+                    }
+                    try:
+                        db.insert_transaction(_txn_data)
+                    except Exception as _e:
+                        st.error(f"❌ Error: {_e}")
+                        st.json(_txn_data)
+                        st.stop()
                 msg = f"✅ บันทึก {len(valid_items)} รายการ"
                 if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
                 if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
