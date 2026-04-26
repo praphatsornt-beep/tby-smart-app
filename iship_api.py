@@ -76,7 +76,7 @@ def create_order(
         payload["label_address"] = src["ISHIP_SRC_ADDRESS"]
         payload["label_zipcode"] = src["ISHIP_SRC_ZIPCODE"]
     if is_cod:
-        payload["product_lists"] = [{
+        _prod_list = [{
             "product_name":   "สินค้าซูเลียน",
             "product_qty":    "1",
             "product_length": "10",
@@ -87,6 +87,7 @@ def create_order(
             "product_price":  "2000",
             "product_remark": "",
         }]
+        payload["product_lists"] = json.dumps(_prod_list, ensure_ascii=False)
     r = requests.post(
         f"{BASE_URL}/create_order",
         json=payload,
