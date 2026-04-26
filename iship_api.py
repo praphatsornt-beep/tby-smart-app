@@ -1,4 +1,5 @@
 import os
+import json
 import requests
 import streamlit as st
 
@@ -75,7 +76,8 @@ def create_order(
         payload["label_address"] = src["ISHIP_SRC_ADDRESS"]
         payload["label_zipcode"] = src["ISHIP_SRC_ZIPCODE"]
     if is_cod:
-        payload["products"] = [{"name": "สินค้าซูเลียน", "qty": 1, "price": 2000}]
+        _prod = [{"product_name": "สินค้าซูเลียน", "amount": 1, "price": 2000}]
+        payload["products"] = json.dumps(_prod, ensure_ascii=False)
     r = requests.post(
         f"{BASE_URL}/create_order",
         json=payload,
