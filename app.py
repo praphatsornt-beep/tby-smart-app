@@ -571,25 +571,33 @@ with tab1:
                                         st.session_state["_last_rph_fill"] = _sa.get("phone", "")
                                         st.rerun()
                                 st.divider()
-                        st.caption("📋 วางที่อยู่จาก LINE (iShip format) แล้วกด แยกอัตโนมัติ")
-                        paste_txt = st.text_area(
-                            "", label_visibility="collapsed",
-                            key=f"paste_{_cid}", height=90, placeholder=
-                            "Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976"
-                        )
-                        if st.button("📍 แยกอัตโนมัติ", key=f"parse_btn_{_cid}"):
-                            _parsed = _parse_iship_address(paste_txt)
-                            for _sk in ["r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv"]:
-                                st.session_state[_sk] = ""
-                            st.session_state["_staged_pc"] = ""
-                            if _parsed["dst_name"]:    st.session_state["r_name"]  = _parsed["dst_name"]
-                            if _parsed["dst_phone"]:   st.session_state["r_phone"] = _parsed["dst_phone"]
-                            if _parsed["address_line"]: st.session_state["r_al"]   = _parsed["address_line"]
-                            if _parsed["district"]:    st.session_state["r_dt"]    = _parsed["district"]
-                            if _parsed["amphure"]:     st.session_state["r_am"]    = _parsed["amphure"]
-                            if _parsed["province"]:    st.session_state["r_pv"]    = _parsed["province"]
-                            if _parsed["zipcode"]:     st.session_state["_staged_pc"] = _parsed["zipcode"]
-                            st.rerun()
+                        _parse_key = f"_show_paste_{_cid}"
+                        if st.button("📍 แยกที่อยู่อัตโนมัติ", key=f"parse_open_{_cid}"):
+                            st.session_state[_parse_key] = not st.session_state.get(_parse_key, False)
+                        if st.session_state.get(_parse_key):
+                            paste_txt = st.text_area(
+                                "วางที่อยู่จาก LINE (iShip format)",
+                                key=f"paste_{_cid}", height=100, placeholder=
+                                "Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976"
+                            )
+                            _pc1, _pc2 = st.columns([1, 1])
+                            if _pc1.button("✅ ตกลง", key=f"parse_btn_{_cid}", type="primary"):
+                                _parsed = _parse_iship_address(paste_txt)
+                                for _sk in ["r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv"]:
+                                    st.session_state[_sk] = ""
+                                st.session_state["_staged_pc"] = ""
+                                if _parsed["dst_name"]:     st.session_state["r_name"]  = _parsed["dst_name"]
+                                if _parsed["dst_phone"]:    st.session_state["r_phone"] = _parsed["dst_phone"]
+                                if _parsed["address_line"]: st.session_state["r_al"]    = _parsed["address_line"]
+                                if _parsed["district"]:     st.session_state["r_dt"]    = _parsed["district"]
+                                if _parsed["amphure"]:      st.session_state["r_am"]    = _parsed["amphure"]
+                                if _parsed["province"]:     st.session_state["r_pv"]    = _parsed["province"]
+                                if _parsed["zipcode"]:      st.session_state["_staged_pc"] = _parsed["zipcode"]
+                                st.session_state[_parse_key] = False
+                                st.rerun()
+                            if _pc2.button("ยกเลิก", key=f"parse_cancel_{_cid}"):
+                                st.session_state[_parse_key] = False
+                                st.rerun()
                         st.divider()
                         _cur_rph = st.session_state.get("r_phone", "")
                         if len(_cur_rph.strip()) == 10 and st.session_state.get("_last_rph_fill") != _cur_rph.strip():
