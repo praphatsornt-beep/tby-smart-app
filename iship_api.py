@@ -107,9 +107,12 @@ def create_order(
         form_data = {k: str(v) for k, v in payload.items()}
         form_data["product_lists"] = json.dumps(_prod_list, ensure_ascii=False)
         r = requests.post(
-            f"{BASE_URL}/create_order",
+            "https://app.iship.cloud/shipment",
             data=form_data,
-            headers={"Authorization": f"Bearer {_token()}"},
+            headers={
+                "Authorization":   f"Bearer {_token()}",
+                "X-Requested-With": "XMLHttpRequest",
+            },
             timeout=15,
         )
     else:
