@@ -482,8 +482,8 @@ with tab1:
             product_display = {f"{p['id']} — {p['name']}": p for p in products}
             product_display_keys = list(product_display.keys())
             cart_df = pd.DataFrame({
-                "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
                 "สินค้า": pd.Series([""] * 3, dtype="object"),
+                "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
             })
             edited_cart = st.data_editor(
                 cart_df,
@@ -491,8 +491,8 @@ with tab1:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
                     "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
+                    "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
                 },
                 key="m_cart",
             )
