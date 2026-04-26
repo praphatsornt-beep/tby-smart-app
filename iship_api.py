@@ -87,13 +87,21 @@ def create_order(
             "product_price":  "2000",
             "product_remark": "",
         }]
-        payload["product_lists"] = json.dumps(_prod_list, ensure_ascii=False)
-    r = requests.post(
-        f"{BASE_URL}/create_order",
-        json=payload,
-        headers={"Authorization": f"Bearer {_token()}"},
-        timeout=15,
-    )
+        form_data = {k: str(v) for k, v in payload.items()}
+        form_data["product_lists"] = json.dumps(_prod_list, ensure_ascii=False)
+        r = requests.post(
+            f"{BASE_URL}/create_order",
+            data=form_data,
+            headers={"Authorization": f"Bearer {_token()}"},
+            timeout=15,
+        )
+    else:
+        r = requests.post(
+            f"{BASE_URL}/create_order",
+            json=payload,
+            headers={"Authorization": f"Bearer {_token()}"},
+            timeout=15,
+        )
     try:
         result = r.json()
     except Exception:
