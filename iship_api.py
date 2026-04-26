@@ -69,11 +69,14 @@ def create_order(
         "dst_province":  _norm_province(province),
         "dst_zipcode":   zipcode,
         "weight":        max(1, round(weight_kg)),
+        "width":         10,
+        "length":        10,
+        "height":        5,
         "cod_amount":    int(cod_amount),
         "remark":        remark,
     }
-    if cod_amount > 0 and products:
-        payload["products"] = products
+    if cod_amount > 0:
+        payload["products"] = [{"name": "สินค้าซูเลียน", "qty": 1, "price": 2000}]
     r = requests.post(
         f"{BASE_URL}/create_order",
         json=payload,
