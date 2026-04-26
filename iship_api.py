@@ -76,7 +76,7 @@ def create_order(
         payload["label_address"] = src["ISHIP_SRC_ADDRESS"]
         payload["label_zipcode"] = src["ISHIP_SRC_ZIPCODE"]
     if is_cod:
-        payload["products"] = ["สินค้าซูเลียน"]
+        payload["products"] = ["สินค้าซูเลียน จำนวน 1 ขนาด 10x10x5 ซม. น้ำหนัก 1 กก. ราคา 2,000 บาท สีน้ำตาล"]
     r = requests.post(
         f"{BASE_URL}/create_order",
         json=payload,
