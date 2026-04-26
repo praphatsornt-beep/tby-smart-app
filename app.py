@@ -835,10 +835,18 @@ with tab1:
                         _sp_err = _sp_resp.get("message") or str(_sp_resp)
                         if "NotSupportAddress" in _sp_err:
                             st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
+                        elif "500" in _sp_err or "DOCTYPE" in _sp_err:
+                            st.warning("⚠️ iShip API ไม่รองรับ COD อัตโนมัติ — กรุณาสร้างใน iShip เอง")
+                            _spp2 = st.session_state.get("_sp_iship_pending", {})
+                            st.code(
+                                f"ผู้รับ: {_spp2.get('dst_name','')} | {_spp2.get('dst_phone','')}\n"
+                                f"ที่อยู่: {_spp2.get('address_line','')} {_spp2.get('district','')} {_spp2.get('amphure','')} {_spp2.get('province','')} {_spp2.get('zipcode','')}\n"
+                                f"ขนส่ง: {_spp2.get('carrier','')} | COD: {_spp2.get('cod_amount',0):,} ฿\n"
+                                f"หมายเหตุ: {_spp2.get('remark','')}",
+                                language=None
+                            )
                         else:
                             st.error(f"❌ iShip Error: {_sp_err}")
-                            with st.expander("🔍 payload ที่ส่งไป"):
-                                st.json(_sp_resp.get("_debug_payload", {}))
                 else:
                     st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
             if _si2.button("ปิด", key="sp_cancel_iship", use_container_width=True):
