@@ -1135,29 +1135,30 @@ with tab4:
 
         # ── ตาราง + checkbox ลบ ───────────────────────────────────────────
         if show_addr:
-            _tx = "font-size:14px;margin:0;padding:2px 0"
-            _h0, _h1, _h2, _h3, _h4 = st.columns([1, 2, 2, 5, 2])
-            _h0.markdown(f'<p style="{_tx}"><b>ลบ</b></p>', unsafe_allow_html=True)
-            _h1.markdown(f'<p style="{_tx}"><b>เบอร์</b></p>', unsafe_allow_html=True)
-            _h2.markdown(f'<p style="{_tx}"><b>ชื่อผู้รับ</b></p>', unsafe_allow_html=True)
-            _h3.markdown(f'<p style="{_tx}"><b>ที่อยู่</b></p>', unsafe_allow_html=True)
-            _h4.markdown(f'<p style="{_tx}"><b>ลูกค้า</b></p>', unsafe_allow_html=True)
-            st.divider()
-            _to_delete = []
-            for _a in show_addr:
-                _c0, _c1, _c2, _c3, _c4 = st.columns([1, 2, 2, 5, 2])
-                if _c0.checkbox("", key=f"del_chk_{_a['id']}", label_visibility="collapsed"):
-                    _to_delete.append(_a["id"])
-                _c1.markdown(f'<p style="{_tx}">{_a.get("phone","")}</p>', unsafe_allow_html=True)
-                _c2.markdown(f'<p style="{_tx}">{_a.get("recipient_name","")}</p>', unsafe_allow_html=True)
-                _addr_str = f"{_a.get('address_line','')} {_a.get('district','')} {_a.get('amphure','')} {_a.get('province','')} {_a.get('postal_code','')}".strip()
-                _c3.markdown(f'<p style="{_tx}">{_addr_str}</p>', unsafe_allow_html=True)
-                _c4.markdown(f'<p style="{_tx}">{(_a.get("customers") or {}).get("name","")}</p>', unsafe_allow_html=True)
+            _addr_ids = [a["id"] for a in show_addr]
+            _addr_df = pd.DataFrame([{
+                "ลบ":         False,
+                "เบอร์":      a.get("phone", ""),
+                "ชื่อผู้รับ": a.get("recipient_name", ""),
+                "ที่อยู่":    f"{a.get('address_line','')} {a.get('district','')} {a.get('amphure','')} {a.get('province','')} {a.get('postal_code','')}".strip(),
+                "ลูกค้า":    (a.get("customers") or {}).get("name", ""),
+            } for a in show_addr])
+            _edited_addr = st.data_editor(
+                _addr_df,
+                column_config={
+                    "ลบ": st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                },
+                disabled=["เบอร์", "ชื่อผู้รับ", "ที่อยู่", "ลูกค้า"],
+                hide_index=True,
+                use_container_width=True,
+                key="addr_tbl",
+            )
+            _to_delete = [_addr_ids[i] for i, v in enumerate(_edited_addr["ลบ"]) if v]
             if _to_delete:
-                st.divider()
                 if st.button(f"🗑️ ลบที่เลือก ({len(_to_delete)} รายการ)", type="primary", key="del_checked_btn"):
                     for _did in _to_delete:
                         db.delete_customer_address(_did)
+                    st.session_state.pop("addr_tbl", None)
                     st.rerun()
         else:
             st.info("ยังไม่มีที่อยู่" if not sa_phone.strip() else "ไม่พบเบอร์นี้")
