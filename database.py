@@ -555,3 +555,7 @@ def update_shipment_tracking(shipment_id: str, tracking_no: str) -> None:
     get_supabase().table("shipments").update(
         {"tracking_no": tracking_no}
     ).eq("id", shipment_id).execute()
+
+
+def delete_shipment(shipment_id: str) -> None:
+    get_supabase().table("shipments").delete().eq("id", shipment_id).execute()

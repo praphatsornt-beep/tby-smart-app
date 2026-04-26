@@ -240,7 +240,7 @@ def _pick_carrier(pc: str, kg: float = 0) -> str:
 
 
 with tab1:
-    _sub_sale, _sub_ship = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ"])
+    _sub_sale, _sub_ship, _sub_shiphist = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง"])
 
     with _sub_sale:
         st.subheader("บันทึกรายการขาย")
@@ -285,6 +285,24 @@ with tab1:
                         if resp.get("status"):
                             tracking = (resp.get("data") or {}).get("tracking_code", "")
                             st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
+                            # บันทึก shipment record จาก บันทึกขาย
+                            try:
+                                db.create_shipment({
+                                    "customer_id":    _p.get("_customer_id") or None,
+                                    "recipient_name": _p.get("dst_name",""),
+                                    "phone":          _p.get("dst_phone",""),
+                                    "address_line":   _p.get("address_line",""),
+                                    "district":       _p.get("district",""),
+                                    "amphure":        _p.get("amphure",""),
+                                    "province":       _p.get("province",""),
+                                    "postal_code":    _p.get("zipcode",""),
+                                    "carrier":        _p.get("carrier",""),
+                                    "items":          _p.get("_items",[]),
+                                    "tracking_no":    tracking,
+                                    "notes":          _p.get("remark",""),
+                                })
+                            except Exception:
+                                pass
                             del st.session_state["_iship_pending"]
                         else:
                             _err_msg = resp.get("message") or resp.get("msg") or str(resp)
@@ -734,6 +752,9 @@ with tab1:
                         "carrier":      m_carrier,
                         "remark":       f"{customer['name']} {_prod_codes}",
                         "sender_name":  customer["name"],
+                        "_items": [{"product_id": p["id"], "name": p["name"], "qty": qty}
+                                   for p, qty, _ in valid_items],
+                        "_customer_id": customer["id"],
                     }
                 # ล้างฟอร์มสำหรับลูกค้าถัดไป
                 for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
@@ -937,39 +958,70 @@ with tab1:
                 st.session_state.pop("sp_cart", None)
                 st.rerun()
 
-        # ── ประวัติการส่ง ─────────────────────────────────────────────────
-        st.divider()
-        st.caption("ประวัติการส่งของ")
+        st.caption("กรอกข้อมูลด้านบนแล้วกด 💾 บันทึกการส่งของ — tracking จะบันทึกอัตโนมัติหลังส่ง iShip")
+
+    with _sub_shiphist:
+        st.subheader("ประวัติการส่งของ")
         try:
-            _sp_hist = db.get_shipments()
+            _sh_all = db.get_shipments()
         except Exception:
-            st.warning("⚙️ ยังไม่ได้สร้าง table shipments — รัน SQL ใน supabase_setup.sql ก่อน")
-            _sp_hist = []
-        if _sp_hist:
-            _hist_df = pd.DataFrame([{
-                "วันที่":        (r.get("created_at") or "")[:10],
-                "ลูกค้า":       (r.get("customers") or {}).get("name", ""),
-                "ผู้รับ":        r.get("recipient_name", ""),
-                "เบอร์":         r.get("phone", ""),
-                "จังหวัด":      r.get("province", ""),
-                "ขนส่ง":        r.get("carrier", ""),
-                "tracking":     r.get("tracking_no", ""),
-                "_id":          r.get("id", ""),
-            } for r in _sp_hist])
-            _hist_edit = st.data_editor(
-                _hist_df.drop(columns=["_id"]),
-                hide_index=True, use_container_width=True, key="sp_hist_editor",
-                disabled=["วันที่","ลูกค้า","ผู้รับ","เบอร์","จังหวัด","ขนส่ง"],
-                column_config={"tracking": st.column_config.TextColumn("tracking")},
+            st.warning("⚙️ ยังไม่ได้สร้าง table shipments")
+            _sh_all = []
+
+        if _sh_all:
+            def _items_str(items):
+                if not items:
+                    return ""
+                return ", ".join(f"{it.get('product_id','')} ×{it.get('qty',0)}" for it in items)
+
+            _sh_ids  = [r["id"] for r in _sh_all]
+            _sh_df   = pd.DataFrame([{
+                "วันที่":    (r.get("created_at") or "")[:10],
+                "ลูกค้า":   (r.get("customers") or {}).get("name", ""),
+                "ผู้รับ":    r.get("recipient_name", ""),
+                "เบอร์":     r.get("phone", ""),
+                "จังหวัด":  r.get("province", ""),
+                "รายการ":   _items_str(r.get("items")),
+                "ขนส่ง":    r.get("carrier", ""),
+                "tracking": r.get("tracking_no", ""),
+                "หมายเหตุ": r.get("notes", ""),
+                "ลบ":       False,
+            } for r in _sh_all])
+
+            _sh_edit = st.data_editor(
+                _sh_df,
+                hide_index=True, use_container_width=True, key="sh_hist_tbl",
+                disabled=["วันที่","ลูกค้า","ผู้รับ","เบอร์","จังหวัด","รายการ","ขนส่ง","หมายเหตุ"],
+                column_config={
+                    "tracking": st.column_config.TextColumn("tracking"),
+                    "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                },
             )
-            if st.button("💾 บันทึก tracking", key="sp_save_track"):
-                for i, row in _hist_edit.iterrows():
-                    _orig = _sp_hist[i].get("tracking_no", "")
-                    _new  = str(row.get("tracking", "") or "").strip()
-                    if _new != _orig:
-                        db.update_shipment_tracking(_hist_df.at[i, "_id"], _new)
-                st.success("✅ บันทึก tracking แล้ว")
-                st.rerun()
+
+            _sh_to_del = [_sh_ids[i] for i, v in enumerate(_sh_edit["ลบ"]) if v]
+
+            # บันทึก tracking ที่แก้ไข
+            _sh_changed = [(i, str(row["tracking"] or "").strip())
+                           for i, row in _sh_edit.iterrows()
+                           if str(row["tracking"] or "").strip() != (_sh_all[i].get("tracking_no") or "").strip()]
+            if _sh_changed:
+                if st.button("💾 บันทึก tracking", key="sh_save_track"):
+                    for _i, _trk in _sh_changed:
+                        db.update_shipment_tracking(_sh_ids[_i], _trk)
+                    st.success("✅ บันทึกแล้ว")
+                    st.rerun()
+
+            if _sh_to_del:
+                if st.button(f"🗑️ ลบที่เลือก ({len(_sh_to_del)} รายการ)", type="primary", key="sh_del_btn"):
+                    for _did in _sh_to_del:
+                        try:
+                            db.delete_shipment(_did)
+                        except Exception:
+                            pass
+                    st.session_state.pop("sh_hist_tbl", None)
+                    st.rerun()
+        else:
+            st.info("ยังไม่มีประวัติการส่งของ")
 
 # Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
 # ─────────────────────────────────────────────────────────────────────────────
