@@ -68,9 +68,12 @@ def create_order(
         "dst_province":  _norm_province(province),
         "dst_zipcode":   zipcode,
         "weight":        1,
-        "cod_amount":    int(cod_amount),
-        "remark":        remark,
-        "item_detail":   item_detail or remark,
+        "cod_amount":     int(cod_amount),
+        "remark":         remark,
+        "item_detail":    item_detail or remark,
+        "parcel_detail":  item_detail or remark,
+        "goods_name":     item_detail or remark,
+        "product_detail": item_detail or remark,
     }
     r = requests.post(
         f"{BASE_URL}/create_order",
