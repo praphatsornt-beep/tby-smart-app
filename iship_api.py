@@ -47,32 +47,34 @@ def create_order(
     products: list = None,
 ) -> dict:
     src = _src()
+    is_cod = cod_amount > 0
     payload = {
-        "courier_code":  COURIER_MAP.get(carrier, "FlashExpress"),
-        "src_name":      src["ISHIP_SRC_NAME"],
-        "src_phone":     src["ISHIP_SRC_PHONE"],
-        "src_address":   src["ISHIP_SRC_ADDRESS"],
-        "src_district":  src["ISHIP_SRC_DISTRICT"],
-        "src_amphure":   src["ISHIP_SRC_AMPHURE"],
-        "src_province":  src["ISHIP_SRC_PROVINCE"],
-        "src_zipcode":   src["ISHIP_SRC_ZIPCODE"],
-        "use_onlabel":   "1",
-        "label_name":    src["ISHIP_LABEL_NAME"],
-        "label_phone":   src["ISHIP_LABEL_PHONE"],
-        "label_address": src["ISHIP_SRC_ADDRESS"],
-        "label_zipcode": src["ISHIP_SRC_ZIPCODE"],
-        "dst_name":      dst_name,
-        "dst_phone":     dst_phone,
-        "dst_address":   f"{address_line} {district} {amphure} {province}".strip(),
-        "dst_district":  district,
-        "dst_amphure":   amphure,
-        "dst_province":  _norm_province(province),
-        "dst_zipcode":   zipcode,
-        "weight":        max(1, round(weight_kg)),
-        "cod_amount":    int(cod_amount),
-        "remark":        remark,
+        "courier_code": COURIER_MAP.get(carrier, "FlashExpress"),
+        "src_name":     src["ISHIP_SRC_NAME"],
+        "src_phone":    src["ISHIP_SRC_PHONE"],
+        "src_address":  src["ISHIP_SRC_ADDRESS"],
+        "src_district": src["ISHIP_SRC_DISTRICT"],
+        "src_amphure":  src["ISHIP_SRC_AMPHURE"],
+        "src_province": src["ISHIP_SRC_PROVINCE"],
+        "src_zipcode":  src["ISHIP_SRC_ZIPCODE"],
+        "dst_name":     dst_name,
+        "dst_phone":    dst_phone,
+        "dst_address":  f"{address_line} {district} {amphure} {province}".strip(),
+        "dst_district": district,
+        "dst_amphure":  amphure,
+        "dst_province": _norm_province(province),
+        "dst_zipcode":  zipcode,
+        "weight":       max(1, round(weight_kg)),
+        "cod_amount":   int(cod_amount),
+        "remark":       remark,
     }
-    if cod_amount > 0:
+    if not is_cod:
+        payload["use_onlabel"]   = "1"
+        payload["label_name"]    = src["ISHIP_LABEL_NAME"]
+        payload["label_phone"]   = src["ISHIP_LABEL_PHONE"]
+        payload["label_address"] = src["ISHIP_SRC_ADDRESS"]
+        payload["label_zipcode"] = src["ISHIP_SRC_ZIPCODE"]
+    if is_cod:
         payload["products"] = [{"name": "สินค้าซูเลียน", "qty": 1, "price": 2000}]
     r = requests.post(
         f"{BASE_URL}/create_order",
