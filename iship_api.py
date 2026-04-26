@@ -76,15 +76,29 @@ def create_order(
         payload["label_address"] = src["ISHIP_SRC_ADDRESS"]
         payload["label_zipcode"] = src["ISHIP_SRC_ZIPCODE"]
     if is_cod:
-        payload["products"] = [{"name": "สินค้าซูเลียน", "qty": 1,
-                                 "width": 10, "length": 10, "height": 5,
-                                 "weight": 1, "color": "น้ำตาล", "price": 2000}]
-    r = requests.post(
-        f"{BASE_URL}/create_order",
-        json=payload,
-        headers={"Authorization": f"Bearer {_token()}"},
-        timeout=15,
-    )
+        # ส่ง products เป็น form-data แบบ PHP array notation
+        form_data = {k: str(v) for k, v in payload.items()}
+        form_data["products[0][name]"]   = "สินค้าซูเลียน"
+        form_data["products[0][qty]"]    = "1"
+        form_data["products[0][width]"]  = "10"
+        form_data["products[0][length]"] = "10"
+        form_data["products[0][height]"] = "5"
+        form_data["products[0][weight]"] = "1"
+        form_data["products[0][color]"]  = "น้ำตาล"
+        form_data["products[0][price]"]  = "2000"
+        r = requests.post(
+            f"{BASE_URL}/create_order",
+            data=form_data,
+            headers={"Authorization": f"Bearer {_token()}"},
+            timeout=15,
+        )
+    else:
+        r = requests.post(
+            f"{BASE_URL}/create_order",
+            json=payload,
+            headers={"Authorization": f"Bearer {_token()}"},
+            timeout=15,
+        )
     try:
         result = r.json()
     except Exception:
