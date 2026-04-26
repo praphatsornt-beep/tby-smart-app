@@ -750,6 +750,43 @@ with tab1:
     with _sub_ship:
         st.subheader("บันทึกการส่งของ")
 
+        # ── iShip pending (แสดงหลัง save) ────────────────────────────────
+        if st.session_state.get("_sp_iship_pending"):
+            _spp = st.session_state["_sp_iship_pending"]
+            st.info(f"📦 พร้อมส่ง iShip: **{_spp['dst_name']}** | {_spp['zipcode']} | {_spp['carrier']}")
+            _si1, _si2 = st.columns([3, 1])
+            _sp_car_pick = _si1.radio("ขนส่ง", ["Flash Express", "SPX Express"],
+                                      index=0 if _spp["carrier"] == "Flash Express" else 1,
+                                      horizontal=True, key="sp_iship_carrier")
+            _spp["carrier"] = _sp_car_pick
+            if _si1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="sp_do_iship"):
+                if iship_api.is_configured():
+                    _sp_call = {k: _spp[k] for k in
+                                {"dst_name","dst_phone","address_line","district",
+                                 "amphure","province","zipcode","weight_kg",
+                                 "cod_amount","carrier","remark"} if k in _spp}
+                    with st.spinner("กำลังสร้างรายการใน iShip..."):
+                        _sp_resp = iship_api.create_order(**_sp_call)
+                    if _sp_resp.get("status"):
+                        _sp_tracking = (_sp_resp.get("data") or {}).get("tracking_code", "")
+                        if _spp.get("_shipment_id") and _sp_tracking:
+                            db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
+                        st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{_sp_tracking}**")
+                        del st.session_state["_sp_iship_pending"]
+                        st.rerun()
+                    else:
+                        _sp_err = _sp_resp.get("message") or str(_sp_resp)
+                        if "NotSupportAddress" in _sp_err:
+                            st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
+                        else:
+                            st.error(f"❌ iShip Error: {_sp_err}")
+                else:
+                    st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
+            if _si2.button("ปิด", key="sp_cancel_iship", use_container_width=True):
+                del st.session_state["_sp_iship_pending"]
+                st.rerun()
+            st.divider()
+
         _sp = db.get_products()
         _sc = db.get_customers()
         _sc_map = {c["name"]: c for c in _sc}
@@ -853,8 +890,15 @@ with tab1:
             elif not _sp_pc.strip():
                 st.error("กรุณากรอกรหัสไปรษณีย์")
             else:
+                _sp_new_id = str(uuid.uuid4())
+                _sp_wt = sum(
+                    float(_sp_prod_map.get(r["สินค้า"], {}).get("weight_grams") or 0) * int(r["จำนวน"] or 0)
+                    for _, r in _sp_cart_edit.iterrows()
+                    if str(r.get("สินค้า","")) in _sp_prod_map
+                ) / 1000
                 try:
                     db.create_shipment({
+                        "id":             _sp_new_id,
                         "created_at":     str(_sp_date),
                         "customer_id":    _sp_cid or None,
                         "recipient_name": _sp_rname.strip(),
@@ -870,10 +914,24 @@ with tab1:
                         "tracking_no":    _sp_track.strip(),
                         "notes":          _sp_notes.strip(),
                     })
-                    st.success("✅ บันทึกการส่งของแล้ว")
                 except Exception:
                     st.error("❌ ยังไม่ได้สร้าง table shipments — รัน SQL ใน supabase_setup.sql ก่อน")
                     st.stop()
+                # ตั้ง iShip pending เพื่อส่งขนส่ง
+                st.session_state["_sp_iship_pending"] = {
+                    "dst_name":     _sp_rname.strip(),
+                    "dst_phone":    _sp_rphone.strip(),
+                    "address_line": _sp_al.strip(),
+                    "district":     _sp_dt.strip(),
+                    "amphure":      _sp_am.strip(),
+                    "province":     _sp_pv.strip(),
+                    "zipcode":      _sp_pc.strip(),
+                    "weight_kg":    max(0.5, _sp_wt),
+                    "cod_amount":   0,
+                    "carrier":      _sp_carrier,
+                    "remark":       _sp_notes.strip(),
+                    "_shipment_id": _sp_new_id,
+                }
                 for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes"]:
                     st.session_state.pop(_k, None)
                 st.session_state.pop("sp_cart", None)
