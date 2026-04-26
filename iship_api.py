@@ -123,9 +123,10 @@ def create_order(
         result = r.json()
     except Exception:
         result = {"status": False, "message": f"HTTP {r.status_code}: {r.text[:300]}"}
+    _excl = {"src_name","src_phone","src_address","src_district",
+             "src_amphure","src_province","src_zipcode",
+             "label_name","label_phone","label_address","label_zipcode"}
     if not result.get("status"):
-        result["_debug_payload"] = {k: v for k, v in payload.items()
-                                    if k not in ("src_name","src_phone","src_address","src_district",
-                                                 "src_amphure","src_province","src_zipcode",
-                                                 "label_name","label_phone","label_address","label_zipcode")}
+        _src_data = form_data if is_cod else payload
+        result["_debug_payload"] = {k: v for k, v in _src_data.items() if k not in _excl}
     return result
