@@ -511,6 +511,14 @@ with tab1:
             m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery")
             m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย", "COD"], horizontal=True, key="m_pay")
             m_bill = ms3.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], horizontal=True, key="m_bill")
+            # auto-set เมื่อเลือก COD
+            if m_pay == "COD" and st.session_state.get("_prev_pay") != "COD":
+                st.session_state["m_bill"]     = "ยังไม่เปิดบิล"
+                st.session_state["m_delivery"] = "ส่งพัสดุ"
+                st.session_state["_prev_pay"]  = "COD"
+                st.rerun()
+            elif m_pay != "COD":
+                st.session_state["_prev_pay"] = m_pay
             m_cod     = (m_pay == "COD")
             m_receipt = "ฝากของ" if m_delivery == "ฝากของ (รอรับ)" else "รับของแล้ว"
             m_postcode = ""
