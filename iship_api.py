@@ -83,7 +83,10 @@ def create_order(
         headers={"Authorization": f"Bearer {_token()}"},
         timeout=15,
     )
-    result = r.json()
+    try:
+        result = r.json()
+    except Exception:
+        result = {"status": False, "message": f"HTTP {r.status_code}: {r.text[:300]}"}
     if not result.get("status"):
         result["_debug_payload"] = {k: v for k, v in payload.items()
                                     if k not in ("src_name","src_phone","src_address","src_district",
