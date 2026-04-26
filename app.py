@@ -1,3 +1,4 @@
+import re
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -1024,24 +1025,41 @@ with tab4:
         else:
             cust_df = pd.DataFrame(columns=["รหัส", "ชื่อลูกค้า", "เบอร์โทร"])
 
-        st.write("**แก้ไขหรือเพิ่มลูกค้า** — แก้ในตารางได้โดยตรง กด `+` ที่มุมล่างขวาเพื่อเพิ่มแถวใหม่")
+        # ── เรียงลำดับ ────────────────────────────────────────────────────
+        _sort_by = st.radio("เรียงตาม", ["รหัส", "ชื่อลูกค้า"], horizontal=True, key="cust_sort")
+        if not cust_df.empty:
+            cust_df = cust_df.sort_values(_sort_by, ignore_index=True)
+
+        st.write("**แก้ไขหรือเพิ่มลูกค้า** — แก้ในตารางได้โดยตรง กด `+` เพื่อเพิ่มแถวใหม่ (ไม่ต้องพิมพ์รหัส ระบบจะออกให้อัตโนมัติ)")
         edited_cust_df = st.data_editor(
             cust_df,
             num_rows="dynamic",
             use_container_width=True,
             key="cust_editor",
             column_config={
-                "รหัส":      st.column_config.TextColumn("รหัส", required=True),
+                "รหัส":       st.column_config.TextColumn("รหัส", help="เว้นว่างให้ระบบออกรหัสอัตโนมัติ"),
                 "ชื่อลูกค้า": st.column_config.TextColumn("ชื่อลูกค้า", required=True),
-                "เบอร์โทร":  st.column_config.TextColumn("เบอร์โทร"),
+                "เบอร์โทร":   st.column_config.TextColumn("เบอร์โทร"),
             },
         )
         if st.button("💾 บันทึกทั้งหมด", key="save_cust_editor", use_container_width=True, type="primary"):
-            valid = edited_cust_df.dropna(subset=["รหัส", "ชื่อลูกค้า"])
-            valid = valid[valid["รหัส"].astype(str).str.strip() != ""]
+            valid = edited_cust_df.dropna(subset=["ชื่อลูกค้า"]).copy()
+            valid = valid[valid["ชื่อลูกค้า"].astype(str).str.strip() != ""]
             if valid.empty:
                 st.error("ไม่มีข้อมูลที่จะบันทึก")
             else:
+                # auto-generate รหัส C-XXX สำหรับแถวที่ไม่มีรหัส
+                _all_ids = [c["id"] for c in db.get_customers()]
+                _max_num = 0
+                for _cid in _all_ids:
+                    _m = re.match(r'C-(\d+)', str(_cid))
+                    if _m:
+                        _max_num = max(_max_num, int(_m.group(1)))
+                for _i, _row in valid.iterrows():
+                    _rid = str(_row.get("รหัส", "") or "").strip()
+                    if not _rid or _rid == "nan":
+                        _max_num += 1
+                        valid.at[_i, "รหัส"] = f"C-{_max_num:03d}"
                 for _, row in valid.iterrows():
                     db.upsert_customer({
                         "id":    str(row["รหัส"]).strip(),
@@ -1050,32 +1068,6 @@ with tab4:
                     })
                 st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
                 st.rerun()
-
-        if customers:
-            with st.expander("📦 แก้ไขที่อยู่จัดส่ง"):
-                addr_sel = st.selectbox("เลือกลูกค้า", [c["name"] for c in customers], key="addr_edit_sel")
-                _ec = next(c for c in customers if c["name"] == addr_sel)
-                col_a2, col_b2 = st.columns(2)
-                ea_rn   = col_a2.text_input("ชื่อผู้รับ",    value=_ec.get("recipient_name") or _ec["name"], key="ea_rn")
-                ea_rp   = col_b2.text_input("เบอร์โทร",      value=_ec.get("phone") or "",                   key="ea_rp")
-                ea_al   = st.text_input("บ้านเลขที่/ถนน",    value=_ec.get("address_line") or "",            key="ea_al")
-                col_c2, col_d2, col_e2 = st.columns(3)
-                ea_dt   = col_c2.text_input("ตำบล/แขวง",    value=_ec.get("district") or "",                 key="ea_dt")
-                ea_am   = col_d2.text_input("อำเภอ/เขต",     value=_ec.get("amphure") or "",                 key="ea_am")
-                ea_pv   = col_e2.text_input("จังหวัด",        value=_ec.get("province") or "",               key="ea_pv")
-                ea_pc   = st.text_input("รหัสไปรษณีย์",      value=_ec.get("postal_code") or "",            key="ea_pc", max_chars=5)
-                if st.button("💾 บันทึกที่อยู่", key="ea_save", type="primary"):
-                    db.update_customer_address(_ec["id"], {
-                        "recipient_name": ea_rn,
-                        "phone":          ea_rp,
-                        "address_line":   ea_al,
-                        "district":       ea_dt,
-                        "amphure":        ea_am,
-                        "province":       ea_pv,
-                        "postal_code":    ea_pc,
-                    })
-                    st.success("✅ บันทึกที่อยู่แล้ว")
-                    st.rerun()
 
         if customers:
             with st.expander("🗑️ ลบลูกค้า"):
