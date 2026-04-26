@@ -950,7 +950,7 @@ with tab1:
                     st.stop()
                 # ตั้ง iShip pending เพื่อส่งขนส่ง
                 _sp_item_codes = " ".join(f"{it['product_id']}-{it['qty']}" for it in _sp_items)
-                _sp_remark = " | ".join(filter(None, [
+                _sp_remark = " ".join(filter(None, [
                     _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
                     _sp_item_codes,
                     _sp_notes.strip(),
