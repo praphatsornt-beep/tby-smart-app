@@ -44,6 +44,7 @@ def create_order(
     address_line: str, district: str, amphure: str, province: str, zipcode: str,
     weight_kg: float, cod_amount: float, carrier: str, remark: str = "",
     item_detail: str = "",
+    products: list = None,
 ) -> dict:
     src = _src()
     payload = {
@@ -67,17 +68,12 @@ def create_order(
         "dst_amphure":   amphure,
         "dst_province":  _norm_province(province),
         "dst_zipcode":   zipcode,
-        "weight":        1,
-        "cod_amount":     int(cod_amount),
-        "remark":         remark,
-        "item_detail":    item_detail or remark,
-        "parcel_detail":  item_detail or remark,
-        "goods_name":     item_detail or remark,
-        "product_detail": item_detail or remark,
-        "item_name":      item_detail or remark,
-        "content":        item_detail or remark,
-        "description":    item_detail or remark,
+        "weight":        max(1, round(weight_kg)),
+        "cod_amount":    int(cod_amount),
+        "remark":        remark,
     }
+    if cod_amount > 0 and products:
+        payload["products"] = products
     r = requests.post(
         f"{BASE_URL}/create_order",
         json=payload,
