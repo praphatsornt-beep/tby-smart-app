@@ -949,6 +949,12 @@ with tab1:
                     st.error("❌ ยังไม่ได้สร้าง table shipments — รัน SQL ใน supabase_setup.sql ก่อน")
                     st.stop()
                 # ตั้ง iShip pending เพื่อส่งขนส่ง
+                _sp_item_codes = " ".join(f"{it['product_id']}-{it['qty']}" for it in _sp_items)
+                _sp_remark = " | ".join(filter(None, [
+                    _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
+                    _sp_item_codes,
+                    _sp_notes.strip(),
+                ]))
                 st.session_state["_sp_iship_pending"] = {
                     "dst_name":     _sp_rname.strip(),
                     "dst_phone":    _sp_rphone.strip(),
@@ -960,7 +966,8 @@ with tab1:
                     "weight_kg":    max(0.5, _sp_wt),
                     "cod_amount":   0,
                     "carrier":      _sp_carrier,
-                    "remark":       _sp_notes.strip(),
+                    "remark":       _sp_remark,
+                    "_items":       _sp_items,
                     "_shipment_id": _sp_new_id,
                 }
                 for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes"]:
