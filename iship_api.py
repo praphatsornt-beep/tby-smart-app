@@ -76,16 +76,16 @@ def create_order(
         payload["label_address"] = src["ISHIP_SRC_ADDRESS"]
         payload["label_zipcode"] = src["ISHIP_SRC_ZIPCODE"]
     if is_cod:
-        payload["products"] = [{
+        payload["product_lists"] = [{
             "product_name":   "สินค้าซูเลียน",
-            "product_price":  2000,
-            "product_weight": 1,
-            "product_width":  10,
-            "product_length": 10,
-            "product_height": 5,
-            "product_sku":    "ZHULIAN",
-            "unit_name":      "ห่อ",
-            "quantity":       1,
+            "product_qty":    "1",
+            "product_length": "10",
+            "product_width":  "10",
+            "product_height": "5",
+            "product_weight": "1",
+            "product_color":  "น้ำตาล",
+            "product_price":  "2000",
+            "product_remark": "",
         }]
     r = requests.post(
         f"{BASE_URL}/create_order",
