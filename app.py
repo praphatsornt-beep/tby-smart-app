@@ -518,6 +518,27 @@ with tab1:
             # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
             _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
             with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
+                    # ── quick-select ที่อยู่เดิมของลูกค้า ──────────────────
+                    if m_customer != "— เลือกลูกค้า —":
+                        try:
+                            _saved_addrs = db.get_customer_addresses(customer_id=_cid)
+                        except Exception:
+                            _saved_addrs = []
+                        if _saved_addrs:
+                            st.caption("⚡ เลือกที่อยู่เดิม")
+                            for _sa in _saved_addrs:
+                                _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
+                                if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
+                                    st.session_state["r_name"]  = _sa.get("recipient_name", "")
+                                    st.session_state["r_phone"] = _sa.get("phone", "")
+                                    st.session_state["r_al"]    = _sa.get("address_line", "")
+                                    st.session_state["r_dt"]    = _sa.get("district", "")
+                                    st.session_state["r_am"]    = _sa.get("amphure", "")
+                                    st.session_state["r_pv"]    = _sa.get("province", "")
+                                    st.session_state["_staged_pc"] = _sa.get("postal_code", "")
+                                    st.session_state["_last_rph_fill"] = _sa.get("phone", "")
+                                    st.rerun()
+                            st.divider()
                     st.caption("📋 วางที่อยู่จาก LINE (iShip format) แล้วกด แยกอัตโนมัติ")
                     paste_txt = st.text_area(
                         "", label_visibility="collapsed",
