@@ -29,7 +29,7 @@ CREATE TABLE transactions (
     initial_qty_received INTEGER NOT NULL DEFAULT 0,
     transaction_type TEXT NOT NULL CHECK (transaction_type IN ('ขายปกติ', 'เบิกของก่อน')),
     bill_status TEXT NOT NULL CHECK (bill_status IN ('เปิดบิลแล้ว', 'ยังไม่เปิดบิล')),
-    pay_status TEXT NOT NULL CHECK (pay_status IN ('จ่ายแล้ว', 'ค้างจ่าย')),
+    pay_status TEXT NOT NULL CHECK (pay_status IN ('จ่ายแล้ว', 'ค้างจ่าย', 'COD')),
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
