@@ -835,6 +835,8 @@ with tab1:
                             st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
                         else:
                             st.error(f"❌ iShip Error: {_sp_err}")
+                            with st.expander("🔍 payload ที่ส่งไป"):
+                                st.json(_sp_resp.get("_debug_payload", {}))
                 else:
                     st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
             if _si2.button("ปิด", key="sp_cancel_iship", use_container_width=True):

@@ -78,4 +78,10 @@ def create_order(
         headers={"Authorization": f"Bearer {_token()}"},
         timeout=15,
     )
-    return r.json()
+    result = r.json()
+    if not result.get("status"):
+        result["_debug_payload"] = {k: v for k, v in payload.items()
+                                    if k not in ("src_name","src_phone","src_address","src_district",
+                                                 "src_amphure","src_province","src_zipcode",
+                                                 "label_name","label_phone","label_address","label_zipcode")}
+    return result
