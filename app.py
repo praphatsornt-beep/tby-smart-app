@@ -1120,22 +1120,36 @@ with tab4:
         else:
             show_addr = all_addr
 
-        # ── ตาราง ─────────────────────────────────────────────────────────
+        # ── ตาราง + checkbox ลบ ───────────────────────────────────────────
         if show_addr:
-            addr_df = pd.DataFrame([{
-                "เบอร์":      a.get("phone", ""),
-                "ชื่อผู้รับ": a.get("recipient_name", ""),
-                "ที่อยู่":    f"{a.get('address_line','')} {a.get('district','')} {a.get('amphure','')} {a.get('province','')} {a.get('postal_code','')}".strip(),
-                "ลูกค้า":    (a.get("customers") or {}).get("name", ""),
-            } for a in show_addr])
-            st.dataframe(addr_df, use_container_width=True, hide_index=True)
+            _h0, _h1, _h2, _h3, _h4 = st.columns([1, 2, 2, 5, 2])
+            _h0.markdown("**ลบ**")
+            _h1.markdown("**เบอร์**")
+            _h2.markdown("**ชื่อผู้รับ**")
+            _h3.markdown("**ที่อยู่**")
+            _h4.markdown("**ลูกค้า**")
+            st.divider()
+            _to_delete = []
+            for _a in show_addr:
+                _c0, _c1, _c2, _c3, _c4 = st.columns([1, 2, 2, 5, 2])
+                if _c0.checkbox("", key=f"del_chk_{_a['id']}", label_visibility="collapsed"):
+                    _to_delete.append(_a["id"])
+                _c1.write(_a.get("phone", ""))
+                _c2.write(_a.get("recipient_name", ""))
+                _c3.write(f"{_a.get('address_line','')} {_a.get('district','')} {_a.get('amphure','')} {_a.get('province','')} {_a.get('postal_code','')}".strip())
+                _c4.write((_a.get("customers") or {}).get("name", ""))
+            if _to_delete:
+                st.divider()
+                if st.button(f"🗑️ ลบที่เลือก ({len(_to_delete)} รายการ)", type="primary", key="del_checked_btn"):
+                    for _did in _to_delete:
+                        db.delete_customer_address(_did)
+                    st.rerun()
         else:
             st.info("ยังไม่มีที่อยู่" if not sa_phone.strip() else "ไม่พบเบอร์นี้")
 
         # ── แก้ไข / เพิ่ม ─────────────────────────────────────────────────
         all_custs = db.get_customers()
         with st.expander("✏️ เพิ่ม / แก้ไขที่อยู่"):
-            # เลือก row ถ้ามี
             addr_opts = {"— เพิ่มใหม่ —": None} | {
                 f"{a.get('phone','')} — {a.get('recipient_name','')}": a
                 for a in show_addr
@@ -1143,11 +1157,17 @@ with tab4:
             sel_addr = st.selectbox("เลือกที่อยู่เพื่อแก้ไข หรือ เพิ่มใหม่",
                                     list(addr_opts.keys()), key="addr3_edit_sel")
             _ea = addr_opts[sel_addr] or {}
-            cust_names3 = [c["name"] for c in all_custs]
+            cust_names3 = ["— เลือกลูกค้า —"] + [c["name"] for c in all_custs]
             _ea_cust_name = (_ea.get("customers") or {}).get("name", "")
             _ea_cust_idx  = cust_names3.index(_ea_cust_name) if _ea_cust_name in cust_names3 else 0
-            with st.form("addr3_edit_form"):
-                ea3_cust = st.selectbox("ลูกค้า (ผู้ส่ง)", cust_names3, index=_ea_cust_idx)
+            # selectbox ลูกค้าอยู่นอก form เพื่อ reset ได้ถูกต้อง
+            if st.session_state.get("_prev_addr_edit_sel") != sel_addr:
+                st.session_state["_prev_addr_edit_sel"] = sel_addr
+                st.session_state["ea3c_cust"] = cust_names3[_ea_cust_idx]
+            ea3_cust = st.selectbox("ลูกค้า (ผู้ส่ง)", cust_names3, key="ea3c_cust")
+            # form key เปลี่ยนตาม sel_addr เพื่อ reset field ข้างใน
+            _form_key = f"addr3_edit_form_{sel_addr[:30]}"
+            with st.form(_form_key):
                 a1, a2 = st.columns(2)
                 ea3_rn = a1.text_input("ชื่อผู้รับ",    value=_ea.get("recipient_name", ""))
                 ea3_rp = a2.text_input("เบอร์โทร",      value=_ea.get("phone", ""))
@@ -1157,8 +1177,12 @@ with tab4:
                 ea3_am = b2.text_input("อำเภอ/เขต",     value=_ea.get("amphure", ""))
                 ea3_pv = b3.text_input("จังหวัด",        value=_ea.get("province", ""))
                 ea3_pc = st.text_input("รหัสไปรษณีย์",   value=_ea.get("postal_code", ""), max_chars=5)
-                _ea_cust_id = next((c["id"] for c in all_custs if c["name"] == ea3_cust), "")
                 if st.form_submit_button("💾 บันทึก", type="primary", use_container_width=True):
+                    _cur_cust = st.session_state.get("ea3c_cust", "— เลือกลูกค้า —")
+                    _ea_cust_id = next((c["id"] for c in all_custs if c["name"] == _cur_cust), "")
+                    if not _ea_cust_id:
+                        st.error("กรุณาเลือกลูกค้าก่อนบันทึก")
+                        st.stop()
                     db.upsert_customer_address({
                         "id":             _ea.get("id") or str(uuid.uuid4()),
                         "customer_id":    _ea_cust_id,
@@ -1178,6 +1202,24 @@ with tab4:
         _bill_list = db.get_bill_list()
         if _bill_list:
             _sel_bill = st.selectbox("เลขที่บิล", _bill_list, key="del_bill_sel")
+
+            _bill_rows = db.get_bill_details(_sel_bill)
+            if _bill_rows:
+                _bill_date = (_bill_rows[0].get("date") or "")[:10]
+                _bill_cust = (_bill_rows[0].get("customers") or {}).get("name", "—")
+                _bill_status = _bill_rows[0].get("bill_status", "")
+                st.markdown(f"**วันที่:** {_bill_date} &nbsp;|&nbsp; **ลูกค้า:** {_bill_cust} &nbsp;|&nbsp; **สถานะ:** {_bill_status}")
+                _preview_df = pd.DataFrame([{
+                    "สินค้า":      r.get("product_name", ""),
+                    "จำนวน":      r.get("qty", 0),
+                    "ราคา/หน่วย": r.get("price_per_unit", 0),
+                    "ยอดรวม":     r.get("total_amount", 0),
+                } for r in _bill_rows])
+                st.dataframe(_preview_df, use_container_width=True, hide_index=True)
+                _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
+                st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
+
+            st.divider()
             if st.button("🗑️ ลบบิลนี้", type="primary", key="del_bill_btn"):
                 _n = db.delete_bill(_sel_bill)
                 st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")

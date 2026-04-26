@@ -185,6 +185,12 @@ def delete_transaction(transaction_id: str) -> None:
     db.table("transactions").delete().eq("id", transaction_id).execute()
 
 
+def get_bill_details(bill_no: str) -> list[dict]:
+    return (get_supabase().table("transactions")
+            .select("product_name, qty, price_per_unit, total_amount, customers(name), date, bill_status")
+            .eq("bill_no", bill_no).execute().data)
+
+
 def delete_bill(bill_no: str) -> int:
     db = get_supabase()
     rows = db.table("transactions").select("id").eq("bill_no", bill_no).execute().data
