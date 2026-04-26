@@ -1009,40 +1009,33 @@ with tab1:
 
             _sh_ids  = [r["id"] for r in _sh_all]
             _sh_df   = pd.DataFrame([{
-                "วันที่/เวลา": (r.get("created_at") or "")[:16].replace("T", " "),
-                "ลูกค้า":   (r.get("customers") or {}).get("name", ""),
-                "ผู้รับ":    r.get("recipient_name", ""),
-                "เบอร์":     r.get("phone", ""),
-                "จังหวัด":  r.get("province", ""),
-                "รายการ":   _items_str(r.get("items")),
-                "ขนส่ง":    r.get("carrier", ""),
-                "tracking": r.get("tracking_no", ""),
-                "หมายเหตุ": r.get("notes", ""),
-                "ลบ":       False,
+                "วันที่/เวลา":     (r.get("created_at") or "")[:16].replace("T", " "),
+                "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
+                "ผู้รับ":           r.get("recipient_name", ""),
+                "เบอร์":            r.get("phone", ""),
+                "บ้านเลขที่/ถนน":  r.get("address_line", ""),
+                "ตำบล":            r.get("district", ""),
+                "อำเภอ":           r.get("amphure", ""),
+                "จังหวัด":         r.get("province", ""),
+                "รหัสปณ.":         r.get("postal_code", ""),
+                "รายการ":          _items_str(r.get("items")),
+                "ขนส่ง":           r.get("carrier", ""),
+                "หมายเหตุ":        r.get("notes", ""),
+                "ลบ":              False,
             } for r in _sh_all])
 
             _sh_edit = st.data_editor(
                 _sh_df,
                 hide_index=True, use_container_width=True, key="sh_hist_tbl",
-                disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์","จังหวัด","รายการ","ขนส่ง","หมายเหตุ"],
+                disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
+                          "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
+                          "รายการ","ขนส่ง","หมายเหตุ"],
                 column_config={
-                    "tracking": st.column_config.TextColumn("tracking"),
-                    "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                    "ลบ": st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
                 },
             )
 
             _sh_to_del = [_sh_ids[i] for i, v in enumerate(_sh_edit["ลบ"]) if v]
-
-            # บันทึก tracking ที่แก้ไข
-            _sh_changed = [(i, str(row["tracking"] or "").strip())
-                           for i, row in _sh_edit.iterrows()
-                           if str(row["tracking"] or "").strip() != (_sh_all[i].get("tracking_no") or "").strip()]
-            if _sh_changed:
-                if st.button("💾 บันทึก tracking", key="sh_save_track"):
-                    for _i, _trk in _sh_changed:
-                        db.update_shipment_tracking(_sh_ids[_i], _trk)
-                    st.success("✅ บันทึกแล้ว")
-                    st.rerun()
 
             if _sh_to_del:
                 if st.button(f"🗑️ ลบที่เลือก ({len(_sh_to_del)} รายการ)", type="primary", key="sh_del_btn"):
