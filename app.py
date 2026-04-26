@@ -278,7 +278,7 @@ with tab1:
                     if iship_api.is_configured():
                         _api_keys = {"dst_name","dst_phone","address_line","district",
                                      "amphure","province","zipcode","weight_kg",
-                                     "cod_amount","carrier","remark"}
+                                     "cod_amount","carrier","remark","item_detail"}
                         _call = {k: v for k, v in _p.items() if k in _api_keys}
                         with st.spinner("กำลังสร้างรายการใน iShip..."):
                             resp = iship_api.create_order(**_call)
@@ -773,6 +773,7 @@ with tab1:
                         "cod_amount":  ceil(collect) if m_cod else 0,
                         "carrier":      m_carrier,
                         "remark":       f"{customer['name']} {_prod_codes}",
+                        "item_detail":  ", ".join(f"{p['name']} x{qty}" for p, qty, _ in valid_items),
                         "sender_name":  customer["name"],
                         "_items": [{"product_id": p["id"], "name": p["name"], "qty": qty}
                                    for p, qty, _ in valid_items],
@@ -818,7 +819,7 @@ with tab1:
                     _sp_call = {k: _spp[k] for k in
                                 {"dst_name","dst_phone","address_line","district",
                                  "amphure","province","zipcode","weight_kg",
-                                 "cod_amount","carrier","remark"} if k in _spp}
+                                 "cod_amount","carrier","remark","item_detail"} if k in _spp}
                     with st.spinner("กำลังสร้างรายการใน iShip..."):
                         _sp_resp = iship_api.create_order(**_sp_call)
                     if _sp_resp.get("status"):
@@ -989,6 +990,7 @@ with tab1:
                     "cod_amount":   0,
                     "carrier":      _sp_carrier,
                     "remark":       _sp_remark,
+                    "item_detail":  ", ".join(f"{it['name']} x{it['qty']}" for it in _sp_items) or _sp_remark,
                     "_items":       _sp_items,
                     "_shipment_id": _sp_new_id,
                 }

@@ -43,6 +43,7 @@ def create_order(
     dst_name: str, dst_phone: str,
     address_line: str, district: str, amphure: str, province: str, zipcode: str,
     weight_kg: float, cod_amount: float, carrier: str, remark: str = "",
+    item_detail: str = "",
 ) -> dict:
     src = _src()
     payload = {
@@ -69,6 +70,7 @@ def create_order(
         "weight":        1,
         "cod_amount":    int(cod_amount),
         "remark":        remark,
+        "item_detail":   item_detail or remark,
     }
     r = requests.post(
         f"{BASE_URL}/create_order",
