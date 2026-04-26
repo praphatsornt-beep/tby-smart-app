@@ -482,9 +482,8 @@ with tab1:
             product_display = {f"{p['id']} — {p['name']}": p for p in products}
             product_display_keys = list(product_display.keys())
             cart_df = pd.DataFrame({
-                "สินค้า":   pd.Series([""] * 3, dtype="object"),
-                "จำนวน":   pd.Series([0]  * 3, dtype="int64"),
-                "หมายเหตุ": pd.Series([""] * 3, dtype="object"),
+                "สินค้า": pd.Series([""] * 3, dtype="object"),
+                "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
             })
             edited_cart = st.data_editor(
                 cart_df,
@@ -492,15 +491,14 @@ with tab1:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "สินค้า":  st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
-                    "จำนวน":  st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
-                    "หมายเหตุ": st.column_config.TextColumn("หมายเหตุ"),
+                    "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
+                    "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
                 },
                 key="m_cart",
             )
 
             valid_items = [
-                (product_display[row["สินค้า"]], int(row["จำนวน"] or 0), str(row["หมายเหตุ"] or ""))
+                (product_display[row["สินค้า"]], int(row["จำนวน"] or 0), "")
                 for _, row in edited_cart.iterrows()
                 if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
             ]
