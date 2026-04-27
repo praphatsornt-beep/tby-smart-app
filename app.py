@@ -780,7 +780,10 @@ with tab1:
                 # ล้างฟอร์มสำหรับลูกค้าถัดไป
                 for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
                            "m_bill", "m_pay", "m_delivery", "m_cod",
-                           "m_cart", "m_postcode", "m_carrier", "m_zone"]:
+                           "m_cart", "m_postcode", "m_carrier", "m_zone",
+                           "r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv",
+                           "_carrier_sig", "_prev_pc", "_prev_pay",
+                           "_prev_shipping_cid", "_last_rph_fill"]:
                     st.session_state.pop(_k, None)
                 st.rerun()
             elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
