@@ -19,6 +19,7 @@ import uuid
 import io
 
 import database as db
+import thai_address
 
 _PROVINCES = [
     "กรุงเทพมหานคร","กระบี่","กาญจนบุรี","กาฬสินธุ์","กำแพงเพชร","ขอนแก่น",
@@ -700,6 +701,16 @@ with tab1:
                             st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
                         m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
                                                     key="m_postcode", placeholder="เช่น 10400")
+                        if len((m_postcode or "").strip()) == 5:
+                            _pc_opts = thai_address.lookup(m_postcode.strip())
+                            if _pc_opts and not st.session_state.get("r_dt"):
+                                for _o in _pc_opts[:8]:
+                                    _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
+                                    if st.button(_lbl, key=f"pc_fill_{_o['tambon']}_{m_postcode}", use_container_width=True):
+                                        st.session_state["r_dt"] = _o["tambon"]
+                                        st.session_state["r_am"] = _o["amphure"]
+                                        st.session_state["r_pv"] = _o["province"]
+                                        st.rerun()
                         if m_customer != "— เลือกลูกค้า —":
                             if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                 db.upsert_customer_address({
@@ -1001,6 +1012,16 @@ with tab1:
             _sp_am = _sb2.text_input("อำเภอ/เขต",   key="sp_am")
             _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key="sp_pv")
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
+            if len((_sp_pc or "").strip()) == 5:
+                _sp_pc_opts = thai_address.lookup(_sp_pc.strip())
+                if _sp_pc_opts and not st.session_state.get("sp_dt"):
+                    for _o in _sp_pc_opts[:8]:
+                        _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
+                        if st.button(_lbl, key=f"sp_pc_fill_{_o['tambon']}_{_sp_pc}", use_container_width=True):
+                            st.session_state["sp_dt"] = _o["tambon"]
+                            st.session_state["sp_am"] = _o["amphure"]
+                            st.session_state["sp_pv"] = _o["province"]
+                            st.rerun()
             if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                 db.upsert_customer_address({
                     "id":             str(uuid.uuid4()),
