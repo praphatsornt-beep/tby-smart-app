@@ -451,7 +451,7 @@ with tab1:
 
                 qs1, qs2, qs3 = st.columns(3)
                 q_receipt = qs1.radio("การรับ / สถานะของ", ["ฝากของ", "รับของแล้ว"], index=None, horizontal=True, key="q_receipt")
-                q_pay     = qs2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว"], index=None, horizontal=True, key="q_pay")
+                q_pay     = qs2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD"], index=None, horizontal=True, key="q_pay")
                 q_bill    = qs3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], index=None, horizontal=True, key="q_bill")
 
                 q_text = st.text_area(
