@@ -22,10 +22,12 @@ def get_supabase() -> Client:
 
 # ─── Master data ────────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=300)
 def get_products() -> list[dict]:
     return get_supabase().table("products").select("*").order("id").execute().data
 
 
+@st.cache_data(ttl=300)
 def get_customers() -> list[dict]:
     return get_supabase().table("customers").select("*").order("name").execute().data
 
@@ -37,6 +39,7 @@ def get_customer_by_phone(phone: str) -> dict | None:
 
 # ─── Customer Addresses (แยก table — 1 ลูกค้า มีได้หลายที่อยู่) ────────────
 
+@st.cache_data(ttl=120)
 def get_customer_addresses(customer_id: str = None) -> list[dict]:
     q = get_supabase().table("customer_addresses").select("*, customers(name)")
     if customer_id:
@@ -55,18 +58,22 @@ def upsert_customer_address(data: dict) -> None:
     if data.get("phone"):
         db.table("customer_addresses").delete().eq("phone", data["phone"].strip()).execute()
     db.table("customer_addresses").insert(data).execute()
+    get_customer_addresses.clear()
 
 
 def delete_customer_address(address_id: str) -> None:
     get_supabase().table("customer_addresses").delete().eq("id", address_id).execute()
+    get_customer_addresses.clear()
 
 
 def upsert_product(data: dict) -> None:
     get_supabase().table("products").upsert(data).execute()
+    get_products.clear()
 
 
 def upsert_customer(data: dict) -> None:
     get_supabase().table("customers").upsert(data).execute()
+    get_customers.clear()
 
 
 def update_customer_address(customer_id: str, data: dict) -> None:
@@ -79,6 +86,11 @@ def update_customer_address(customer_id: str, data: dict) -> None:
 
 def insert_transaction(data: dict) -> None:
     get_supabase().table("transactions").insert(data).execute()
+
+
+def insert_transactions_batch(rows: list[dict]) -> None:
+    if rows:
+        get_supabase().table("transactions").insert(rows).execute()
 
 
 def get_next_bill_no(date_str: str) -> str:

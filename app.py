@@ -381,25 +381,23 @@ with tab1:
                             if st.button(f"💾 บันทึกทั้งหมด {len(found)} รายการ", key="q_submit", type="primary", use_container_width=True):
                                 customer = customer_map[q_customer]
                                 receive_now = q_receipt == "รับของแล้ว"
-                                for item in found:
-                                    p   = item["product"]
-                                    qty = item["qty"]
-                                    db.insert_transaction({
-                                        "id":                  str(uuid.uuid4()),
-                                        "date":                str(q_date),
-                                        "customer_id":         customer["id"],
-                                        "product_id":          p["id"],
-                                        "product_name":        p["name"],
-                                        "qty":                 qty,
-                                        "price_per_unit":      float(p["price"]),
-                                        "points_per_unit":     float(p["points_per_unit"]),
-                                        "total_amount":        float(p["price"]) * qty,
-                                        "initial_qty_received": qty if receive_now else 0,
-                                        "transaction_type":    "เบิกของก่อน" if q_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
-                                        "bill_status":         q_bill,
-                                        "pay_status":          q_pay,
-                                        "notes":               "",
-                                    })
+                                _q_batch = [{
+                                    "id":                   str(uuid.uuid4()),
+                                    "date":                 str(q_date),
+                                    "customer_id":          customer["id"],
+                                    "product_id":           item["product"]["id"],
+                                    "product_name":         item["product"]["name"],
+                                    "qty":                  item["qty"],
+                                    "price_per_unit":       float(item["product"]["price"]),
+                                    "points_per_unit":      float(item["product"]["points_per_unit"]),
+                                    "total_amount":         float(item["product"]["price"]) * item["qty"],
+                                    "initial_qty_received": item["qty"] if receive_now else 0,
+                                    "transaction_type":     "เบิกของก่อน" if q_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
+                                    "bill_status":          q_bill,
+                                    "pay_status":           q_pay,
+                                    "notes":                "",
+                                } for item in found]
+                                db.insert_transactions_batch(_q_batch)
                                 st.success(f"✅ บันทึก {len(found)} รายการแล้ว")
                                 st.session_state["q_parsed"] = False
                                 st.rerun()
@@ -729,31 +727,29 @@ with tab1:
                 else:
                     cod_tag = ""
                 bill_no = db.get_next_bill_no(str(m_date))
-                for p, qty, note in valid_items:
-                    full_note = " ".join(filter(None, [delivery_tag, cod_tag, note])).strip()
-                    _txn_data = {
-                        "id":                   str(uuid.uuid4()),
-                        "date":                 str(m_date),
-                        "customer_id":          customer["id"],
-                        "product_id":           p["id"],
-                        "product_name":         p["name"],
-                        "qty":                  qty,
-                        "price_per_unit":       float(p["price"]),
-                        "points_per_unit":      float(p["points_per_unit"]),
-                        "total_amount":         float(p["price"]) * qty,
-                        "initial_qty_received": qty if receive_now else 0,
-                        "transaction_type":     "เบิกของก่อน" if m_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
-                        "bill_status":          m_bill,
-                        "pay_status":           actual_pay,
-                        "notes":                full_note,
-                        "bill_no":              bill_no,
-                    }
-                    try:
-                        db.insert_transaction(_txn_data)
-                    except Exception as _e:
-                        st.error(f"❌ Error: {_e}")
-                        st.json(_txn_data)
-                        st.stop()
+                _m_batch = [{
+                    "id":                   str(uuid.uuid4()),
+                    "date":                 str(m_date),
+                    "customer_id":          customer["id"],
+                    "product_id":           p["id"],
+                    "product_name":         p["name"],
+                    "qty":                  qty,
+                    "price_per_unit":       float(p["price"]),
+                    "points_per_unit":      float(p["points_per_unit"]),
+                    "total_amount":         float(p["price"]) * qty,
+                    "initial_qty_received": qty if receive_now else 0,
+                    "transaction_type":     "เบิกของก่อน" if m_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
+                    "bill_status":          m_bill,
+                    "pay_status":           actual_pay,
+                    "notes":                " ".join(filter(None, [delivery_tag, cod_tag, note])).strip(),
+                    "bill_no":              bill_no,
+                } for p, qty, note in valid_items]
+                try:
+                    db.insert_transactions_batch(_m_batch)
+                except Exception as _e:
+                    st.error(f"❌ Error: {_e}")
+                    st.json(_m_batch)
+                    st.stop()
                 msg = f"✅ บันทึก {len(valid_items)} รายการ"
                 if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
                 if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
