@@ -1332,14 +1332,24 @@ with tab2:
                                 "💵+📦 จ่ายเงิน + รับของ": "จ่ายเงิน + รับของ",
                             }
                             evt_type = evt_map[action]
+                            _price   = float(txn["price_per_unit"])
+                            _outs_q  = int(balance["outstanding_qty"])
+                            _hint    = f"ราคา/ชิ้น: {_price:,.0f} ฿"
+                            for _n in range(1, min(_outs_q, 5) + 1):
+                                _hint += f"  ·  {_n} ชิ้น = {_n * _price:,.0f} ฿"
+                            st.caption(_hint)
+                            _def_amt = float(balance["outstanding_amount"]) if evt_type != "รับของ" else 0.0
+                            _def_qty = _outs_q if evt_type != "จ่ายเงิน" else 0
                             with st.form(f"evt_{txn_id}", clear_on_submit=True):
                                 fc1, fc2, fc3 = st.columns([2, 2, 1])
                                 amount_paid  = fc1.number_input(
                                     "เงินที่จ่าย (บาท)", min_value=0.0, step=100.0,
+                                    value=_def_amt,
                                     disabled=(evt_type == "รับของ"),
                                 )
                                 qty_received = fc2.number_input(
                                     "จำนวนที่รับ (ชิ้น)", min_value=0, step=1,
+                                    value=_def_qty,
                                     disabled=(evt_type == "จ่ายเงิน"),
                                 )
                                 event_date  = fc3.date_input("วันที่", value=date.today())
@@ -1378,9 +1388,10 @@ with tab2:
                                 st.rerun()
 
                     else:
-                        # Multi: proportional payment
-                        sel_rows   = grp[grp["id"].isin(selected_ids)]
-                        total_owed = sel_rows["ค้างจ่าย"].sum()
+                        # Multi: เปิดบิล หรือ จ่ายเงิน
+                        sel_rows      = grp[grp["id"].isin(selected_ids)]
+                        total_owed    = sel_rows["ค้างจ่าย"].sum()
+                        _all_unbilled = (sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล").all()
                         st.write(f"**เลือก {len(selected_ids)} รายการ — ยอดค้างรวม {total_owed:,.0f} บาท**")
                         st.dataframe(
                             sel_rows[["สินค้า", "สั่ง", "ค้างจ่าย", "สถานะบิล"]].style.format(
@@ -1388,40 +1399,53 @@ with tab2:
                             ),
                             use_container_width=True, hide_index=True,
                         )
-                        with st.form(f"multi_pay_{customer_name}", clear_on_submit=True):
-                            mp1, mp2, mp3 = st.columns([2, 2, 1])
-                            payment_amount = mp1.number_input(
-                                "จำนวนที่จ่าย (บาท)", min_value=0.0, step=100.0, value=float(total_owed)
-                            )
-                            mp_notes = mp2.text_input("หมายเหตุ")
-                            mp_date  = mp3.date_input("วันที่", value=date.today())
-                            submit_multi = st.form_submit_button(
-                                "💾 บันทึกการจ่ายเงิน", use_container_width=True, type="primary"
-                            )
-                        if submit_multi:
-                            if total_owed <= 0:
-                                st.error("ไม่มียอดค้างในรายการที่เลือก")
-                            else:
-                                for _, sel_row in sel_rows.iterrows():
-                                    ratio           = sel_row["ค้างจ่าย"] / total_owed
-                                    amount_for_this = round(payment_amount * ratio, 2)
-                                    if amount_for_this > 0:
-                                        db.insert_partial_event({
-                                            "id":             str(uuid.uuid4()),
-                                            "date":           str(mp_date),
-                                            "transaction_id": sel_row["id"],
-                                            "qty_received":   0,
-                                            "amount_paid":    amount_for_this,
-                                            "event_type":     "จ่ายเงิน",
-                                            "notes":          mp_notes,
-                                        })
-                                st.success(
-                                    f"✅ บันทึกการจ่าย {payment_amount:,.0f} บาท "
-                                    f"ครอบ {len(selected_ids)} รายการแล้ว"
-                                )
-                                for tid in txn_ids:
-                                    st.session_state[f"chk_{tid}"] = False
+                        _m_opts = (["📄 เปิดบิล"] if _all_unbilled else []) + ["💵 จ่ายเงิน"]
+                        _m_act  = st.radio("บันทึก", _m_opts, horizontal=True,
+                                           key=f"multi_act_{customer_name}")
+
+                        if _m_act == "📄 เปิดบิล":
+                            if st.button(f"📄 เปิดบิลทั้งหมด {len(selected_ids)} รายการ",
+                                         type="primary", use_container_width=True,
+                                         key=f"multi_open_{customer_name}"):
+                                for _sid in selected_ids:
+                                    db.update_transaction_status(_sid, bill_status="เปิดบิลแล้ว")
+                                st.success(f"✅ เปิดบิล {len(selected_ids)} รายการแล้ว")
                                 st.rerun()
+                        else:
+                            with st.form(f"multi_pay_{customer_name}", clear_on_submit=True):
+                                mp1, mp2, mp3 = st.columns([2, 2, 1])
+                                payment_amount = mp1.number_input(
+                                    "จำนวนที่จ่าย (บาท)", min_value=0.0, step=100.0, value=float(total_owed)
+                                )
+                                mp_notes = mp2.text_input("หมายเหตุ")
+                                mp_date  = mp3.date_input("วันที่", value=date.today())
+                                submit_multi = st.form_submit_button(
+                                    "💾 บันทึกการจ่ายเงิน", use_container_width=True, type="primary"
+                                )
+                            if submit_multi:
+                                if total_owed <= 0:
+                                    st.error("ไม่มียอดค้างในรายการที่เลือก")
+                                else:
+                                    for _, sel_row in sel_rows.iterrows():
+                                        ratio           = sel_row["ค้างจ่าย"] / total_owed
+                                        amount_for_this = round(payment_amount * ratio, 2)
+                                        if amount_for_this > 0:
+                                            db.insert_partial_event({
+                                                "id":             str(uuid.uuid4()),
+                                                "date":           str(mp_date),
+                                                "transaction_id": sel_row["id"],
+                                                "qty_received":   0,
+                                                "amount_paid":    amount_for_this,
+                                                "event_type":     "จ่ายเงิน",
+                                                "notes":          mp_notes,
+                                            })
+                                    st.success(
+                                        f"✅ บันทึกการจ่าย {payment_amount:,.0f} บาท "
+                                        f"ครอบ {len(selected_ids)} รายการแล้ว"
+                                    )
+                                    for tid in txn_ids:
+                                        st.session_state[f"chk_{tid}"] = False
+                                    st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
