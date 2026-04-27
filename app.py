@@ -447,7 +447,11 @@ with tab1:
                             _fp = st.text_input("เบอร์โทร (ถ้ามี)")
                             _fc1, _fc2 = st.columns(2)
                             if _fc1.form_submit_button("💾 บันทึก", type="primary"):
-                                db.upsert_customer({"id": str(uuid.uuid4()),
+                                _all_cids = [c["id"] for c in db.get_customers()]
+                                _cmax = max((int(re.match(r'C-(\d+)', x).group(1))
+                                             for x in _all_cids if re.match(r'C-(\d+)', x)), default=0)
+                                _new_cid = f"C-{_cmax + 1:03d}"
+                                db.upsert_customer({"id": _new_cid,
                                                     "name": _fn.strip(), "phone": _fp.strip()})
                                 st.session_state["_cust_picked"] = _fn.strip()
                                 st.session_state.pop("_adding_cust", None)
