@@ -703,7 +703,8 @@ with tab1:
                         r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
                         r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
                         r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
-                        if len((r_district or "").strip()) >= 2:
+                        _r_last_dt = st.session_state.get("_r_last_dt", "")
+                        if len((r_district or "").strip()) >= 2 and r_district.strip() != _r_last_dt:
                             _rdt_opts = thai_address.lookup_by_tambon(r_district.strip())
                             for _o in _rdt_opts:
                                 _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
@@ -712,12 +713,15 @@ with tab1:
                                     st.session_state["_fr_am"] = _o["amphure"]
                                     st.session_state["_fr_pv"] = _o["province"]
                                     st.session_state["_staged_pc"] = _o["zipcode"]
+                                    st.session_state["_r_last_dt"] = _o["tambon"]
+                                    st.session_state["_r_last_pc"] = _o["zipcode"]
                                     st.rerun()
                         if "_staged_pc" in st.session_state:
                             st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
                         m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
                                                     key="m_postcode", placeholder="เช่น 10400")
-                        if len((m_postcode or "").strip()) == 5:
+                        _r_last_pc = st.session_state.get("_r_last_pc", "")
+                        if len((m_postcode or "").strip()) == 5 and m_postcode.strip() != _r_last_pc:
                             _pc_opts = thai_address.lookup(m_postcode.strip())
                             if _pc_opts:
                                 for _o in _pc_opts[:8]:
@@ -726,6 +730,8 @@ with tab1:
                                         st.session_state["_fr_dt"] = _o["tambon"]
                                         st.session_state["_fr_am"] = _o["amphure"]
                                         st.session_state["_fr_pv"] = _o["province"]
+                                        st.session_state["_r_last_dt"] = _o["tambon"]
+                                        st.session_state["_r_last_pc"] = m_postcode.strip()
                                         st.rerun()
                         if m_customer != "— เลือกลูกค้า —":
                             if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
@@ -1033,7 +1039,8 @@ with tab1:
             _sp_dt = _sb1.text_input("ตำบล/แขวง",  key="sp_dt")
             _sp_am = _sb2.text_input("อำเภอ/เขต",   key="sp_am")
             _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key="sp_pv")
-            if len((_sp_dt or "").strip()) >= 2:
+            _sp_last_dt = st.session_state.get("_sp_last_dt", "")
+            if len((_sp_dt or "").strip()) >= 2 and _sp_dt.strip() != _sp_last_dt:
                 _dt_opts = thai_address.lookup_by_tambon(_sp_dt.strip())
                 for _o in _dt_opts:
                     _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
@@ -1042,9 +1049,12 @@ with tab1:
                         st.session_state["_fsp_am"] = _o["amphure"]
                         st.session_state["_fsp_pv"] = _o["province"]
                         st.session_state["_fsp_pc"] = _o["zipcode"]
+                        st.session_state["_sp_last_dt"] = _o["tambon"]
+                        st.session_state["_sp_last_pc"] = _o["zipcode"]
                         st.rerun()
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
-            if len((_sp_pc or "").strip()) == 5:
+            _sp_last_pc = st.session_state.get("_sp_last_pc", "")
+            if len((_sp_pc or "").strip()) == 5 and _sp_pc.strip() != _sp_last_pc:
                 _sp_pc_opts = thai_address.lookup(_sp_pc.strip())
                 if _sp_pc_opts:
                     for _o in _sp_pc_opts[:8]:
@@ -1053,6 +1063,8 @@ with tab1:
                             st.session_state["_fsp_dt"] = _o["tambon"]
                             st.session_state["_fsp_am"] = _o["amphure"]
                             st.session_state["_fsp_pv"] = _o["province"]
+                            st.session_state["_sp_last_dt"] = _o["tambon"]
+                            st.session_state["_sp_last_pc"] = _sp_pc.strip()
                             st.rerun()
             if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                 db.upsert_customer_address({
