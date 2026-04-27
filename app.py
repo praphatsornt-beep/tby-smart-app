@@ -1016,6 +1016,7 @@ with tab1:
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
             if len((_sp_pc or "").strip()) == 5:
                 _sp_pc_opts = thai_address.lookup(_sp_pc.strip())
+                st.caption(f"🔍 พบ {len(_sp_pc_opts)} ตำบล สำหรับ {_sp_pc}")
                 if _sp_pc_opts:
                     for _o in _sp_pc_opts[:8]:
                         _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
