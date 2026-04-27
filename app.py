@@ -19,6 +19,22 @@ import uuid
 import io
 
 import database as db
+
+_PROVINCES = [
+    "กรุงเทพมหานคร","กระบี่","กาญจนบุรี","กาฬสินธุ์","กำแพงเพชร","ขอนแก่น",
+    "จันทบุรี","ฉะเชิงเทรา","ชลบุรี","ชัยนาท","ชัยภูมิ","ชุมพร",
+    "ตรัง","ตราด","ตาก","นครนายก","นครปฐม","นครพนม","นครราชสีมา",
+    "นครศรีธรรมราช","นครสวรรค์","นนทบุรี","นราธิวาส","น่าน","บึงกาฬ",
+    "บุรีรัมย์","ปทุมธานี","ประจวบคีรีขันธ์","ปราจีนบุรี","ปัตตานี",
+    "พระนครศรีอยุธยา","พะเยา","พังงา","พัทลุง","พิจิตร","พิษณุโลก",
+    "ภูเก็ต","มหาสารคาม","มุกดาหาร","ยะลา","ยโสธร","ระนอง","ระยอง",
+    "ราชบุรี","ร้อยเอ็ด","ลพบุรี","ลำปาง","ลำพูน","ศรีสะเกษ","สกลนคร",
+    "สงขลา","สตูล","สมุทรปราการ","สมุทรสงคราม","สมุทรสาคร","สระบุรี",
+    "สระแก้ว","สิงห์บุรี","สุพรรณบุรี","สุราษฎร์ธานี","สุรินทร์","สุโขทัย",
+    "หนองคาย","หนองบัวลำภู","อำนาจเจริญ","อุดรธานี","อุตรดิตถ์",
+    "อุทัยธานี","อุบลราชธานี","อ่างทอง","เชียงราย","เชียงใหม่",
+    "เพชรบุรี","เพชรบูรณ์","เลย","แพร่","แม่ฮ่องสอน",
+]
 import shopee_api
 import iship_api
 from math import ceil
@@ -679,7 +695,7 @@ with tab1:
                         col_c, col_d, col_e = st.columns(3)
                         r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
                         r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
-                        r_province  = col_e.text_input("จังหวัด",       key="r_pv")
+                        r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
                         if "_staged_pc" in st.session_state:
                             st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
                         m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
@@ -983,7 +999,7 @@ with tab1:
             _sb1, _sb2, _sb3 = st.columns(3)
             _sp_dt = _sb1.text_input("ตำบล/แขวง",  key="sp_dt")
             _sp_am = _sb2.text_input("อำเภอ/เขต",   key="sp_am")
-            _sp_pv = _sb3.text_input("จังหวัด",      key="sp_pv")
+            _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key="sp_pv")
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
             if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                 db.upsert_customer_address({
