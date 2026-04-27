@@ -426,99 +426,21 @@ with tab1:
                     st.rerun()
                 st.divider()
 
-            # ── บันทึกแบบเร็ว ────────────────────────────────────────────────
-            with st.expander("⚡ บันทึกแบบเร็ว — วางข้อความจากไลน์", expanded=False):
-                qc1, qc2 = st.columns([2, 2])
-                with qc1:
-                    _q_picked = st.session_state.get("_q_cust_picked", "")
-                    if _q_picked:
-                        _qc1x, _qc1y = st.columns([5, 1])
-                        _qc1x.markdown(f"👤 **{_q_picked}**")
-                        if _qc1y.button("✕", key="q_cust_clear"):
-                            st.session_state.pop("_q_cust_picked", None)
-                            st.rerun()
-                        q_customer = _q_picked
-                    else:
-                        _q_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อ...", key="q_cust_search")
-                        q_customer = "— เลือกลูกค้า —"
-                        if _q_search.strip():
-                            _q_matches = [n for n in customer_map if _q_search.upper() in n.upper()][:6]
-                            for _qn in _q_matches:
-                                if st.button(f"👤 {_qn}", key=f"qq_{_qn}", use_container_width=True):
-                                    st.session_state["_q_cust_picked"] = _qn
-                                    st.rerun()
-                q_date = qc2.date_input("วันที่", value=date.today(), key="q_date")
-
-                qs1, qs2, qs3 = st.columns(3)
-                q_receipt = qs1.radio("การรับ / สถานะของ", ["ส่งพัสดุ", "ฝากของ", "รับของแล้ว"], index=None, horizontal=True, key="q_receipt")
-                q_pay     = qs2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD"], index=None, horizontal=True, key="q_pay")
-                q_bill    = qs3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], index=None, horizontal=True, key="q_bill")
-
+            # ── วางรหัสสินค้าลงตาราง ─────────────────────────────────────────
+            with st.expander("⚡ วางรหัสสินค้า", expanded=False):
                 q_text = st.text_area(
-                    "วางรายการสินค้า (รหัส-จำนวน คั่นด้วยเว้นวรรค)",
+                    "รหัส-จำนวน คั่นด้วยเว้นวรรค",
                     placeholder="เช่น: tf2581-38 ty2006-1 rb2306-1 tu3315-1",
                     height=80, key="q_text",
                 )
-
-                if st.button("🔍 ดูตัวอย่าง", key="q_preview"):
-                    st.session_state["q_parsed"] = True
-
-                if st.session_state.get("q_parsed") and q_text.strip():
-                    found, unknown = _parse_quick_order(q_text, products)
-                    if unknown:
-                        st.error(f"❌ รหัสไม่พบ: {', '.join(unknown)}")
-                    if found:
-                        preview_rows = [{
-                            "รหัส":      item["product"]["id"],
-                            "ชื่อสินค้า": item["product"]["name"],
-                            "จำนวน":    item["qty"],
-                            "ราคา/ชิ้น": float(item["product"]["price"]),
-                            "ยอดรวม":   float(item["product"]["price"]) * item["qty"],
-                            "PV":        float(item["product"]["points_per_unit"]) * item["qty"],
-                        } for item in found]
-                        prev_df = pd.DataFrame(preview_rows)
-                        st.dataframe(prev_df.style.format({
-                            "ราคา/ชิ้น": "{:,.0f}", "ยอดรวม": "{:,.0f}", "PV": "{:.0f}",
-                        }), use_container_width=True, hide_index=True)
-                        pc1, pc2, pc3 = st.columns(3)
-                        pc1.metric("รวมรายการ", f"{len(found)} สินค้า")
-                        pc2.metric("ยอดรวม", f"{prev_df['ยอดรวม'].sum():,.0f} บาท")
-                        pc3.metric("PV รวม", f"{prev_df['PV'].sum():.0f}")
-
-                        q_errors = []
-                        if q_customer == "— เลือกลูกค้า —": q_errors.append("กรุณาเลือกลูกค้า")
-                        if q_bill is None:    q_errors.append("กรุณาเลือกสถานะบิล")
-                        if q_pay is None:     q_errors.append("กรุณาเลือกสถานะจ่าย")
-                        if q_receipt is None: q_errors.append("กรุณาเลือกสถานะของ")
-
-                        if q_errors:
-                            for e in q_errors: st.warning(e)
-                        else:
-                            if st.button(f"💾 บันทึกทั้งหมด {len(found)} รายการ", key="q_submit", type="primary", use_container_width=True):
-                                customer = customer_map[q_customer]
-                                receive_now = q_receipt == "รับของแล้ว"
-                                _q_batch = [{
-                                    "id":                   str(uuid.uuid4()),
-                                    "date":                 str(q_date),
-                                    "customer_id":          customer["id"],
-                                    "product_id":           item["product"]["id"],
-                                    "product_name":         item["product"]["name"],
-                                    "qty":                  item["qty"],
-                                    "price_per_unit":       float(item["product"]["price"]),
-                                    "points_per_unit":      float(item["product"]["points_per_unit"]),
-                                    "total_amount":         float(item["product"]["price"]) * item["qty"],
-                                    "initial_qty_received": item["qty"] if receive_now else 0,
-                                    "transaction_type":     "เบิกของก่อน" if q_bill == "ยังไม่เปิดบิล" and receive_now else "ขายปกติ",
-                                    "bill_status":          q_bill,
-                                    "pay_status":           q_pay,
-                                    "notes":                "",
-                                } for item in found]
-                                db.insert_transactions_batch(_q_batch)
-                                st.success(f"✅ บันทึก {len(found)} รายการแล้ว")
-                                st.session_state["q_parsed"] = False
-                                st.session_state.pop("_q_cust_picked", None)
-                                st.session_state.pop("q_cust_search", None)
-                                st.rerun()
+                if st.button("📋 ใส่ลงตาราง", key="q_to_cart", type="primary", use_container_width=True):
+                    _qf, _qu = _parse_quick_order(q_text or "", products)
+                    if _qu:
+                        st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
+                    if _qf:
+                        st.session_state["_quick_cart_items"] = _qf
+                        st.session_state.pop("m_cart", None)
+                        st.rerun()
 
             st.divider()
             # ── บันทึกหลายรายการพร้อมกัน ────────────────────────────────────
@@ -601,10 +523,17 @@ with tab1:
             # ── รายการสินค้า ─────────────────────────────────────────────────
             product_display = {f"{p['id']} — {p['name']}": p for p in products}
             product_display_keys = list(product_display.keys())
-            cart_df = pd.DataFrame({
-                "สินค้า": pd.Series([""] * 3, dtype="object"),
-                "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
-            })
+            if "_quick_cart_items" in st.session_state:
+                _qi = st.session_state.pop("_quick_cart_items")
+                cart_df = pd.DataFrame({
+                    "สินค้า": [f"{it['product']['id']} — {it['product']['name']}" for it in _qi],
+                    "จำนวน":  pd.array([it["qty"] for it in _qi], dtype="int64"),
+                })
+            else:
+                cart_df = pd.DataFrame({
+                    "สินค้า": pd.Series([""] * 3, dtype="object"),
+                    "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
+                })
             edited_cart = st.data_editor(
                 cart_df,
                 num_rows="dynamic",
