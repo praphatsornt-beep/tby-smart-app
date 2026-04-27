@@ -239,10 +239,98 @@ def _pick_carrier(pc: str, kg: float = 0) -> str:
     return "Flash Express" if (kg <= 3 and not is_metro) else "SPX Express"
 
 
+@st.dialog("🧾 สรุปบิล", width="large")
+def _show_bill_popup(data: dict):
+    cust_name  = data["customer_name"]
+    bill_date  = data["bill_date"]
+    bill_no    = data["bill_no"]
+    items      = data["items"]
+    ship_fee   = data.get("ship_fee", 0)
+    carrier    = data.get("carrier", "")
+    is_cod     = data.get("is_cod", False)
+    cod_fee    = data.get("cod_fee", 0)
+    total_amt  = data["total_amt"]
+    total_pv   = data["total_pv"]
+    bill_status= data.get("bill_status", "")
+    pay_status = data.get("pay_status", "")
+    grand      = data.get("collect", total_amt + ship_fee)
+
+    rows_html = "".join(
+        f"<tr><td>{it['name']}</td>"
+        f"<td style='text-align:center'>{it['qty']}</td>"
+        f"<td style='text-align:right'>{it['price']:,.0f}</td>"
+        f"<td style='text-align:right'>{it['total']:,.0f}</td>"
+        f"<td style='text-align:right'>{it['pv']:.0f}</td></tr>"
+        for it in items
+    )
+    if ship_fee:
+        rows_html += (f"<tr><td colspan='3' style='color:#555'>🚚 ค่าส่ง ({carrier})</td>"
+                      f"<td style='text-align:right'>{ship_fee:,.0f}</td><td></td></tr>")
+    if is_cod:
+        rows_html += (f"<tr><td colspan='3' style='color:#555'>💳 ค่า COD (3.21%)</td>"
+                      f"<td style='text-align:right'>{cod_fee:,.2f}</td><td></td></tr>")
+
+    summary_rows = f"<tr><td>ยอดสินค้า</td><td><b>{total_amt:,.0f} บาท</b></td></tr>"
+    if ship_fee:
+        summary_rows += f"<tr><td>🚚 ค่าส่ง</td><td><b style='color:#1a5c8e'>{ship_fee:,.0f} บาท</b></td></tr>"
+    if is_cod:
+        summary_rows += f"<tr><td>💳 ค่า COD</td><td><b>{cod_fee:,.2f} บาท</b></td></tr>"
+    grand_label = "💰 ยอดเก็บ COD" if is_cod else "💰 ยอดรวม"
+    summary_rows += (f"<tr style='font-size:16px;font-weight:700;border-top:1px solid #ccc'>"
+                     f"<td style='padding-top:6px'>{grand_label}</td>"
+                     f"<td style='padding-top:6px;color:#c0392b'><b>{grand:,.0f} บาท</b></td></tr>"
+                     f"<tr><td>⭐ PV รวม</td><td><b style='color:#b8860b'>{total_pv:.0f}</b></td></tr>")
+
+    html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:'Sarabun',sans-serif;padding:16px;color:#111;background:#fff;font-size:14px}}
+.hdr{{border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px;display:flex;justify-content:space-between}}
+h1{{font-size:16px;font-weight:700}} h2{{font-size:14px;font-weight:600;margin-top:3px}}
+.info{{color:#666;font-size:12px;margin-top:2px}}
+table{{width:100%;border-collapse:collapse;margin-top:8px}}
+th{{background:#222;color:#fff;padding:7px 10px;text-align:left;font-size:12px}}
+td{{padding:5px 10px;border-bottom:1px solid #e8e8e8;font-size:13px}}
+tr:nth-child(even) td{{background:#f7f7f7}}
+.sum{{margin-top:14px;border-top:2px solid #222;padding-top:10px;text-align:right}}
+.sum table{{width:auto;margin-left:auto}} .sum td{{padding:3px 10px;border:none;font-size:14px}}
+.btn{{display:block;margin:0 auto 14px;padding:8px 36px;background:#c0392b;color:#fff;
+      border:none;border-radius:6px;font-size:14px;cursor:pointer;font-family:'Sarabun',sans-serif}}
+@media print{{.btn{{display:none}}}}
+</style></head><body>
+<button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+<div class="hdr">
+  <div><h1>ใบรับสินค้า ZHULIAN TBY</h1><h2>ลูกค้า: {cust_name}</h2>
+    <div class="info">{bill_status} &nbsp;|&nbsp; {pay_status}</div></div>
+  <div style="text-align:right">
+    <div style="font-size:13px;font-weight:600">เลขที่บิล: {bill_no}</div>
+    <div class="info">วันที่: {bill_date}</div>
+  </div>
+</div>
+<table><thead><tr>
+  <th>สินค้า</th><th style="text-align:center">จำนวน</th>
+  <th style="text-align:right">ราคา/ชิ้น</th>
+  <th style="text-align:right">ยอดรวม</th>
+  <th style="text-align:right">PV</th>
+</tr></thead><tbody>{rows_html}</tbody></table>
+<div class="sum"><table>{summary_rows}</table></div>
+<br><button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+</body></html>"""
+
+    components.html(html, height=500, scrolling=True)
+    if st.button("✕ ปิด", use_container_width=True, key="close_bill_popup"):
+        del st.session_state["_print_popup"]
+        st.rerun()
+
+
 with tab1:
     _sub_sale, _sub_ship, _sub_shiphist = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง"])
 
     with _sub_sale:
+        if st.session_state.get("_print_popup"):
+            _show_bill_popup(st.session_state["_print_popup"])
+
         st.subheader("บันทึกรายการขาย")
 
         products = db.get_products()
@@ -781,6 +869,26 @@ with tab1:
                                    for p, qty, _ in valid_items],
                         "_customer_id": customer["id"],
                     }
+                # เก็บข้อมูลสำหรับ popup พิมพ์บิล
+                st.session_state["_print_popup"] = {
+                    "customer_name": customer["name"],
+                    "bill_date":     str(m_date),
+                    "bill_no":       bill_no,
+                    "items": [{"name": p["name"], "qty": qty,
+                               "price": float(p["price"]),
+                               "total": float(p["price"]) * qty,
+                               "pv":    float(p["points_per_unit"]) * qty}
+                              for p, qty, _ in valid_items],
+                    "ship_fee":    ship_fee,
+                    "carrier":     m_carrier if is_shipping else "",
+                    "is_cod":      m_cod,
+                    "cod_fee":     cod_amount if m_cod else 0,
+                    "collect":     ceil(collect) if m_cod else (total_amt + ship_fee),
+                    "total_amt":   total_amt,
+                    "total_pv":    total_pv,
+                    "bill_status": m_bill,
+                    "pay_status":  actual_pay,
+                }
                 # ล้างฟอร์มสำหรับลูกค้าถัดไป
                 for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
                            "m_bill", "m_pay", "m_delivery", "m_cod",
