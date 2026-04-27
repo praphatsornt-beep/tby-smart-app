@@ -612,7 +612,7 @@ with tab1:
                 hide_index=True,
                 column_config={
                     "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
-                    "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
+                    "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
                 },
                 key="m_cart",
             )
@@ -1060,7 +1060,7 @@ with tab1:
             key="sp_cart",
             column_config={
                 "สินค้า": st.column_config.SelectboxColumn("สินค้า", options=_sp_prod_keys),
-                "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1),
+                "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
             },
         )
         _sp_items = [
