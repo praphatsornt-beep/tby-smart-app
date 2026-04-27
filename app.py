@@ -213,6 +213,11 @@ st.markdown("""
 
 st.title("🛍️ TBY SMART APP")
 
+with st.sidebar:
+    if st.button("🔄 ล้าง cache", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+
 tab1, tab2, tab5, tab6, tab7, tab_fin, tab_ecom, tab4 = st.tabs([
     "📋 บันทึกรายการ",
     "💰 ยอดค้าง",
