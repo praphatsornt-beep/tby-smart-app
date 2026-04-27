@@ -293,7 +293,6 @@ def _show_bill_popup(data: dict):
                      f"<tr><td>⭐ PV รวม</td><td><b style='color:#b8860b'>{total_pv:.0f}</b></td></tr>")
 
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:'Sarabun',sans-serif;padding:16px;color:#111;background:#fff;font-size:14px}}
@@ -2023,6 +2022,7 @@ with tab7:
                     total_amount      = show_p["ยอดรวม"].sum()
                     total_paid        = show_p["จ่ายแล้ว"].sum()
                     total_outstanding = show_p["ค้างจ่าย"].sum()
+                    total_pv          = show_p["PV รวม"].sum() if "PV รวม" in show_p.columns else 0
                     unbilled_pv       = show_p.loc[show_p["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in show_p.columns else 0
                     today_str         = date.today().strftime("%d/%m/%Y")
                     filter_label      = "รายการค้างอยู่" if filter_p == "ค้างอยู่" else "รายการทั้งหมด"
@@ -2053,7 +2053,6 @@ with tab7:
 
                     bill_html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
-<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
   *{{box-sizing:border-box;margin:0;padding:0}}
   body{{font-family:'Sarabun',sans-serif;padding:24px;color:#111;background:#fff;font-size:14px}}
@@ -2103,6 +2102,7 @@ with tab7:
     <tr><td>ยอดรวม (รวมค่าส่ง)</td><td><b>{total_amount + int(ship_fee_str or 0):,.0f} บาท</b></td></tr>
     <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
     <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
+    <tr><td>⭐ PV รวม</td><td><b style="color:#b8860b">{total_pv:.0f}</b></td></tr>
   </table>
 </div>
 <br>
