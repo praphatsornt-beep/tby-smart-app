@@ -934,7 +934,24 @@ with tab1:
 
         # ── เลือกลูกค้า + วันที่ ─────────────────────────────────────────
         _sp_c1, _sp_c2 = st.columns([3, 1])
-        _sp_cust = _sp_c1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + [c["name"] for c in _sc], key="sp_cust")
+        with _sp_c1:
+            _sp_picked = st.session_state.get("_sp_cust_picked", "")
+            if _sp_picked:
+                _spx, _spy = st.columns([5, 1])
+                _spx.markdown(f"👤 **{_sp_picked}**")
+                if _spy.button("✕", key="sp_cust_clear"):
+                    st.session_state.pop("_sp_cust_picked", None)
+                    st.rerun()
+                _sp_cust = _sp_picked
+            else:
+                _sp_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อ...", key="sp_cust_search")
+                _sp_cust = "— เลือกลูกค้า —"
+                if _sp_search.strip():
+                    _sp_matches = [n for n in _sc_map if _sp_search.upper() in n.upper()][:6]
+                    for _sm in _sp_matches:
+                        if st.button(f"👤 {_sm}", key=f"sp_pick_{_sm}", use_container_width=True):
+                            st.session_state["_sp_cust_picked"] = _sm
+                            st.rerun()
         _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
         _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
 
@@ -1081,7 +1098,8 @@ with tab1:
                     "_items":       _sp_items,
                     "_shipment_id": _sp_new_id,
                 }
-                for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes"]:
+                for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes",
+                           "_sp_cust_picked","sp_cust_search"]:
                     st.session_state.pop(_k, None)
                 st.session_state.pop("sp_cart", None)
                 st.rerun()
