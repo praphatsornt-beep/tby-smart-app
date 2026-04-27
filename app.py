@@ -21,6 +21,8 @@ import io
 import database as db
 import thai_address
 
+thai_address._load_db()  # pre-warm cache ตอน app โหลด
+
 _PROVINCES = [
     "กรุงเทพมหานคร","กระบี่","กาญจนบุรี","กาฬสินธุ์","กำแพงเพชร","ขอนแก่น",
     "จันทบุรี","ฉะเชิงเทรา","ชลบุรี","ชัยนาท","ชัยภูมิ","ชุมพร",
