@@ -2096,31 +2096,34 @@ with tab7:
 
                     _css = """
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Sarabun',sans-serif;padding:20px;color:#111;background:#fff;font-size:13px}
-  .header{border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px}
-  .header h1{font-size:17px;font-weight:700}
-  .header h2{font-size:14px;font-weight:600;margin-top:3px}
-  .info{color:#666;font-size:11px;margin-top:3px}
-  table{width:100%;border-collapse:collapse;margin-top:6px}
-  th{background:#222;color:#fff;padding:7px 8px;text-align:left;font-size:12px}
-  td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:12px}
+  body{font-family:'Sarabun',sans-serif;padding:16px;color:#111;background:#fff;font-size:12px}
+  .header{border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:12px}
+  .header h1{font-size:15px;font-weight:700}
+  .header h2{font-size:13px;font-weight:600;margin-top:2px}
+  .info{color:#666;font-size:10px;margin-top:2px}
+  table{width:100%;border-collapse:collapse;margin-top:5px}
+  th{background:#222;color:#fff;padding:5px 6px;text-align:left;font-size:11px}
+  td{padding:4px 6px;border-bottom:1px solid #e0e0e0;font-size:11px}
   tr:nth-child(even) td{background:#f7f7f7}
-  .summary{margin-top:14px;border-top:2px solid #222;padding-top:10px;text-align:right}
+  .summary{margin-top:12px;border-top:2px solid #222;padding-top:8px;text-align:right}
   .summary table{width:auto;margin-left:auto}
-  .summary td{padding:3px 10px;border:none;font-size:13px}
-  .big td{font-weight:700;font-size:15px;border-top:1px solid #ccc;padding-top:6px}
-  .cut{border-top:2px dashed #aaa;margin:18px 0;text-align:center;position:relative}
-  .cut span{position:absolute;top:-10px;left:50%;transform:translateX(-50%);
-            background:#fff;padding:0 8px;color:#aaa;font-size:11px}
-  .btn{display:block;margin:0 auto 16px;padding:8px 32px;background:#c0392b;color:#fff;
-       border:none;border-radius:6px;font-size:14px;cursor:pointer}
-  @media print{.btn{display:none}}"""
+  .summary td{padding:2px 8px;border:none;font-size:12px}
+  .big td{font-weight:700;font-size:13px;border-top:1px solid #ccc;padding-top:5px}
+  .two-col{display:flex;gap:0;height:100%}
+  .copy{width:50%;padding:16px;min-height:400px}
+  .vcut{width:2px;background:repeating-linear-gradient(to bottom,#aaa 0,#aaa 6px,transparent 6px,transparent 12px);flex-shrink:0}
+  .copy-lbl{font-size:10px;color:#999;margin-bottom:4px;font-style:italic}
+  .btn{display:block;margin:0 auto 14px;padding:7px 28px;background:#c0392b;color:#fff;
+       border:none;border-radius:6px;font-size:13px;cursor:pointer}
+  @media print{.btn{display:none}@page{size:A4 landscape;margin:8mm}}"""
 
                     if _print_copies == "2 ชุด (ลูกค้า + ร้าน)":
-                        _body = (_bill_body("สำหรับลูกค้า") +
-                                 '<div class="cut"><span>✂ ตัดตรงนี้</span></div>' +
-                                 _bill_body("สำหรับร้าน"))
-                        _height = 1200
+                        _body = f"""<div class="two-col">
+  <div class="copy">{_bill_body("สำหรับลูกค้า")}</div>
+  <div class="vcut"></div>
+  <div class="copy">{_bill_body("สำหรับร้าน")}</div>
+</div>"""
+                        _height = 750
                     else:
                         _body = _bill_body("")
                         _height = 700
