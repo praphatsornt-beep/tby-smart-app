@@ -612,20 +612,32 @@ with tab1:
                 if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
             ]
 
-            # ── สถานะ + การจัดส่ง ────────────────────────────────────────────
-            # auto-set COD ก่อน render (ต้องตั้ง session_state ก่อน widget)
-            _cur_pay = st.session_state.get("m_pay", "จ่ายแล้ว")
-            if _cur_pay == "COD" and st.session_state.get("_prev_pay") != "COD":
-                st.session_state["m_bill"]     = "ยังไม่เปิดบิล"
-                st.session_state["m_delivery"] = "ส่งพัสดุ"
-                st.session_state["_prev_pay"]  = "COD"
-            elif _cur_pay != "COD":
-                st.session_state["_prev_pay"] = _cur_pay
-            ms1, ms2, ms3 = st.columns(3)
+            # ── ประเภทการขาย (preset) ───────────────────────────────────────
             _delivery_opts = ["ฝากของ (รอรับ)", "รับหน้าร้าน", "ส่งพัสดุ"]
-            m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery")
-            m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย", "COD"], horizontal=True, key="m_pay")
-            m_bill = ms3.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], horizontal=True, key="m_bill")
+            _PRESETS = {
+                "เปิดบิล/ค้างจ่าย": ("ฝากของ (รอรับ)", "ค้างจ่าย",  "เปิดบิลแล้ว"),
+                "เบิกค้างจ่าย":      ("รับหน้าร้าน",    "ค้างจ่าย",  "ยังไม่เปิดบิล"),
+                "เบิกจ่ายแล้ว":      ("รับหน้าร้าน",    "จ่ายแล้ว",  "ยังไม่เปิดบิล"),
+                "COD":               ("ส่งพัสดุ",        "COD",        "ยังไม่เปิดบิล"),
+                "⚙️ กำหนดเอง":      None,
+            }
+            m_preset = st.radio("ประเภท", list(_PRESETS.keys()), horizontal=True, key="m_preset")
+            if _PRESETS.get(m_preset):
+                _dv, _py, _bl = _PRESETS[m_preset]
+                st.session_state["m_delivery"] = _dv
+                st.session_state["m_pay"]      = _py
+                st.session_state["m_bill"]     = _bl
+
+            if m_preset == "⚙️ กำหนดเอง":
+                ms1, ms2, ms3 = st.columns(3)
+                m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery")
+                m_pay  = ms2.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย", "COD"], horizontal=True, key="m_pay")
+                m_bill = ms3.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], horizontal=True, key="m_bill")
+            else:
+                m_delivery = st.session_state["m_delivery"]
+                m_pay      = st.session_state["m_pay"]
+                m_bill     = st.session_state["m_bill"]
+                st.caption(f"การรับ: {m_delivery}  ·  จ่าย: {m_pay}  ·  บิล: {m_bill}")
             m_cod     = (m_pay == "COD")
             m_receipt = "ฝากของ" if m_delivery == "ฝากของ (รอรับ)" else "รับของแล้ว"
             m_postcode = ""
@@ -910,7 +922,7 @@ with tab1:
                 }
                 # ล้างฟอร์มสำหรับลูกค้าถัดไป
                 for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
-                           "m_bill", "m_pay", "m_delivery", "m_cod",
+                           "m_bill", "m_pay", "m_delivery", "m_cod", "m_preset",
                            "m_cart", "m_postcode", "m_carrier", "m_zone",
                            "r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv",
                            "_carrier_sig", "_prev_pc", "_prev_pay",
