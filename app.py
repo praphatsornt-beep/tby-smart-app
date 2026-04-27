@@ -418,8 +418,25 @@ with tab1:
             # ── บันทึกแบบเร็ว ────────────────────────────────────────────────
             with st.expander("⚡ บันทึกแบบเร็ว — วางข้อความจากไลน์", expanded=False):
                 qc1, qc2 = st.columns([2, 2])
-                q_customer = qc1.selectbox("ลูกค้า", ["— เลือกลูกค้า —"] + list(customer_map.keys()), key="q_cust")
-                q_date     = qc2.date_input("วันที่", value=date.today(), key="q_date")
+                with qc1:
+                    _q_picked = st.session_state.get("_q_cust_picked", "")
+                    if _q_picked:
+                        _qc1x, _qc1y = st.columns([5, 1])
+                        _qc1x.markdown(f"👤 **{_q_picked}**")
+                        if _qc1y.button("✕", key="q_cust_clear"):
+                            st.session_state.pop("_q_cust_picked", None)
+                            st.rerun()
+                        q_customer = _q_picked
+                    else:
+                        _q_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อ...", key="q_cust_search")
+                        q_customer = "— เลือกลูกค้า —"
+                        if _q_search.strip():
+                            _q_matches = [n for n in customer_map if _q_search.upper() in n.upper()][:6]
+                            for _qn in _q_matches:
+                                if st.button(f"👤 {_qn}", key=f"qq_{_qn}", use_container_width=True):
+                                    st.session_state["_q_cust_picked"] = _qn
+                                    st.rerun()
+                q_date = qc2.date_input("วันที่", value=date.today(), key="q_date")
 
                 qs1, qs2, qs3 = st.columns(3)
                 q_bill    = qs1.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=None, horizontal=True, key="q_bill")
@@ -488,6 +505,8 @@ with tab1:
                                 db.insert_transactions_batch(_q_batch)
                                 st.success(f"✅ บันทึก {len(found)} รายการแล้ว")
                                 st.session_state["q_parsed"] = False
+                                st.session_state.pop("_q_cust_picked", None)
+                                st.session_state.pop("q_cust_search", None)
                                 st.rerun()
 
             st.divider()
