@@ -450,9 +450,9 @@ with tab1:
                 q_date = qc2.date_input("วันที่", value=date.today(), key="q_date")
 
                 qs1, qs2, qs3 = st.columns(3)
-                q_bill    = qs1.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], index=None, horizontal=True, key="q_bill")
+                q_receipt = qs1.radio("การรับ / สถานะของ", ["ฝากของ", "รับของแล้ว"], index=None, horizontal=True, key="q_receipt")
                 q_pay     = qs2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว"], index=None, horizontal=True, key="q_pay")
-                q_receipt = qs3.radio("สถานะของ", ["ฝากของ", "รับของแล้ว"], index=None, horizontal=True, key="q_receipt")
+                q_bill    = qs3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], index=None, horizontal=True, key="q_bill")
 
                 q_text = st.text_area(
                     "วางรายการสินค้า (รหัส-จำนวน คั่นด้วยเว้นวรรค)",
