@@ -1160,31 +1160,25 @@ with tab2:
             st.divider()
 
         # ── Filter ────────────────────────────────────────────────────────
-        fc1, fc2 = st.columns(2)
-        filter_cust = fc1.selectbox(
-            "กรองลูกค้า",
-            ["ทั้งหมด"] + [c["name"] for c in customers],
-            key="tab2_filter_cust",
-        )
-        filter_bill = fc2.selectbox(
-            "กรองสถานะบิล",
-            ["ค้างอยู่ทั้งหมด", "ยังไม่เปิดบิล", "เปิดบิลแล้ว"],
-            key="tab2_filter_bill",
-        )
+        fc1, fc2 = st.columns([2, 2])
+        _t2_search = fc1.text_input("🔍 ค้นหาลูกค้า", placeholder="พิมพ์ชื่อ...", key="tab2_search")
+        filter_bill = fc2.radio("สถานะบิล", ["ค้างอยู่ทั้งหมด", "ยังไม่เปิดบิล", "เปิดบิลแล้ว"],
+                                horizontal=True, key="tab2_filter_bill")
 
-        cid = None if filter_cust == "ทั้งหมด" else next(
-            c["id"] for c in customers if c["name"] == filter_cust
-        )
-        outstanding_df = db.get_outstanding_df(customer_id=cid)
+        outstanding_df = db.get_outstanding_df()
         if filter_bill == "ยังไม่เปิดบิล":
             outstanding_df = outstanding_df[outstanding_df["สถานะบิล"] == "ยังไม่เปิดบิล"]
         elif filter_bill == "เปิดบิลแล้ว":
             outstanding_df = outstanding_df[outstanding_df["สถานะบิล"] == "เปิดบิลแล้ว"]
+        if _t2_search.strip():
+            outstanding_df = outstanding_df[
+                outstanding_df["ลูกค้า"].str.contains(_t2_search.strip(), case=False, na=False)
+            ]
 
         if outstanding_df.empty:
             st.success("✅ ไม่มียอดค้าง")
         else:
-            single_cust = filter_cust != "ทั้งหมด"
+            single_cust = _t2_search.strip() != "" and outstanding_df["ลูกค้า"].nunique() == 1
             for customer_name, grp in outstanding_df.groupby("ลูกค้า"):
                 owed    = grp["ค้างจ่าย"].sum()
                 pending = int(grp["ค้างรับ"].sum())
