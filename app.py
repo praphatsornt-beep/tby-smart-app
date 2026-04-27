@@ -232,10 +232,6 @@ st.markdown("""
 
 st.title("🛍️ TBY SMART APP")
 
-with st.sidebar:
-    if st.button("🔄 ล้าง cache", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
 
 tab1, tab2, tab5, tab6, tab7, tab_fin, tab_ecom, tab4 = st.tabs([
     "📋 บันทึกรายการ",
@@ -362,6 +358,7 @@ with tab1:
     _sub_sale, _sub_ship, _sub_shiphist = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง"])
 
     with _sub_sale:
+        st.session_state["_active_subtab"] = "sale"
         if st.session_state.get("_print_popup"):
             _show_bill_popup(st.session_state["_print_popup"])
 
@@ -917,7 +914,22 @@ with tab1:
     # ─────────────────────────────────────────────────────────────────────────────
 
     with _sub_ship:
-        st.subheader("บันทึกการส่งของ")
+        _sp_keys = ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc",
+                    "sp_track","sp_notes","sp_cart","_sp_cust_picked","sp_cust_search",
+                    "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc"]
+        # auto-clear เมื่อมาจาก tab อื่น
+        _prev_subtab = st.session_state.get("_active_subtab", "")
+        if _prev_subtab not in ("", "ship"):
+            for _k in _sp_keys:
+                st.session_state.pop(_k, None)
+        st.session_state["_active_subtab"] = "ship"
+
+        _sc1, _sc2 = st.columns([6, 1])
+        _sc1.subheader("บันทึกการส่งของ")
+        if _sc2.button("🗑️ ล้าง", key="sp_clear_form", use_container_width=True):
+            for _k in _sp_keys:
+                st.session_state.pop(_k, None)
+            st.rerun()
 
         # ── แสดง tracking ล่าสุด ─────────────────────────────────────────
         if st.session_state.get("_sp_last_tracking"):
@@ -1188,6 +1200,7 @@ with tab1:
         st.caption("กรอกข้อมูลด้านบนแล้วกด 💾 บันทึกการส่งของ — tracking จะบันทึกอัตโนมัติหลังส่ง iShip")
 
     with _sub_shiphist:
+        st.session_state["_active_subtab"] = "hist"
         st.subheader("ประวัติการส่งของ")
         try:
             _sh_all = db.get_shipments()
