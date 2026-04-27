@@ -2,29 +2,43 @@
 import streamlit as st
 import requests
 
-_DATA_URL = "https://raw.githubusercontent.com/earthchie/jquery-Thailand-address/master/jquery.Thailand.js/database/db.json"
+_URLS = [
+    "https://raw.githubusercontent.com/earthchie/jquery-Thailand-address/master/jquery.Thailand.js/database/db.json",
+    "https://raw.githubusercontent.com/earthchie/jquery-Thailand-address/main/jquery.Thailand.js/database/db.json",
+]
 
 
 @st.cache_data(ttl=86400)
 def _load_db() -> dict[str, list[dict]]:
-    """โหลด Thai address DB จาก GitHub CDN → {zipcode: [{tambon, amphure, province}]}"""
-    try:
-        r = requests.get(_DATA_URL, timeout=15)
-        raw = r.json()
-    except Exception:
-        return {}
+    """โหลด Thai address DB → {zipcode: [{tambon, amphure, province}]}
+    ถ้าล้มเหลว raise RuntimeError เพื่อไม่ให้ Streamlit cache ผลว่าง"""
+    raw = None
+    for url in _URLS:
+        try:
+            r = requests.get(url, timeout=15)
+            r.raise_for_status()
+            raw = r.json()
+            if raw:
+                break
+        except Exception:
+            continue
+
+    if not raw:
+        raise RuntimeError("ไม่สามารถโหลดข้อมูลรหัสไปรษณีย์ได้")
 
     result: dict[str, list[dict]] = {}
     for row in raw:
-        # format: [tambon, amphure, province, zipcode]  (array per row)
         if not isinstance(row, (list, tuple)) or len(row) < 4:
             continue
-        tambon, amphure, province, zipcode = str(row[0]), str(row[1]), str(row[2]), str(row[3])
-        if not zipcode or zipcode == "None":
+        tambon   = str(row[0])
+        amphure  = str(row[1])
+        province = str(row[2])
+        zipcode  = str(int(row[3])).zfill(5) if row[3] else ""
+        if not zipcode or zipcode == "0":
             continue
         result.setdefault(zipcode, []).append({
-            "tambon": tambon,
-            "amphure": amphure,
+            "tambon":   tambon,
+            "amphure":  amphure,
             "province": province,
         })
     return result
@@ -34,5 +48,8 @@ def lookup(zipcode: str) -> list[dict]:
     """คืน list of {tambon, amphure, province} สำหรับ zipcode ที่กำหนด"""
     if not zipcode or len(zipcode) != 5:
         return []
-    db = _load_db()
+    try:
+        db = _load_db()
+    except Exception:
+        return []
     return db.get(zipcode, [])

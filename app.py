@@ -21,7 +21,10 @@ import io
 import database as db
 import thai_address
 
-thai_address._load_db()  # pre-warm cache ตอน app โหลด
+try:
+    thai_address._load_db()  # pre-warm cache ตอน app โหลด
+except Exception:
+    pass
 
 _PROVINCES = [
     "กรุงเทพมหานคร","กระบี่","กาญจนบุรี","กาฬสินธุ์","กำแพงเพชร","ขอนแก่น",
@@ -705,7 +708,7 @@ with tab1:
                                                     key="m_postcode", placeholder="เช่น 10400")
                         if len((m_postcode or "").strip()) == 5:
                             _pc_opts = thai_address.lookup(m_postcode.strip())
-                            if _pc_opts and not st.session_state.get("r_dt"):
+                            if _pc_opts:
                                 for _o in _pc_opts[:8]:
                                     _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
                                     if st.button(_lbl, key=f"pc_fill_{_o['tambon']}_{m_postcode}", use_container_width=True):
@@ -1016,7 +1019,7 @@ with tab1:
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
             if len((_sp_pc or "").strip()) == 5:
                 _sp_pc_opts = thai_address.lookup(_sp_pc.strip())
-                if _sp_pc_opts and not st.session_state.get("sp_dt"):
+                if _sp_pc_opts:
                     for _o in _sp_pc_opts[:8]:
                         _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
                         if st.button(_lbl, key=f"sp_pc_fill_{_o['tambon']}_{_sp_pc}", use_container_width=True):
