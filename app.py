@@ -1159,10 +1159,10 @@ with tab2:
             st.divider()
 
         # ── Filter ────────────────────────────────────────────────────────
-        fc1, fc2 = st.columns([2, 2])
-        _t2_search      = fc1.text_input("🔍 ค้นหาลูกค้า", placeholder="พิมพ์ชื่อ...", key="tab2_search")
-        _t2_bill_search = fc1.text_input("🔍 ค้นหาเลขที่บิล", placeholder="เช่น 260427", key="tab2_bill_search")
-        filter_bill = fc2.radio("สถานะบิล", ["ค้างอยู่ทั้งหมด", "ยังไม่เปิดบิล", "เปิดบิลแล้ว"],
+        fc1, fc2, fc3 = st.columns([2, 2, 3])
+        _t2_search      = fc1.text_input("🔍 ลูกค้า", placeholder="พิมพ์ชื่อ...", key="tab2_search")
+        _t2_bill_search = fc2.text_input("🔍 เลขที่บิล", placeholder="เช่น 260427", key="tab2_bill_search")
+        filter_bill = fc3.radio("สถานะบิล", ["ค้างอยู่ทั้งหมด", "ยังไม่เปิดบิล", "เปิดบิลแล้ว"],
                                 horizontal=True, key="tab2_filter_bill")
 
         outstanding_df = db.get_outstanding_df()
