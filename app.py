@@ -1225,16 +1225,14 @@ with tab2:
                         sel_row = grp[grp["id"] == txn_id].iloc[0]
 
                         st.caption(
-                            f"วันที่ {sel_row['วันที่']}  |  "
-                            f"ราคา {float(txn['price_per_unit']):,.0f} บาท/ชิ้น  |  "
-                            f"ยอดรวม {float(txn['total_amount']):,.0f} บาท"
+                            f"📅 {sel_row['วันที่']}  ·  "
+                            f"ราคา {float(txn['price_per_unit']):,.0f} ฿/ชิ้น  ·  "
+                            f"รวม {float(txn['total_amount']):,.0f} ฿  ·  "
+                            f"จ่ายแล้ว {balance['total_paid']:,.0f} ฿  ·  "
+                            f"ค้างจ่าย **{balance['outstanding_amount']:,.0f} ฿**  ·  "
+                            f"รับแล้ว {balance['total_received']} ชิ้น  ·  "
+                            f"ค้างรับ {balance['outstanding_qty']} ชิ้น"
                         )
-                        mc1, mc2, mc3, mc4 = st.columns(4)
-                        mc1.metric("จ่ายแล้ว", f"{balance['total_paid']:,.0f} บาท")
-                        mc2.metric("ค้างจ่าย", f"{balance['outstanding_amount']:,.0f} บาท")
-                        mc3.metric("รับแล้ว",  f"{balance['total_received']} ชิ้น")
-                        mc4.metric("ค้างรับ",  f"{balance['outstanding_qty']} ชิ้น")
-                        st.divider()
 
                         is_unbilled = txn["bill_status"] == "ยังไม่เปิดบิล"
                         radio_opts  = (["📄 เปิดบิล"] if is_unbilled else []) + [
