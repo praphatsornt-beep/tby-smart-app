@@ -699,6 +699,16 @@ with tab1:
                         r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
                         r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
                         r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
+                        if len((r_district or "").strip()) >= 2:
+                            _rdt_opts = thai_address.lookup_by_tambon(r_district.strip())
+                            for _o in _rdt_opts:
+                                _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
+                                if st.button(_lbl, key=f"rdt_fill_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
+                                    st.session_state["r_dt"] = _o["tambon"]
+                                    st.session_state["r_am"] = _o["amphure"]
+                                    st.session_state["r_pv"] = _o["province"]
+                                    st.session_state["_staged_pc"] = _o["zipcode"]
+                                    st.rerun()
                         if "_staged_pc" in st.session_state:
                             st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
                         m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
@@ -1013,10 +1023,19 @@ with tab1:
             _sp_dt = _sb1.text_input("ตำบล/แขวง",  key="sp_dt")
             _sp_am = _sb2.text_input("อำเภอ/เขต",   key="sp_am")
             _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key="sp_pv")
+            if len((_sp_dt or "").strip()) >= 2:
+                _dt_opts = thai_address.lookup_by_tambon(_sp_dt.strip())
+                for _o in _dt_opts:
+                    _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
+                    if st.button(_lbl, key=f"sp_dt_fill_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
+                        st.session_state["sp_dt"] = _o["tambon"]
+                        st.session_state["sp_am"] = _o["amphure"]
+                        st.session_state["sp_pv"] = _o["province"]
+                        st.session_state["sp_pc"] = _o["zipcode"]
+                        st.rerun()
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
             if len((_sp_pc or "").strip()) == 5:
                 _sp_pc_opts = thai_address.lookup(_sp_pc.strip())
-                st.caption(f"🔍 พบ {len(_sp_pc_opts)} ตำบล สำหรับ {_sp_pc}")
                 if _sp_pc_opts:
                     for _o in _sp_pc_opts[:8]:
                         _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
