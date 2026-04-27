@@ -2023,18 +2023,37 @@ with tab7:
     if not customers_p:
         st.info("ยังไม่มีข้อมูลลูกค้า")
     else:
-        cust_map_p = {c["name"]: c for c in customers_p}
-        pc1, pc2 = st.columns([3, 1])
-        sel_p    = pc1.selectbox("เลือกลูกค้า", ["— เลือก —"] + list(cust_map_p.keys()), key="print_cust")
-        filter_p = pc2.radio("แสดงรายการ", ["ค้างอยู่", "ทั้งหมด"], horizontal=True, key="print_filter")
+        cust_map_p  = {c["name"]: c for c in customers_p}
+        _print_mode = st.radio("เลือกโดย", ["ลูกค้า", "เลขที่บิล"], horizontal=True, key="print_mode")
 
-        pd1, pd2 = st.columns(2)
-        date_from_p = pd1.date_input("ตั้งแต่วันที่", value=None, key="print_date_from")
-        date_to_p   = pd2.date_input("ถึงวันที่",     value=None, key="print_date_to")
+        if _print_mode == "ลูกค้า":
+            pc1, pc2 = st.columns([3, 1])
+            sel_p    = pc1.selectbox("เลือกลูกค้า", ["— เลือก —"] + list(cust_map_p.keys()), key="print_cust")
+            filter_p = pc2.radio("แสดงรายการ", ["ค้างอยู่", "ทั้งหมด"], horizontal=True, key="print_filter")
+            pd1, pd2 = st.columns(2)
+            date_from_p = pd1.date_input("ตั้งแต่วันที่", value=None, key="print_date_from")
+            date_to_p   = pd2.date_input("ถึงวันที่",     value=None, key="print_date_to")
+            _sel_bill_no = None
+        else:
+            _bill_list = db.get_bill_list()
+            if not _bill_list:
+                st.info("ยังไม่มีเลขที่บิล")
+                st.stop()
+            _sel_bill_no = st.selectbox("เลือกเลขที่บิล", ["— เลือก —"] + _bill_list, key="print_bill_no")
+            sel_p = "— เลือก —"
+            filter_p = "ทั้งหมด"
+            date_from_p = date_to_p = None
 
-        if sel_p != "— เลือก —":
-            customer_p  = cust_map_p[sel_p]
-            all_df_p    = db.get_all_transactions_df(customer_id=customer_p["id"])
+        _ready = (_print_mode == "ลูกค้า" and sel_p != "— เลือก —") or \
+                 (_print_mode == "เลขที่บิล" and _sel_bill_no and _sel_bill_no != "— เลือก —")
+
+        if _ready:
+            if _print_mode == "เลขที่บิล":
+                all_df_p = db.get_all_transactions_df(bill_no=_sel_bill_no)
+                sel_p    = all_df_p["ลูกค้า"].iloc[0] if not all_df_p.empty else "—"
+            else:
+                customer_p  = cust_map_p[sel_p]
+                all_df_p    = db.get_all_transactions_df(customer_id=customer_p["id"])
 
             if all_df_p.empty:
                 st.info("ไม่มีรายการ")

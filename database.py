@@ -244,13 +244,15 @@ def get_unbilled_pv_summary() -> dict:
     return {"count": count, "total_pv": total_pv, "total_amount": total_amount}
 
 
-def get_all_transactions_df(customer_id: str = None) -> pd.DataFrame:
+def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.DataFrame:
     """รายการทั้งหมด รวมที่เคลียร์แล้ว"""
     db = get_supabase()
 
     q = db.table("transactions").select("*, customers(name)")
     if customer_id:
         q = q.eq("customer_id", customer_id)
+    if bill_no:
+        q = q.eq("bill_no", bill_no)
     txns = q.order("date", desc=True).execute().data
 
     if not txns:
