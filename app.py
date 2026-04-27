@@ -696,6 +696,10 @@ with tab1:
                         r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone")
                         r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                         col_c, col_d, col_e = st.columns(3)
+                        # apply staged address fill ก่อน render
+                        for _fk, _wk in [("_fr_dt","r_dt"),("_fr_am","r_am"),("_fr_pv","r_pv")]:
+                            if _fk in st.session_state:
+                                st.session_state[_wk] = st.session_state.pop(_fk)
                         r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
                         r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
                         r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
@@ -704,9 +708,9 @@ with tab1:
                             for _o in _rdt_opts:
                                 _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
                                 if st.button(_lbl, key=f"rdt_fill_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
-                                    st.session_state["r_dt"] = _o["tambon"]
-                                    st.session_state["r_am"] = _o["amphure"]
-                                    st.session_state["r_pv"] = _o["province"]
+                                    st.session_state["_fr_dt"] = _o["tambon"]
+                                    st.session_state["_fr_am"] = _o["amphure"]
+                                    st.session_state["_fr_pv"] = _o["province"]
                                     st.session_state["_staged_pc"] = _o["zipcode"]
                                     st.rerun()
                         if "_staged_pc" in st.session_state:
@@ -719,9 +723,9 @@ with tab1:
                                 for _o in _pc_opts[:8]:
                                     _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
                                     if st.button(_lbl, key=f"pc_fill_{_o['tambon']}_{m_postcode}", use_container_width=True):
-                                        st.session_state["r_dt"] = _o["tambon"]
-                                        st.session_state["r_am"] = _o["amphure"]
-                                        st.session_state["r_pv"] = _o["province"]
+                                        st.session_state["_fr_dt"] = _o["tambon"]
+                                        st.session_state["_fr_am"] = _o["amphure"]
+                                        st.session_state["_fr_pv"] = _o["province"]
                                         st.rerun()
                         if m_customer != "— เลือกลูกค้า —":
                             if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
@@ -1015,6 +1019,12 @@ with tab1:
                             st.rerun()
                     st.divider()
 
+            # apply staged address fill ก่อน render widgets
+            for _fk, _wk in [("_fsp_dt","sp_dt"),("_fsp_am","sp_am"),
+                              ("_fsp_pv","sp_pv"),("_fsp_pc","sp_pc")]:
+                if _fk in st.session_state:
+                    st.session_state[_wk] = st.session_state.pop(_fk)
+
             _sa1, _sa2 = st.columns(2)
             _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key="sp_rname")
             _sp_rphone = _sa2.text_input("เบอร์โทร",      key="sp_rphone")
@@ -1028,10 +1038,10 @@ with tab1:
                 for _o in _dt_opts:
                     _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
                     if st.button(_lbl, key=f"sp_dt_fill_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
-                        st.session_state["sp_dt"] = _o["tambon"]
-                        st.session_state["sp_am"] = _o["amphure"]
-                        st.session_state["sp_pv"] = _o["province"]
-                        st.session_state["sp_pc"] = _o["zipcode"]
+                        st.session_state["_fsp_dt"] = _o["tambon"]
+                        st.session_state["_fsp_am"] = _o["amphure"]
+                        st.session_state["_fsp_pv"] = _o["province"]
+                        st.session_state["_fsp_pc"] = _o["zipcode"]
                         st.rerun()
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
             if len((_sp_pc or "").strip()) == 5:
@@ -1040,9 +1050,9 @@ with tab1:
                     for _o in _sp_pc_opts[:8]:
                         _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
                         if st.button(_lbl, key=f"sp_pc_fill_{_o['tambon']}_{_sp_pc}", use_container_width=True):
-                            st.session_state["sp_dt"] = _o["tambon"]
-                            st.session_state["sp_am"] = _o["amphure"]
-                            st.session_state["sp_pv"] = _o["province"]
+                            st.session_state["_fsp_dt"] = _o["tambon"]
+                            st.session_state["_fsp_am"] = _o["amphure"]
+                            st.session_state["_fsp_pv"] = _o["province"]
                             st.rerun()
             if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                 db.upsert_customer_address({
