@@ -1412,40 +1412,46 @@ with tab2:
                                 st.success(f"✅ เปิดบิล {len(selected_ids)} รายการแล้ว")
                                 st.rerun()
                         else:
-                            with st.form(f"multi_pay_{customer_name}", clear_on_submit=True):
-                                mp1, mp2, mp3 = st.columns([2, 2, 1])
-                                payment_amount = mp1.number_input(
-                                    "จำนวนที่จ่าย (บาท)", min_value=0.0, step=100.0, value=float(total_owed)
-                                )
-                                mp_notes = mp2.text_input("หมายเหตุ")
-                                mp_date  = mp3.date_input("วันที่", value=date.today())
-                                submit_multi = st.form_submit_button(
-                                    "💾 บันทึกการจ่ายเงิน", use_container_width=True, type="primary"
-                                )
-                            if submit_multi:
-                                if total_owed <= 0:
-                                    st.error("ไม่มียอดค้างในรายการที่เลือก")
-                                else:
-                                    for _, sel_row in sel_rows.iterrows():
-                                        ratio           = sel_row["ค้างจ่าย"] / total_owed
-                                        amount_for_this = round(payment_amount * ratio, 2)
-                                        if amount_for_this > 0:
-                                            db.insert_partial_event({
-                                                "id":             str(uuid.uuid4()),
-                                                "date":           str(mp_date),
-                                                "transaction_id": sel_row["id"],
-                                                "qty_received":   0,
-                                                "amount_paid":    amount_for_this,
-                                                "event_type":     "จ่ายเงิน",
-                                                "notes":          mp_notes,
-                                            })
-                                    st.success(
-                                        f"✅ บันทึกการจ่าย {payment_amount:,.0f} บาท "
-                                        f"ครอบ {len(selected_ids)} รายการแล้ว"
-                                    )
-                                    for tid in txn_ids:
-                                        st.session_state[f"chk_{tid}"] = False
-                                    st.rerun()
+                            # ตารางแก้ยอดจ่ายได้ทีละแถว
+                            _pay_rows = [{"_id": r["id"], "สินค้า": r["สินค้า"],
+                                          "สั่ง": r["สั่ง"], "ค้างจ่าย": r["ค้างจ่าย"],
+                                          "จ่ายจริง": r["ค้างจ่าย"]}
+                                         for _, r in sel_rows.iterrows()]
+                            _pay_df = pd.DataFrame(_pay_rows)
+                            _edited = st.data_editor(
+                                _pay_df[["สินค้า", "สั่ง", "ค้างจ่าย", "จ่ายจริง"]],
+                                column_config={
+                                    "สินค้า":   st.column_config.TextColumn(disabled=True),
+                                    "สั่ง":     st.column_config.NumberColumn(disabled=True),
+                                    "ค้างจ่าย": st.column_config.NumberColumn(disabled=True, format="%.0f"),
+                                    "จ่ายจริง": st.column_config.NumberColumn("จ่ายจริง ✏️", min_value=0, format="%.0f"),
+                                },
+                                hide_index=True, use_container_width=True,
+                                key=f"multi_pay_tbl_{customer_name}",
+                            )
+                            _total_pay = float(_edited["จ่ายจริง"].sum())
+                            st.metric("ยอดจ่ายรวม", f"{_total_pay:,.0f} บาท")
+                            mp2, mp3 = st.columns([2, 1])
+                            mp_notes = mp2.text_input("หมายเหตุ", key=f"mp_notes_{customer_name}")
+                            mp_date  = mp3.date_input("วันที่", value=date.today(), key=f"mp_date_{customer_name}")
+                            if st.button("💾 บันทึกการจ่ายเงิน", type="primary",
+                                         use_container_width=True, key=f"multi_save_{customer_name}"):
+                                for i, row in _pay_df.iterrows():
+                                    _amt = float(_edited.iloc[i]["จ่ายจริง"])
+                                    if _amt > 0:
+                                        db.insert_partial_event({
+                                            "id":             str(uuid.uuid4()),
+                                            "date":           str(mp_date),
+                                            "transaction_id": row["_id"],
+                                            "qty_received":   0,
+                                            "amount_paid":    _amt,
+                                            "event_type":     "จ่ายเงิน",
+                                            "notes":          mp_notes,
+                                        })
+                                st.success(f"✅ บันทึกการจ่าย {_total_pay:,.0f} บาท ครอบ {len(selected_ids)} รายการแล้ว")
+                                for tid in txn_ids:
+                                    st.session_state[f"chk_{tid}"] = False
+                                st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
