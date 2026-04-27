@@ -2051,29 +2051,17 @@ with tab7:
                     bm1.metric("💸 ยอดค้างจ่ายรวม",  f"{total_outstanding:,.0f} บาท")
                     bm2.metric("⭐ PV ยังไม่เปิดบิล", f"{unbilled_pv:,.0f}")
 
-                    bill_html = f"""<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<style>
-  *{{box-sizing:border-box;margin:0;padding:0}}
-  body{{font-family:'Sarabun',sans-serif;padding:24px;color:#111;background:#fff;font-size:14px}}
-  .header{{border-bottom:2px solid #222;padding-bottom:12px;margin-bottom:16px}}
-  .header h1{{font-size:18px;font-weight:700}}
-  .header h2{{font-size:15px;font-weight:600;margin-top:4px}}
-  .info{{color:#666;font-size:12px;margin-top:4px}}
-  table{{width:100%;border-collapse:collapse;margin-top:8px}}
-  th{{background:#222;color:#fff;padding:8px 10px;text-align:left;font-size:13px}}
-  td{{padding:6px 10px;border-bottom:1px solid #e0e0e0;font-size:13px}}
-  tr:nth-child(even) td{{background:#f7f7f7}}
-  .summary{{margin-top:18px;border-top:2px solid #222;padding-top:12px;text-align:right}}
-  .summary table{{width:auto;margin-left:auto}}
-  .summary td{{padding:4px 12px;border:none;font-size:14px}}
-  .summary .big td{{font-weight:700;font-size:16px;border-top:1px solid #ccc;padding-top:8px}}
-  .btn{{display:block;margin:0 auto 20px;padding:10px 36px;background:#c0392b;color:#fff;
-        border:none;border-radius:6px;font-size:15px;cursor:pointer;font-family:'Sarabun',sans-serif}}
-  @media print{{.btn{{display:none}}}}
-</style>
-</head><body>
-<button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+                    _print_copies = st.radio("จำนวนชุด", ["1 ชุด", "2 ชุด (ลูกค้า + ร้าน)"],
+                                             horizontal=True, key="print_copies")
+
+                    _ship_row_html = (
+                        f"<tr><td>⚖️ น้ำหนัก {ship_weight_str} kg &nbsp; 🚚 ค่าส่ง</td>"
+                        f"<td><b style='color:#1a5c8e'>{ship_fee_str} บาท</b></td></tr>"
+                    ) if is_ship_bill and ship_fee_str else ""
+
+                    def _bill_body(label: str) -> str:
+                        _lbl = f"<div style='font-size:11px;color:#888;margin-bottom:4px'>{label}</div>" if label else ""
+                        return f"""{_lbl}
 <div class="header" style="display:flex;justify-content:space-between;align-items:flex-start">
   <div>
     <h1>ใบรับสินค้า ZHULIAN TBY</h1>
@@ -2098,18 +2086,53 @@ with tab7:
 <div class="summary">
   <table>
     <tr><td>ยอดสินค้า</td><td><b>{total_amount:,.0f} บาท</b></td></tr>
-    {"<tr><td>⚖️ น้ำหนัก " + ship_weight_str + " kg &nbsp; 🚚 ค่าส่ง</td><td><b style='color:#1a5c8e'>" + ship_fee_str + " บาท</b></td></tr>" if is_ship_bill and ship_fee_str else ""}
+    {_ship_row_html}
     <tr><td>ยอดรวม (รวมค่าส่ง)</td><td><b>{total_amount + int(ship_fee_str or 0):,.0f} บาท</b></td></tr>
     <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
     <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
     <tr><td>⭐ PV รวม</td><td><b style="color:#b8860b">{total_pv:.0f}</b></td></tr>
   </table>
-</div>
-<br>
+</div>"""
+
+                    _css = """
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Sarabun',sans-serif;padding:20px;color:#111;background:#fff;font-size:13px}
+  .header{border-bottom:2px solid #222;padding-bottom:10px;margin-bottom:14px}
+  .header h1{font-size:17px;font-weight:700}
+  .header h2{font-size:14px;font-weight:600;margin-top:3px}
+  .info{color:#666;font-size:11px;margin-top:3px}
+  table{width:100%;border-collapse:collapse;margin-top:6px}
+  th{background:#222;color:#fff;padding:7px 8px;text-align:left;font-size:12px}
+  td{padding:5px 8px;border-bottom:1px solid #e0e0e0;font-size:12px}
+  tr:nth-child(even) td{background:#f7f7f7}
+  .summary{margin-top:14px;border-top:2px solid #222;padding-top:10px;text-align:right}
+  .summary table{width:auto;margin-left:auto}
+  .summary td{padding:3px 10px;border:none;font-size:13px}
+  .big td{font-weight:700;font-size:15px;border-top:1px solid #ccc;padding-top:6px}
+  .cut{border-top:2px dashed #aaa;margin:18px 0;text-align:center;position:relative}
+  .cut span{position:absolute;top:-10px;left:50%;transform:translateX(-50%);
+            background:#fff;padding:0 8px;color:#aaa;font-size:11px}
+  .btn{display:block;margin:0 auto 16px;padding:8px 32px;background:#c0392b;color:#fff;
+       border:none;border-radius:6px;font-size:14px;cursor:pointer}
+  @media print{.btn{display:none}}"""
+
+                    if _print_copies == "2 ชุด (ลูกค้า + ร้าน)":
+                        _body = (_bill_body("สำหรับลูกค้า") +
+                                 '<div class="cut"><span>✂ ตัดตรงนี้</span></div>' +
+                                 _bill_body("สำหรับร้าน"))
+                        _height = 1200
+                    else:
+                        _body = _bill_body("")
+                        _height = 700
+
+                    bill_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>{_css}</style></head><body>
 <button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+{_body}
+<br><button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
 </body></html>"""
 
-                    components.html(bill_html, height=700, scrolling=True)
+                    components.html(bill_html, height=_height, scrolling=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
