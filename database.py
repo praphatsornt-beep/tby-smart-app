@@ -491,7 +491,12 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
                 "เลขที่บิล": t.get("bill_no") or "",
             })
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df.sort_values(["ลูกค้า", "เลขที่บิล", "วันที่"], ascending=[True, True, True],
+                   inplace=True, na_position="last")
+    return df.reset_index(drop=True)
 
 
 # ─── E-commerce ──────────────────────────────────────────────────────────────
