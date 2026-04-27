@@ -387,7 +387,7 @@ with tab1:
                                     "carrier":        _p.get("carrier",""),
                                     "items":          _p.get("_items",[]),
                                     "tracking_no":    tracking,
-                                    "notes":          _p.get("remark",""),
+                                    "notes":          "",
                                 })
                             except Exception:
                                 pass
