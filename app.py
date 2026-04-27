@@ -2,7 +2,18 @@ import re
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
+
+_BKK = timezone(timedelta(hours=7))
+
+def _to_bkk(ts: str) -> str:
+    if not ts:
+        return ""
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.astimezone(_BKK).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return ts[:16].replace("T", " ")
 from math import floor
 import uuid
 import io
@@ -1160,7 +1171,7 @@ with tab1:
 
             _sh_ids  = [r["id"] for r in _sh_all]
             _sh_df   = pd.DataFrame([{
-                "วันที่/เวลา":     (r.get("created_at") or "")[:16].replace("T", " "),
+                "วันที่/เวลา":     _to_bkk(r.get("created_at") or ""),
                 "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
                 "ผู้รับ":           r.get("recipient_name", ""),
                 "เบอร์":            r.get("phone", ""),
