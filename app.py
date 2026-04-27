@@ -1160,7 +1160,8 @@ with tab2:
 
         # ── Filter ────────────────────────────────────────────────────────
         fc1, fc2 = st.columns([2, 2])
-        _t2_search = fc1.text_input("🔍 ค้นหาลูกค้า", placeholder="พิมพ์ชื่อ...", key="tab2_search")
+        _t2_search      = fc1.text_input("🔍 ค้นหาลูกค้า", placeholder="พิมพ์ชื่อ...", key="tab2_search")
+        _t2_bill_search = fc1.text_input("🔍 ค้นหาเลขที่บิล", placeholder="เช่น 260427", key="tab2_bill_search")
         filter_bill = fc2.radio("สถานะบิล", ["ค้างอยู่ทั้งหมด", "ยังไม่เปิดบิล", "เปิดบิลแล้ว"],
                                 horizontal=True, key="tab2_filter_bill")
 
@@ -1173,11 +1174,15 @@ with tab2:
             outstanding_df = outstanding_df[
                 outstanding_df["ลูกค้า"].str.contains(_t2_search.strip(), case=False, na=False)
             ]
+        if _t2_bill_search.strip():
+            outstanding_df = outstanding_df[
+                outstanding_df["เลขที่บิล"].fillna("").str.contains(_t2_bill_search.strip(), case=False)
+            ]
 
         if outstanding_df.empty:
             st.success("✅ ไม่มียอดค้าง")
         else:
-            single_cust = _t2_search.strip() != "" and outstanding_df["ลูกค้า"].nunique() == 1
+            single_cust = (_t2_search.strip() != "" or _t2_bill_search.strip() != "") and outstanding_df["ลูกค้า"].nunique() == 1
             for customer_name, grp in outstanding_df.groupby("ลูกค้า"):
                 owed    = grp["ค้างจ่าย"].sum()
                 pending = int(grp["ค้างรับ"].sum())
