@@ -2103,12 +2103,9 @@ with tab7:
         else:
             _sel_bill_no = None
             _p_picked = st.session_state.get("_print_cust_picked", "")
-            if _p_q.strip() and not _p_picked:
-                # ล้าง picked ถ้า user เริ่มพิมพ์ใหม่
-                pass
-            if _p_picked and not _p_q.strip():
-                # ล้าง picked ถ้า user ลบ search
+            if _p_picked and (_p_q.strip() == "" or _p_picked.upper() not in _p_q.strip().upper()):
                 st.session_state.pop("_print_cust_picked", None)
+                st.session_state.pop("_print_bill_picked", None)
                 _p_picked = ""
             if _p_picked:
                 _ppx, _ppy = st.columns([5, 1])
