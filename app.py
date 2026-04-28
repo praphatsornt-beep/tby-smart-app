@@ -1504,9 +1504,11 @@ with tab4:
     # ── iShip API debug ─────────────────────────────────────────────────────
     with st.expander("🔧 ทดสอบ iShip API"):
         import requests as _rq, os as _os, iship_api as _ia
-        _tok   = _os.environ.get("ISHIP_TOKEN") or st.secrets.get("ISHIP_TOKEN", "")
-        _email = _os.environ.get("ISHIP_EMAIL") or st.secrets.get("ISHIP_EMAIL", "")
+        _tok   = _os.environ.get("ISHIP_TOKEN")    or st.secrets.get("ISHIP_TOKEN", "")
+        _email = _os.environ.get("ISHIP_EMAIL")    or st.secrets.get("ISHIP_EMAIL", "")
+        _phone = _os.environ.get("ISHIP_PHONE")    or st.secrets.get("ISHIP_PHONE", "")
         _pw    = _os.environ.get("ISHIP_PASSWORD") or st.secrets.get("ISHIP_PASSWORD", "")
+        st.info(f"ISHIP_PHONE ใน secrets: {'✅ มี' if _phone else '❌ ยังไม่มี — ต้องเพิ่ม'}")
 
         # Test 1: Bearer token กับ web endpoint
         if st.button("1) GET /shipment/create + Bearer Token", key="iship_t1"):

@@ -35,14 +35,18 @@ def _token() -> str:
 
 
 def _web_session():
-    """Login to iShip web and return (session, debug_msg)."""
-    email    = os.environ.get("ISHIP_EMAIL")    or st.secrets.get("ISHIP_EMAIL", "")
+    """Login to iShip web and return (session, debug_msg).
+    iShip ใช้ phone number (ไม่ใช่ email) ในการ login"""
+    phone    = os.environ.get("ISHIP_PHONE")    or st.secrets.get("ISHIP_PHONE", "")
     password = os.environ.get("ISHIP_PASSWORD") or st.secrets.get("ISHIP_PASSWORD", "")
-    if not email or not password:
-        return None, "ไม่มี ISHIP_EMAIL/ISHIP_PASSWORD ใน secrets"
+    if not phone or not password:
+        return None, "ไม่มี ISHIP_PHONE/ISHIP_PASSWORD ใน secrets"
     s = requests.Session()
-    s.headers.update({"User-Agent": "Mozilla/5.0",
-                       "Accept": "text/html,application/json,*/*"})
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "th,en-US;q=0.9,en;q=0.8",
+    })
     try:
         r = s.get(f"{WEB_BASE}/login", timeout=10)
         m = re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', r.text)
@@ -50,14 +54,17 @@ def _web_session():
             return None, f"หาไม่เจอ _token ใน login page (status={r.status_code})"
         r2 = s.post(f"{WEB_BASE}/login", data={
             "_token":   m.group(1),
-            "email":    email,
+            "phone":    phone,
             "password": password,
-            "remember": "0",
+            "remember": "1",
+        }, headers={
+            "Referer": f"{WEB_BASE}/login",
+            "Origin":  WEB_BASE,
+            "Content-Type": "application/x-www-form-urlencoded",
         }, timeout=10, allow_redirects=True)
         if "login" in r2.url:
-            # ลอง parse error จาก response
-            _err = re.search(r'"message"\s*:\s*"([^"]+)"', r2.text)
-            _msg = _err.group(1) if _err else r2.text[:200]
+            _err = re.search(r'text-danger[^>]*>([^<]+)<', r2.text)
+            _msg = _err.group(1).strip() if _err else r2.text[:200]
             return None, f"Login ไม่สำเร็จ: {_msg}"
         return s, f"Login OK → {r2.url}"
     except Exception as e:
