@@ -2675,3 +2675,22 @@ with tab_fin:
             file_name=f"finance_{date.today()}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+    st.divider()
+
+    # ── ตรวจสอบสถานะ COD Transfer ────────────────────────────────────────────
+    with st.expander("🔍 ตรวจสอบสถานะ COD (iShip)", expanded=False):
+        st.caption("ดึงข้อมูลจาก iShip แล้ว match กับ tracking ใน shipments table")
+        if st.button("🔄 ดึงข้อมูล COD Transfer", key="cod_fetch"):
+            with st.spinner("กำลัง login และดึงข้อมูล..."):
+                _cod_result = iship_api.get_cod_transfers(max_batches=30)
+            if "error" in _cod_result:
+                st.error(f"❌ {_cod_result['error']}")
+            st.json(_cod_result.get("debug", {}))
+            _cod_map = _cod_result.get("transfers", {})
+            if _cod_map:
+                st.success(f"✅ พบ {len(_cod_map)} tracking ที่โอนแล้ว")
+                st.dataframe(
+                    pd.DataFrame(_cod_map).T.reset_index().rename(columns={"index": "tracking"}),
+                    use_container_width=True, hide_index=True,
+                )
