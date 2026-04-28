@@ -166,10 +166,13 @@ def get_cod_transfers(days_back: int = 60) -> dict:
                                  headers=hdrs2, cookies=_cookie_dict,
                                  timeout=15, params=_det_params_base)
                 if r.status_code != 200 or not r.text.strip():
-                    return {}
-                rows = r.json().get("data", [])
-            except Exception:
-                return {}
+                    return {"_debug_det": f"status={r.status_code} empty={not r.text.strip()} url={r.url[:80]}"}
+                try:
+                    rows = r.json().get("data", [])
+                except Exception:
+                    return {"_debug_det": f"JSON fail: {r.text[:200]}"}
+            except Exception as ex:
+                return {"_debug_det": str(ex)}
             result = {}
             for row in rows:
                 tn = row.get("track_no", "")
@@ -184,12 +187,18 @@ def get_cod_transfers(days_back: int = 60) -> dict:
             return result
 
         transfers = {}
+        det_debug = []
         with ThreadPoolExecutor(max_workers=4) as pool:
             futures = {pool.submit(_fetch_detail, b): b for b in batches}
             for fut in as_completed(futures):
-                transfers.update(fut.result())
+                res = fut.result()
+                if "_debug_det" in res:
+                    det_debug.append(res["_debug_det"])
+                else:
+                    transfers.update(res)
         return {"transfers": transfers, "error": None,
                 "_debug": {"batches": len(batches),
+                           "det_errors": det_debug[:3],
                            "first_txn": batches[0].get("txn_id","") if batches else ""}}
 
     except Exception as e:
