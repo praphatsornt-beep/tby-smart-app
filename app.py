@@ -2161,6 +2161,13 @@ with tab7:
                             st.session_state["_print_bill_picked"] = _bills.iloc[0]["เลขที่บิล"] or "—"
                             st.rerun()
                         st.caption("เลือกบิลที่ต้องการพิมพ์")
+                        _total_owed = _bills["ค้างจ่าย"].sum()
+                        _all_color = "🔴" if _total_owed > 0.01 else "✅"
+                        if st.button(f"📋 **รวมทุกบิล** &nbsp; {_all_color} ค้างจ่ายรวม {_total_owed:,.0f} บาท",
+                                     key="pbill_ALL", use_container_width=True):
+                            st.session_state["_print_bill_picked"] = "__ALL__"
+                            st.rerun()
+                        st.divider()
                         for _, _br in _bills.iterrows():
                             _bno = _br["เลขที่บิล"] or "—"
                             _owing = _br["ค้างจ่าย"]
@@ -2171,14 +2178,16 @@ with tab7:
                                 st.rerun()
                 else:
                     _bx1, _bx2 = st.columns([6, 1])
-                    _bx1.markdown(f"📄 บิล **{_bill_picked}**")
+                    _lbl_picked = "รวมทุกบิล" if _bill_picked == "__ALL__" else f"บิล {_bill_picked}"
+                    _bx1.markdown(f"📄 **{_lbl_picked}**")
                     if _bx2.button("✕ เปลี่ยน", key="print_bill_clear"):
                         st.session_state.pop("_print_bill_picked", None)
                         st.rerun()
-                    if _bill_picked == "—":
-                        all_df_p = all_df_p[all_df_p["เลขที่บิล"].replace("", "—") == "—"]
-                    else:
-                        all_df_p = all_df_p[all_df_p["เลขที่บิล"] == _bill_picked]
+                    if _bill_picked != "__ALL__":
+                        if _bill_picked == "—":
+                            all_df_p = all_df_p[all_df_p["เลขที่บิล"].replace("", "—") == "—"]
+                        else:
+                            all_df_p = all_df_p[all_df_p["เลขที่บิล"] == _bill_picked]
 
                 if not _bill_picked:
                     all_df_p = pd.DataFrame()  # ยังไม่เลือกบิล ไม่แสดง print
