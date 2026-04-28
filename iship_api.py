@@ -98,13 +98,13 @@ def get_cod_transfers(max_batches: int = 30) -> dict:
         # ── ลอง /api/tracking ด้วย tracking number ──────────────────
         # ดึง tracking ล่าสุดจาก shipments ใน Supabase
         import database as _db
-        _ships = _db.get_supabase().table("shipments").select("tracking_number,cod_amount") \
+        _ships = _db.get_supabase().table("shipments").select("tracking_no,cod_amount") \
                      .gt("cod_amount", 0).order("created_at", desc=True).limit(3).execute().data
         debug["sample_shipments"] = _ships
 
         probe = {}
         for _s in _ships[:2]:
-            tn = _s.get("tracking_number", "")
+            tn = _s.get("tracking_no", "")
             if not tn:
                 continue
             for url, params in [
