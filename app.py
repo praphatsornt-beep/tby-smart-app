@@ -1599,8 +1599,9 @@ with tab4:
                 if not m:
                     st.error("หา _token ไม่เจอ")
                 else:
+                    st.write(f"กำลัง login ด้วย phone={_phone[:4]}xxxx, pw={'*'*len(_pw)}")
                     r2 = s2.post("https://app.iship.cloud/login", data={
-                        "_token": m.group(1), "email": _email, "password": _pw, "remember": "1",
+                        "_token": m.group(1), "phone": _phone, "password": _pw, "remember": "1",
                     }, headers={"Referer": "https://app.iship.cloud/login",
                                 "Origin": "https://app.iship.cloud"},
                     timeout=10, allow_redirects=True)
