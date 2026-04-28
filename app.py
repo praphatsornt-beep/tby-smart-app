@@ -1576,6 +1576,40 @@ with tab4:
                     st.write(f"status {r2.status_code} | URL: {r2.url}")
                     st.write(f"Cookies: {dict(s.cookies)}")
 
+        # Test 4: ดู login form fields ทั้งหมด
+        if st.button("4) ดู Login Form Fields", key="iship_t4"):
+            import re as _re2
+            r = _rq.get("https://app.iship.cloud/login", timeout=10)
+            st.write(f"status {r.status_code}")
+            for f in _re2.findall(r'<input[^>]+>', r.text):
+                st.code(f)
+
+        # Test 5: Login แล้วดู error message
+        if st.button("5) Login + ดู Error Message", key="iship_t5"):
+            if not _email:
+                st.error("ไม่มี ISHIP_EMAIL")
+            else:
+                import re as _re2
+                s2 = _rq.Session()
+                s2.headers.update({"User-Agent": "Mozilla/5.0 Chrome/120"})
+                r1 = s2.get("https://app.iship.cloud/login", timeout=10)
+                m = _re2.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', r1.text)
+                if not m:
+                    st.error("หา _token ไม่เจอ")
+                else:
+                    r2 = s2.post("https://app.iship.cloud/login", data={
+                        "_token": m.group(1), "email": _email, "password": _pw, "remember": "1",
+                    }, headers={"Referer": "https://app.iship.cloud/login",
+                                "Origin": "https://app.iship.cloud"},
+                    timeout=10, allow_redirects=True)
+                    st.write(f"URL: {r2.url}")
+                    err  = _re2.search(r'class="[^"]*alert[^"]*"[^>]*>(.*?)</div>', r2.text, _re2.DOTALL)
+                    err2 = _re2.search(r'"errors"\s*:\s*(\{[^}]+\})', r2.text)
+                    st.code(err.group(1).strip() if err else "ไม่พบ alert")
+                    st.code(err2.group(1) if err2 else "ไม่พบ errors JSON")
+                    for f in _re2.findall(r'<input[^>]+name="[^"]*"[^>]*>', r2.text)[:10]:
+                        st.code(f)
+
     with sub1:
         products = db.get_products()
 
