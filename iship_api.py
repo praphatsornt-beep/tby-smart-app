@@ -95,38 +95,35 @@ def get_cod_transfers(max_batches: int = 30) -> dict:
         tok = _token()
         bearer = {"Authorization": f"Bearer {tok}"} if tok else {}
 
-        # ── probe: token-based endpoints ────────────────────────────
-        token_candidates = [
-            f"{BASE_URL}/shipments",
-            f"{BASE_URL}/shipment",
-            f"{BASE_URL}/orders",
-            f"{BASE_URL}/cod",
-            f"{BASE_URL}/tracking",
-        ]
-        # ── probe: web-session endpoints (cookie auth) ───────────────
-        session_candidates = [
-            f"{WEB_BASE}/api/withdraw",
-            f"{WEB_BASE}/api/withdraws",
-            f"{WEB_BASE}/api/cod/list",
-            f"{WEB_BASE}/report/cod",
-            f"{WEB_BASE}/api/shipment/list",
-        ]
+        # ── ลอง /api/tracking ด้วย tracking number ──────────────────
+        # ดึง tracking ล่าสุดจาก shipments ใน Supabase
+        import database as _db
+        _ships = _db.get_supabase().table("shipments").select("tracking_number,cod_amount") \
+                     .gt("cod_amount", 0).order("created_at", desc=True).limit(3).execute().data
+        debug["sample_shipments"] = _ships
+
         probe = {}
-        for url in token_candidates:
-            try:
-                r = requests.get(url, headers={**json_headers, **bearer}, timeout=10)
-                probe[f"[token]{url}"] = {"status": r.status_code, "preview": r.text[:300]}
-            except Exception as ex:
-                probe[f"[token]{url}"] = {"error": str(ex)}
-        for url in session_candidates:
-            try:
-                r = sess.get(url, headers=json_headers, timeout=10)
-                probe[f"[sess]{url}"] = {"status": r.status_code, "preview": r.text[:300]}
-            except Exception as ex:
-                probe[f"[sess]{url}"] = {"error": str(ex)}
+        for _s in _ships[:2]:
+            tn = _s.get("tracking_number", "")
+            if not tn:
+                continue
+            for url, params in [
+                (f"{BASE_URL}/tracking",         {"tracking_no": tn}),
+                (f"{BASE_URL}/tracking",         {"no": tn}),
+                (f"{BASE_URL}/tracking/{tn}",    {}),
+                (f"{BASE_URL}/shipment/{tn}",    {}),
+                (f"{WEB_BASE}/api/tracking/{tn}", {}),
+            ]:
+                key = f"{url}?{list(params.values())}" if params else url
+                try:
+                    r = requests.get(url, params=params,
+                                     headers={**json_headers, **bearer}, timeout=10)
+                    probe[key] = {"status": r.status_code, "preview": r.text[:400]}
+                except Exception as ex:
+                    probe[key] = {"error": str(ex)}
 
         debug["probe"] = probe
-        return {"transfers": {}, "debug": debug, "note": "probe round 2 — ดู debug.probe"}
+        return {"transfers": {}, "debug": debug, "note": "probe round 3 — tracking with real numbers"}
 
     except Exception as e:
         debug["exception"] = str(e)
