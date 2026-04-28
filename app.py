@@ -2186,8 +2186,10 @@ with tab7:
                     bill_nos          = show_p["เลขที่บิล"].dropna().unique().tolist() if "เลขที่บิล" in show_p.columns else []
                     bill_nos_str      = ", ".join(b for b in bill_nos if b) or ""
                     _last_paid_raw    = show_p["last_payment_date"].replace("", None).max() if "last_payment_date" in show_p.columns else None
-                    _paid_date_str    = (pd.to_datetime(_last_paid_raw).strftime("%d/%m/%Y")
-                                        if _last_paid_raw else "—")
+                    try:
+                        _paid_date_str = pd.to_datetime(_last_paid_raw).strftime("%d/%m/%Y") if _last_paid_raw else "—"
+                    except Exception:
+                        _paid_date_str = "—"
 
                     # ตรวจสอบว่ามี tag ส่งพัสดุจาก notes ของรายการแรก
                     first_note = str(show_p.iloc[0].get("หมายเหตุ", "") or "")
