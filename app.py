@@ -2135,7 +2135,24 @@ with tab7:
 
         if _print_mode == "ลูกค้า":
             pc1, pc2 = st.columns([3, 1])
-            sel_p    = pc1.selectbox("เลือกลูกค้า", ["— เลือก —"] + list(cust_map_p.keys()), key="print_cust")
+            with pc1:
+                _p_picked = st.session_state.get("_print_cust_picked", "")
+                if _p_picked:
+                    _ppx, _ppy = st.columns([5, 1])
+                    _ppx.markdown(f"👤 **{_p_picked}**")
+                    if _ppy.button("✕", key="print_cust_clear"):
+                        st.session_state.pop("_print_cust_picked", None)
+                        st.rerun()
+                    sel_p = _p_picked
+                else:
+                    _p_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อ...", key="print_cust_search")
+                    sel_p = "— เลือก —"
+                    if _p_search.strip():
+                        _p_matches = [n for n in cust_map_p if _p_search.upper() in n.upper()][:8]
+                        for _pm in _p_matches:
+                            if st.button(f"👤 {_pm}", key=f"pp_{_pm}", use_container_width=True):
+                                st.session_state["_print_cust_picked"] = _pm
+                                st.rerun()
             filter_p = pc2.radio("แสดงรายการ", ["ค้างอยู่", "ทั้งหมด"], horizontal=True, key="print_filter")
             pd1, pd2 = st.columns(2)
             date_from_p = pd1.date_input("ตั้งแต่วันที่", value=None, key="print_date_from")
