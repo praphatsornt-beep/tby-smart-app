@@ -1226,7 +1226,8 @@ with tab1:
                 "เบอร์":            r.get("phone", ""),
                 "รายการ":          _items_str(r.get("items")),
                 "ขนส่ง":           r.get("carrier", ""),
-                "Tracking":        r.get("tracking_no", "") or "",
+                "Tracking":        (f"https://app.iship.cloud/tracking?track={r['tracking_no']}"
+                                   if r.get("tracking_no") else ""),
                 "บ้านเลขที่/ถนน":  r.get("address_line", ""),
                 "ตำบล":            r.get("district", ""),
                 "อำเภอ":           r.get("amphure", ""),
@@ -1240,23 +1241,14 @@ with tab1:
                 hide_index=True, use_container_width=True, key="sh_hist_tbl",
                 disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
-                          "รายการ","ขนส่ง","COD","💸","หมายเหตุ"],
+                          "รายการ","ขนส่ง","COD","💸","Tracking","หมายเหตุ"],
                 column_config={
                     "ลบ":      st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
                     "COD":     st.column_config.NumberColumn("COD ฿", format="%,.0f", width="small"),
                     "💸":      st.column_config.TextColumn("💸", width="small"),
-                    "Tracking": st.column_config.TextColumn("Tracking", width="medium"),
+                    "Tracking": st.column_config.LinkColumn("Tracking", width="medium", display_text=r"track=(.+)$"),
                 },
             )
-
-            # บันทึก Tracking ที่แก้ไข
-            for i, row in _sh_edit.iterrows():
-                orig = _sh_df.at[i, "Tracking"]
-                new  = row["Tracking"] or ""
-                if new != orig:
-                    db.update_shipment_tracking(_sh_ids[i], new)
-                    st.session_state.pop("sh_hist_tbl", None)
-                    st.rerun()
 
             _sh_to_del = [_sh_ids[i] for i, v in enumerate(_sh_edit["ลบ"]) if v]
 
