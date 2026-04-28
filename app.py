@@ -2697,3 +2697,4 @@ with tab_fin:
                 st.dataframe(_cod_df, use_container_width=True, hide_index=True)
             elif not _cod_result.get("error"):
                 st.info("ไม่พบรายการ COD ใน 60 วันที่ผ่านมา")
+                st.json(_cod_result.get("_debug", {}))

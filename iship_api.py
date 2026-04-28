@@ -181,7 +181,9 @@ def get_cod_transfers(days_back: int = 60) -> dict:
                     "net":        row.get("cod_balance", net),
                     "status":     row.get("status_name", "ชำระเงินสำเร็จ"),
                 }
-        return {"transfers": transfers, "error": None}
+        return {"transfers": transfers, "error": None,
+                "_debug": {"batches": len(batches),
+                           "first_txn": batches[0].get("txn_id","") if batches else ""}}
 
     except Exception as e:
         return {"transfers": {}, "error": str(e)}
