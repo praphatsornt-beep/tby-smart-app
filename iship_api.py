@@ -146,8 +146,8 @@ def get_cod_transfers(days_back: int = 60) -> dict:
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         _det_cols = ["created_at","pickedup_date","courier_code","track_no",
-                     "dst_name","dst_phone","cod_amount","cod_non_vat",
-                     "cod_balance","pod_date","status_name"]
+                     "dst_name","dst_phone","cod_amount","cod_fee",
+                     "cod_balance","updated_at"]
         _det_params_base = {"draw": 1, "start": 0, "length": 200,
                             "order[0][column]": 0, "order[0][dir]": "desc",
                             "search[value]": "", "search[regex]": "false"}
@@ -168,7 +168,7 @@ def get_cod_transfers(days_back: int = 60) -> dict:
             _s = _make_sess()
             hdrs2 = {**hdrs, "Referer": f"{WEB_BASE}/report/withdraw/{txn_id}"}
             try:
-                r = _s.get(f"{WEB_BASE}/report/withdraw/{txn_id}",
+                r = _s.get(f"{WEB_BASE}/getdt-report-cod/{txn_id}",
                            headers=hdrs2, timeout=15, params=_det_params_base)
                 if r.status_code != 200 or not r.text.strip():
                     return {"_debug_det": f"status={r.status_code} empty={not r.text.strip()} url={r.url[:80]}"}
