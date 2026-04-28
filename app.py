@@ -1172,21 +1172,21 @@ with tab1:
 
             _sh_ids  = [r["id"] for r in _sh_all]
             _sh_df   = pd.DataFrame([{
+                "ลบ":              False,
                 "วันที่/เวลา":     _to_bkk(r.get("created_at") or ""),
                 "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
+                "COD":             float(r.get("cod_amount") or 0),
                 "ผู้รับ":           r.get("recipient_name", ""),
                 "เบอร์":            r.get("phone", ""),
+                "รายการ":          _items_str(r.get("items")),
+                "ขนส่ง":           r.get("carrier", ""),
+                "Tracking":        r.get("tracking_no", "") or "",
                 "บ้านเลขที่/ถนน":  r.get("address_line", ""),
                 "ตำบล":            r.get("district", ""),
                 "อำเภอ":           r.get("amphure", ""),
                 "จังหวัด":         r.get("province", ""),
                 "รหัสปณ.":         r.get("postal_code", ""),
-                "รายการ":          _items_str(r.get("items")),
-                "ขนส่ง":           r.get("carrier", ""),
-                "COD":             float(r.get("cod_amount") or 0),
-                "Tracking":        r.get("tracking_no", "") or "",
                 "หมายเหตุ":        r.get("notes", ""),
-                "ลบ":              False,
             } for r in _sh_all])
 
             _sh_edit = st.data_editor(
