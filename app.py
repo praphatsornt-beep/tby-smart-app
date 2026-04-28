@@ -2566,6 +2566,52 @@ with tab_fin:
 
     st.divider()
 
+    # ── สรุปภาษีซื้อ / ภาษีขาย ───────────────────────────────────────────────
+    with st.expander("🧾 สรุปภาษีซื้อ / ภาษีขาย", expanded=False):
+        _tax_df = db.get_finance_df()
+        if _tax_df.empty:
+            st.info("ยังไม่มีข้อมูล")
+        else:
+            _tax_df["entry_date"] = pd.to_datetime(_tax_df["entry_date"])
+            _min_m = _tax_df["entry_date"].dt.to_period("M").min()
+            _max_m = _tax_df["entry_date"].dt.to_period("M").max()
+            _months = pd.period_range(_min_m, _max_m, freq="M")
+            _month_labels = [str(m) for m in _months]
+            tc1, tc2 = st.columns(2)
+            _sel_from = tc1.selectbox("ตั้งแต่เดือน", _month_labels, index=len(_month_labels)-1, key="tax_from")
+            _sel_to   = tc2.selectbox("ถึงเดือน",     _month_labels, index=len(_month_labels)-1, key="tax_to")
+
+            _mask = (
+                (_tax_df["entry_date"].dt.to_period("M") >= pd.Period(_sel_from, "M")) &
+                (_tax_df["entry_date"].dt.to_period("M") <= pd.Period(_sel_to, "M"))
+            )
+            _tdf = _tax_df[_mask]
+
+            _sales_vat    = float(_tdf["sales_amount"].sum())
+            _sales_ex_vat = _sales_vat / 1.07
+            _output_vat   = _sales_vat - _sales_ex_vat
+            _po_ex_vat    = float(_tdf["po_amount"].sum())
+            _input_vat    = _po_ex_vat * 0.07
+            _net_vat      = _output_vat - _input_vat
+
+            tv1, tv2 = st.columns(2)
+            with tv1:
+                st.markdown("**📤 ภาษีขาย (Output VAT)**")
+                st.metric("ยอดขาย รวม VAT",    f"{_sales_vat:,.2f} ฿")
+                st.metric("ยอดขาย ไม่รวม VAT", f"{_sales_ex_vat:,.2f} ฿")
+                st.metric("ภาษีขาย 7%",        f"{_output_vat:,.2f} ฿")
+            with tv2:
+                st.markdown("**📥 ภาษีซื้อ (Input VAT)**")
+                st.metric("ยอดซื้อ ไม่รวม VAT", f"{_po_ex_vat:,.2f} ฿")
+                st.metric("ภาษีซื้อ 7%",        f"{_input_vat:,.2f} ฿")
+                _color = "normal" if _net_vat >= 0 else "inverse"
+                st.metric("VAT ต้องชำระสุทธิ",
+                           f"{abs(_net_vat):,.2f} ฿",
+                           delta="ต้องจ่าย" if _net_vat >= 0 else "ขอคืนได้",
+                           delta_color=_color)
+
+    st.divider()
+
     fin_df = db.get_finance_df()
     if fin_df.empty:
         st.info("ยังไม่มีข้อมูล — กรอกข้อมูลด้านบนก่อนครับ")
