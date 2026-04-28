@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import datetime as _dt
 import requests
 import streamlit as st
 
@@ -79,56 +80,85 @@ def is_configured() -> bool:
     return bool(_token())
 
 
-def get_cod_transfers(max_batches: int = 30) -> dict:
+def get_cod_transfers(days_back: int = 60) -> dict:
     """
-    ดึงสถานะ COD transfer จาก iShip API
-    คืน: {"transfers": {tracking: {...}}, "debug": {...}}
+    ดึงสถานะ COD transfer จาก iShip
+    คืน: {"batches": [...], "transfers": {tracking: {...}}, "debug": {...}}
     """
     sess, login_msg = _web_session()
     if not sess:
-        return {"transfers": {}, "error": login_msg}
+        return {"batches": [], "transfers": {}, "error": login_msg}
 
     debug = {}
-    json_headers = {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"}
+    end_date   = _dt.date.today()
+    start_date = end_date - _dt.timedelta(days=days_back)
+    xsrf = sess.cookies.get("XSRF-TOKEN", "")
+
+    hdrs = {
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept":           "application/json, text/javascript, */*; q=0.01",
+        "Referer":          f"{WEB_BASE}/report/withdraw",
+        "X-XSRF-TOKEN":     xsrf,
+    }
 
     try:
-        tok = _token()
-        bearer = {"Authorization": f"Bearer {tok}"} if tok else {}
+        # ── 1. ดึง list ของ WD batches ───────────────────────────────
+        params = {
+            "draw": 1, "start": 0, "length": 200,
+            "start_date": str(start_date), "end_date": str(end_date),
+            "order[0][column]": 0, "order[0][dir]": "desc",
+            "columns[0][data]": "datetime",  "columns[0][searchable]": "true",
+            "columns[1][data]": "txn_id",    "columns[1][searchable]": "true",
+            "columns[2][data]": "withdraw_type",
+            "columns[6][data]": "amount",
+            "columns[12][data]": "net_total_amount",
+        }
+        r_list = sess.get(f"{WEB_BASE}/getdt-withdraw", params=params, headers=hdrs, timeout=15)
+        debug["list_status"] = r_list.status_code
+        if r_list.status_code != 200:
+            return {"batches": [], "transfers": {}, "debug": debug,
+                    "error": f"getdt-withdraw returned {r_list.status_code}"}
 
-        # ── ลอง /api/tracking ด้วย tracking number ──────────────────
-        # ดึง tracking ล่าสุดจาก shipments ใน Supabase
-        import database as _db
-        _ships = _db.get_supabase().table("shipments").select("tracking_no") \
-                     .not_.is_("tracking_no", "null").order("created_at", desc=True).limit(3).execute().data
-        debug["sample_shipments"] = _ships
-        # เพิ่ม test tracking จาก screenshot เผื่อ db ยังไม่มีข้อมูล
-        _test_tns = [s.get("tracking_no","") for s in _ships if s.get("tracking_no")] or ["TH068127047714"]
+        list_json = r_list.json()
+        batches   = list_json.get("data", [])
+        debug["batches_count"] = len(batches)
+        debug["batch_sample"]  = batches[:2]
 
-        probe = {}
-        for tn in _test_tns[:2]:
-            if not tn:
-                continue
-            for url, params in [
-                (f"{BASE_URL}/tracking",         {"tracking_no": tn}),
-                (f"{BASE_URL}/tracking",         {"no": tn}),
-                (f"{BASE_URL}/tracking/{tn}",    {}),
-                (f"{BASE_URL}/shipment/{tn}",    {}),
-                (f"{WEB_BASE}/api/tracking/{tn}", {}),
-            ]:
-                key = f"{url}?{list(params.values())}" if params else url
+        # ── 2. ดึง detail ของแต่ละ batch เพื่อหา tracking numbers ───
+        # ลอง probe endpoint detail ก่อน
+        transfers = {}
+        if batches:
+            first_txn = batches[0].get("txn_id", "")
+            # ลอง DataTables endpoint สำหรับ detail
+            det_candidates = [
+                f"{WEB_BASE}/getdt-withdraw-detail",
+                f"{WEB_BASE}/getdt-withdraw-parcel",
+                f"{WEB_BASE}/getdt-cod-withdraw-detail",
+            ]
+            det_params = {
+                "draw": 1, "start": 0, "length": 200,
+                "txn_id": first_txn,
+                "columns[0][data]": "created_at",
+                "columns[3][data]": "tracking_no",
+                "columns[6][data]": "cod_amount",
+                "columns[8][data]": "net_amount",
+            }
+            debug["detail_probe"] = {}
+            for url in det_candidates:
                 try:
-                    r = requests.get(url, params=params,
-                                     headers={**json_headers, **bearer}, timeout=10)
-                    probe[key] = {"status": r.status_code, "preview": r.text[:400]}
+                    r = sess.get(url, params=det_params, headers=hdrs, timeout=10)
+                    debug["detail_probe"][url] = {
+                        "status": r.status_code,
+                        "preview": r.text[:300],
+                    }
                 except Exception as ex:
-                    probe[key] = {"error": str(ex)}
+                    debug["detail_probe"][url] = {"error": str(ex)}
 
-        debug["probe"] = probe
-        return {"transfers": {}, "debug": debug, "note": "probe round 3 — tracking with real numbers"}
+        return {"batches": batches[:10], "transfers": transfers, "debug": debug}
 
     except Exception as e:
         debug["exception"] = str(e)
-        return {"transfers": {}, "debug": debug, "error": str(e)}
+        return {"batches": [], "transfers": {}, "debug": debug, "error": str(e)}
 
 
 def create_order(
