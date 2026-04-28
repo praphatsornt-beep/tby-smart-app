@@ -1613,6 +1613,19 @@ with tab4:
                     for f in _re2.findall(r'<input[^>]+name="[^"]*"[^>]*>', r2.text)[:10]:
                         st.code(f)
 
+        # Test 6: ทดสอบสร้าง COD order จริง (ที่อยู่ทดสอบ)
+        if st.button("6) ทดสอบ COD Order จริง (ลบทิ้งได้)", key="iship_t6"):
+            with st.spinner("กำลังทดสอบ..."):
+                resp = _ia.create_order(
+                    dst_name="ทดสอบ ระบบ", dst_phone="0800000001",
+                    address_line="1/1 ถนนทดสอบ", district="ลาดยาว",
+                    amphure="จตุจักร", province="กรุงเทพมหานคร", zipcode="10900",
+                    weight_kg=1.0, cod_amount=100, carrier="Flash Express",
+                    remark="TEST - ลบทิ้งได้",
+                )
+            st.write(f"status={resp.get('status')} code={resp.get('code')}")
+            st.json(resp)
+
     with sub1:
         products = db.get_products()
 
