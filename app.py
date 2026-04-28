@@ -368,6 +368,7 @@ with tab1:
                                     "carrier":        _p.get("carrier",""),
                                     "items":          _p.get("_items",[]),
                                     "tracking_no":    tracking,
+                                    "cod_amount":     _p.get("cod_amount", 0),
                                     "notes":          "",
                                 })
                             except Exception:
@@ -1117,6 +1118,7 @@ with tab1:
                         "shipping_cost":  _sp_cost,
                         "items":          _sp_items,
                         "tracking_no":    _sp_track.strip(),
+                        "cod_amount":     0,
                         "notes":          _sp_notes.strip(),
                     })
                 except Exception:
@@ -1181,6 +1183,8 @@ with tab1:
                 "รหัสปณ.":         r.get("postal_code", ""),
                 "รายการ":          _items_str(r.get("items")),
                 "ขนส่ง":           r.get("carrier", ""),
+                "COD":             float(r.get("cod_amount") or 0),
+                "Tracking":        r.get("tracking_no", "") or "",
                 "หมายเหตุ":        r.get("notes", ""),
                 "ลบ":              False,
             } for r in _sh_all])
@@ -1190,9 +1194,11 @@ with tab1:
                 hide_index=True, use_container_width=True, key="sh_hist_tbl",
                 disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
-                          "รายการ","ขนส่ง","หมายเหตุ"],
+                          "รายการ","ขนส่ง","COD","Tracking","หมายเหตุ"],
                 column_config={
-                    "ลบ": st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                    "ลบ":      st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                    "COD":     st.column_config.NumberColumn("COD ฿", format="%,.0f", width="small"),
+                    "Tracking": st.column_config.TextColumn("Tracking", width="medium"),
                 },
             )
 
