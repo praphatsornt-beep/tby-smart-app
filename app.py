@@ -1456,7 +1456,7 @@ with tab2:
                             ),
                             use_container_width=True, hide_index=True,
                         )
-                        _m_opts = (["📄 เปิดบิล"] if _all_unbilled else []) + ["💵 จ่ายเงิน"]
+                        _m_opts = (["📄 เปิดบิล"] if _all_unbilled else []) + ["📦 รับของ", "💵 จ่ายเงิน"]
                         _m_act  = st.radio("บันทึก", _m_opts, horizontal=True,
                                            key=f"multi_act_{customer_name}")
 
@@ -1468,6 +1468,28 @@ with tab2:
                                     db.update_transaction_status(_sid, bill_status="เปิดบิลแล้ว")
                                 st.success(f"✅ เปิดบิล {len(selected_ids)} รายการแล้ว")
                                 st.rerun()
+                        elif _m_act == "📦 รับของ":
+                            _pending_recv = sel_rows[sel_rows["ค้างรับ"] > 0]
+                            if _pending_recv.empty:
+                                st.info("ไม่มีรายการที่ค้างรับ")
+                            else:
+                                mp_date_r = st.date_input("วันที่รับ", value=date.today(), key=f"mp_date_r_{customer_name}")
+                                mp_notes_r = st.text_input("หมายเหตุ", key=f"mp_notes_r_{customer_name}")
+                                if st.button(f"📦 บันทึกรับของทั้งหมด {len(_pending_recv)} รายการ",
+                                             type="primary", use_container_width=True,
+                                             key=f"multi_recv_{customer_name}"):
+                                    for _, _rrow in _pending_recv.iterrows():
+                                        db.insert_partial_event({
+                                            "id":             str(uuid.uuid4()),
+                                            "date":           str(mp_date_r),
+                                            "transaction_id": _rrow["id"],
+                                            "qty_received":   int(_rrow["ค้างรับ"]),
+                                            "amount_paid":    0.0,
+                                            "event_type":     "รับของ",
+                                            "notes":          mp_notes_r,
+                                        })
+                                    st.success(f"✅ บันทึกรับของ {len(_pending_recv)} รายการแล้ว")
+                                    st.rerun()
                         else:
                             # ตารางแก้ยอดจ่ายได้ทีละแถว
                             _pay_rows = [{"_id": r["id"], "สินค้า": r["สินค้า"],
