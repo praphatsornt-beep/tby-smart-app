@@ -2208,9 +2208,6 @@ with tab7:
                     bm1.metric("💸 ยอดค้างจ่ายรวม",  f"{total_outstanding:,.0f} บาท")
                     bm2.metric("⭐ PV ยังไม่เปิดบิล", f"{unbilled_pv:,.0f}")
 
-                    _print_copies = st.radio("จำนวนชุด", ["1 ชุด", "2 ชุด (ลูกค้า + ร้าน)"],
-                                             horizontal=True, key="print_copies")
-
                     _ship_row_html = (
                         f"<tr><td>⚖️ น้ำหนัก {ship_weight_str} kg &nbsp; 🚚 ค่าส่ง</td>"
                         f"<td><b style='color:#1a5c8e'>{ship_fee_str} บาท</b></td></tr>"
@@ -2288,16 +2285,12 @@ with tab7:
     .summary .big td{font-weight:900}
   }"""
 
-                    if _print_copies == "2 ชุด (ลูกค้า + ร้าน)":
-                        _body = f"""<div class="two-col">
+                    _body = f"""<div class="two-col">
   <div class="copy">{_bill_body("สำหรับลูกค้า")}</div>
   <div class="vcut"></div>
   <div class="copy">{_bill_body("สำหรับร้าน")}</div>
 </div>"""
-                        _height = 750
-                    else:
-                        _body = _bill_body("")
-                        _height = 700
+                    _height = 750
 
                     bill_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{_css}</style></head><body>
