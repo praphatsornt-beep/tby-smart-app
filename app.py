@@ -1473,22 +1473,39 @@ with tab2:
                             if _pending_recv.empty:
                                 st.info("ไม่มีรายการที่ค้างรับ")
                             else:
-                                mp_date_r = st.date_input("วันที่รับ", value=date.today(), key=f"mp_date_r_{customer_name}")
-                                mp_notes_r = st.text_input("หมายเหตุ", key=f"mp_notes_r_{customer_name}")
-                                if st.button(f"📦 บันทึกรับของทั้งหมด {len(_pending_recv)} รายการ",
-                                             type="primary", use_container_width=True,
-                                             key=f"multi_recv_{customer_name}"):
-                                    for _, _rrow in _pending_recv.iterrows():
-                                        db.insert_partial_event({
-                                            "id":             str(uuid.uuid4()),
-                                            "date":           str(mp_date_r),
-                                            "transaction_id": _rrow["id"],
-                                            "qty_received":   int(_rrow["ค้างรับ"]),
-                                            "amount_paid":    0.0,
-                                            "event_type":     "รับของ",
-                                            "notes":          mp_notes_r,
-                                        })
-                                    st.success(f"✅ บันทึกรับของ {len(_pending_recv)} รายการแล้ว")
+                                _recv_rows = [{"_id": r["id"], "สินค้า": r["สินค้า"],
+                                               "ค้างรับ": int(r["ค้างรับ"]),
+                                               "รับจริง": int(r["ค้างรับ"])}
+                                              for _, r in _pending_recv.iterrows()]
+                                _recv_df = pd.DataFrame(_recv_rows)
+                                _edited_recv = st.data_editor(
+                                    _recv_df[["สินค้า","ค้างรับ","รับจริง"]],
+                                    column_config={
+                                        "สินค้า":  st.column_config.TextColumn(disabled=True),
+                                        "ค้างรับ": st.column_config.NumberColumn(disabled=True),
+                                        "รับจริง": st.column_config.NumberColumn("รับจริง ✏️", min_value=0, format="%d"),
+                                    },
+                                    hide_index=True, use_container_width=True,
+                                    key=f"multi_recv_tbl_{customer_name}",
+                                )
+                                mr1, mr2 = st.columns([2, 1])
+                                mp_notes_r = mr1.text_input("หมายเหตุ", key=f"mp_notes_r_{customer_name}")
+                                mp_date_r  = mr2.date_input("วันที่รับ", value=date.today(), key=f"mp_date_r_{customer_name}")
+                                if st.button(f"📦 บันทึกรับของ", type="primary",
+                                             use_container_width=True, key=f"multi_recv_{customer_name}"):
+                                    for i, _rrow in _recv_df.iterrows():
+                                        _qty = int(_edited_recv.iloc[i]["รับจริง"])
+                                        if _qty > 0:
+                                            db.insert_partial_event({
+                                                "id":             str(uuid.uuid4()),
+                                                "date":           str(mp_date_r),
+                                                "transaction_id": _rrow["_id"],
+                                                "qty_received":   _qty,
+                                                "amount_paid":    0.0,
+                                                "event_type":     "รับของ",
+                                                "notes":          mp_notes_r,
+                                            })
+                                    st.success("✅ บันทึกรับของแล้ว")
                                     st.rerun()
                         else:
                             # ตารางแก้ยอดจ่ายได้ทีละแถว
