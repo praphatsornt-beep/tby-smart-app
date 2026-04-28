@@ -357,9 +357,6 @@ tr:nth-child(even) td{{background:#f7f7f7}}
 with tab1:
     _sub_sale, _sub_ship, _sub_shiphist = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง"])
 
-    # capture ก่อน tab ใดๆ set ทับ — ใช้ตรวจ tab switch
-    _prev_subtab_snapshot = st.session_state.get("_active_subtab", "")
-
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
                       "m_bill","m_pay","m_delivery","m_cod",
@@ -367,11 +364,6 @@ with tab1:
                       "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
                       "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv"]
-        # auto-clear เมื่อมาจาก tab อื่น
-        if _prev_subtab_snapshot not in ("", "sale"):
-            for _k in _sale_keys:
-                st.session_state.pop(_k, None)
-        st.session_state["_active_subtab"] = "sale"
 
         if st.session_state.get("_print_popup"):
             _show_bill_popup(st.session_state["_print_popup"])
@@ -936,11 +928,6 @@ with tab1:
         _sp_keys = ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc",
                     "sp_track","sp_notes","sp_cart","_sp_cust_picked","sp_cust_search",
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc"]
-        # auto-clear เมื่อมาจาก tab อื่น (ใช้ snapshot ก่อน tabs set ทับ)
-        if _prev_subtab_snapshot not in ("", "ship"):
-            for _k in _sp_keys:
-                st.session_state.pop(_k, None)
-        st.session_state["_active_subtab"] = "ship"
 
         _sc1, _sc2 = st.columns([6, 1])
         _sc1.subheader("บันทึกการส่งของ")
@@ -1218,7 +1205,6 @@ with tab1:
         st.caption("กรอกข้อมูลด้านบนแล้วกด 💾 บันทึกการส่งของ — tracking จะบันทึกอัตโนมัติหลังส่ง iShip")
 
     with _sub_shiphist:
-        st.session_state["_active_subtab"] = "hist"
         st.subheader("ประวัติการส่งของ")
         try:
             _sh_all = db.get_shipments()
