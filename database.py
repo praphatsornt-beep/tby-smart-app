@@ -1,4 +1,5 @@
 import os
+import time
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client, Client
@@ -6,6 +7,18 @@ import pandas as pd
 from collections import defaultdict
 from math import floor
 import uuid
+
+
+def _retry(fn, attempts: int = 2, delay: float = 0.5):
+    """เรียก fn() ซ้ำถ้าเกิด network error"""
+    for i in range(attempts):
+        try:
+            return fn()
+        except Exception:
+            if i < attempts - 1:
+                time.sleep(delay)
+            else:
+                raise
 
 load_dotenv()
 
@@ -169,11 +182,11 @@ def update_transaction_status(transaction_id: str, bill_status: str = None, pay_
 def get_transaction_balance(transaction_id: str) -> dict:
     """ยอดจ่ายและรับของสะสมของรายการ พร้อมจำนวนที่รับได้อีก"""
     db = get_supabase()
-    _rows = db.table("transactions").select("*").eq("id", transaction_id).execute().data
+    _rows = _retry(lambda: db.table("transactions").select("*").eq("id", transaction_id).execute().data)
     if not _rows:
         return None
     txn = _rows[0]
-    events = db.table("partial_events").select("*").eq("transaction_id", transaction_id).execute().data
+    events = _retry(lambda: db.table("partial_events").select("*").eq("transaction_id", transaction_id).execute().data)
 
     total_paid = (
         float(txn["total_amount"]) if txn["pay_status"] == "จ่ายแล้ว" else 0.0
