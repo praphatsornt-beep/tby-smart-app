@@ -1188,11 +1188,15 @@ with tab1:
             if _r.get("error"):
                 st.error(f"❌ {_r['error']}")
             else:
-                st.session_state["_sh_cod_map"] = _r.get("transfers", {})
-                st.rerun()
+                _cod_transfers = _r.get("transfers", {})
+                st.session_state["_sh_cod_map"] = _cod_transfers
+                if _cod_transfers:
+                    st.rerun()
+                else:
+                    st.warning(f"ดึงข้อมูลสำเร็จแต่ไม่พบ tracking ที่โอนแล้ว\n\n`_debug`: {_r.get('_debug', {})}")
         _sh_cod_map = st.session_state.get("_sh_cod_map", {})
         if _sh_cod_map:
-            _sh_cod_col.caption(f"✅ มีข้อมูล COD {len(_sh_cod_map)} tracking")
+            _sh_cod_col.caption(f"✅ COD โอนแล้ว {len(_sh_cod_map)} tracking | {', '.join(list(_sh_cod_map.keys())[:3])}")
 
         try:
             _sh_all = db.get_shipments()
