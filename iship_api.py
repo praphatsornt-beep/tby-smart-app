@@ -92,7 +92,11 @@ def get_cod_transfers(days_back: int = 60) -> dict:
 
     end_date   = _dt.date.today()
     start_date = end_date - _dt.timedelta(days=days_back)
+
+    # โหลดหน้า withdraw ก่อนเพื่อให้ browser ได้ XSRF token ใหม่
+    sess.get(f"{WEB_BASE}/report/withdraw", timeout=10)
     xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
+
     hdrs = {
         "X-Requested-With": "XMLHttpRequest",
         "Accept":           "application/json, text/javascript, */*; q=0.01",
