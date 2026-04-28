@@ -136,8 +136,13 @@ def get_cod_transfers(days_back: int = 60) -> dict:
             return {"transfers": {}, "error": f"JSON parse failed: {r_list.text[:300]}"}
 
         # ── 2. detail แบบ parallel ──────────────────────────────────
-        # Session ไม่ thread-safe → copy cookies เป็น dict ให้แต่ละ thread ใช้แยก
-        _cookie_dict = dict(sess.cookies)
+        # สร้าง session ใหม่ต่อ thread (copy cookies+headers จาก session หลัก)
+        def _make_sess():
+            s = requests.Session()
+            s.cookies.update(sess.cookies)
+            s.headers.update(sess.headers)
+            return s
+
         from concurrent.futures import ThreadPoolExecutor, as_completed
 
         _det_cols = ["created_at","pickedup_date","courier_code","track_no",
@@ -160,11 +165,11 @@ def get_cod_transfers(days_back: int = 60) -> dict:
             net     = batch.get("net_total_amount", 0)
             if not txn_id:
                 return {}
+            _s = _make_sess()
             hdrs2 = {**hdrs, "Referer": f"{WEB_BASE}/report/withdraw/{txn_id}"}
             try:
-                r = requests.get(f"{WEB_BASE}/report/withdraw/{txn_id}",
-                                 headers=hdrs2, cookies=_cookie_dict,
-                                 timeout=15, params=_det_params_base)
+                r = _s.get(f"{WEB_BASE}/report/withdraw/{txn_id}",
+                           headers=hdrs2, timeout=15, params=_det_params_base)
                 if r.status_code != 200 or not r.text.strip():
                     return {"_debug_det": f"status={r.status_code} empty={not r.text.strip()} url={r.url[:80]}"}
                 try:
