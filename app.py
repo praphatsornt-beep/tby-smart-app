@@ -2143,8 +2143,45 @@ with tab7:
             else:
                 all_df_p = _all_txn_cache[_all_txn_cache["ลูกค้า"] == sel_p]
 
+                # ── Bill picker ───────────────────────────────────────────
+                if st.session_state.get("_print_bill_cust") != sel_p:
+                    st.session_state.pop("_print_bill_picked", None)
+                    st.session_state["_print_bill_cust"] = sel_p
+
+                _bill_picked = st.session_state.get("_print_bill_picked", "")
+
+                if not _bill_picked:
+                    if all_df_p.empty:
+                        st.info("ไม่มีรายการ")
+                    else:
+                        _bills = (all_df_p.groupby("เลขที่บิล", dropna=False)
+                                  .agg(วันที่=("วันที่", "max"),
+                                       ยอดรวม=("ยอดรวม", "sum"),
+                                       ค้างจ่าย=("ค้างจ่าย", "sum"))
+                                  .reset_index()
+                                  .sort_values("วันที่", ascending=False))
+                        st.caption("เลือกบิลที่ต้องการพิมพ์")
+                        for _, _br in _bills.iterrows():
+                            _bno = _br["เลขที่บิล"] or "—"
+                            _owing = _br["ค้างจ่าย"]
+                            _color = "🔴" if _owing > 0.01 else "✅"
+                            _lbl = f"📄 **{_bno}** &nbsp; {_br['วันที่']} &nbsp; {_color} ค้างจ่าย {_owing:,.0f} บาท"
+                            if st.button(_lbl, key=f"pbill_{_bno}", use_container_width=True):
+                                st.session_state["_print_bill_picked"] = _bno
+                                st.rerun()
+                else:
+                    _bx1, _bx2 = st.columns([6, 1])
+                    _bx1.markdown(f"📄 บิล **{_bill_picked}**")
+                    if _bx2.button("✕ เปลี่ยน", key="print_bill_clear"):
+                        st.session_state.pop("_print_bill_picked", None)
+                        st.rerun()
+                    all_df_p = all_df_p[all_df_p["เลขที่บิล"].fillna("—") == _bill_picked]
+
+                if not _bill_picked:
+                    all_df_p = pd.DataFrame()  # ยังไม่เลือกบิล ไม่แสดง print
+
             if all_df_p.empty:
-                st.info("ไม่มีรายการ")
+                pass
             else:
                 show_p = all_df_p[~all_df_p["เคลียร์แล้ว"]].copy() if filter_p == "ค้างอยู่" else all_df_p.copy()
 
