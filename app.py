@@ -737,11 +737,19 @@ with tab1:
                         vm1, vm2, vm3, vm4, vm5, vm6, vm7 = st.columns(7)
                         vm1.metric("ยอดสินค้า",       f"{total_amt:,.0f} ฿")
                         vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
-                        vm3.metric("💰 ยอดเก็บ",       f"{collect:,.0f} ฿")
+                        vm3.metric("💰 ยอดเก็บ (อัตโนมัติ)", f"{collect:,.0f} ฿")
                         vm4.metric("💸 ค่า COD",       f"{cod_fee:,.2f} ฿")
                         vm5.metric("✅ ได้รับจริง",    f"{net_recv:,.2f} ฿")
                         vm6.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
                         vm7.metric("PV รวม",           f"{total_pv:.0f}")
+                        _cod_auto = int(ceil(collect))
+                        _cod_custom = st.number_input(
+                            "💰 ยอด COD ที่ต้องเก็บ (แก้ได้)",
+                            min_value=0, value=_cod_auto, step=1,
+                            key="m_cod_custom",
+                            help="ค่า default = คำนวณอัตโนมัติ ปรับได้ถ้าต้องการเก็บยอดอื่น",
+                        )
+                        collect = float(_cod_custom)
                     else:
                         vm1, vm2, vm3, vm4, vm5 = st.columns(5)
                         vm1.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
@@ -786,6 +794,9 @@ with tab1:
                     _base_cod  = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
                     cod_amount = round(_base_cod * COD_FEE_RATE, 2)
                     collect    = _base_cod + cod_amount
+                    _cod_custom_val = st.session_state.get("m_cod_custom", 0)
+                    if _cod_custom_val and int(_cod_custom_val) != int(ceil(collect)):
+                        collect = float(_cod_custom_val)
                     cod_tag    = f"[COD|ยอดเก็บ={collect:.0f}฿|ค่าธรรมเนียม={cod_amount:.2f}฿|ยอดรับจริง={_base_cod:.2f}฿]"
                 else:
                     cod_tag = ""
@@ -862,7 +873,7 @@ with tab1:
                 }
                 # ล้างฟอร์มสำหรับลูกค้าถัดไป
                 for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
-                           "m_bill", "m_pay", "m_delivery", "m_cod",
+                           "m_bill", "m_pay", "m_delivery", "m_cod", "m_cod_custom",
                            "m_cart", "_cart_base", "m_postcode", "m_carrier", "m_zone",
                            "r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv",
                            "_carrier_sig", "_prev_pc", "_prev_pay",
