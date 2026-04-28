@@ -1242,7 +1242,7 @@ with tab1:
 
             _sh_edit = st.data_editor(
                 _sh_df,
-                hide_index=True, use_container_width=True, key="sh_hist_tbl",
+                hide_index=True, use_container_width=False, key="sh_hist_tbl",
                 disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
                           "รายการ","ขนส่ง","COD","💸","Tracking","หมายเหตุ"],
