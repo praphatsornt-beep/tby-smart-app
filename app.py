@@ -360,7 +360,7 @@ with tab1:
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
                       "m_bill","m_pay","m_delivery","m_cod",
-                      "m_cart","m_postcode","m_carrier","m_zone",
+                      "m_cart","_cart_base","m_postcode","m_carrier","m_zone",
                       "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
                       "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv"]
@@ -471,6 +471,7 @@ with tab1:
                     if _qf:
                         st.session_state["_quick_cart_items"] = _qf
                         st.session_state.pop("m_cart", None)
+                        st.session_state.pop("_cart_base", None)
                         st.rerun()
 
             st.divider()
@@ -554,17 +555,27 @@ with tab1:
             # ── รายการสินค้า ─────────────────────────────────────────────────
             product_display = {f"{p['id']} — {p['name']}": p for p in products}
             product_display_keys = list(product_display.keys())
-            if "_quick_cart_items" in st.session_state:
-                _qi = st.session_state.pop("_quick_cart_items")
-                cart_df = pd.DataFrame({
-                    "สินค้า": [f"{it['product']['id']} — {it['product']['name']}" for it in _qi],
-                    "จำนวน":  pd.array([it["qty"] for it in _qi], dtype="int64"),
-                })
+            # cart_df ต้องคงที่ระหว่าง reruns เพราะ data_editor เก็บแค่ edit diff
+            if "m_cart" not in st.session_state:
+                # first render หรือหลัง clear — ตั้ง base ใหม่
+                if "_quick_cart_items" in st.session_state:
+                    _qi = st.session_state.pop("_quick_cart_items")
+                    cart_df = pd.DataFrame({
+                        "สินค้า": [f"{it['product']['id']} — {it['product']['name']}" for it in _qi],
+                        "จำนวน":  pd.array([it["qty"] for it in _qi], dtype="int64"),
+                    })
+                else:
+                    cart_df = pd.DataFrame({
+                        "สินค้า": pd.Series([""] * 3, dtype="object"),
+                        "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
+                    })
+                st.session_state["_cart_base"] = cart_df
             else:
-                cart_df = pd.DataFrame({
+                # rerun กลาง session — ใช้ base เดิมเสมอ
+                cart_df = st.session_state.get("_cart_base", pd.DataFrame({
                     "สินค้า": pd.Series([""] * 3, dtype="object"),
                     "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
-                })
+                }))
             edited_cart = st.data_editor(
                 cart_df,
                 num_rows="dynamic",
@@ -912,7 +923,7 @@ with tab1:
                 # ล้างฟอร์มสำหรับลูกค้าถัดไป
                 for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
                            "m_bill", "m_pay", "m_delivery", "m_cod",
-                           "m_cart", "m_postcode", "m_carrier", "m_zone",
+                           "m_cart", "_cart_base", "m_postcode", "m_carrier", "m_zone",
                            "r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv",
                            "_carrier_sig", "_prev_pc", "_prev_pay",
                            "_prev_shipping_cid", "_last_rph_fill"]:
