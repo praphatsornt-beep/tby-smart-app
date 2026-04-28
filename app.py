@@ -45,6 +45,13 @@ from flash_zones import lookup_zone, zone_surcharge, ZONE_LABELS, carrier_fees
 
 BOX_WEIGHT_G = 500  # น้ำหนักกล่อง 0.5 kg (ไม่แสดงในระบบ)
 
+def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+    return buf.getvalue()
+
+
 def calc_shipping(weight_grams: float, postcode: str = "") -> float:
     """ค่าส่ง Flash Express: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท + ค่าพื้นที่"""
     kg  = (weight_grams + BOX_WEIGHT_G) / 1000
@@ -1243,6 +1250,18 @@ with tab2:
                 outstanding_df["เลขที่บิล"].fillna("").str.contains(_t2_bill_search.strip(), case=False)
             ]
 
+        _exp_cols2 = ["เลขที่บิล", "วันที่", "ลูกค้า", "รหัส", "สินค้า", "สั่ง",
+                      "ค้างรับ", "ยอดรวม", "ค้างจ่าย", "สถานะบิล"]
+        _avail_cols2 = [c for c in _exp_cols2 if c in outstanding_df.columns]
+        _exp_df2 = outstanding_df[_avail_cols2]
+        st.download_button(
+            "⬇ Export Excel",
+            _to_excel_bytes(_exp_df2, "ยอดค้าง"),
+            file_name=f"ยอดค้าง_{date.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_outs",
+        )
+
         if outstanding_df.empty:
             st.success("✅ ไม่มียอดค้าง")
         else:
@@ -1825,6 +1844,14 @@ with tab5:
         show_df = all_df[display_cols_h].reset_index(drop=True)
         show_df["หมายเหตุ"] = show_df["หมายเหตุ"].fillna("").apply(_fmt_note)
         id_map  = all_df["id"].reset_index(drop=True)
+
+        st.download_button(
+            "⬇ Export Excel",
+            _to_excel_bytes(show_df, "ประวัติ"),
+            file_name=f"ประวัติ_{date.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="dl_hist",
+        )
 
         chk_df = show_df.copy()
         chk_df.insert(0, "🗑️", False)
