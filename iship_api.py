@@ -81,57 +81,41 @@ def is_configured() -> bool:
 
 def get_cod_transfers(max_batches: int = 30) -> dict:
     """
-    ดึงสถานะ COD transfer จาก iShip
-    คืน: {
-      "transfers": {tracking_number: {"wd_id","date","net","fee","carrier"}},
-      "debug": {...}
-    }
+    ดึงสถานะ COD transfer จาก iShip API
+    คืน: {"transfers": {tracking: {...}}, "debug": {...}}
     """
     sess, login_msg = _web_session()
     if not sess:
         return {"transfers": {}, "error": login_msg}
 
     debug = {}
+    json_headers = {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"}
+
     try:
-        # ── 1. ดึง list ของ WD batches ───────────────────────────────
-        r_list = sess.get(f"{WEB_BASE}/report/withdraw", timeout=15)
-        debug["list_status"] = r_list.status_code
-        debug["list_url"]    = r_list.url
+        # ── probe API endpoints ──────────────────────────────────────
+        candidates = [
+            f"{BASE_URL}/withdraw",
+            f"{BASE_URL}/withdraws",
+            f"{BASE_URL}/cod/withdraw",
+            f"{BASE_URL}/cod-withdraw",
+            f"{WEB_BASE}/report/withdraw/data",
+            f"{BASE_URL}/report/withdraw",
+        ]
+        probe = {}
+        for url in candidates:
+            try:
+                r = sess.get(url, headers=json_headers, timeout=10)
+                probe[url] = {"status": r.status_code, "preview": r.text[:200]}
+                if r.status_code == 200:
+                    try:
+                        probe[url]["json"] = r.json()
+                    except Exception:
+                        pass
+            except Exception as ex:
+                probe[url] = {"error": str(ex)}
 
-        # หา WD IDs จาก links ใน HTML
-        wd_ids = list(dict.fromkeys(
-            re.findall(r'/report/withdraw/(WD[A-Za-z0-9]+)', r_list.text)
-        ))
-        debug["wd_ids_found"] = wd_ids[:5]  # show first 5
-
-        if not wd_ids:
-            debug["list_html_preview"] = r_list.text[:500]
-            return {"transfers": {}, "debug": debug, "error": "ไม่พบ WD IDs"}
-
-        # ── 2. ดึง detail แต่ละ WD batch ────────────────────────────
-        transfers = {}
-        for wd_id in wd_ids[:max_batches]:
-            r_det = sess.get(f"{WEB_BASE}/report/withdraw/{wd_id}", timeout=15)
-            # แต่ละแถวใน table: td ตามลำดับ
-            # สร้างเมื่อ | เข้าระบบ | ขนส่ง | พัสดุ(tracking) | ผู้รับ | เบอร์ | COD | ค่าธรรมเนียม | ยอดโอน | อัพเดท
-            rows = re.findall(r'<tr[^>]*>(.*?)</tr>', r_det.text, re.DOTALL)
-            for row in rows:
-                cells = re.findall(r'<td[^>]*>(.*?)</td>', row, re.DOTALL)
-                cells = [re.sub(r'<[^>]+>', '', c).strip() for c in cells]
-                if len(cells) >= 9:
-                    tracking = cells[3].strip()
-                    if tracking and len(tracking) > 5:
-                        transfers[tracking] = {
-                            "wd_id":   wd_id,
-                            "date":    cells[9] if len(cells) > 9 else cells[-1],
-                            "carrier": cells[2],
-                            "cod":     cells[6],
-                            "fee":     cells[7],
-                            "net":     cells[8],
-                        }
-        debug["batches_fetched"] = len(wd_ids[:max_batches])
-        debug["tracking_count"]  = len(transfers)
-        return {"transfers": transfers, "debug": debug}
+        debug["probe"] = probe
+        return {"transfers": {}, "debug": debug, "note": "กำลัง probe endpoints — ดู debug.probe"}
 
     except Exception as e:
         debug["exception"] = str(e)
