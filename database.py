@@ -191,6 +191,23 @@ def get_transaction_balance(transaction_id: str) -> dict:
     }
 
 
+def get_last_payment_date(transaction_ids: list) -> str:
+    """คืนวันที่รับเงินล่าสุด (max date ที่ amount_paid > 0) จาก partial_events"""
+    if not transaction_ids:
+        return ""
+    try:
+        rows = (get_supabase().table("partial_events")
+                .select("date, amount_paid")
+                .in_("transaction_id", transaction_ids)
+                .gt("amount_paid", 0)
+                .execute().data)
+        if not rows:
+            return ""
+        return max(r["date"] for r in rows)[:10]
+    except Exception:
+        return ""
+
+
 def delete_transaction(transaction_id: str) -> None:
     db = get_supabase()
     db.table("partial_events").delete().eq("transaction_id", transaction_id).execute()

@@ -2181,6 +2181,10 @@ with tab7:
                     filter_label      = "รายการค้างอยู่" if filter_p == "ค้างอยู่" else "รายการทั้งหมด"
                     bill_nos          = show_p["เลขที่บิล"].dropna().unique().tolist() if "เลขที่บิล" in show_p.columns else []
                     bill_nos_str      = ", ".join(b for b in bill_nos if b) or ""
+                    _txn_ids_p        = show_p["id"].tolist() if "id" in show_p.columns else []
+                    _last_paid_raw    = db.get_last_payment_date(_txn_ids_p)
+                    _paid_date_str    = (pd.to_datetime(_last_paid_raw).strftime("%d/%m/%Y")
+                                        if _last_paid_raw else "—")
 
                     # ตรวจสอบว่ามี tag ส่งพัสดุจาก notes ของรายการแรก
                     first_note = str(show_p.iloc[0].get("หมายเหตุ", "") or "")
@@ -2222,6 +2226,7 @@ with tab7:
   </div>
   <div style="text-align:right">
     <div style="font-size:14px;font-weight:600">เลขที่บิล: {bill_nos_str if bill_nos_str else "—"}</div>
+    <div style="font-size:14px;font-weight:600;margin-top:4px">วันที่รับเงิน: {_paid_date_str}</div>
     <div class="info" style="margin-top:4px">วันที่พิมพ์: {today_str}</div>
     <div class="info">{filter_label} ({len(show_p)} รายการ)</div>
   </div>
