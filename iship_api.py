@@ -143,19 +143,34 @@ def get_cod_transfers(days_back: int = 60) -> dict:
             net      = batch.get("net_total_amount", 0)
             if not txn_id:
                 continue
-            hdrs2 = {**hdrs, "Referer": f"{WEB_BASE}/report/withdraw/{txn_id}"}
-            r_det = sess.get(f"{WEB_BASE}/report/withdraw/{txn_id}", headers=hdrs2, timeout=15, params={
-                "draw": 1, "start": 0, "length": 200,
-                "columns[0][data]": "created_at",
-                "columns[1][data]": "track_no",
-                "columns[2][data]": "cod_amount",
-                "columns[3][data]": "cod_balance",
-                "columns[4][data]": "status_name",
-                "order[0][column]": 0, "order[0][dir]": "desc",
-            })
-            if r_det.status_code != 200:
+            # โหลด detail page เพื่อ refresh XSRF ก่อนเรียก DataTables
+            sess.get(f"{WEB_BASE}/report/withdraw/{txn_id}", timeout=10)
+            xsrf2 = unquote(sess.cookies.get("XSRF-TOKEN", ""))
+            hdrs2 = {**hdrs, "Referer": f"{WEB_BASE}/report/withdraw/{txn_id}",
+                     "X-XSRF-TOKEN": xsrf2}
+            # build full column params สำหรับ detail
+            _det_cols = ["created_at","pickedup_date","courier_code","track_no",
+                         "dst_name","dst_phone","cod_amount","cod_non_vat",
+                         "cod_balance","pod_date","status_name"]
+            _det_params = {"draw": 1, "start": 0, "length": 200,
+                           "order[0][column]": 0, "order[0][dir]": "desc",
+                           "search[value]": "", "search[regex]": "false"}
+            for i, c in enumerate(_det_cols):
+                _det_params[f"columns[{i}][data]"]          = c
+                _det_params[f"columns[{i}][name]"]          = ""
+                _det_params[f"columns[{i}][searchable]"]    = "true"
+                _det_params[f"columns[{i}][orderable]"]     = "true"
+                _det_params[f"columns[{i}][search][value]"] = ""
+                _det_params[f"columns[{i}][search][regex]"] = "false"
+            r_det = sess.get(f"{WEB_BASE}/report/withdraw/{txn_id}",
+                             headers=hdrs2, timeout=15, params=_det_params)
+            if r_det.status_code != 200 or not r_det.text.strip():
                 continue
-            for row in r_det.json().get("data", []):
+            try:
+                det_rows = r_det.json().get("data", [])
+            except Exception:
+                continue
+            for row in det_rows:
                 tn = row.get("track_no", "")
                 if not tn:
                     continue
