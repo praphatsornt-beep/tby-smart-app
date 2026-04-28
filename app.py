@@ -2121,6 +2121,9 @@ with tab7:
                 sel_p = "— เลือก —"
                 if _p_q.strip():
                     _p_matches = [n for n in cust_map_p if _p_q.strip().upper() in n.upper()][:8]
+                    if len(_p_matches) == 1:
+                        st.session_state["_print_cust_picked"] = _p_matches[0]
+                        st.rerun()
                     for _pm in _p_matches:
                         if st.button(f"👤 {_pm}", key=f"pp_{_pm}", use_container_width=True):
                             st.session_state["_print_cust_picked"] = _pm
