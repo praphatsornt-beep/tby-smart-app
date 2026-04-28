@@ -135,52 +135,56 @@ def get_cod_transfers(days_back: int = 60) -> dict:
         except Exception:
             return {"transfers": {}, "error": f"JSON parse failed: {r_list.text[:300]}"}
 
-        # ── 2. detail ของแต่ละ batch → track_no ─────────────────────
-        transfers = {}
-        for batch in batches:
-            txn_id   = batch.get("txn_id", "")
-            wd_date  = batch.get("datetime", "")[:10]
-            net      = batch.get("net_total_amount", 0)
+        # ── 2. detail แบบ parallel ──────────────────────────────────
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        _det_cols = ["created_at","pickedup_date","courier_code","track_no",
+                     "dst_name","dst_phone","cod_amount","cod_non_vat",
+                     "cod_balance","pod_date","status_name"]
+        _det_params_base = {"draw": 1, "start": 0, "length": 200,
+                            "order[0][column]": 0, "order[0][dir]": "desc",
+                            "search[value]": "", "search[regex]": "false"}
+        for _i, _c in enumerate(_det_cols):
+            _det_params_base[f"columns[{_i}][data]"]          = _c
+            _det_params_base[f"columns[{_i}][name]"]          = ""
+            _det_params_base[f"columns[{_i}][searchable]"]    = "true"
+            _det_params_base[f"columns[{_i}][orderable]"]     = "true"
+            _det_params_base[f"columns[{_i}][search][value]"] = ""
+            _det_params_base[f"columns[{_i}][search][regex]"] = "false"
+
+        def _fetch_detail(batch):
+            txn_id  = batch.get("txn_id", "")
+            wd_date = batch.get("datetime", "")[:10]
+            net     = batch.get("net_total_amount", 0)
             if not txn_id:
-                continue
-            # โหลด detail page เพื่อ refresh XSRF ก่อนเรียก DataTables
-            sess.get(f"{WEB_BASE}/report/withdraw/{txn_id}", timeout=10)
-            xsrf2 = unquote(sess.cookies.get("XSRF-TOKEN", ""))
-            hdrs2 = {**hdrs, "Referer": f"{WEB_BASE}/report/withdraw/{txn_id}",
-                     "X-XSRF-TOKEN": xsrf2}
-            # build full column params สำหรับ detail
-            _det_cols = ["created_at","pickedup_date","courier_code","track_no",
-                         "dst_name","dst_phone","cod_amount","cod_non_vat",
-                         "cod_balance","pod_date","status_name"]
-            _det_params = {"draw": 1, "start": 0, "length": 200,
-                           "order[0][column]": 0, "order[0][dir]": "desc",
-                           "search[value]": "", "search[regex]": "false"}
-            for i, c in enumerate(_det_cols):
-                _det_params[f"columns[{i}][data]"]          = c
-                _det_params[f"columns[{i}][name]"]          = ""
-                _det_params[f"columns[{i}][searchable]"]    = "true"
-                _det_params[f"columns[{i}][orderable]"]     = "true"
-                _det_params[f"columns[{i}][search][value]"] = ""
-                _det_params[f"columns[{i}][search][regex]"] = "false"
-            r_det = sess.get(f"{WEB_BASE}/report/withdraw/{txn_id}",
-                             headers=hdrs2, timeout=15, params=_det_params)
-            if r_det.status_code != 200 or not r_det.text.strip():
-                continue
+                return {}
+            hdrs2 = {**hdrs, "Referer": f"{WEB_BASE}/report/withdraw/{txn_id}"}
             try:
-                det_rows = r_det.json().get("data", [])
+                r = sess.get(f"{WEB_BASE}/report/withdraw/{txn_id}",
+                             headers=hdrs2, timeout=15, params=_det_params_base)
+                if r.status_code != 200 or not r.text.strip():
+                    return {}
+                rows = r.json().get("data", [])
             except Exception:
-                continue
-            for row in det_rows:
+                return {}
+            result = {}
+            for row in rows:
                 tn = row.get("track_no", "")
-                if not tn:
-                    continue
-                transfers[tn] = {
-                    "wd_id":      txn_id,
-                    "date":       wd_date,
-                    "cod_amount": row.get("cod_amount", ""),
-                    "net":        row.get("cod_balance", net),
-                    "status":     row.get("status_name", "ชำระเงินสำเร็จ"),
-                }
+                if tn:
+                    result[tn] = {
+                        "wd_id":      txn_id,
+                        "date":       wd_date,
+                        "cod_amount": row.get("cod_amount", ""),
+                        "net":        row.get("cod_balance", net),
+                        "status":     row.get("status_name", "ชำระเงินสำเร็จ"),
+                    }
+            return result
+
+        transfers = {}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = {pool.submit(_fetch_detail, b): b for b in batches}
+            for fut in as_completed(futures):
+                transfers.update(fut.result())
         return {"transfers": transfers, "error": None,
                 "_debug": {"batches": len(batches),
                            "first_txn": batches[0].get("txn_id","") if batches else ""}}
