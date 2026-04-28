@@ -1183,20 +1183,43 @@ with tab1:
 
         _sh_cod_col, _sh_sync_col = st.columns([6, 2])
         if _sh_sync_col.button("🔄 ตรวจสอบ COD", key="sh_cod_sync", use_container_width=True):
-            with st.spinner("กำลังดึงข้อมูลจาก iShip..."):
-                _r = iship_api.get_cod_transfers(days_back=90)
-            if _r.get("error"):
-                st.error(f"❌ {_r['error']}")
+            try:
+                _pending = db.get_pending_cod_tracking()
+            except Exception:
+                _pending = None  # column ยังไม่มี — ดึงทั้งหมด
+            if _pending is not None and len(_pending) == 0:
+                st.info("✅ COD ทุกรายการโอนแล้ว ไม่ต้องดึงข้อมูลใหม่")
             else:
-                _cod_transfers = _r.get("transfers", {})
-                st.session_state["_sh_cod_map"] = _cod_transfers
-                if _cod_transfers:
-                    st.rerun()
+                with st.spinner("กำลังดึงข้อมูลจาก iShip..."):
+                    _r = iship_api.get_cod_transfers(days_back=90)
+                if _r.get("error"):
+                    st.error(f"❌ {_r['error']}")
                 else:
-                    st.warning(f"ดึงข้อมูลสำเร็จแต่ไม่พบ tracking ที่โอนแล้ว\n\n`_debug`: {_r.get('_debug', {})}")
+                    _cod_transfers = _r.get("transfers", {})
+                    st.session_state["_sh_cod_map"] = _cod_transfers
+                    if _cod_transfers:
+                        try:
+                            db.mark_cod_transferred(list(_cod_transfers.keys()))
+                        except Exception:
+                            pass
+                        st.rerun()
+                    else:
+                        st.info("ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
         _sh_cod_map = st.session_state.get("_sh_cod_map", {})
+        # โหลดสถานะที่บันทึกใน DB ด้วย
+        try:
+            _db_transferred = set(
+                r["tracking_no"] for r in
+                db.get_supabase().table("shipments")
+                    .select("tracking_no").not_.is_("cod_transferred_at","null")
+                    .not_.is_("tracking_no","null").execute().data
+                if r.get("tracking_no")
+            )
+            _sh_cod_map = {**{tn: {} for tn in _db_transferred}, **_sh_cod_map}
+        except Exception:
+            pass
         if _sh_cod_map:
-            _sh_cod_col.caption(f"✅ COD โอนแล้ว {len(_sh_cod_map)} tracking | {', '.join(list(_sh_cod_map.keys())[:3])}")
+            _sh_cod_col.caption(f"✅ COD โอนแล้ว {len(_sh_cod_map)} tracking")
 
         try:
             _sh_all = db.get_shipments()
@@ -1230,7 +1253,8 @@ with tab1:
                 "เบอร์":            r.get("phone", ""),
                 "รายการ":          _items_str(r.get("items")),
                 "ขนส่ง":           r.get("carrier", ""),
-                "Tracking":        (f"https://app.iship.cloud/tracking?track={r['tracking_no']}"
+                "Tracking":        r.get("tracking_no", "") or "",
+                "🔗":              (f"https://app.iship.cloud/tracking?track={r['tracking_no']}"
                                    if r.get("tracking_no") else ""),
                 "บ้านเลขที่/ถนน":  r.get("address_line", ""),
                 "ตำบล":            r.get("district", ""),
@@ -1245,14 +1269,24 @@ with tab1:
                 hide_index=True, use_container_width=False, key="sh_hist_tbl",
                 disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
-                          "รายการ","ขนส่ง","COD","💸","Tracking","หมายเหตุ"],
+                          "รายการ","ขนส่ง","COD","💸","🔗","หมายเหตุ"],
                 column_config={
                     "ลบ":      st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
                     "COD":     st.column_config.NumberColumn("COD ฿", format="%,.0f", width="small"),
                     "💸":      st.column_config.TextColumn("💸", width="small"),
-                    "Tracking": st.column_config.LinkColumn("Tracking", width="medium", display_text=r"track=(.+)$"),
+                    "Tracking": st.column_config.TextColumn("Tracking", width="medium"),
+                    "🔗":      st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
                 },
             )
+
+            # บันทึก Tracking ที่แก้ไข
+            for _si, _srow in _sh_edit.iterrows():
+                _orig_tn = _sh_df.at[_si, "Tracking"]
+                _new_tn  = (_srow["Tracking"] or "").strip()
+                if _new_tn != _orig_tn:
+                    db.update_shipment_tracking(_sh_ids[_si], _new_tn)
+                    st.session_state.pop("sh_hist_tbl", None)
+                    st.rerun()
 
             _sh_to_del = [_sh_ids[i] for i, v in enumerate(_sh_edit["ลบ"]) if v]
 

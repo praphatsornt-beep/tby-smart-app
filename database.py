@@ -614,3 +614,28 @@ def update_shipment_tracking(shipment_id: str, tracking_no: str) -> None:
 
 def delete_shipment(shipment_id: str) -> None:
     get_supabase().table("shipments").delete().eq("id", shipment_id).execute()
+
+
+def mark_cod_transferred(tracking_nos: list[str]) -> None:
+    """บันทึกวันที่ COD โอนแล้วสำหรับ tracking numbers ที่ระบุ"""
+    if not tracking_nos:
+        return
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    (get_supabase().table("shipments")
+     .update({"cod_transferred_at": now})
+     .in_("tracking_no", tracking_nos)
+     .is_("cod_transferred_at", "null")
+     .execute())
+
+
+def get_pending_cod_tracking() -> list[str]:
+    """คืน tracking_no ที่ยังไม่ได้รับโอน COD"""
+    rows = (get_supabase().table("shipments")
+            .select("tracking_no")
+            .gt("cod_amount", 0)
+            .is_("cod_transferred_at", "null")
+            .not_.is_("tracking_no", "null")
+            .neq("tracking_no", "")
+            .execute().data)
+    return [r["tracking_no"] for r in rows if r.get("tracking_no")]
