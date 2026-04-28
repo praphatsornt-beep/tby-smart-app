@@ -244,6 +244,7 @@ def get_unbilled_pv_summary() -> dict:
     return {"count": count, "total_pv": total_pv, "total_amount": total_amount}
 
 
+@st.cache_data(ttl=60)
 def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.DataFrame:
     """รายการทั้งหมด รวมที่เคลียร์แล้ว"""
     db = get_supabase()

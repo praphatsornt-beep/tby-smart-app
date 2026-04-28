@@ -2130,47 +2130,50 @@ with tab7:
     if not customers_p:
         st.info("ยังไม่มีข้อมูลลูกค้า")
     else:
-        cust_map_p  = {c["name"]: c for c in customers_p}
-        _print_mode = st.radio("เลือกโดย", ["ลูกค้า", "เลขที่บิล"], horizontal=True, key="print_mode")
+        cust_map_p = {c["name"]: c for c in customers_p}
 
-        if _print_mode == "ลูกค้า":
-            pc1, pc2 = st.columns([3, 1])
-            with pc1:
-                _p_picked = st.session_state.get("_print_cust_picked", "")
-                if _p_picked:
-                    _ppx, _ppy = st.columns([5, 1])
-                    _ppx.markdown(f"👤 **{_p_picked}**")
-                    if _ppy.button("✕", key="print_cust_clear"):
-                        st.session_state.pop("_print_cust_picked", None)
-                        st.rerun()
-                    sel_p = _p_picked
-                else:
-                    _p_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อ...", key="print_cust_search")
-                    sel_p = "— เลือก —"
-                    if _p_search.strip():
-                        _p_matches = [n for n in cust_map_p if _p_search.upper() in n.upper()][:8]
-                        for _pm in _p_matches:
-                            if st.button(f"👤 {_pm}", key=f"pp_{_pm}", use_container_width=True):
-                                st.session_state["_print_cust_picked"] = _pm
-                                st.rerun()
-            filter_p = pc2.radio("แสดงรายการ", ["ค้างอยู่", "ทั้งหมด"], horizontal=True, key="print_filter")
-            pd1, pd2 = st.columns(2)
-            date_from_p = pd1.date_input("ตั้งแต่วันที่", value=None, key="print_date_from")
-            date_to_p   = pd2.date_input("ถึงวันที่",     value=None, key="print_date_to")
-            _sel_bill_no = None
+        _p_q = st.text_input("🔍 ชื่อลูกค้า หรือ เลขที่บิล",
+                              placeholder="เช่น KONAING  หรือ  260427-001",
+                              key="print_search")
+        _is_bill = bool(re.match(r'\d{6}-\d+', (_p_q or "").strip()))
+
+        if _is_bill:
+            _sel_bill_no = _p_q.strip()
+            sel_p = "—"
         else:
-            _sel_bill_no = st.text_input("เลขที่บิล", placeholder="เช่น 260427-001",
-                                         key="print_bill_no")
-            sel_p = "— เลือก —"
-            filter_p = "ทั้งหมด"
-            date_from_p = date_to_p = None
+            _sel_bill_no = None
+            _p_picked = st.session_state.get("_print_cust_picked", "")
+            if _p_q.strip() and not _p_picked:
+                # ล้าง picked ถ้า user เริ่มพิมพ์ใหม่
+                pass
+            if _p_picked and not _p_q.strip():
+                # ล้าง picked ถ้า user ลบ search
+                st.session_state.pop("_print_cust_picked", None)
+                _p_picked = ""
+            if _p_picked:
+                _ppx, _ppy = st.columns([5, 1])
+                _ppx.markdown(f"👤 **{_p_picked}**")
+                if _ppy.button("✕", key="print_cust_clear"):
+                    st.session_state.pop("_print_cust_picked", None)
+                    st.rerun()
+                sel_p = _p_picked
+            else:
+                sel_p = "— เลือก —"
+                if _p_q.strip():
+                    _p_matches = [n for n in cust_map_p if _p_q.strip().upper() in n.upper()][:8]
+                    for _pm in _p_matches:
+                        if st.button(f"👤 {_pm}", key=f"pp_{_pm}", use_container_width=True):
+                            st.session_state["_print_cust_picked"] = _pm
+                            st.rerun()
 
-        _ready = (_print_mode == "ลูกค้า" and sel_p != "— เลือก —") or \
-                 (_print_mode == "เลขที่บิล" and bool((_sel_bill_no or "").strip()))
+        filter_p = "ทั้งหมด"
+        date_from_p = date_to_p = None
+
+        _ready = _is_bill or sel_p != "— เลือก —"
 
         if _ready:
-            if _print_mode == "เลขที่บิล":
-                all_df_p = db.get_all_transactions_df(bill_no=(_sel_bill_no or "").strip())
+            if _is_bill:
+                all_df_p = db.get_all_transactions_df(bill_no=_sel_bill_no)
                 sel_p    = all_df_p["ลูกค้า"].iloc[0] if not all_df_p.empty else "—"
             else:
                 customer_p  = cust_map_p[sel_p]
