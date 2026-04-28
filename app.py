@@ -1502,42 +1502,79 @@ with tab4:
     sub1, sub2, sub3, sub4 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "🗑️ ลบบิล"])
 
     # ── iShip API debug ─────────────────────────────────────────────────────
-    with st.expander("🔧 ทดสอบ iShip API Login"):
-        if st.button("ทดสอบ POST /api/login", key="iship_login_test"):
-            import requests as _rq
-            import os as _os
-            _email = _os.environ.get("ISHIP_EMAIL") or st.secrets.get("ISHIP_EMAIL", "")
-            _pw    = _os.environ.get("ISHIP_PASSWORD") or st.secrets.get("ISHIP_PASSWORD", "")
+    with st.expander("🔧 ทดสอบ iShip API"):
+        import requests as _rq, os as _os, iship_api as _ia
+        _tok   = _os.environ.get("ISHIP_TOKEN") or st.secrets.get("ISHIP_TOKEN", "")
+        _email = _os.environ.get("ISHIP_EMAIL") or st.secrets.get("ISHIP_EMAIL", "")
+        _pw    = _os.environ.get("ISHIP_PASSWORD") or st.secrets.get("ISHIP_PASSWORD", "")
+
+        # Test 1: Bearer token กับ web endpoint
+        if st.button("1) GET /shipment/create + Bearer Token", key="iship_t1"):
+            try:
+                r = _rq.get("https://app.iship.cloud/shipment/create",
+                            headers={"Authorization": f"Bearer {_tok}", "Accept": "application/json"},
+                            timeout=10)
+                st.write(f"status {r.status_code} | url: {r.url}")
+                try: st.json(r.json())
+                except: st.code(r.text[:300])
+            except Exception as e:
+                st.error(str(e))
+
+        # Test 2: /api/create_order + product_lists เป็น JSON array จริง
+        if st.button("2) /api/create_order (product_lists=array, COD=100)", key="iship_t2"):
+            _src = _ia._src()
+            _p = {
+                "courier_code": "FlashExpressA",
+                "src_name": _src["ISHIP_SRC_NAME"], "src_phone": _src["ISHIP_SRC_PHONE"],
+                "src_address": _src["ISHIP_SRC_ADDRESS"], "src_district": _src["ISHIP_SRC_DISTRICT"],
+                "src_amphure": _src["ISHIP_SRC_AMPHURE"], "src_province": _src["ISHIP_SRC_PROVINCE"],
+                "src_zipcode": _src["ISHIP_SRC_ZIPCODE"],
+                "dst_name": "ทดสอบ", "dst_phone": "0800000000",
+                "dst_address": "1/1", "dst_district": "ลาดยาว",
+                "dst_amphure": "จตุจักร", "dst_province": "กรุงเทพมหานคร", "dst_zipcode": "10900",
+                "weight": 1, "cod_amount": 100, "remark": "test",
+                "use_onlabel": "1", "label_name": _src["ISHIP_LABEL_NAME"],
+                "label_phone": _src["ISHIP_LABEL_PHONE"],
+                "label_address": _src["ISHIP_SRC_ADDRESS"], "label_zipcode": _src["ISHIP_SRC_ZIPCODE"],
+                "create_mode": "add", "order_type": "1", "category_id": "2",
+                "product_lists": [{"product_name":"สินค้าซูเลียน","product_qty":"1",
+                                   "product_length":"10","product_width":"10","product_height":"5",
+                                   "product_weight":"1","product_color":"น้ำตาล",
+                                   "product_price":"100","product_remark":""}],
+            }
+            try:
+                r = _rq.post("https://app.iship.cloud/api/create_order", json=_p,
+                             headers={"Authorization": f"Bearer {_tok}", "Accept": "application/json"},
+                             timeout=15)
+                st.write(f"status {r.status_code}")
+                try: st.json(r.json())
+                except: st.code(r.text[:500])
+            except Exception as e:
+                st.error(str(e))
+
+        # Test 3: Web login แบบ browser จริง
+        if st.button("3) Web Login (Chrome headers)", key="iship_t3"):
             if not _email:
                 st.error("ไม่มี ISHIP_EMAIL ใน secrets")
             else:
-                # ลอง JSON login
-                try:
-                    r1 = _rq.post(
-                        "https://app.iship.cloud/api/login",
-                        json={"email": _email, "password": _pw},
-                        headers={"Accept": "application/json", "Content-Type": "application/json"},
-                        timeout=10,
-                    )
-                    st.write(f"**POST /api/login JSON** → status {r1.status_code}")
-                    try: st.json(r1.json())
-                    except: st.code(r1.text[:500])
-                except Exception as e:
-                    st.error(f"/api/login: {e}")
-
-                # ลอง form-data login
-                try:
-                    r2 = _rq.post(
-                        "https://app.iship.cloud/api/login",
-                        data={"email": _email, "password": _pw},
-                        headers={"Accept": "application/json"},
-                        timeout=10,
-                    )
-                    st.write(f"**POST /api/login form** → status {r2.status_code}")
-                    try: st.json(r2.json())
-                    except: st.code(r2.text[:500])
-                except Exception as e:
-                    st.error(f"/api/login form: {e}")
+                s = _rq.Session()
+                s.headers.update({
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                    "Accept-Language": "th,en-US;q=0.9,en;q=0.8",
+                })
+                r1 = s.get("https://app.iship.cloud/login", timeout=10)
+                import re as _re
+                m = _re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', r1.text)
+                if not m:
+                    st.error(f"หา _token ไม่เจอ (status={r1.status_code})")
+                else:
+                    r2 = s.post("https://app.iship.cloud/login", data={
+                        "_token": m.group(1), "email": _email, "password": _pw, "remember": "1",
+                    }, headers={"Referer": "https://app.iship.cloud/login",
+                                "Origin": "https://app.iship.cloud"},
+                    timeout=10, allow_redirects=True)
+                    st.write(f"status {r2.status_code} | URL: {r2.url}")
+                    st.write(f"Cookies: {dict(s.cookies)}")
 
     with sub1:
         products = db.get_products()
