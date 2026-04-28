@@ -169,7 +169,10 @@ def update_transaction_status(transaction_id: str, bill_status: str = None, pay_
 def get_transaction_balance(transaction_id: str) -> dict:
     """ยอดจ่ายและรับของสะสมของรายการ พร้อมจำนวนที่รับได้อีก"""
     db = get_supabase()
-    txn = db.table("transactions").select("*").eq("id", transaction_id).single().execute().data
+    _rows = db.table("transactions").select("*").eq("id", transaction_id).execute().data
+    if not _rows:
+        return None
+    txn = _rows[0]
     events = db.table("partial_events").select("*").eq("transaction_id", transaction_id).execute().data
 
     total_paid = (

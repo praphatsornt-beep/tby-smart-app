@@ -1896,6 +1896,9 @@ with tab5:
             edit_txn_id = edit_opts[edit_sel]
 
             edit_balance = db.get_transaction_balance(edit_txn_id)
+            if not edit_balance:
+                st.warning("ไม่พบรายการนี้ในฐานข้อมูล (อาจถูกลบไปแล้ว)")
+                st.stop()
             et = edit_balance["transaction"]
 
             prod_names = list(product_map_e.keys())
