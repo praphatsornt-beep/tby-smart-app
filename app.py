@@ -903,7 +903,7 @@ with tab1:
                     "carrier":     m_carrier if is_shipping else "",
                     "is_cod":      m_cod,
                     "cod_fee":     cod_amount if m_cod else 0,
-                    "collect":     ceil(collect) if m_cod else (total_amt + ship_fee),
+                    "collect":     ceil(collect) if m_cod else (total_amt + (ship_fee if is_shipping else 0)),
                     "total_amt":   total_amt,
                     "total_pv":    total_pv,
                     "bill_status": m_bill,
