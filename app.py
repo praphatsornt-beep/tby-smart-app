@@ -1501,6 +1501,43 @@ with tab4:
 
     sub1, sub2, sub3, sub4 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "🗑️ ลบบิล"])
 
+    # ── iShip API debug ─────────────────────────────────────────────────────
+    with st.expander("🔧 ทดสอบ iShip API Login"):
+        if st.button("ทดสอบ POST /api/login", key="iship_login_test"):
+            import requests as _rq
+            _email = os.environ.get("ISHIP_EMAIL") or st.secrets.get("ISHIP_EMAIL", "")
+            _pw    = os.environ.get("ISHIP_PASSWORD") or st.secrets.get("ISHIP_PASSWORD", "")
+            if not _email:
+                st.error("ไม่มี ISHIP_EMAIL ใน secrets")
+            else:
+                # ลอง JSON login
+                try:
+                    r1 = _rq.post(
+                        "https://app.iship.cloud/api/login",
+                        json={"email": _email, "password": _pw},
+                        headers={"Accept": "application/json", "Content-Type": "application/json"},
+                        timeout=10,
+                    )
+                    st.write(f"**POST /api/login JSON** → status {r1.status_code}")
+                    try: st.json(r1.json())
+                    except: st.code(r1.text[:500])
+                except Exception as e:
+                    st.error(f"/api/login: {e}")
+
+                # ลอง form-data login
+                try:
+                    r2 = _rq.post(
+                        "https://app.iship.cloud/api/login",
+                        data={"email": _email, "password": _pw},
+                        headers={"Accept": "application/json"},
+                        timeout=10,
+                    )
+                    st.write(f"**POST /api/login form** → status {r2.status_code}")
+                    try: st.json(r2.json())
+                    except: st.code(r2.text[:500])
+                except Exception as e:
+                    st.error(f"/api/login form: {e}")
+
     with sub1:
         products = db.get_products()
 
