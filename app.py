@@ -2131,13 +2131,14 @@ with tab7:
 
         _ready = _is_bill or sel_p != "— เลือก —"
 
+        _all_txn_cache = db.get_all_transactions_df()  # โหลดครั้งเดียว cache 5 นาที
+
         if _ready:
             if _is_bill:
-                all_df_p = db.get_all_transactions_df(bill_no=_sel_bill_no)
+                all_df_p = _all_txn_cache[_all_txn_cache["เลขที่บิล"] == _sel_bill_no]
                 sel_p    = all_df_p["ลูกค้า"].iloc[0] if not all_df_p.empty else "—"
             else:
-                customer_p  = cust_map_p[sel_p]
-                all_df_p    = db.get_all_transactions_df(customer_id=customer_p["id"])
+                all_df_p = _all_txn_cache[_all_txn_cache["ลูกค้า"] == sel_p]
 
             if all_df_p.empty:
                 st.info("ไม่มีรายการ")
@@ -2181,8 +2182,7 @@ with tab7:
                     filter_label      = "รายการค้างอยู่" if filter_p == "ค้างอยู่" else "รายการทั้งหมด"
                     bill_nos          = show_p["เลขที่บิล"].dropna().unique().tolist() if "เลขที่บิล" in show_p.columns else []
                     bill_nos_str      = ", ".join(b for b in bill_nos if b) or ""
-                    _txn_ids_p        = show_p["id"].tolist() if "id" in show_p.columns else []
-                    _last_paid_raw    = db.get_last_payment_date(_txn_ids_p)
+                    _last_paid_raw    = show_p["last_payment_date"].replace("", None).max() if "last_payment_date" in show_p.columns else None
                     _paid_date_str    = (pd.to_datetime(_last_paid_raw).strftime("%d/%m/%Y")
                                         if _last_paid_raw else "—")
 

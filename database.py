@@ -261,7 +261,7 @@ def get_unbilled_pv_summary() -> dict:
     return {"count": count, "total_pv": total_pv, "total_amount": total_amount}
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=300)
 def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.DataFrame:
     """รายการทั้งหมด รวมที่เคลียร์แล้ว"""
     db = get_supabase()
@@ -298,6 +298,7 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
 
         cleared = outstanding_amount <= 0.01 and outstanding_qty <= 0 and t["bill_status"] == "เปิดบิลแล้ว"
         customer_name = (t.get("customers") or {}).get("name", t["customer_id"])
+        paid_dates = [e["date"][:10] for e in evts if float(e.get("amount_paid") or 0) > 0]
         rows.append({
             "id": tid,
             "วันที่": t["date"],
@@ -316,6 +317,7 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
             "PV รวม": float(t["points_per_unit"]) * t["qty"],
             "เลขที่บิล": t.get("bill_no") or "",
             "เคลียร์แล้ว": cleared,
+            "last_payment_date": max(paid_dates) if paid_dates else "",
         })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
