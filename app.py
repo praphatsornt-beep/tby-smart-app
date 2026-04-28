@@ -2290,25 +2290,38 @@ with tab7:
                     _css = """
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Sarabun',sans-serif;padding:16px;color:#111;background:#fff;font-size:12px}
-  .header{border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:12px}
+  .header{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px}
   .header h1{font-size:15px;font-weight:700}
   .header h2{font-size:13px;font-weight:600;margin-top:2px}
-  .info{color:#666;font-size:10px;margin-top:2px}
-  table{width:100%;border-collapse:collapse;margin-top:5px}
-  th{background:#222;color:#fff;padding:5px 6px;text-align:left;font-size:11px}
-  td{padding:4px 6px;border-bottom:1px solid #e0e0e0;font-size:11px}
-  tr:nth-child(even) td{background:#f7f7f7}
-  .summary{margin-top:12px;border-top:2px solid #222;padding-top:8px;text-align:right}
-  .summary table{width:auto;margin-left:auto}
+  .info{color:#444;font-size:10px;margin-top:2px}
+  table{width:100%;border-collapse:collapse;margin-top:5px;border:1px solid #000}
+  th{background:#000;color:#fff;padding:5px 6px;text-align:left;font-size:11px;border:1px solid #000}
+  td{padding:4px 6px;border:1px solid #aaa;font-size:11px}
+  tr:nth-child(even) td{background:#f0f0f0}
+  .summary{margin-top:12px;border-top:2px solid #000;padding-top:8px;text-align:right}
+  .summary table{width:auto;margin-left:auto;border:none}
   .summary td{padding:2px 8px;border:none;font-size:12px}
-  .big td{font-weight:700;font-size:13px;border-top:1px solid #ccc;padding-top:5px}
+  .big td{font-weight:900;font-size:14px;border-top:2px solid #000;padding-top:5px}
   .two-col{display:flex;gap:0;height:100%}
   .copy{width:50%;padding:16px;min-height:400px}
   .vcut{width:2px;background:repeating-linear-gradient(to bottom,#aaa 0,#aaa 6px,transparent 6px,transparent 12px);flex-shrink:0}
   .copy-lbl{font-size:10px;color:#999;margin-bottom:4px;font-style:italic}
   .btn{display:block;margin:0 auto 14px;padding:7px 28px;background:#c0392b;color:#fff;
        border:none;border-radius:6px;font-size:13px;cursor:pointer}
-  @media print{.btn{display:none}@page{size:A4 landscape;margin:8mm}}"""
+  @media print{
+    .btn{display:none}
+    @page{size:A4 landscape;margin:8mm}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{color:#000!important;font-size:11px}
+    th{background:#000!important;color:#fff!important;border:1px solid #000}
+    td{border-bottom:1px solid #999!important;color:#000!important}
+    tr:nth-child(even) td{background:#eee!important}
+    .info{color:#333!important}
+    .copy-lbl{color:#333!important}
+    .vcut{background:repeating-linear-gradient(to bottom,#000 0,#000 4px,transparent 4px,transparent 8px)!important}
+    b[style],span[style],[style*="color"]{color:#000!important}
+    .summary .big td{font-weight:900}
+  }"""
 
                     if _print_copies == "2 ชุด (ลูกค้า + ร้าน)":
                         _body = f"""<div class="two-col">
