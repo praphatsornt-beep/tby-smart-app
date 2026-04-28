@@ -2178,7 +2178,10 @@ with tab7:
                     if _bx2.button("✕ เปลี่ยน", key="print_bill_clear"):
                         st.session_state.pop("_print_bill_picked", None)
                         st.rerun()
-                    all_df_p = all_df_p[all_df_p["เลขที่บิล"].fillna("—") == _bill_picked]
+                    if _bill_picked == "—":
+                        all_df_p = all_df_p[all_df_p["เลขที่บิล"].replace("", "—") == "—"]
+                    else:
+                        all_df_p = all_df_p[all_df_p["เลขที่บิล"] == _bill_picked]
 
                 if not _bill_picked:
                     all_df_p = pd.DataFrame()  # ยังไม่เลือกบิล ไม่แสดง print
