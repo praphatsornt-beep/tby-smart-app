@@ -123,8 +123,13 @@ def get_cod_transfers(days_back: int = 60) -> dict:
         r_list = sess.get(f"{WEB_BASE}/getdt-withdraw", headers=hdrs,
                           timeout=15, params=_list_params)
         if r_list.status_code != 200:
-            return {"transfers": {}, "error": f"list HTTP {r_list.status_code}"}
-        batches = r_list.json().get("data", [])
+            return {"transfers": {}, "error": f"list HTTP {r_list.status_code}: {r_list.text[:200]}"}
+        if not r_list.text.strip():
+            return {"transfers": {}, "error": f"empty response (url={r_list.url}, cookies={list(sess.cookies.keys())})"}
+        try:
+            batches = r_list.json().get("data", [])
+        except Exception:
+            return {"transfers": {}, "error": f"JSON parse failed: {r_list.text[:300]}"}
 
         # ── 2. detail ของแต่ละ batch → track_no ─────────────────────
         transfers = {}
