@@ -1169,6 +1169,20 @@ with tab1:
 
     with _sub_shiphist:
         st.subheader("ประวัติการส่งของ")
+
+        _sh_cod_col, _sh_sync_col = st.columns([6, 2])
+        if _sh_sync_col.button("🔄 ตรวจสอบ COD", key="sh_cod_sync", use_container_width=True):
+            with st.spinner("กำลังดึงข้อมูลจาก iShip..."):
+                _r = iship_api.get_cod_transfers(days_back=90)
+            if _r.get("error"):
+                st.error(f"❌ {_r['error']}")
+            else:
+                st.session_state["_sh_cod_map"] = _r.get("transfers", {})
+                st.rerun()
+        _sh_cod_map = st.session_state.get("_sh_cod_map", {})
+        if _sh_cod_map:
+            _sh_cod_col.caption(f"✅ มีข้อมูล COD {len(_sh_cod_map)} tracking")
+
         try:
             _sh_all = db.get_shipments()
         except Exception:
@@ -1182,11 +1196,21 @@ with tab1:
                 return ", ".join(f"{it.get('product_id','')} ×{it.get('qty',0)}" for it in items)
 
             _sh_ids  = [r["id"] for r in _sh_all]
+            def _cod_status(r):
+                tn  = r.get("tracking_no", "") or ""
+                cod = float(r.get("cod_amount") or 0)
+                if cod <= 0:
+                    return ""
+                if tn and tn in _sh_cod_map:
+                    return "✅"
+                return "⏳"
+
             _sh_df   = pd.DataFrame([{
                 "ลบ":              False,
                 "วันที่/เวลา":     _to_bkk(r.get("created_at") or ""),
                 "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
                 "COD":             float(r.get("cod_amount") or 0),
+                "💸":              _cod_status(r),
                 "ผู้รับ":           r.get("recipient_name", ""),
                 "เบอร์":            r.get("phone", ""),
                 "รายการ":          _items_str(r.get("items")),
@@ -1205,10 +1229,11 @@ with tab1:
                 hide_index=True, use_container_width=True, key="sh_hist_tbl",
                 disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
-                          "รายการ","ขนส่ง","COD","หมายเหตุ"],
+                          "รายการ","ขนส่ง","COD","💸","หมายเหตุ"],
                 column_config={
                     "ลบ":      st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
                     "COD":     st.column_config.NumberColumn("COD ฿", format="%,.0f", width="small"),
+                    "💸":      st.column_config.TextColumn("💸", width="small"),
                     "Tracking": st.column_config.TextColumn("Tracking", width="medium"),
                 },
             )
