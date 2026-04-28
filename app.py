@@ -1272,9 +1272,9 @@ with tab1:
                           "รายการ","ขนส่ง","COD","💸","🔗","หมายเหตุ"],
                 column_config={
                     "ลบ":      st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
-                    "COD":     st.column_config.NumberColumn("COD ฿", format="%,.0f", width="small"),
+                    "COD":     st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
                     "💸":      st.column_config.TextColumn("💸", width="small"),
-                    "Tracking": st.column_config.TextColumn("Tracking", width="medium"),
+                    "Tracking": st.column_config.TextColumn("Tracking", width="small"),
                     "🔗":      st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
                 },
             )
