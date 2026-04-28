@@ -4,6 +4,7 @@ import json
 import datetime as _dt
 import requests
 import streamlit as st
+from urllib.parse import unquote
 
 BASE_URL  = "https://app.iship.cloud/api"
 WEB_BASE  = "https://app.iship.cloud"
@@ -91,7 +92,7 @@ def get_cod_transfers(days_back: int = 60) -> dict:
 
     end_date   = _dt.date.today()
     start_date = end_date - _dt.timedelta(days=days_back)
-    xsrf = sess.cookies.get("XSRF-TOKEN", "")
+    xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
     hdrs = {
         "X-Requested-With": "XMLHttpRequest",
         "Accept":           "application/json, text/javascript, */*; q=0.01",
@@ -99,16 +100,28 @@ def get_cod_transfers(days_back: int = 60) -> dict:
         "X-XSRF-TOKEN":     xsrf,
     }
 
+    # full column list ตาม browser (required ทุก column)
+    _cols = ["datetime","txn_id","withdraw_type","bank_name","bank_account_name",
+             "bank_account_number","amount","non_vat","vat","fee","service_fee",
+             "transfer_fee","net_total_amount","wd_remark","txn_id"]
+    _list_params = {
+        "draw": 1, "start": 0, "length": 200,
+        "start_date": str(start_date), "end_date": str(end_date),
+        "order[0][column]": 0, "order[0][dir]": "desc",
+        "search[value]": "", "search[regex]": "false",
+    }
+    for i, col in enumerate(_cols):
+        _list_params[f"columns[{i}][data]"]            = col
+        _list_params[f"columns[{i}][name]"]            = ""
+        _list_params[f"columns[{i}][searchable]"]      = "true"
+        _list_params[f"columns[{i}][orderable]"]       = "true"
+        _list_params[f"columns[{i}][search][value]"]   = ""
+        _list_params[f"columns[{i}][search][regex]"]   = "false"
+
     try:
         # ── 1. list WD batches ───────────────────────────────────────
-        r_list = sess.get(f"{WEB_BASE}/getdt-withdraw", headers=hdrs, timeout=15, params={
-            "draw": 1, "start": 0, "length": 200,
-            "start_date": str(start_date), "end_date": str(end_date),
-            "order[0][column]": 0, "order[0][dir]": "desc",
-            "columns[0][data]": "datetime",
-            "columns[1][data]": "txn_id",
-            "columns[12][data]": "net_total_amount",
-        })
+        r_list = sess.get(f"{WEB_BASE}/getdt-withdraw", headers=hdrs,
+                          timeout=15, params=_list_params)
         if r_list.status_code != 200:
             return {"transfers": {}, "error": f"list HTTP {r_list.status_code}"}
         batches = r_list.json().get("data", [])
