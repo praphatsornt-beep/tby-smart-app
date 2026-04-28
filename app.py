@@ -2142,21 +2142,18 @@ with tab7:
             date_to_p   = pd2.date_input("ถึงวันที่",     value=None, key="print_date_to")
             _sel_bill_no = None
         else:
-            _bill_list = db.get_bill_list()
-            if not _bill_list:
-                st.info("ยังไม่มีเลขที่บิล")
-                st.stop()
-            _sel_bill_no = st.selectbox("เลือกเลขที่บิล", ["— เลือก —"] + _bill_list, key="print_bill_no")
+            _sel_bill_no = st.text_input("เลขที่บิล", placeholder="เช่น 260427-001",
+                                         key="print_bill_no")
             sel_p = "— เลือก —"
             filter_p = "ทั้งหมด"
             date_from_p = date_to_p = None
 
         _ready = (_print_mode == "ลูกค้า" and sel_p != "— เลือก —") or \
-                 (_print_mode == "เลขที่บิล" and _sel_bill_no and _sel_bill_no != "— เลือก —")
+                 (_print_mode == "เลขที่บิล" and bool((_sel_bill_no or "").strip()))
 
         if _ready:
             if _print_mode == "เลขที่บิล":
-                all_df_p = db.get_all_transactions_df(bill_no=_sel_bill_no)
+                all_df_p = db.get_all_transactions_df(bill_no=(_sel_bill_no or "").strip())
                 sel_p    = all_df_p["ลูกค้า"].iloc[0] if not all_df_p.empty else "—"
             else:
                 customer_p  = cust_map_p[sel_p]
