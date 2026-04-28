@@ -2,127 +2,75 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-# Agent Instructions
+## What This Project Is
 
-You're working inside the **WAT framework** (Workflows, Agents, Tools). This architecture separates concerns so that probabilistic AI handles reasoning while deterministic code handles execution. That separation is what makes this system reliable.
+**TBY SMART APP** — A Streamlit business management app deployed on Streamlit Community Cloud for a Zhulian MLM distributor. Backend is Supabase (PostgreSQL). No local dev server needed for testing — changes go live via `git push origin main`.
 
-## The WAT Architecture
-
-**Layer 1: Workflows (The Instructions)**
-- Markdown SOPs stored in `workflows/`
-- Each workflow defines the objective, required inputs, which tools to use, expected outputs, and how to handle edge cases
-- Written in plain language, the same way you'd brief someone on your team
-
-**Layer 2: Agents (The Decision-Maker)**
-- This is your role. You're responsible for intelligent coordination.
-- Read the relevant workflow, run tools in the correct sequence, handle failures gracefully, and ask clarifying questions when needed
-- You connect intent to execution without trying to do everything yourself
-- Example: If you need to pull data from a website, don't attempt it directly. Read `workflows/scrape_website.md`, figure out the required inputs, then execute `tools/scrape_single_site.py`
-
-**Layer 3: Tools (The Execution)**
-- Python scripts in `tools/` that do the actual work
-- API calls, data transformations, file operations, database queries
-- Credentials and API keys are stored in `.env`
-- These scripts are consistent, testable, and fast
-
-**Why this matters:** When AI tries to handle every step directly, accuracy drops fast. If each step is 90% accurate, you're down to 59% success after just five steps. By offloading execution to deterministic scripts, you stay focused on orchestration and decision-making where you excel.
-
-## Ask First — Hard Rules
-
-These require explicit approval before proceeding:
-
-- **Creating or overwriting a workflow** — workflows are standing instructions; don't draft, replace, or delete them without being asked
-- **Running a tool that makes paid API calls or consumes credits** — confirm before each run if the outcome is uncertain
-- **Pushing data to cloud services** (Google Sheets, Slides, etc.) when the destination or content wasn't specified
-
-Everything else — reading files, running tools with free/local APIs, fixing scripts, updating `.tmp/` — you can do without asking.
-
-## How to Operate
-
-**1. Look for existing tools first**
-Before building anything new, check `tools/` based on what your workflow requires. Only create new scripts when nothing exists for that task.
-
-**2. Learn and adapt when things fail**
-When you hit an error:
-- Read the full error message and trace
-- Fix the script and retest (if it uses paid API calls or credits, check before running again)
-- Document what you learned in the workflow (rate limits, timing quirks, unexpected behavior)
-- Example: You get rate-limited on an API, so you dig into the docs, discover a batch endpoint, refactor the tool to use it, verify it works, then update the workflow so this never happens again
-
-**3. Keep workflows current**
-Workflows should evolve as you learn. When you find better methods, discover constraints, or encounter recurring issues, update the workflow (but see Ask First above).
-
-## The Self-Improvement Loop
-
-Every failure is a chance to make the system stronger:
-1. Identify what broke
-2. Fix the tool
-3. Verify the fix works
-4. Update the workflow with the new approach
-5. Move on with a more robust system
-
-## File Structure
-
-```
-.tmp/           # Temporary files (scraped data, intermediate exports). Regenerated as needed.
-tools/          # Python scripts for deterministic execution
-workflows/      # Markdown SOPs defining what to do and how
-.env            # API keys and environment variables
-credentials.json, token.json  # Google OAuth (gitignored)
-```
-
-**Core principle:** Local files are just for processing. Anything the user needs to see or use lives in cloud services (Google Sheets, Slides, etc.). Everything in `.tmp/` is disposable.
-
-## Running Tools
-
-Prefer `uv run` over `python` directly — it handles the virtual environment automatically:
+## Running & Deploying
 
 ```bash
-uv run tools/<script_name>.py
-# fallback if uv is unavailable:
-python tools/<script_name>.py
+# Local development
+streamlit run app.py
+
+# Deploy: just push — Streamlit Cloud auto-deploys from GitHub main branch
+git add . && git commit -m "..." && git push origin main
 ```
 
-Environment variables are loaded from `.env` via `python-dotenv`. Every tool must call `load_dotenv()` near the top before accessing `os.environ`.
+Dependencies: `pip install -r requirements.txt`
 
-Install missing dependencies:
+Credentials live in `.streamlit/secrets.toml` (local) and Streamlit Cloud Secrets (production). Required keys: `SUPABASE_URL`, `SUPABASE_KEY`. Optional: `ISHIP_TOKEN` + iShip sender address fields, `SHOPEE_PARTNER_ID/KEY`.
 
-```bash
-pip install -r requirements.txt
-# or per-tool:
-pip install <package>
+## Architecture
+
+Single-file app (`app.py`, ~2000 lines) with supporting modules:
+
+| File | Role |
+|---|---|
+| `app.py` | All UI — Streamlit tabs, forms, session state |
+| `database.py` | All Supabase queries. Cached functions: `get_products()` (5 min), `get_customers()` (5 min), `get_customer_addresses()` (2 min). Mutations call `.clear()` on the relevant cache. |
+| `iship_api.py` | iShip shipping integration. Non-COD: Bearer token to `/api/create_order`. COD: web session login to `/shipment` (currently unreliable — see memory). |
+| `thai_address.py` | Postcode → tambon/amphure/province lookup using local `thai_postcodes.json` (7,498 tambons). Cached indefinitely with `@st.cache_data`. |
+| `flash_zones.py` | Flash Express zone surcharges by postcode. |
+| `shopee_api.py` | Shopee Open Platform OAuth + order sync. |
+
+## Tab Layout (`app.py`)
+
+```
+tab1: บันทึกรายการ
+  ├── _sub_sale:     บันทึกขาย (main sale form)
+  ├── _sub_ship:     ส่งของ (shipping-only form)
+  └── _sub_shiphist: ประวัติการส่ง
+tab2: ยอดค้าง       — outstanding balances, per-transaction actions
+tab5: ประวัติทั้งหมด
+tab6: สต๊อก
+tab7: พิมพ์บิล      — bill printing with 1/2-copy layout
+tab_fin: การเงิน
+tab_ecom: E-commerce (Shopee)
+tab4: จัดการข้อมูล  — products, customers, addresses, bill deletion
 ```
 
-## Tool Script Conventions
+## Key Patterns
 
-Each tool in `tools/` should follow this pattern:
+**Session state for widgets**: Streamlit widgets can't have their key set after rendering. Use staging keys (e.g., `_fsp_dt`, `_fr_dt`) that are applied to widget keys BEFORE the widget renders on the next rerun.
 
-```python
-#!/usr/bin/env python3
-from dotenv import load_dotenv
-import os, sys
+**Cart persistence**: `st.data_editor` stores only edit diffs relative to its initial DataFrame. Always keep the same base DataFrame in `st.session_state["_cart_base"]` across reruns — never re-initialize with an empty DataFrame while the user is mid-entry.
 
-load_dotenv()
+**Address autocomplete**: Two directions — postcode→tambon (`thai_address.lookup()`) and tambon→postcode (`thai_address.lookup_by_tambon()`). Both use `_sp_last_dt`/`_r_last_dt` flags to suppress re-showing suggestions after a selection.
 
-def main():
-    # single clear responsibility
-    # print progress to stdout
-    # write outputs to .tmp/ or push to cloud
-    # exit(1) with a descriptive message on unrecoverable error
-    pass
+**COD calculation**: `collect = total_amt + ship_fee + cod_fee` where `cod_fee = (total_amt + ship_fee) × 3.21%`
 
-if __name__ == "__main__":
-    main()
-```
+**Customer IDs**: Always `C-NNN` format (e.g., `C-014`). The quick-add form in บันทึกขาย auto-generates the next C-NNN by scanning existing IDs for the max number.
 
-- One script, one job. No shared state between tools.
-- Accept inputs via CLI args or environment variables — never hardcode paths or keys.
-- Write intermediate outputs to `.tmp/<descriptive_name>.<ext>`.
+**Bill numbers**: Format `YYMMDD-NNN` (e.g., `260427-001`). Generated by `db.get_next_bill_no(date_str)`. Column `bill_no` was added to `transactions` via ALTER TABLE — not in `supabase_setup.sql`.
 
-## Workflow Execution Pattern
+## Database Schema Key Points
 
-Before running any multi-step task:
-1. Check `workflows/` for a relevant SOP
-2. Identify the required inputs and tools listed in that workflow
-3. Run each tool in sequence, passing outputs as inputs to the next step
-4. If no workflow exists for the task, ask before creating one
+- `transactions`: one row = one product line. Multiple rows share the same `bill_no`.
+- `partial_events`: records each payment/receipt event against a transaction.
+- `customer_addresses`: separate table, one customer → many addresses.
+- `shipments`: records iShip shipments with `items` as JSONB.
+- `pay_status` CHECK includes `'COD'` (added via ALTER TABLE, not in setup SQL).
+
+## WAT Framework (existing tools/)
+
+The `tools/` and `workflows/` directories are for separate scripting tasks unrelated to the Streamlit app. Use `uv run tools/<script>.py` (fallback: `python`). Credentials in `.env` via `python-dotenv`. Ask before creating or overwriting any workflow file.
