@@ -83,17 +83,15 @@ def is_configured() -> bool:
 def get_cod_transfers(days_back: int = 60) -> dict:
     """
     ดึงสถานะ COD transfer จาก iShip
-    คืน: {"batches": [...], "transfers": {tracking: {...}}, "debug": {...}}
+    คืน: {"transfers": {track_no: {"wd_id","date","cod_amount","net","status"}}, "error": str|None}
     """
     sess, login_msg = _web_session()
     if not sess:
-        return {"batches": [], "transfers": {}, "error": login_msg}
+        return {"transfers": {}, "error": login_msg}
 
-    debug = {}
     end_date   = _dt.date.today()
     start_date = end_date - _dt.timedelta(days=days_back)
     xsrf = sess.cookies.get("XSRF-TOKEN", "")
-
     hdrs = {
         "X-Requested-With": "XMLHttpRequest",
         "Accept":           "application/json, text/javascript, */*; q=0.01",
@@ -102,63 +100,54 @@ def get_cod_transfers(days_back: int = 60) -> dict:
     }
 
     try:
-        # ── 1. ดึง list ของ WD batches ───────────────────────────────
-        params = {
+        # ── 1. list WD batches ───────────────────────────────────────
+        r_list = sess.get(f"{WEB_BASE}/getdt-withdraw", headers=hdrs, timeout=15, params={
             "draw": 1, "start": 0, "length": 200,
             "start_date": str(start_date), "end_date": str(end_date),
             "order[0][column]": 0, "order[0][dir]": "desc",
-            "columns[0][data]": "datetime",  "columns[0][searchable]": "true",
-            "columns[1][data]": "txn_id",    "columns[1][searchable]": "true",
-            "columns[2][data]": "withdraw_type",
-            "columns[6][data]": "amount",
+            "columns[0][data]": "datetime",
+            "columns[1][data]": "txn_id",
             "columns[12][data]": "net_total_amount",
-        }
-        r_list = sess.get(f"{WEB_BASE}/getdt-withdraw", params=params, headers=hdrs, timeout=15)
-        debug["list_status"] = r_list.status_code
+        })
         if r_list.status_code != 200:
-            return {"batches": [], "transfers": {}, "debug": debug,
-                    "error": f"getdt-withdraw returned {r_list.status_code}"}
+            return {"transfers": {}, "error": f"list HTTP {r_list.status_code}"}
+        batches = r_list.json().get("data", [])
 
-        list_json = r_list.json()
-        batches   = list_json.get("data", [])
-        debug["batches_count"] = len(batches)
-        debug["batch_sample"]  = batches[:2]
-
-        # ── 2. ดึง detail ของแต่ละ batch เพื่อหา tracking numbers ───
-        # ลอง probe endpoint detail ก่อน
+        # ── 2. detail ของแต่ละ batch → track_no ─────────────────────
         transfers = {}
-        if batches:
-            first_txn = batches[0].get("txn_id", "")
-            # ลอง DataTables endpoint สำหรับ detail
-            det_candidates = [
-                f"{WEB_BASE}/getdt-withdraw-detail",
-                f"{WEB_BASE}/getdt-withdraw-parcel",
-                f"{WEB_BASE}/getdt-cod-withdraw-detail",
-            ]
-            det_params = {
+        for batch in batches:
+            txn_id   = batch.get("txn_id", "")
+            wd_date  = batch.get("datetime", "")[:10]
+            net      = batch.get("net_total_amount", 0)
+            if not txn_id:
+                continue
+            hdrs2 = {**hdrs, "Referer": f"{WEB_BASE}/report/withdraw/{txn_id}"}
+            r_det = sess.get(f"{WEB_BASE}/report/withdraw/{txn_id}", headers=hdrs2, timeout=15, params={
                 "draw": 1, "start": 0, "length": 200,
-                "txn_id": first_txn,
                 "columns[0][data]": "created_at",
-                "columns[3][data]": "tracking_no",
-                "columns[6][data]": "cod_amount",
-                "columns[8][data]": "net_amount",
-            }
-            debug["detail_probe"] = {}
-            for url in det_candidates:
-                try:
-                    r = sess.get(url, params=det_params, headers=hdrs, timeout=10)
-                    debug["detail_probe"][url] = {
-                        "status": r.status_code,
-                        "preview": r.text[:300],
-                    }
-                except Exception as ex:
-                    debug["detail_probe"][url] = {"error": str(ex)}
-
-        return {"batches": batches[:10], "transfers": transfers, "debug": debug}
+                "columns[1][data]": "track_no",
+                "columns[2][data]": "cod_amount",
+                "columns[3][data]": "cod_balance",
+                "columns[4][data]": "status_name",
+                "order[0][column]": 0, "order[0][dir]": "desc",
+            })
+            if r_det.status_code != 200:
+                continue
+            for row in r_det.json().get("data", []):
+                tn = row.get("track_no", "")
+                if not tn:
+                    continue
+                transfers[tn] = {
+                    "wd_id":      txn_id,
+                    "date":       wd_date,
+                    "cod_amount": row.get("cod_amount", ""),
+                    "net":        row.get("cod_balance", net),
+                    "status":     row.get("status_name", "ชำระเงินสำเร็จ"),
+                }
+        return {"transfers": transfers, "error": None}
 
     except Exception as e:
-        debug["exception"] = str(e)
-        return {"batches": [], "transfers": {}, "debug": debug, "error": str(e)}
+        return {"transfers": {}, "error": str(e)}
 
 
 def create_order(

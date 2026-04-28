@@ -2683,14 +2683,17 @@ with tab_fin:
         st.caption("ดึงข้อมูลจาก iShip แล้ว match กับ tracking ใน shipments table")
         if st.button("🔄 ดึงข้อมูล COD Transfer", key="cod_fetch"):
             with st.spinner("กำลัง login และดึงข้อมูล..."):
-                _cod_result = iship_api.get_cod_transfers(max_batches=30)
-            if "error" in _cod_result:
+                _cod_result = iship_api.get_cod_transfers(days_back=60)
+            if _cod_result.get("error"):
                 st.error(f"❌ {_cod_result['error']}")
-            st.json(_cod_result.get("debug", {}))
             _cod_map = _cod_result.get("transfers", {})
             if _cod_map:
                 st.success(f"✅ พบ {len(_cod_map)} tracking ที่โอนแล้ว")
-                st.dataframe(
-                    pd.DataFrame(_cod_map).T.reset_index().rename(columns={"index": "tracking"}),
-                    use_container_width=True, hide_index=True,
-                )
+                _cod_df = pd.DataFrame([
+                    {"tracking": tn, "วันที่โอน": v["date"], "ยอด COD": v["cod_amount"],
+                     "ยอดสุทธิ": v["net"], "สถานะ": v["status"], "WD": v["wd_id"]}
+                    for tn, v in _cod_map.items()
+                ])
+                st.dataframe(_cod_df, use_container_width=True, hide_index=True)
+            elif not _cod_result.get("error"):
+                st.info("ไม่พบรายการ COD ใน 60 วันที่ผ่านมา")
