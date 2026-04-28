@@ -325,6 +325,15 @@ with tab1:
             product_map = {p["name"]: p for p in products}
             customer_map = {c["name"]: c for c in customers}
 
+            # ── แสดง tracking ล่าสุดจาก iShip ──────────────────────────────
+            if st.session_state.get("_sale_last_tracking"):
+                _slt = st.session_state["_sale_last_tracking"]
+                _stc1, _stc2 = st.columns([5, 1])
+                _stc1.success(f"✅ iShip สำเร็จ — Tracking: **{_slt}**")
+                if _stc2.button("✕", key="sale_clear_tracking", use_container_width=True):
+                    del st.session_state["_sale_last_tracking"]
+                    st.rerun()
+
             # ── iShip pending (แสดงหลัง save ส่งพัสดุ) ──────────────────────
             if st.session_state.get("_iship_pending"):
                 _p = st.session_state["_iship_pending"]
@@ -373,6 +382,8 @@ with tab1:
                                 })
                             except Exception:
                                 pass
+                            if tracking:
+                                st.session_state["_sale_last_tracking"] = tracking
                             del st.session_state["_iship_pending"]
                         else:
                             _err_msg = resp.get("message") or resp.get("msg") or str(resp)
