@@ -92,30 +92,41 @@ def get_cod_transfers(max_batches: int = 30) -> dict:
     json_headers = {"Accept": "application/json", "X-Requested-With": "XMLHttpRequest"}
 
     try:
-        # ── probe API endpoints ──────────────────────────────────────
-        candidates = [
-            f"{BASE_URL}/withdraw",
-            f"{BASE_URL}/withdraws",
-            f"{BASE_URL}/cod/withdraw",
-            f"{BASE_URL}/cod-withdraw",
-            f"{WEB_BASE}/report/withdraw/data",
-            f"{BASE_URL}/report/withdraw",
+        tok = _token()
+        bearer = {"Authorization": f"Bearer {tok}"} if tok else {}
+
+        # ── probe: token-based endpoints ────────────────────────────
+        token_candidates = [
+            f"{BASE_URL}/shipments",
+            f"{BASE_URL}/shipment",
+            f"{BASE_URL}/orders",
+            f"{BASE_URL}/cod",
+            f"{BASE_URL}/tracking",
+        ]
+        # ── probe: web-session endpoints (cookie auth) ───────────────
+        session_candidates = [
+            f"{WEB_BASE}/api/withdraw",
+            f"{WEB_BASE}/api/withdraws",
+            f"{WEB_BASE}/api/cod/list",
+            f"{WEB_BASE}/report/cod",
+            f"{WEB_BASE}/api/shipment/list",
         ]
         probe = {}
-        for url in candidates:
+        for url in token_candidates:
+            try:
+                r = requests.get(url, headers={**json_headers, **bearer}, timeout=10)
+                probe[f"[token]{url}"] = {"status": r.status_code, "preview": r.text[:300]}
+            except Exception as ex:
+                probe[f"[token]{url}"] = {"error": str(ex)}
+        for url in session_candidates:
             try:
                 r = sess.get(url, headers=json_headers, timeout=10)
-                probe[url] = {"status": r.status_code, "preview": r.text[:200]}
-                if r.status_code == 200:
-                    try:
-                        probe[url]["json"] = r.json()
-                    except Exception:
-                        pass
+                probe[f"[sess]{url}"] = {"status": r.status_code, "preview": r.text[:300]}
             except Exception as ex:
-                probe[url] = {"error": str(ex)}
+                probe[f"[sess]{url}"] = {"error": str(ex)}
 
         debug["probe"] = probe
-        return {"transfers": {}, "debug": debug, "note": "กำลัง probe endpoints — ดู debug.probe"}
+        return {"transfers": {}, "debug": debug, "note": "probe round 2 — ดู debug.probe"}
 
     except Exception as e:
         debug["exception"] = str(e)
