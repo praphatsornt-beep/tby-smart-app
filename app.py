@@ -1505,8 +1505,9 @@ with tab4:
     with st.expander("🔧 ทดสอบ iShip API Login"):
         if st.button("ทดสอบ POST /api/login", key="iship_login_test"):
             import requests as _rq
-            _email = os.environ.get("ISHIP_EMAIL") or st.secrets.get("ISHIP_EMAIL", "")
-            _pw    = os.environ.get("ISHIP_PASSWORD") or st.secrets.get("ISHIP_PASSWORD", "")
+            import os as _os
+            _email = _os.environ.get("ISHIP_EMAIL") or st.secrets.get("ISHIP_EMAIL", "")
+            _pw    = _os.environ.get("ISHIP_PASSWORD") or st.secrets.get("ISHIP_PASSWORD", "")
             if not _email:
                 st.error("ไม่มี ISHIP_EMAIL ใน secrets")
             else:
