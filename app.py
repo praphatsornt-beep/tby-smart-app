@@ -2134,9 +2134,9 @@ with tab7:
 
         _ready = _is_bill or sel_p != "— เลือก —"
 
-        _all_txn_cache = db.get_all_transactions_df()  # โหลดครั้งเดียว cache 5 นาที
-
         if _ready:
+            _all_txn_cache = db.get_all_transactions_df()  # โหลดเมื่อต้องการเท่านั้น
+
             if _is_bill:
                 all_df_p = _all_txn_cache[_all_txn_cache["เลขที่บิล"] == _sel_bill_no]
                 sel_p    = all_df_p["ลูกค้า"].iloc[0] if not all_df_p.empty else "—"
@@ -2160,6 +2160,9 @@ with tab7:
                                        ค้างจ่าย=("ค้างจ่าย", "sum"))
                                   .reset_index()
                                   .sort_values("วันที่", ascending=False))
+                        if len(_bills) == 1:
+                            st.session_state["_print_bill_picked"] = _bills.iloc[0]["เลขที่บิล"] or "—"
+                            st.rerun()
                         st.caption("เลือกบิลที่ต้องการพิมพ์")
                         for _, _br in _bills.iterrows():
                             _bno = _br["เลขที่บิล"] or "—"
