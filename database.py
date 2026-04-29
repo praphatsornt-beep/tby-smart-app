@@ -165,6 +165,7 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
 
 def update_transaction(transaction_id: str, data: dict) -> None:
     get_supabase().table("transactions").update(data).eq("id", transaction_id).execute()
+    get_all_transactions_df.clear()
 
 
 def update_transaction_status(transaction_id: str, bill_status: str = None, pay_status: str = None) -> None:
