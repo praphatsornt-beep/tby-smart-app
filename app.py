@@ -1181,7 +1181,24 @@ with tab1:
     with _sub_shiphist:
         st.subheader("ประวัติการส่งของ")
 
-        _sh_cod_col, _sh_sync_col = st.columns([6, 2])
+        _sh_cod_col, _sh_status_col, _sh_sync_col = st.columns([4, 2, 2])
+        if _sh_status_col.button("🚚 สถานะส่ง", key="sh_status_sync", use_container_width=True):
+            _pending_tn = db.get_pending_delivery_tracking()
+            if not _pending_tn:
+                st.info("ทุก tracking จัดส่งสำเร็จแล้ว")
+            else:
+                with st.spinner(f"ดึงสถานะ {len(_pending_tn)} tracking..."):
+                    _sr = iship_api.get_shipment_statuses(days_back=90)
+                if _sr.get("error"):
+                    st.error(f"❌ {_sr['error']}")
+                else:
+                    _to_update = {tn: st for tn, st in _sr["statuses"].items() if tn in set(_pending_tn)}
+                    if _to_update:
+                        db.update_delivery_statuses(_to_update)
+                        st.success(f"✅ อัปเดต {len(_to_update)} tracking")
+                        st.rerun()
+                    else:
+                        st.info("ไม่มีสถานะใหม่")
         if _sh_sync_col.button("🔄 ตรวจสอบ COD", key="sh_cod_sync", use_container_width=True):
             try:
                 _pending = db.get_pending_cod_tracking()
@@ -1243,12 +1260,23 @@ with tab1:
                     return "✅"
                 return "⏳"
 
+            def _delivery_icon(status: str) -> str:
+                if not status:
+                    return ""
+                if "จัดส่งแล้ว" in status:
+                    return "✅"
+                if "ตีกลับ" in status or "ยกเลิก" in status:
+                    return "❌"
+                return "🚚"
+
             _sh_df   = pd.DataFrame([{
                 "ลบ":              False,
                 "วันที่/เวลา":     _to_bkk(r.get("created_at") or ""),
                 "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
                 "COD":             float(r.get("cod_amount") or 0),
                 "💸":              _cod_status(r),
+                "สถานะส่ง":        (_delivery_icon(r.get("delivery_status") or "") + " " +
+                                    (r.get("delivery_status") or "")).strip(),
                 "ผู้รับ":           r.get("recipient_name", ""),
                 "เบอร์":            r.get("phone", ""),
                 "รายการ":          _items_str(r.get("items")),
@@ -1269,13 +1297,14 @@ with tab1:
                 hide_index=True, use_container_width=False, key="sh_hist_tbl",
                 disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
-                          "รายการ","ขนส่ง","COD","💸","🔗","หมายเหตุ"],
+                          "รายการ","ขนส่ง","COD","💸","สถานะส่ง","🔗","หมายเหตุ"],
                 column_config={
-                    "ลบ":      st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
-                    "COD":     st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
-                    "💸":      st.column_config.TextColumn("💸", width="small"),
+                    "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                    "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
+                    "💸":       st.column_config.TextColumn("💸", width="small"),
+                    "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width="medium"),
                     "Tracking": st.column_config.TextColumn("Tracking", width="small"),
-                    "🔗":      st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
+                    "🔗":       st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
                 },
             )
 

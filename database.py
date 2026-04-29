@@ -640,3 +640,27 @@ def get_pending_cod_tracking() -> list[str]:
             .neq("tracking_no", "")
             .execute().data)
     return [r["tracking_no"] for r in rows if r.get("tracking_no")]
+
+
+_DELIVERY_TERMINAL = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
+
+def update_delivery_statuses(statuses: dict) -> int:
+    """อัปเดต delivery_status ใน shipments, คืนจำนวนที่อัปเดต"""
+    db = get_supabase()
+    count = 0
+    for track_no, status in statuses.items():
+        if track_no:
+            db.table("shipments").update({"delivery_status": status}).eq("tracking_no", track_no).execute()
+            count += 1
+    return count
+
+
+def get_pending_delivery_tracking() -> list[str]:
+    """คืน tracking_no ที่ยังไม่จัดส่งสำเร็จ (delivery_status IS NULL หรือไม่ใช่ terminal)"""
+    rows = (get_supabase().table("shipments")
+            .select("tracking_no, delivery_status")
+            .not_.is_("tracking_no", "null")
+            .neq("tracking_no", "")
+            .execute().data)
+    return [r["tracking_no"] for r in rows
+            if r.get("delivery_status") not in _DELIVERY_TERMINAL]

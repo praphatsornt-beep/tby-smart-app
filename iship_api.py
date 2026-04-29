@@ -210,6 +210,80 @@ def get_cod_transfers(days_back: int = 60) -> dict:
         return {"transfers": {}, "error": str(e)}
 
 
+def get_shipment_statuses(days_back: int = 60) -> dict:
+    """
+    ดึงสถานะการจัดส่งจาก iShip
+    คืน: {"statuses": {track_no: status_text}, "error": str|None}
+    """
+    sess, login_msg = _web_session()
+    if not sess:
+        return {"statuses": {}, "error": login_msg}
+
+    end_date   = _dt.date.today()
+    start_date = end_date - _dt.timedelta(days=days_back)
+
+    sess.get(f"{WEB_BASE}/shipment", timeout=10)
+    xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
+    hdrs = {
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept":           "application/json, text/javascript, */*; q=0.01",
+        "Referer":          f"{WEB_BASE}/shipment",
+        "X-XSRF-TOKEN":     xsrf,
+    }
+
+    _cols = [
+        ("checkbox",        "",                          False, False),
+        ("order_date",      "orders.created_at",         True,  True),
+        ("track_no",        "shippings.track_no",        True,  True),
+        ("custom_order_id", "shippings.custom_order_id", True,  True),
+        ("status_btn",      "status_btn",                False, False),
+        ("name",            "",                          True,  True),
+        ("dst_name",        "",                          True,  True),
+        ("dst_phone",       "",                          True,  True),
+        ("dst_address",     "",                          True,  True),
+        ("print_btn",       "print_count",               False, False),
+        ("cod_amount",      "",                          True,  True),
+        ("remark",          "",                          True,  True),
+        ("cancel_btn",      "",                          True,  True),
+        ("detail_btn",      "",                          True,  True),
+    ]
+    params = {
+        "draw": 1, "start": 0, "length": 200,
+        "order[0][column]": 1, "order[0][dir]": "desc",
+        "search[value]": "", "search[regex]": "false",
+        "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
+        "order_print": 3, "courier_filter": "all",
+    }
+    for i, (data, name, searchable, orderable) in enumerate(_cols):
+        params[f"columns[{i}][data]"]          = data
+        params[f"columns[{i}][name]"]          = name
+        params[f"columns[{i}][searchable]"]    = "true" if searchable else "false"
+        params[f"columns[{i}][orderable]"]     = "true" if orderable else "false"
+        params[f"columns[{i}][search][value]"] = ""
+        params[f"columns[{i}][search][regex]"] = "false"
+
+    try:
+        r = sess.get(f"{WEB_BASE}/getdt-new-shipment", headers=hdrs,
+                     params=params, timeout=15)
+        if r.status_code != 200 or not r.text.strip():
+            return {"statuses": {}, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+        try:
+            rows = r.json().get("data", [])
+        except Exception:
+            return {"statuses": {}, "error": f"JSON parse failed: {r.text[:300]}"}
+        statuses = {}
+        for row in rows:
+            tn = row.get("track_no", "")
+            status_html = row.get("status_btn", "") or ""
+            m = re.search(r'>([^<>]+)</', status_html)
+            status_text = m.group(1).strip() if m else status_html.strip()
+            if tn and status_text:
+                statuses[tn] = status_text
+        return {"statuses": statuses, "error": None, "_debug": {"rows": len(rows)}}
+    except Exception as e:
+        return {"statuses": {}, "error": str(e)}
+
+
 def create_order(
     dst_name: str, dst_phone: str,
     address_line: str, district: str, amphure: str, province: str, zipcode: str,
