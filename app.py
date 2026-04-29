@@ -361,7 +361,9 @@ with tab1:
                         with st.spinner("กำลังสร้างรายการใน iShip..."):
                             resp = iship_api.create_order(**_call)
                         if resp.get("status"):
-                            tracking = (resp.get("data") or {}).get("tracking_code", "")
+                            _rd = resp.get("data") or {}
+                            tracking = (_rd.get("tracking_code") or _rd.get("tracking_number")
+                                        or resp.get("tracking_code") or resp.get("tracking_number") or "")
                             st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
                             # บันทึก shipment record จาก บันทึกขาย
                             try:
@@ -938,7 +940,9 @@ with tab1:
                     with st.spinner("กำลังสร้างรายการใน iShip..."):
                         _sp_resp = iship_api.create_order(**_sp_call)
                     if _sp_resp.get("status"):
-                        _sp_tracking = (_sp_resp.get("data") or {}).get("tracking_code", "")
+                        _d = _sp_resp.get("data") or {}
+                        _sp_tracking = (_d.get("tracking_code") or _d.get("tracking_number")
+                                        or _sp_resp.get("tracking_code") or _sp_resp.get("tracking_number") or "")
                         if _spp.get("_shipment_id") and _sp_tracking:
                             db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
                         st.session_state["_sp_last_tracking"] = _sp_tracking
