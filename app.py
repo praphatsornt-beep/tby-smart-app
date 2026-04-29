@@ -1199,6 +1199,10 @@ with tab1:
                         st.rerun()
                     else:
                         st.info("ไม่มีสถานะใหม่")
+                        with st.expander("🔍 debug"):
+                            st.write(f"iShip คืนมา {len(_sr['statuses'])} tracking: {list(_sr['statuses'].keys())[:5]}")
+                            st.write(f"pending ในระบบ {len(_pending_tn)}: {_pending_tn[:5]}")
+                            st.write(f"debug: {_sr.get('_debug')}")
         if _sh_sync_col.button("🔄 ตรวจสอบ COD", key="sh_cod_sync", use_container_width=True):
             try:
                 _pending = db.get_pending_cod_tracking()
