@@ -664,3 +664,18 @@ def get_pending_delivery_tracking() -> list[str]:
             .execute().data)
     return [r["tracking_no"] for r in rows
             if r.get("delivery_status") not in _DELIVERY_TERMINAL]
+
+
+def get_customer_line_user_id(customer_id: str) -> str:
+    """คืน line_user_id ของลูกค้า หรือ '' ถ้าไม่มี"""
+    if not customer_id:
+        return ""
+    rows = get_supabase().table("customers").select("line_user_id").eq("id", customer_id).execute().data
+    return (rows[0].get("line_user_id") or "") if rows else ""
+
+
+def mark_line_notified(shipment_id: str) -> None:
+    """บันทึกวันที่ส่ง LINE notification แล้ว"""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    get_supabase().table("shipments").update({"line_notified_at": now}).eq("id", shipment_id).execute()

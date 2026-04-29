@@ -39,6 +39,7 @@ _PROVINCES = [
     "เพชรบุรี","เพชรบูรณ์","เลย","แพร่","แม่ฮ่องสอน",
 ]
 import shopee_api
+import line_api
 import iship_api
 from math import ceil
 from flash_zones import lookup_zone, zone_surcharge, ZONE_LABELS, carrier_fees
@@ -386,6 +387,14 @@ with tab1:
                                 pass
                             if tracking:
                                 st.session_state["_sale_last_tracking"] = tracking
+                                if line_api.is_configured():
+                                    _cid = _p.get("_customer_id", "")
+                                    _luid = db.get_customer_line_user_id(_cid) if _cid else ""
+                                    if _luid:
+                                        line_api.push_tracking(
+                                            _luid, _p.get("dst_name",""), tracking,
+                                            _carrier_choice, float(_p.get("cod_amount",0))
+                                        )
                             del st.session_state["_iship_pending"]
                         else:
                             _err_msg = resp.get("message") or resp.get("msg") or str(resp)
@@ -945,6 +954,16 @@ with tab1:
                                         or _sp_resp.get("tracking_code") or _sp_resp.get("tracking_number") or "")
                         if _spp.get("_shipment_id") and _sp_tracking:
                             db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
+                        if _sp_tracking and line_api.is_configured():
+                            _sp_cid2 = _spp.get("_customer_id", "")
+                            _sp_luid = db.get_customer_line_user_id(_sp_cid2) if _sp_cid2 else ""
+                            if _sp_luid:
+                                _lr = line_api.push_tracking(
+                                    _sp_luid, _spp.get("dst_name",""), _sp_tracking,
+                                    _spp.get("carrier",""), float(_spp.get("cod_amount",0))
+                                )
+                                if _lr.get("ok") and _spp.get("_shipment_id"):
+                                    db.mark_line_notified(_spp["_shipment_id"])
                         st.session_state["_sp_last_tracking"] = _sp_tracking
                         del st.session_state["_sp_iship_pending"]
                         st.rerun()
@@ -1173,6 +1192,7 @@ with tab1:
                     "products":     [{"name": it["name"], "qty": it["qty"], "price": 0} for it in _sp_items],
                     "_items":       _sp_items,
                     "_shipment_id": _sp_new_id,
+                    "_customer_id": _sp_cid or "",
                 }
                 for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes",
                            "_sp_cust_picked","sp_cust_search"]:
