@@ -1989,6 +1989,8 @@ with tab5:
             if rc2.button("💾 บันทึกแก้ไข", type="primary", use_container_width=True, key="save_recv_fix"):
                 for i, old_recv, new_recv in _recv_changes:
                     txn_id = id_map.iloc[i]
+                    max_recv = int(chk_df.iloc[i]["สั่ง"])
+                    new_recv = max(0, min(new_recv, max_recv))
                     delta = new_recv - old_recv
                     if delta != 0:
                         db.insert_partial_event({
