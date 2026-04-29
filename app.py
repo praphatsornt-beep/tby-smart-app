@@ -2140,6 +2140,7 @@ with tab6:
             qty_billed_wait = billed_not_rcv.get(pid, 0)
             diff = qty_system - qty_physical + qty_billed_wait - qty_unbilled
             stock_rows.append({
+                "รหัส":     pid,
                 "สินค้า":   p["name"],
                 "คอม":      qty_system,
                 "นับจริง":  qty_physical,
@@ -2156,7 +2157,7 @@ with tab6:
             stock_df,
             use_container_width=True,
             hide_index=True,
-            disabled=["สินค้า", "เบิก", "ฝาก", "ส่วนต่าง", "สถานะ"],
+            disabled=["รหัส", "สินค้า", "เบิก", "ฝาก", "ส่วนต่าง", "สถานะ"],
             column_config={
                 "คอม":      st.column_config.NumberColumn("คอม",     min_value=0, step=1, format="%d"),
                 "นับจริง":  st.column_config.NumberColumn("นับจริง", min_value=0, step=1, format="%d"),
