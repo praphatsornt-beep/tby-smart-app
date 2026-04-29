@@ -1960,9 +1960,9 @@ with tab5:
                 "ยอดรวม":  st.column_config.NumberColumn("ยอดรวม",  format="%,.0f"),
                 "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
                 "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
-                "ค้างรับ":  st.column_config.NumberColumn("ค้างรับ",  min_value=0, step=1, width="small"),
+                "รับแล้ว":  st.column_config.NumberColumn("รับแล้ว",  min_value=0, step=1, width="small"),
             },
-            disabled=[c for c in chk_df.columns if c not in ("🗑️", "ค้างรับ")],
+            disabled=[c for c in chk_df.columns if c not in ("🗑️", "รับแล้ว")],
             key="hist_table",
         )
 
@@ -1978,19 +1978,17 @@ with tab5:
                 st.rerun()
 
         _recv_changes = [
-            (i, int(chk_df.iloc[i]["ค้างรับ"]), int(edited_h.iloc[i]["ค้างรับ"]))
+            (i, int(chk_df.iloc[i]["รับแล้ว"]), int(edited_h.iloc[i]["รับแล้ว"]))
             for i in range(len(chk_df))
-            if int(chk_df.iloc[i]["ค้างรับ"]) != int(edited_h.iloc[i]["ค้างรับ"])
+            if int(chk_df.iloc[i]["รับแล้ว"]) != int(edited_h.iloc[i]["รับแล้ว"])
             and i < len(id_map)
         ]
         if _recv_changes:
             rc1, rc2 = st.columns([3, 1])
-            rc1.info(f"แก้ไขค้างรับ {len(_recv_changes)} รายการ")
+            rc1.info(f"แก้ไขรับแล้ว {len(_recv_changes)} รายการ")
             if rc2.button("💾 บันทึกแก้ไข", type="primary", use_container_width=True, key="save_recv_fix"):
-                for i, old_pend, new_pend in _recv_changes:
+                for i, old_recv, new_recv in _recv_changes:
                     txn_id = id_map.iloc[i]
-                    old_recv = int(chk_df.iloc[i]["รับแล้ว"])
-                    new_recv = int(chk_df.iloc[i]["สั่ง"]) - new_pend
                     delta = new_recv - old_recv
                     if delta != 0:
                         db.insert_partial_event({
@@ -1999,8 +1997,8 @@ with tab5:
                             "transaction_id": txn_id,
                             "qty_received":   delta,
                             "amount_paid":    0.0,
-                            "event_type":     "แก้ไข",
-                            "notes":          f"แก้ค้างรับ: {old_pend} → {new_pend}",
+                            "event_type":     "รับของ",
+                            "notes":          f"แก้รับแล้ว: {old_recv} → {new_recv}",
                         })
                 st.success("✅ บันทึกแล้ว")
                 db.get_all_transactions_df.clear()
