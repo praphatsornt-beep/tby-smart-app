@@ -54,9 +54,10 @@ def push_tracking(line_user_id: str, dst_name: str, tracking: str,
 
 def push_outstanding(line_user_id: str, customer_name: str,
                      outstanding_amount: float, pending_qty: int,
-                     items: list) -> dict:
+                     items: list, cod_transferred: list = None) -> dict:
     """ส่งสรุปยอดค้างให้ลูกค้าใน LINE
     items = [{"bill_no": str, "product": str, "amount": float, "qty": int}]
+    cod_transferred = [{"tracking_no": str, "cod_amount": float}]  COD ที่โอนแล้วรอเปิดบิล
     """
     token = _token()
     if not token:
@@ -82,6 +83,13 @@ def push_outstanding(line_user_id: str, customer_name: str,
             if amt > 0:
                 line += f" {amt:,.0f}฿"
             lines.append(line)
+    if cod_transferred:
+        lines.append("")
+        lines.append("✅ COD รับยอดแล้ว — กรุณาติดต่อเปิดบิล:")
+        for c in cod_transferred[:5]:
+            tn  = c.get("tracking_no", "")
+            amt = float(c.get("cod_amount") or 0)
+            lines.append(f"• {tn}  {amt:,.0f}฿")
 
     body = {
         "to": line_user_id,

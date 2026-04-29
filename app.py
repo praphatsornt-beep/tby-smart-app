@@ -1434,13 +1434,28 @@ with tab2:
                             for _, r in grp.iterrows()
                             if float(r["ค้างจ่าย"]) > 0 or int(r["ค้างรับ"]) > 0
                         ]
+                        # COD ที่โอนแล้วรอเปิดบิล
+                        _cust_obj  = next((c for c in customers if c["name"] == customer_name), None)
+                        _cod_done  = []
+                        if _cust_obj:
+                            try:
+                                _sh_list = db.get_shipments(customer_id=_cust_obj["id"])
+                                _cod_done = [
+                                    {"tracking_no": s.get("tracking_no",""), "cod_amount": float(s.get("cod_amount") or 0)}
+                                    for s in _sh_list
+                                    if s.get("cod_transferred_at") and float(s.get("cod_amount") or 0) > 0
+                                ]
+                            except Exception:
+                                pass
                         if st.button(
                             "📨 แจ้ง LINE" if _luid else "📨 ไม่มี LINE ID",
                             key=f"line_out_{customer_name}",
                             disabled=not _luid,
                             help=None if _luid else "ยังไม่มี line_user_id ของลูกค้านี้",
                         ):
-                            _r = line_api.push_outstanding(_luid, customer_name, owed, pending, _line_items)
+                            _r = line_api.push_outstanding(
+                                _luid, customer_name, owed, pending, _line_items, _cod_done
+                            )
                             if _r.get("ok"):
                                 st.success("✅ ส่ง LINE แล้ว")
                             else:
