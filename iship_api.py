@@ -273,10 +273,16 @@ def get_shipment_statuses(days_back: int = 60) -> dict:
             return {"statuses": {}, "error": f"JSON parse failed: {r.text[:300]}"}
         statuses = {}
         for row in rows:
-            tn = row.get("track_no", "")
-            status_html = row.get("status_btn", "") or ""
-            m = re.search(r'>([^<>]+)</', status_html)
-            status_text = m.group(1).strip() if m else status_html.strip()
+            track_html   = row.get("track_no", "") or ""
+            status_html  = row.get("status_btn", "") or ""
+            # track_no เป็น HTML — แกะ tracking number จาก href หรือ link text
+            m_tn = re.search(r'track=([A-Z0-9]+)', track_html)
+            if not m_tn:
+                m_tn = re.search(r'>([A-Z0-9]{8,})<', track_html)
+            tn = m_tn.group(1).strip() if m_tn else track_html.strip()
+            # status_btn เป็น HTML button — แกะข้อความสถานะ
+            m_st = re.search(r'>([^<>]+)</', status_html)
+            status_text = m_st.group(1).strip() if m_st else status_html.strip()
             if tn and status_text:
                 statuses[tn] = status_text
         return {"statuses": statuses, "error": None, "_debug": {"rows": len(rows)}}
