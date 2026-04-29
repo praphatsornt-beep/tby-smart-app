@@ -1414,14 +1414,37 @@ with tab2:
         if outstanding_df.empty:
             st.success("✅ ไม่มียอดค้าง")
         else:
+            # โหลด line_user_id ของลูกค้าทั้งหมด
+            _cust_line_map = {c["name"]: c.get("line_user_id") or "" for c in customers}
+
             single_cust = (_t2_search.strip() != "" or _t2_bill_search.strip() != "") and outstanding_df["ลูกค้า"].nunique() == 1
             for customer_name, grp in outstanding_df.groupby("ลูกค้า"):
                 owed    = grp["ค้างจ่าย"].sum()
                 pending = int(grp["ค้างรับ"].sum())
                 txn_ids = grp["id"].tolist()
+                _luid   = _cust_line_map.get(customer_name, "")
                 exp_label = f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
 
                 with st.expander(exp_label, expanded=single_cust):
+                    # ── LINE แจ้งยอดค้าง ─────────────────────────────────
+                    if line_api.is_configured():
+                        _line_items = [
+                            {"bill_no": r["เลขที่บิล"], "product": r["สินค้า"],
+                             "amount": float(r["ค้างจ่าย"]), "qty": int(r["ค้างรับ"])}
+                            for _, r in grp.iterrows()
+                            if float(r["ค้างจ่าย"]) > 0 or int(r["ค้างรับ"]) > 0
+                        ]
+                        if st.button(
+                            "📨 แจ้ง LINE" if _luid else "📨 ไม่มี LINE ID",
+                            key=f"line_out_{customer_name}",
+                            disabled=not _luid,
+                            help=None if _luid else "ยังไม่มี line_user_id ของลูกค้านี้",
+                        ):
+                            _r = line_api.push_outstanding(_luid, customer_name, owed, pending, _line_items)
+                            if _r.get("ok"):
+                                st.success("✅ ส่ง LINE แล้ว")
+                            else:
+                                st.error(f"❌ {_r.get('error')}")
                     # ── Styled table + row selection ──────────────────────
                     _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
                                "ยอดรวม", "ค้างจ่าย", "สถานะบิล"]
