@@ -97,13 +97,21 @@ def update_customer_address(customer_id: str, data: dict) -> None:
 
 # ─── Transactions ────────────────────────────────────────────────────────────
 
+def _clear_transaction_caches() -> None:
+    get_all_transactions_df.clear()
+    get_outstanding_df.clear()
+    get_unbilled_pv_summary.clear()
+
+
 def insert_transaction(data: dict) -> None:
     get_supabase().table("transactions").insert(data).execute()
+    _clear_transaction_caches()
 
 
 def insert_transactions_batch(rows: list[dict]) -> None:
     if rows:
         get_supabase().table("transactions").insert(rows).execute()
+        _clear_transaction_caches()
 
 
 def get_next_bill_no(date_str: str) -> str:
@@ -127,6 +135,8 @@ def get_next_bill_no(date_str: str) -> str:
 
 def insert_partial_event(data: dict) -> None:
     get_supabase().table("partial_events").insert(data).execute()
+    get_outstanding_df.clear()
+    get_unbilled_pv_summary.clear()
 
 
 def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
@@ -161,11 +171,12 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
             "pay_status": "ค้างจ่าย",
             "notes": txn.get("notes", "") or "",
         }).execute()
+    _clear_transaction_caches()
 
 
 def update_transaction(transaction_id: str, data: dict) -> None:
     get_supabase().table("transactions").update(data).eq("id", transaction_id).execute()
-    get_all_transactions_df.clear()
+    _clear_transaction_caches()
 
 
 def update_transaction_status(transaction_id: str, bill_status: str = None, pay_status: str = None) -> None:
@@ -176,6 +187,7 @@ def update_transaction_status(transaction_id: str, bill_status: str = None, pay_
         updates["pay_status"] = pay_status
     if updates:
         get_supabase().table("transactions").update(updates).eq("id", transaction_id).execute()
+        _clear_transaction_caches()
 
 
 # ─── Calculations ────────────────────────────────────────────────────────────
@@ -266,11 +278,15 @@ def delete_customer(customer_id: str) -> None:
     get_supabase().table("customers").delete().eq("id", customer_id).execute()
 
 
+@st.cache_data(ttl=60)
 def get_unbilled_pv_summary() -> dict:
     """สรุป PV และยอดเงินของรายการที่ยังไม่เปิดบิล"""
-    rows = get_supabase().table("transactions").select(
-        "qty, points_per_unit, total_amount, customers(name)"
-    ).eq("bill_status", "ยังไม่เปิดบิล").execute().data
+    try:
+        rows = get_supabase().table("transactions").select(
+            "qty, points_per_unit, total_amount, customers(name)"
+        ).eq("bill_status", "ยังไม่เปิดบิล").execute().data
+    except Exception:
+        return {"count": 0, "total_pv": 0.0, "total_amount": 0.0}
 
     total_pv = sum(float(r["points_per_unit"]) * r["qty"] for r in rows)
     total_amount = sum(float(r["total_amount"]) for r in rows)
@@ -476,6 +492,7 @@ def get_billed_not_received_qty_by_product() -> dict:
     return dict(result)
 
 
+@st.cache_data(ttl=60)
 def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
     """รายการที่ยังค้างชำระหรือค้างรับของ"""
     db = get_supabase()

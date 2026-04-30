@@ -551,9 +551,11 @@ with tab1:
             )
 
             valid_items = [
-                (product_display[row["สินค้า"]], int(row["จำนวน"] or 0), "")
+                (product_display[row["สินค้า"]], int(row["จำนวน"]), "")
                 for _, row in edited_cart.iterrows()
-                if str(row.get("สินค้า", "")) in product_display and int(row.get("จำนวน") or 0) > 0
+                if str(row.get("สินค้า", "")) in product_display
+                and pd.notna(row.get("จำนวน"))
+                and int(row.get("จำนวน")) > 0
             ]
 
             # ── สถานะ + การจัดส่ง ────────────────────────────────────────────
@@ -1370,11 +1372,11 @@ with tab2:
     else:
         # ── Summary metrics ────────────────────────────────────────────────
         unbilled     = db.get_unbilled_pv_summary()
-        _outs_all    = db.get_outstanding_df()
-        if not _outs_all.empty:
+        outstanding_df = db.get_outstanding_df()
+        if not outstanding_df.empty:
             sm1, sm2, sm3 = st.columns(3)
-            sm1.metric("ค้างจ่ายรวม",   f"{_outs_all['ค้างจ่าย'].sum():,.0f} ฿")
-            sm2.metric("ค้างรับรวม",    f"{int(_outs_all['ค้างรับ'].sum())} ชิ้น")
+            sm1.metric("ค้างจ่ายรวม",   f"{outstanding_df['ค้างจ่าย'].sum():,.0f} ฿")
+            sm2.metric("ค้างรับรวม",    f"{int(outstanding_df['ค้างรับ'].sum())} ชิ้น")
             sm3.metric("PV รอเปิดบิล", f"{unbilled['total_pv']:,.0f}")
             st.divider()
 
@@ -1384,8 +1386,6 @@ with tab2:
         _t2_bill_search = fc2.text_input("🔍 เลขที่บิล", placeholder="เช่น 260427", key="tab2_bill_search")
         filter_bill = fc3.radio("สถานะบิล", ["ค้างอยู่ทั้งหมด", "ยังไม่เปิดบิล", "เปิดบิลแล้ว"],
                                 horizontal=True, key="tab2_filter_bill")
-
-        outstanding_df = db.get_outstanding_df()
         if filter_bill == "ยังไม่เปิดบิล":
             outstanding_df = outstanding_df[outstanding_df["สถานะบิล"] == "ยังไม่เปิดบิล"]
         elif filter_bill == "เปิดบิลแล้ว":
