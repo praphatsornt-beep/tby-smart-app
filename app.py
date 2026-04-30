@@ -296,7 +296,7 @@ with tab1:
             _grand = _pd.get("collect", _pd["total_amt"])
             _items_txt = ", ".join(f"{it['name']} ×{it['qty']}" for it in _pd.get("items", []))
             with st.container(border=True):
-                _pb1, _pb2, _pb3 = st.columns([4, 3, 1])
+                _pb1, _pb2, _pb3, _pb4 = st.columns([4, 3, 1, 1])
                 _pb1.markdown(
                     f"✅ **{_pd['customer_name']}** — บิล `{_pd['bill_no']}` | {_pd['bill_date']}"
                     f"\n\n_{_items_txt}_"
@@ -304,7 +304,20 @@ with tab1:
                 _pb2.markdown(
                     f"💰 **{_grand:,.0f} ฿** &nbsp;&nbsp; ⭐ PV {_pd['total_pv']:.0f}"
                 )
-                if _pb3.button("✕ ปิด", key="popup_close", use_container_width=True):
+                _popup_line_uid = db.get_customer_line_user_id(_pd.get("customer_id", "")) if _pd.get("customer_id") else ""
+                if _pb3.button("📨 LINE", key="popup_line_btn",
+                               disabled=not bool(_popup_line_uid),
+                               use_container_width=True,
+                               help="ส่งสรุปบิลให้ลูกค้าใน LINE" if _popup_line_uid else "ลูกค้าไม่มี LINE ID"):
+                    _res = line_api.push_bill_summary(
+                        _popup_line_uid, _pd["customer_name"], _pd["bill_no"],
+                        _pd.get("items", []), _pd["total_amt"], _pd["pay_status"]
+                    )
+                    if _res["ok"]:
+                        st.toast("✅ ส่ง LINE แล้ว")
+                    else:
+                        st.error(f"LINE error: {_res['error']}")
+                if _pb4.button("✕ ปิด", key="popup_close", use_container_width=True):
                     del st.session_state["_print_popup"]
                     st.rerun()
 
@@ -878,6 +891,7 @@ with tab1:
                 # เก็บข้อมูลสำหรับ popup พิมพ์บิล
                 st.session_state["_print_popup"] = {
                     "customer_name": customer["name"],
+                    "customer_id":   customer["id"],
                     "bill_date":     str(m_date),
                     "bill_no":       bill_no,
                     "items": [{"name": p["name"], "qty": qty,
@@ -2579,6 +2593,24 @@ with tab7:
 </body></html>"""
 
                     components.html(bill_html, height=_height, scrolling=True)
+
+                    # ── ส่งสรุปบิล LINE ─────────────────────────────────────
+                    _t7_cust_id = st.session_state.get("_print_cust_picked", "")
+                    _t7_line_uid = db.get_customer_line_user_id(_t7_cust_id) if _t7_cust_id and not _is_bill else ""
+                    _t7_items = [{"name": r["สินค้า"], "qty": int(r["สั่ง"]),
+                                  "total": float(r["ยอดรวม"])} for _, r in show_p.iterrows()]
+                    _t7_pay = show_p.iloc[0].get("สถานะบิล", "") if not show_p.empty else ""
+                    if st.button("📨 ส่งสรุปบิล LINE", key="t7_line_btn",
+                                 disabled=not bool(_t7_line_uid),
+                                 help="ส่งสรุปให้ลูกค้าใน LINE" if _t7_line_uid else "ลูกค้าไม่มี LINE ID"):
+                        _r7 = line_api.push_bill_summary(
+                            _t7_line_uid, sel_p, bill_nos_str,
+                            _t7_items, total_amount, _t7_pay
+                        )
+                        if _r7["ok"]:
+                            st.success("✅ ส่ง LINE แล้ว")
+                        else:
+                            st.error(f"LINE error: {_r7['error']}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
