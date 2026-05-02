@@ -1639,8 +1639,6 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                     for s in _sh_list
                                     if s.get("cod_transferred_at") and float(s.get("cod_amount") or 0) > 0
                                 ]
-                            except Exception:
-                                pass
                         if st.button(
                             "📨 แจ้ง LINE" if _luid else "📨 ไม่มี LINE ID",
                             key=f"line_out_{customer_name}",
