@@ -286,10 +286,12 @@ with tab1:
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
                       "m_bill","m_pay","m_delivery","m_cod",
-                      "m_cart","_cart_base","m_postcode","m_carrier","m_zone",
+                      "_cart_base","m_postcode","m_carrier","m_zone",
                       "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
                       "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv"]
+        _cart_ver = st.session_state.get("_cart_version", 0)
+        _cart_key = f"m_cart_{_cart_ver}"
 
         if st.session_state.get("_print_popup"):
             _pd = st.session_state["_print_popup"]
@@ -363,6 +365,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if _sale_h2.button("🗑️ ล้าง", key="sale_clear_form", use_container_width=True):
             for _k in _sale_keys:
                 st.session_state.pop(_k, None)
+            st.session_state.pop(_cart_key, None)
+            st.session_state["_cart_version"] = _cart_ver + 1
             st.rerun()
 
         products = db.get_products()
@@ -482,7 +486,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
                     if _qf:
                         st.session_state["_quick_cart_items"] = _qf
-                        st.session_state.pop("m_cart", None)
+                        st.session_state.pop(_cart_key, None)
                         st.session_state.pop("_cart_base", None)
                         st.rerun()
 
@@ -568,7 +572,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             product_display = {f"{p['id']} — {p['name']}": p for p in products}
             product_display_keys = list(product_display.keys())
             # cart_df ต้องคงที่ระหว่าง reruns เพราะ data_editor เก็บแค่ edit diff
-            if "m_cart" not in st.session_state:
+            if _cart_key not in st.session_state:
                 # first render หรือหลัง clear — ตั้ง base ใหม่
                 if "_quick_cart_items" in st.session_state:
                     _qi = st.session_state.pop("_quick_cart_items")
@@ -597,7 +601,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
                     "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
                 },
-                key="m_cart",
+                key=_cart_key,
             )
 
             valid_items = [
@@ -949,11 +953,13 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 # ล้างฟอร์มสำหรับลูกค้าถัดไป
                 for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
                            "m_bill", "m_pay", "m_delivery", "m_cod", "m_cod_custom",
-                           "m_cart", "_cart_base", "m_postcode", "m_carrier", "m_zone",
+                           "_cart_base", "m_postcode", "m_carrier", "m_zone",
                            "r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv",
                            "_carrier_sig", "_prev_pc", "_prev_pay",
                            "_prev_shipping_cid", "_last_rph_fill"]:
                     st.session_state.pop(_k, None)
+                st.session_state.pop(_cart_key, None)
+                st.session_state["_cart_version"] = _cart_ver + 1
                 st.rerun()
             elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
                 st.caption("⚠️ " + " | ".join(m_errors))
