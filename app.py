@@ -1453,17 +1453,19 @@ with tab2:
                         ) or "<tr><td colspan='2' style='color:#888'>ไม่มีค้างรับ</td></tr>"
                         _recv_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
-body{{font-family:'Sarabun',sans-serif;padding:12px 16px;font-size:13px;color:#000}}
-h3{{margin:0 0 6px;font-size:15px}}
-.info{{margin-bottom:10px;font-size:13px}}
+html,body{{background:#fff!important;color:#000!important}}
+body{{font-family:'Sarabun',sans-serif;padding:12px 16px;font-size:13px}}
+h3{{margin:0 0 6px;font-size:15px;color:#000}}
+.info{{margin-bottom:10px;font-size:13px;color:#000}}
+b{{color:#000}}
 table{{width:100%;border-collapse:collapse;margin:6px 0}}
-th{{background:#222;color:#fff;padding:4px 8px;font-size:12px;text-align:left}}
-td{{padding:4px 8px;border-bottom:1px solid #ddd}}
+th{{background:#333;color:#fff;padding:4px 8px;font-size:12px;text-align:left}}
+td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
 .section{{margin:10px 0}}
-.sig{{margin-top:28px;display:inline-block;border-top:1px solid #000;padding-top:4px;min-width:180px;text-align:center;font-size:12px}}
-.btn{{display:block;margin:0 0 10px;padding:5px 18px;background:#222;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
+.sig{{margin-top:28px;display:inline-block;border-top:1px solid #000;padding-top:4px;min-width:180px;text-align:center;font-size:12px;color:#000}}
+.btn{{display:block;margin:0 0 10px;padding:5px 18px;background:#333;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
 @media print{{.btn{{display:none}}@page{{size:A6 portrait;margin:8mm}}}}
-</style></head><body>
+</style></head><body style="background:#fff;color:#000">
 <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบรับของ</button>
 <h3>ใบรับของ</h3>
 <div class='info'>วันที่: {_rp['date']}<br>ลูกค้า: <b>{_rp['customer_name']}</b></div>
