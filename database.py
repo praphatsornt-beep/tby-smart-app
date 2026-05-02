@@ -321,7 +321,7 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
         q = q.eq("customer_id", customer_id)
     if bill_no:
         q = q.eq("bill_no", bill_no)
-    txns = q.order("date", desc=True).execute().data
+    txns = q.order("bill_no", desc=True).order("date", desc=True).execute().data
 
     if not txns:
         return pd.DataFrame()
