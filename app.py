@@ -1633,15 +1633,19 @@ td{{padding:4px 8px;border-bottom:1px solid #ddd}}
                                 if error:
                                     st.error(error)
                                 else:
-                                    db.insert_partial_event({
-                                        "id":             str(uuid.uuid4()),
-                                        "date":           str(event_date),
-                                        "transaction_id": txn_id,
-                                        "qty_received":   int(qty_received),
-                                        "amount_paid":    float(amount_paid),
-                                        "event_type":     evt_type,
-                                        "notes":          event_notes,
-                                    })
+                                    try:
+                                        db.insert_partial_event({
+                                            "id":             str(uuid.uuid4()),
+                                            "date":           str(event_date),
+                                            "transaction_id": txn_id,
+                                            "qty_received":   int(qty_received),
+                                            "amount_paid":    float(amount_paid),
+                                            "event_type":     evt_type,
+                                            "notes":          event_notes,
+                                        })
+                                    except Exception as _pe:
+                                        st.error(f"❌ DB error: {_pe}")
+                                        st.stop()
                                     db.get_all_transactions_df.clear()
                                     if int(qty_received) > 0:
                                         _rp_pending = []
