@@ -2420,9 +2420,11 @@ with tab6:
         # ── สรุปยอดรวม ──────────────────────────────────────────────────────
         price_by_name = {p["name"]: float(p.get("price") or 0) for p in products}
         pv_by_name    = {p["name"]: float(p.get("points_per_unit") or 0) for p in products}
-        total_kom_amt  = sum(int(row["คอม"])     * price_by_name.get(row["สินค้า"], 0) for _, row in stock_df.iterrows())
-        total_real_amt = sum(int(row["นับจริง"]) * price_by_name.get(row["สินค้า"], 0) for _, row in stock_df.iterrows())
-        total_pv       = sum(int(row["ส่วนต่าง"]) * pv_by_name.get(row["สินค้า"], 0)   for _, row in stock_df.iterrows())
+        _sp = stock_df["สินค้า"].map(price_by_name).fillna(0)
+        _sv = stock_df["สินค้า"].map(pv_by_name).fillna(0)
+        total_kom_amt  = (stock_df["คอม"].astype(float)      * _sp).sum()
+        total_real_amt = (stock_df["นับจริง"].astype(float)  * _sp).sum()
+        total_pv       = (stock_df["ส่วนต่าง"].astype(float) * _sv).sum()
         diff_amt       = total_kom_amt - total_real_amt
         sm1, sm2, sm3, sm4 = st.columns(4)
         sm1.metric("📦 ยอดในคอม (฿)", f"{total_kom_amt:,.0f}")
