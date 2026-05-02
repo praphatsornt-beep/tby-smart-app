@@ -296,7 +296,7 @@ with tab1:
             _grand = _pd.get("collect", _pd["total_amt"])
             _items_txt = ", ".join(f"{it['name']} ×{it['qty']}" for it in _pd.get("items", []))
             with st.container(border=True):
-                _pb1, _pb2, _pb3, _pb4 = st.columns([4, 3, 1, 1])
+                _pb1, _pb2, _pb3, _pb4, _pb5 = st.columns([4, 3, 1, 1, 1])
                 _pb1.markdown(
                     f"✅ **{_pd['customer_name']}** — บิล `{_pd['bill_no']}` | {_pd['bill_date']}"
                     f"\n\n_{_items_txt}_"
@@ -317,9 +317,46 @@ with tab1:
                         st.toast("✅ ส่ง LINE แล้ว")
                     else:
                         st.error(f"LINE error: {_res['error']}")
-                if _pb4.button("✕ ปิด", key="popup_close", use_container_width=True):
+                if _pb4.button("🖨️ พิมพ์", key="popup_print_btn", use_container_width=True):
+                    st.session_state["_popup_show_print"] = not st.session_state.get("_popup_show_print", False)
+                if _pb5.button("✕ ปิด", key="popup_close", use_container_width=True):
                     del st.session_state["_print_popup"]
+                    st.session_state.pop("_popup_show_print", None)
                     st.rerun()
+
+            if st.session_state.get("_popup_show_print") and st.session_state.get("_print_popup"):
+                _pit = _pd.get("items", [])
+                _rows_html = "".join(
+                    f"<tr><td>{it['name']}</td><td style='text-align:center'>{it['qty']}</td>"
+                    f"<td style='text-align:right'>{float(it['price']):,.0f}</td>"
+                    f"<td style='text-align:right'>{float(it['total']):,.0f}</td></tr>"
+                    for it in _pit
+                )
+                _ship_row = f"<tr><td>ค่าส่ง ({_pd.get('carrier','')})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
+                _cod_row  = f"<tr><td>COD (3%)</td><td></td><td></td><td style='text-align:right'>{_pd['cod_fee']:,.0f}</td></tr>" if _pd.get("is_cod") else ""
+                _bill_html_popup = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+html,body{{background:#fff!important;color:#000!important;margin:0;padding:0}}
+body{{font-family:'Sarabun',sans-serif;padding:14px;font-size:13px}}
+h3{{margin:0 0 4px;font-size:15px}}
+.info{{font-size:12px;margin-bottom:8px;color:#333}}
+table{{width:100%;border-collapse:collapse;margin:6px 0;font-size:12px}}
+th{{background:#333;color:#fff;padding:4px 6px;text-align:left}}
+td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
+.total{{font-weight:bold;font-size:14px;text-align:right;margin-top:6px}}
+.btn{{display:inline-block;margin:0 0 10px;padding:5px 16px;background:#333;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
+@media print{{.btn{{display:none}}@page{{size:A5;margin:8mm}}}}
+</style></head><body style="background:#fff;color:#000">
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์บิล</button>
+<h3>TBY — ใบเสร็จรับเงิน</h3>
+<div class='info'>บิล: <b>{_pd['bill_no']}</b> | วันที่: {_pd['bill_date']}<br>
+ลูกค้า: <b>{_pd['customer_name']}</b> | สถานะ: {_pd['pay_status']}</div>
+<table><tr><th>สินค้า</th><th>จำนวน</th><th>ราคา/ชิ้น</th><th>รวม</th></tr>
+{_rows_html}{_ship_row}{_cod_row}
+</table>
+<div class='total'>ยอดรวม: {_grand:,.0f} ฿ &nbsp;|&nbsp; PV: {_pd['total_pv']:.0f}</div>
+</body></html>"""
+                components.html(_bill_html_popup, height=420, scrolling=True)
 
         _sale_h1, _sale_h2 = st.columns([6, 1])
         _sale_h1.subheader("บันทึกรายการขาย")
