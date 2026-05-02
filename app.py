@@ -1509,6 +1509,9 @@ with tab2:
                     elif len(selected_ids) == 1:
                         txn_id  = selected_ids[0]
                         balance = db.get_transaction_balance(txn_id)
+                        if not balance:
+                            st.warning("ไม่พบรายการนี้ในฐานข้อมูล")
+                            st.stop()
                         txn     = balance["transaction"]
                         sel_row = grp[grp["id"] == txn_id].iloc[0]
 
