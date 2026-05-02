@@ -656,7 +656,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 
                 # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
                 _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
-                with st.expander("📦 ที่อยู่ผู้รับ", expanded=False):
+                with st.expander("📦 ที่อยู่ผู้รับ", expanded=(m_delivery == "ส่งพัสดุ")):
                         # ── quick-select ที่อยู่เดิมของลูกค้า ──────────────────
                         if m_customer != "— เลือกลูกค้า —":
                             try:
@@ -664,20 +664,19 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             except Exception:
                                 _saved_addrs = []
                             if _saved_addrs:
-                                st.caption("⚡ เลือกที่อยู่เดิม")
-                                for _sa in _saved_addrs:
-                                    _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
-                                    if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
-                                        st.session_state["r_name"]  = _sa.get("recipient_name", "")
-                                        st.session_state["r_phone"] = _sa.get("phone", "")
-                                        st.session_state["r_al"]    = _sa.get("address_line", "")
-                                        st.session_state["r_dt"]    = _sa.get("district", "")
-                                        st.session_state["r_am"]    = _sa.get("amphure", "")
-                                        st.session_state["r_pv"]    = _sa.get("province", "")
-                                        st.session_state["_staged_pc"] = _sa.get("postal_code", "")
-                                        st.session_state["_last_rph_fill"] = _sa.get("phone", "")
-                                        st.rerun()
-                                st.divider()
+                                with st.expander(f"⚡ เลือกที่อยู่เดิม ({len(_saved_addrs)})", expanded=False):
+                                    for _sa in _saved_addrs:
+                                        _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
+                                        if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
+                                            st.session_state["r_name"]  = _sa.get("recipient_name", "")
+                                            st.session_state["r_phone"] = _sa.get("phone", "")
+                                            st.session_state["r_al"]    = _sa.get("address_line", "")
+                                            st.session_state["r_dt"]    = _sa.get("district", "")
+                                            st.session_state["r_am"]    = _sa.get("amphure", "")
+                                            st.session_state["r_pv"]    = _sa.get("province", "")
+                                            st.session_state["_staged_pc"] = _sa.get("postal_code", "")
+                                            st.session_state["_last_rph_fill"] = _sa.get("phone", "")
+                                            st.rerun()
                         _parse_key = f"_show_paste_{_cid}"
                         if st.button("📍 แยกที่อยู่อัตโนมัติ", key=f"parse_open_{_cid}"):
                             st.session_state[_parse_key] = not st.session_state.get(_parse_key, False)
