@@ -241,7 +241,8 @@ st.markdown("""
 st.title("🛍️ TBY SMART APP")
 
 
-tab1, tab2, tab5, tab6, tab7, tab_fin, tab_ecom, tab4 = st.tabs([
+tab_dash, tab1, tab2, tab5, tab6, tab7, tab_fin, tab_ecom, tab4 = st.tabs([
+    "🏠 หน้าแรก",
     "📋 บันทึกรายการ",
     "💰 ยอดค้าง",
     "🗂️ ประวัติทั้งหมด",
@@ -253,6 +254,94 @@ tab1, tab2, tab5, tab6, tab7, tab_fin, tab_ecom, tab4 = st.tabs([
 ])
 
 
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Tab Dashboard: หน้าแรก
+# ─────────────────────────────────────────────────────────────────────────────
+with tab_dash:
+    _today = date.today()
+    _today_str = _today.strftime("%Y-%m-%d")
+    _thai_days = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์","อาทิตย์"]
+    _thai_months = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
+    _day_name = _thai_days[_today.weekday()]
+    st.caption(f"📅 วัน{_day_name} {_today.day} {_thai_months[_today.month]} {_today.year + 543}")
+
+    # ── โหลด data (ทั้งหมด cached) ──────────────────────────────────────────
+    try:
+        _dash_txn   = db.get_all_transactions_df()
+        _dash_outs  = db.get_outstanding_df()
+        _dash_ships = db.get_shipments()
+        _dash_pv    = db.get_unbilled_pv_summary()
+        _dash_fin   = db.get_finance_summary()
+    except Exception as _de:
+        st.error(f"โหลดข้อมูลไม่ได้: {_de}")
+        st.stop()
+
+    # ── คำนวณ metrics ────────────────────────────────────────────────────────
+    _today_txn = _dash_txn[_dash_txn["วันที่"] == _today_str] if not _dash_txn.empty else pd.DataFrame()
+    _today_sales = _today_txn["ยอดรวม"].sum() if not _today_txn.empty else 0.0
+    _today_count = len(_today_txn)
+
+    _total_owed  = _dash_outs["ค้างจ่าย"].sum() if not _dash_outs.empty else 0.0
+    _total_custs = _dash_outs["ลูกค้า"].nunique() if not _dash_outs.empty else 0
+
+    _cod_pending = [s for s in _dash_ships
+                    if float(s.get("cod_amount") or 0) > 0
+                    and not s.get("cod_transferred_at")]
+    _cod_count  = len(_cod_pending)
+    _cod_amt    = sum(float(s.get("cod_amount") or 0) for s in _cod_pending)
+
+    _pv_count = _dash_pv.get("count", 0)
+    _pv_total = _dash_pv.get("total_pv", 0.0)
+
+    # ── Metric cards ─────────────────────────────────────────────────────────
+    _dc1, _dc2, _dc3, _dc4 = st.columns(4)
+    _dc1.metric("💵 ยอดขายวันนี้",   f"{_today_sales:,.0f} ฿",
+                delta=f"{_today_count} รายการ", delta_color="off")
+    _dc2.metric("⚠️ ค้างจ่ายรวม",    f"{_total_owed:,.0f} ฿",
+                delta=f"{_total_custs} ลูกค้า", delta_color="off")
+    _dc3.metric("🚚 COD รอรับ",       f"{_cod_count} รายการ",
+                delta=f"{_cod_amt:,.0f} ฿" if _cod_amt else "ไม่มี", delta_color="off")
+    _dc4.metric("⭐ PV รอเปิดบิล",   f"{_pv_total:,.0f} PV",
+                delta=f"{_pv_count} รายการ", delta_color="off")
+
+    # แสดงสิทธิ์สั่งของถ้ามี finance data
+    _credit = float(_dash_fin.get("credit", 0) or 0)
+    if _credit > 0:
+        st.info(f"💳 สิทธิ์สั่งของคงเหลือ: **{_credit:,.0f} ฿**")
+
+    st.divider()
+
+    # ── 2 คอลัมน์: รายการวันนี้ + ลูกค้าค้างสูงสุด ──────────────────────────
+    _dl, _dr = st.columns([3, 2])
+
+    with _dl:
+        st.markdown("**📋 รายการที่บันทึกวันนี้**")
+        if _today_txn.empty:
+            st.caption("ยังไม่มีรายการวันนี้")
+        else:
+            _show_today = _today_txn[["เลขที่บิล","ลูกค้า","สินค้า","ยอดรวม","สถานะบิล"]].copy()
+            _show_today = _show_today.rename(columns={"เลขที่บิล": "บิล", "ยอดรวม": "ยอด (฿)"})
+            st.dataframe(
+                _show_today.style.format({"ยอด (฿)": "{:,.0f}"}),
+                use_container_width=True, hide_index=True,
+                height=min(35 * len(_show_today) + 38, 320),
+            )
+
+    with _dr:
+        st.markdown("**🔴 ลูกค้าค้างสูงสุด (Top 5)**")
+        if _dash_outs.empty:
+            st.caption("ไม่มียอดค้าง")
+        else:
+            _top5 = (_dash_outs.groupby("ลูกค้า")
+                     .agg(ค้างจ่าย=("ค้างจ่าย","sum"), ค้างรับ=("ค้างรับ","sum"))
+                     .sort_values("ค้างจ่าย", ascending=False)
+                     .head(5)
+                     .reset_index())
+            st.dataframe(
+                _top5.style.format({"ค้างจ่าย": "{:,.0f}", "ค้างรับ": "{:.0f}"}),
+                use_container_width=True, hide_index=True,
+            )
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab 1: บันทึกรายการขาย
