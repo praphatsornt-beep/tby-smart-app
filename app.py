@@ -2598,14 +2598,15 @@ with tab7:
                     components.html(bill_html, height=_height, scrolling=True)
 
                     # ── ส่งสรุปบิล LINE ─────────────────────────────────────
-                    _t7_cust_id = st.session_state.get("_print_cust_picked", "")
-                    _t7_line_uid = db.get_customer_line_user_id(_t7_cust_id) if _t7_cust_id and not _is_bill else ""
+                    _t7_cust_id = cust_map_p.get(sel_p, {}).get("id", "") if not _is_bill else ""
+                    _t7_line_uid = db.get_customer_line_user_id(_t7_cust_id) if _t7_cust_id else ""
                     _t7_items = [{"name": r["สินค้า"], "qty": int(r["สั่ง"]),
                                   "total": float(r["ยอดรวม"])} for _, r in show_p.iterrows()]
                     _t7_pay = show_p.iloc[0].get("สถานะบิล", "") if not show_p.empty else ""
-                    if st.button("📨 ส่งสรุปบิล LINE", key="t7_line_btn",
-                                 disabled=not bool(_t7_line_uid),
-                                 help="ส่งสรุปให้ลูกค้าใน LINE" if _t7_line_uid else "ลูกค้าไม่มี LINE ID"):
+                    _t7_col1, _t7_col2 = st.columns([1, 2])
+                    if _t7_col1.button("📨 ส่งสรุปบิล LINE", key="t7_line_btn",
+                                       disabled=not bool(_t7_line_uid),
+                                       help="ส่งสรุปให้ลูกค้าใน LINE" if _t7_line_uid else "ลูกค้าไม่มี LINE ID"):
                         _r7 = line_api.push_bill_summary(
                             _t7_line_uid, sel_p, bill_nos_str,
                             _t7_items, total_amount, _t7_pay
@@ -2614,6 +2615,24 @@ with tab7:
                             st.success("✅ ส่ง LINE แล้ว")
                         else:
                             st.error(f"LINE error: {_r7['error']}")
+
+                    # ── เปลี่ยนลูกค้าในบิล ──────────────────────────────────
+                    with st.expander("✏️ เปลี่ยนลูกค้าในบิลนี้"):
+                        if bill_nos_str and db.bill_has_partial_events(bill_nos_str):
+                            st.warning("⚠️ บิลนี้มีการจ่าย/รับของแล้ว — เปลี่ยนได้แต่ยอดค้างอาจเปลี่ยน")
+                        _new_cust_name = st.selectbox(
+                            "เลือกลูกค้าใหม่",
+                            [c["name"] for c in customers_p],
+                            key="t7_new_cust"
+                        )
+                        _new_cust_id = cust_map_p.get(_new_cust_name, {}).get("id")
+                        _confirm_cust = st.checkbox("ยืนยันการเปลี่ยนลูกค้า", key="t7_confirm_cust")
+                        if st.button("💾 บันทึก", disabled=not (_confirm_cust and _new_cust_id and bill_nos_str),
+                                     key="t7_save_cust"):
+                            db.update_bill_customer(bill_nos_str, _new_cust_id)
+                            st.session_state["_print_cust_picked"] = _new_cust_name
+                            st.success(f"✅ เปลี่ยนเป็น {_new_cust_name} แล้ว")
+                            st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

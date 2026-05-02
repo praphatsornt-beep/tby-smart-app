@@ -249,6 +249,23 @@ def get_bill_details(bill_no: str) -> list[dict]:
             .eq("bill_no", bill_no).execute().data)
 
 
+def update_bill_customer(bill_no: str, new_customer_id: str) -> None:
+    get_supabase().table("transactions")\
+        .update({"customer_id": new_customer_id})\
+        .eq("bill_no", bill_no).execute()
+    _clear_transaction_caches()
+
+
+def bill_has_partial_events(bill_no: str) -> bool:
+    """True ถ้าบิลนี้มีการจ่าย/รับของแล้ว"""
+    db = get_supabase()
+    txn_ids = [r["id"] for r in db.table("transactions").select("id").eq("bill_no", bill_no).execute().data]
+    if not txn_ids:
+        return False
+    events = db.table("partial_events").select("id").in_("transaction_id", txn_ids).limit(1).execute().data
+    return bool(events)
+
+
 def delete_bill(bill_no: str) -> int:
     db = get_supabase()
     rows = db.table("transactions").select("id").eq("bill_no", bill_no).execute().data
