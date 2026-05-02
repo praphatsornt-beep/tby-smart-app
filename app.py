@@ -2079,6 +2079,17 @@ with tab5:
         )
 
         to_del_idx = edited_h[edited_h["🗑️"]].index.tolist()
+
+        # ถ้าเลือก 1 รายการ → auto-fill ใน expander แก้ไขด้านล่าง
+        if len(to_del_idx) == 1 and to_del_idx[0] < len(id_map):
+            _auto_tid = id_map.iloc[to_del_idx[0]]
+            _auto_rows = all_df[all_df["id"] == _auto_tid]
+            if not _auto_rows.empty:
+                _ar = _auto_rows.iloc[0]
+                _auto_label = f"{_ar['วันที่']}  {_ar['ลูกค้า']}  {_ar['สินค้า']} ×{int(_ar['สั่ง'])}"
+                if st.session_state.get("edit_sel") != _auto_label:
+                    st.session_state["edit_sel"] = _auto_label
+
         if to_del_idx:
             d1, d2 = st.columns([2, 1])
             d1.warning(f"เลือก {len(to_del_idx)} รายการ")
