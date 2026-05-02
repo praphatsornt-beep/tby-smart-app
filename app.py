@@ -1591,7 +1591,7 @@ td{{padding:4px 8px;border-bottom:1px solid #ddd}}
                             evt_map  = {
                                 "💵 จ่ายเงิน": "จ่ายเงิน",
                                 "📦 รับของ": "รับของ",
-                                "💵+📦 จ่ายเงิน + รับของ": "จ่ายเงิน + รับของ",
+                                "💵+📦 จ่ายเงิน + รับของ": "ทั้งคู่",
                             }
                             evt_type = evt_map[action]
                             _price   = float(txn["price_per_unit"])
