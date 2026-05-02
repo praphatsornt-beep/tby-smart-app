@@ -137,6 +137,7 @@ def insert_partial_event(data: dict) -> None:
     get_supabase().table("partial_events").insert(data).execute()
     get_outstanding_df.clear()
     get_unbilled_pv_summary.clear()
+    bill_has_partial_events.clear()
 
 
 def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
@@ -256,6 +257,7 @@ def update_bill_customer(bill_no: str, new_customer_id: str) -> None:
     _clear_transaction_caches()
 
 
+@st.cache_data(ttl=60)
 def bill_has_partial_events(bill_no: str) -> bool:
     """True ถ้าบิลนี้มีการจ่าย/รับของแล้ว"""
     db = get_supabase()
