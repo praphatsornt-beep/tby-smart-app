@@ -1440,6 +1440,45 @@ with tab2:
                 exp_label = f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
 
                 with st.expander(exp_label, expanded=single_cust):
+                    # ── ใบรับของ popup ───────────────────────────────────
+                    _rp = st.session_state.get("_recv_popup")
+                    if _rp and _rp.get("customer_name") == customer_name:
+                        _recv_rows_html = "".join(
+                            f"<tr><td>{it['product']}</td><td style='text-align:center'>{it['qty']}</td></tr>"
+                            for it in _rp["received"]
+                        )
+                        _pend_rows_html = "".join(
+                            f"<tr><td>{it['product']}</td><td style='text-align:center'>{it['qty']}</td></tr>"
+                            for it in _rp["pending"]
+                        ) or "<tr><td colspan='2' style='color:#888'>ไม่มีค้างรับ</td></tr>"
+                        _recv_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+body{{font-family:'Sarabun',sans-serif;padding:12px 16px;font-size:13px;color:#000}}
+h3{{margin:0 0 6px;font-size:15px}}
+.info{{margin-bottom:10px;font-size:13px}}
+table{{width:100%;border-collapse:collapse;margin:6px 0}}
+th{{background:#222;color:#fff;padding:4px 8px;font-size:12px;text-align:left}}
+td{{padding:4px 8px;border-bottom:1px solid #ddd}}
+.section{{margin:10px 0}}
+.sig{{margin-top:28px;display:inline-block;border-top:1px solid #000;padding-top:4px;min-width:180px;text-align:center;font-size:12px}}
+.btn{{display:block;margin:0 0 10px;padding:5px 18px;background:#222;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
+@media print{{.btn{{display:none}}@page{{size:A6 portrait;margin:8mm}}}}
+</style></head><body>
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบรับของ</button>
+<h3>ใบรับของ</h3>
+<div class='info'>วันที่: {_rp['date']}<br>ลูกค้า: <b>{_rp['customer_name']}</b></div>
+<div class='section'><b>รายการที่รับวันนี้:</b>
+<table><tr><th>สินค้า</th><th>จำนวนรับ</th></tr>{_recv_rows_html}</table></div>
+<div class='section'><b>ยังค้างรับ:</b>
+<table><tr><th>สินค้า</th><th>ค้างรับ</th></tr>{_pend_rows_html}</table></div>
+<div class='sig'>ลายเซ็นผู้รับ</div>
+</body></html>"""
+                        components.html(_recv_html, height=360, scrolling=False)
+                        if st.button("✕ ปิดใบรับของ", key=f"close_recv_{customer_name}"):
+                            del st.session_state["_recv_popup"]
+                            st.rerun()
+                        st.divider()
+
                     # ── LINE แจ้งยอดค้าง ─────────────────────────────────
                     if line_api.is_configured():
                         _line_items = [
@@ -1604,6 +1643,20 @@ with tab2:
                                         "notes":          event_notes,
                                     })
                                     db.get_all_transactions_df.clear()
+                                    if int(qty_received) > 0:
+                                        _rp_pending = []
+                                        for _, _rr in grp.iterrows():
+                                            _pq = int(_rr["ค้างรับ"])
+                                            if _rr["id"] == txn_id:
+                                                _pq = max(0, _pq - int(qty_received))
+                                            if _pq > 0:
+                                                _rp_pending.append({"product": _rr["สินค้า"], "qty": _pq})
+                                        st.session_state["_recv_popup"] = {
+                                            "customer_name": customer_name,
+                                            "date": str(event_date),
+                                            "received": [{"product": txn["product_name"], "qty": int(qty_received)}],
+                                            "pending": _rp_pending,
+                                        }
                                     st.success("✅ บันทึกแล้ว")
                                     st.rerun()
 
@@ -1662,6 +1715,8 @@ with tab2:
                                 mp_date_r  = mr2.date_input("วันที่รับ", value=date.today(), key=f"mp_date_r_{customer_name}")
                                 if st.button(f"📦 บันทึกรับของ", type="primary",
                                              use_container_width=True, key=f"multi_recv_{customer_name}"):
+                                    _mrp_received = []
+                                    _mrp_id_qty = {}
                                     for i, _rrow in _recv_df.iterrows():
                                         _qty = int(_edited_recv.iloc[i]["รับจริง"])
                                         if _qty > 0:
@@ -1674,6 +1729,22 @@ with tab2:
                                                 "event_type":     "รับของ",
                                                 "notes":          mp_notes_r,
                                             })
+                                            _mrp_received.append({"product": _rrow["สินค้า"], "qty": _qty})
+                                            _mrp_id_qty[_rrow["_id"]] = _qty
+                                    if _mrp_received:
+                                        _mrp_pending = []
+                                        for _, _rr in grp.iterrows():
+                                            _pq = int(_rr["ค้างรับ"])
+                                            if _rr["id"] in _mrp_id_qty:
+                                                _pq = max(0, _pq - _mrp_id_qty[_rr["id"]])
+                                            if _pq > 0:
+                                                _mrp_pending.append({"product": _rr["สินค้า"], "qty": _pq})
+                                        st.session_state["_recv_popup"] = {
+                                            "customer_name": customer_name,
+                                            "date": str(mp_date_r),
+                                            "received": _mrp_received,
+                                            "pending": _mrp_pending,
+                                        }
                                     st.success("✅ บันทึกรับของแล้ว")
                                     st.rerun()
                         else:
