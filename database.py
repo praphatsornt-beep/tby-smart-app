@@ -386,6 +386,7 @@ def upsert_finance_entry(data: dict) -> None:
     db.table("finance_daily").insert(data).execute()
 
 
+@st.cache_data(ttl=120)
 def get_finance_df() -> pd.DataFrame:
     rows = get_supabase().table("finance_daily").select("*").order("entry_date").execute().data
     if not rows:
@@ -416,6 +417,7 @@ def get_finance_df() -> pd.DataFrame:
     return df
 
 
+@st.cache_data(ttl=120)
 def get_finance_summary() -> dict:
     df = get_finance_df()
     if df.empty:
@@ -431,6 +433,7 @@ def get_finance_summary() -> dict:
 
 # ─── Stock ───────────────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=120)
 def get_latest_stock_counts() -> dict:
     rows = get_supabase().table("stock_counts").select("*").order("count_date", desc=True).execute().data
     result = {}
@@ -446,24 +449,30 @@ def upsert_stock_count(data: dict) -> None:
     db = get_supabase()
     db.table("stock_counts").delete().eq("product_id", data["product_id"]).eq("count_date", data["count_date"]).execute()
     db.table("stock_counts").insert(data).execute()
+    get_latest_stock_counts.clear()
 
 
 def insert_stock_count(data: dict) -> None:
     get_supabase().table("stock_counts").insert(data).execute()
+    get_latest_stock_counts.clear()
 
 
+@st.cache_data(ttl=120)
 def get_stock_deposits() -> list[dict]:
     return get_supabase().table("stock_deposits").select("*, products(name)").eq("is_returned", False).execute().data
 
 
 def insert_stock_deposit(data: dict) -> None:
     get_supabase().table("stock_deposits").insert(data).execute()
+    get_stock_deposits.clear()
 
 
 def return_stock_deposit(deposit_id: str) -> None:
     get_supabase().table("stock_deposits").update({"is_returned": True}).eq("id", deposit_id).execute()
+    get_stock_deposits.clear()
 
 
+@st.cache_data(ttl=60)
 def get_unbilled_received_qty_by_product() -> dict:
     db = get_supabase()
     txns = db.table("transactions").select("id, product_id, initial_qty_received").eq("bill_status", "ยังไม่เปิดบิล").execute().data
@@ -632,8 +641,10 @@ def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
 
 def create_shipment(data: dict) -> None:
     get_supabase().table("shipments").insert(data).execute()
+    get_shipments.clear()
 
 
+@st.cache_data(ttl=60)
 def get_shipments(customer_id: str = None) -> list[dict]:
     q = get_supabase().table("shipments").select("*, customers(name)")
     if customer_id:
@@ -645,10 +656,12 @@ def update_shipment_tracking(shipment_id: str, tracking_no: str) -> None:
     get_supabase().table("shipments").update(
         {"tracking_no": tracking_no}
     ).eq("id", shipment_id).execute()
+    get_shipments.clear()
 
 
 def delete_shipment(shipment_id: str) -> None:
     get_supabase().table("shipments").delete().eq("id", shipment_id).execute()
+    get_shipments.clear()
 
 
 def mark_cod_transferred(tracking_nos: list[str]) -> None:

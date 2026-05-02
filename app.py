@@ -1474,6 +1474,15 @@ with tab2:
             _cust_line_map = {c["name"]: c.get("line_user_id") or "" for c in customers}
 
             single_cust = (_t2_search.strip() != "" or _t2_bill_search.strip() != "") and outstanding_df["ลูกค้า"].nunique() == 1
+            # pre-fetch shipments ครั้งเดียวแทนการเรียงใน loop (N+1 fix)
+            try:
+                _all_ships = db.get_shipments()
+            except Exception:
+                _all_ships = []
+            _ship_by_cust: dict = {}
+            for _s in _all_ships:
+                _ship_by_cust.setdefault(_s.get("customer_id", ""), []).append(_s)
+
             for customer_name, grp in outstanding_df.groupby("ลูกค้า"):
                 owed    = grp["ค้างจ่าย"].sum()
                 pending = int(grp["ค้างรับ"].sum())
@@ -1535,9 +1544,8 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                         _cust_obj  = next((c for c in customers if c["name"] == customer_name), None)
                         _cod_done  = []
                         if _cust_obj:
-                            try:
-                                _sh_list = db.get_shipments(customer_id=_cust_obj["id"])
-                                _cod_done = [
+                            _sh_list = _ship_by_cust.get(_cust_obj["id"], [])
+                            _cod_done = [
                                     {"tracking_no": s.get("tracking_no",""), "cod_amount": float(s.get("cod_amount") or 0)}
                                     for s in _sh_list
                                     if s.get("cod_transferred_at") and float(s.get("cod_amount") or 0) > 0
