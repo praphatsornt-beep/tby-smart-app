@@ -656,7 +656,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 
                 # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
                 _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
-                with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
+                with st.expander("📦 ที่อยู่ผู้รับ", expanded=False):
                         # ── quick-select ที่อยู่เดิมของลูกค้า ──────────────────
                         if m_customer != "— เลือกลูกค้า —":
                             try:
