@@ -1068,7 +1068,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
                     "sp_carrier","_sp_prev_pc","_sp_staged_carrier","sp_date",
                     "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
-                    "_sp_last_rph_fill","_sp_parse_open","_sp_carrier_sig"]
+                    "_sp_last_rph_fill","_sp_parse_open","_sp_carrier_sig",
+                    "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search"]
         _sp_cart_ver_now = st.session_state.get("_sp_cart_ver", 0)
 
         _sc1, _sc2 = st.columns([6, 1])
@@ -1201,6 +1202,52 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.session_state.pop(f"sp_cart_{_new_ver - 1}", None)
                     st.session_state.pop("_sp_cart_base", None)
                     st.rerun()
+
+        # ── เชื่อมกับบิลเก่า ─────────────────────────────────────────────
+        with st.expander("🔗 เชื่อมกับบิลเก่า (บันทึกรับของอัตโนมัติ)", expanded=False):
+            _sp_linked = st.session_state.get("_sp_linked_bill_no", "")
+            if _sp_linked:
+                st.success(f"✅ เชื่อมกับบิล **{_sp_linked}** แล้ว — ของในบิลจะถูกบันทึกรับอัตโนมัติเมื่อ save")
+                if st.button("✕ ยกเลิกเชื่อม", key="sp_unlink_bill"):
+                    st.session_state.pop("_sp_linked_bill_no", None)
+                    st.session_state.pop("_sp_linked_bill_txns", None)
+                    st.rerun()
+            else:
+                _sp_lnk_q = st.text_input("ค้นเลขบิล หรือ ชื่อลูกค้า", key="sp_link_search",
+                                            placeholder="เช่น 260504 หรือ Aime")
+                if _sp_lnk_q.strip():
+                    _bill_sums = db.get_bill_summaries()
+                    _lnk_matches = [b for b in _bill_sums
+                                    if _sp_lnk_q.strip() in b["bill_no"]
+                                    or _sp_lnk_q.strip().upper() in b["customer_name"].upper()][:6]
+                    if not _lnk_matches:
+                        st.caption("ไม่พบบิล")
+                    for _lb in _lnk_matches:
+                        _lbl = f"📄 {_lb['bill_no']}  |  {_lb['customer_name']}  |  {_lb['total']:,.0f} ฿  |  {_lb['date']}"
+                        if st.button(_lbl, key=f"sp_link_{_lb['bill_no']}", use_container_width=True):
+                            _lnk_df = db.get_all_transactions_df(bill_no=_lb["bill_no"])
+                            _lnk_rows = _lnk_df[_lnk_df["ค้างรับ"] > 0] if not _lnk_df.empty else _lnk_df
+                            if _lnk_rows.empty:
+                                st.warning("บิลนี้รับของครบแล้ว")
+                            else:
+                                _txn_map = {
+                                    r["รหัส"]: {"tid": r["id"], "ค้างรับ": int(r["ค้างรับ"])}
+                                    for _, r in _lnk_rows.iterrows()
+                                }
+                                st.session_state["_sp_linked_bill_no"]   = _lb["bill_no"]
+                                st.session_state["_sp_linked_bill_txns"] = _txn_map
+                                if not st.session_state.get("_sp_cust_picked"):
+                                    st.session_state["_sp_cust_picked"] = _lb["customer_name"]
+                                _lnk_items = [
+                                    {"product": {"id": r["รหัส"], "name": r["สินค้า"], "weight_grams": 0},
+                                     "qty": int(r["ค้างรับ"])}
+                                    for _, r in _lnk_rows.iterrows()
+                                ]
+                                st.session_state["_sp_quick_items"] = _lnk_items
+                                _new_ver = st.session_state.get("_sp_cart_ver", 0) + 1
+                                st.session_state["_sp_cart_ver"] = _new_ver
+                                st.session_state.pop("_sp_cart_base", None)
+                                st.rerun()
 
         st.divider()
 
@@ -1440,6 +1487,23 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 except Exception:
                     st.error("❌ ยังไม่ได้สร้าง table shipments — รัน SQL ใน supabase_setup.sql ก่อน")
                     st.stop()
+                # ── บันทึกรับของในบิลเก่าที่เชื่อมอยู่ ───────────────────
+                _lnk_bill = st.session_state.get("_sp_linked_bill_no", "")
+                _lnk_txns = st.session_state.get("_sp_linked_bill_txns", {})
+                if _lnk_bill and _lnk_txns:
+                    for _sit in _sp_items:
+                        _pid = _sit["product_id"]
+                        if _pid in _lnk_txns:
+                            _recv_qty = min(_sit["qty"], _lnk_txns[_pid]["ค้างรับ"])
+                            if _recv_qty > 0:
+                                db.insert_partial_event({
+                                    "id":             str(uuid.uuid4()),
+                                    "date":           str(_sp_date),
+                                    "transaction_id": _lnk_txns[_pid]["tid"],
+                                    "qty_received":   _recv_qty,
+                                    "amount_paid":    0.0,
+                                    "event_type":     "รับของ",
+                                })
                 # ตั้ง iShip pending เพื่อส่งขนส่ง
                 _sp_item_codes = " ".join(f"{it['product_id']}-{it['qty']}" for it in _sp_items)
                 _sp_remark = " ".join(filter(None, [
@@ -1468,7 +1532,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 }
                 for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes",
                            "_sp_cust_picked","sp_cust_search","_sp_cart_base","_sp_quick_items",
-                           "_sp_last_rph_fill","_sp_carrier_sig"]:
+                           "_sp_last_rph_fill","_sp_carrier_sig",
+                           "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search"]:
                     st.session_state.pop(_k, None)
                 _sp_cv = st.session_state.get("_sp_cart_ver", 0)
                 st.session_state.pop(f"sp_cart_{_sp_cv}", None)
