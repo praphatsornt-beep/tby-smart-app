@@ -289,6 +289,29 @@ def get_bill_list() -> list[str]:
     return result
 
 
+@st.cache_data(ttl=120)
+def get_bill_summaries() -> list[dict]:
+    """คืน [{bill_no, customer_name, total, date}] ต่อบิล เรียง desc"""
+    rows = (get_supabase().table("transactions")
+            .select("bill_no, total_amount, date, customers(name)")
+            .not_.is_("bill_no", "null")
+            .order("bill_no", desc=True).execute().data)
+    seen: dict[str, dict] = {}
+    for r in rows:
+        bn = r.get("bill_no")
+        if not bn:
+            continue
+        if bn not in seen:
+            seen[bn] = {
+                "bill_no":       bn,
+                "customer_name": (r.get("customers") or {}).get("name", ""),
+                "total":         0.0,
+                "date":          (r.get("date") or "")[:10],
+            }
+        seen[bn]["total"] += float(r.get("total_amount") or 0)
+    return list(seen.values())
+
+
 def delete_product(product_id: str) -> None:
     get_supabase().table("products").delete().eq("id", product_id).execute()
 

@@ -2707,6 +2707,7 @@ with tab7:
                               placeholder="เช่น KONAING  หรือ  260427-001",
                               key="print_search")
         _is_bill = bool(re.match(r'\d{6}-\d+', (_p_q or "").strip()))
+        _is_partial_bill = bool(re.match(r'^\d+', (_p_q or "").strip())) and not _is_bill
 
         if _is_bill:
             _sel_bill_no = _p_q.strip()
@@ -2728,14 +2729,23 @@ with tab7:
             else:
                 sel_p = "— เลือก —"
                 if _p_q.strip():
-                    _p_matches = [n for n in cust_map_p if _p_q.strip().upper() in n.upper()][:8]
-                    if len(_p_matches) == 1:
-                        st.session_state["_print_cust_picked"] = _p_matches[0]
-                        st.rerun()
-                    for _pm in _p_matches:
-                        if st.button(f"👤 {_pm}", key=f"pp_{_pm}", use_container_width=True):
-                            st.session_state["_print_cust_picked"] = _pm
+                    if _is_partial_bill:
+                        _bill_sums = db.get_bill_summaries()
+                        _bill_matches = [b for b in _bill_sums if _p_q.strip() in b["bill_no"]][:8]
+                        for _bm in _bill_matches:
+                            _lbl = f"📄 {_bm['bill_no']}  |  {_bm['customer_name']}  |  {_bm['total']:,.0f} ฿  |  {_bm['date']}"
+                            if st.button(_lbl, key=f"pb_sug_{_bm['bill_no']}", use_container_width=True):
+                                st.session_state["print_search"] = _bm["bill_no"]
+                                st.rerun()
+                    else:
+                        _p_matches = [n for n in cust_map_p if _p_q.strip().upper() in n.upper()][:8]
+                        if len(_p_matches) == 1:
+                            st.session_state["_print_cust_picked"] = _p_matches[0]
                             st.rerun()
+                        for _pm in _p_matches:
+                            if st.button(f"👤 {_pm}", key=f"pp_{_pm}", use_container_width=True):
+                                st.session_state["_print_cust_picked"] = _pm
+                                st.rerun()
 
         filter_p = "ทั้งหมด"
         date_from_p = date_to_p = None
