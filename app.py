@@ -609,6 +609,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     m_customer = "— เลือกลูกค้า —"
                     if cust_search.strip():
                         _matches = [n for n in customer_map if cust_search.upper() in n.upper()][:6]
+                        if len(_matches) == 1:
+                            st.session_state["_cust_picked"] = _matches[0]
+                            st.rerun()
                         for _mn in _matches:
                             if st.button(f"👤 {_mn}", key=f"cp_{_mn}", use_container_width=True):
                                 st.session_state["_cust_picked"] = _mn
