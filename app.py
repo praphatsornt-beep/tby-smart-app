@@ -1062,7 +1062,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         _sp_keys = ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc",
                     "sp_track","sp_notes","sp_cart","_sp_cust_picked","sp_cust_search",
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
-                    "sp_carrier","_sp_prev_pc","_sp_staged_carrier"]
+                    "sp_carrier","_sp_prev_pc","_sp_staged_carrier","sp_date"]
 
         _sc1, _sc2 = st.columns([6, 1])
         _sc1.subheader("บันทึกการส่งของ")
@@ -1185,14 +1185,17 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     for _sa in _sp_saved:
                         _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
                         if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
-                            for _k, _fld in [("sp_rname", "recipient_name"), ("sp_rphone", "phone"),
-                                             ("sp_al", "address_line"), ("sp_dt", "district"),
-                                             ("sp_am", "amphure"), ("sp_pv", "province")]:
-                                st.session_state[_k] = _sa.get(_fld, "")
-                            _sa_pc = _sa.get("postal_code", "")
-                            st.session_state["sp_pc"] = _sa_pc
+                            _sa_dt = (_sa.get("district", "") or "").strip()
+                            _sa_pc = (_sa.get("postal_code", "") or "").strip()
+                            st.session_state["sp_rname"]  = _sa.get("recipient_name", "")
+                            st.session_state["sp_rphone"] = _sa.get("phone", "")
+                            st.session_state["sp_al"]     = _sa.get("address_line", "")
+                            st.session_state["_fsp_dt"]   = _sa_dt
+                            st.session_state["_fsp_am"]   = _sa.get("amphure", "")
+                            st.session_state["_fsp_pv"]   = _sa.get("province", "")
+                            st.session_state["_fsp_pc"]   = _sa_pc
+                            st.session_state["_sp_last_dt"] = _sa_dt
                             st.session_state["_sp_last_pc"] = _sa_pc
-                            st.session_state["_sp_last_dt"] = _sa.get("district", "")
                             st.rerun()
 
         # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────────
