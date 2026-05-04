@@ -2857,6 +2857,69 @@ with tab7:
                         else:
                             st.error(f"LINE error: {_r7['error']}")
 
+                    # ── จัดการบิล ────────────────────────────────────────────
+                    _t7_tids = show_p["id"].tolist()
+                    _t7_single = len(bill_nos) == 1 and bill_nos[0]
+
+                    with st.expander("📋 สถานะบิล"):
+                        _cur_bstat = show_p["สถานะบิล"].iloc[0]
+                        _t7_bstat = st.radio("สถานะ", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"],
+                                              index=0 if _cur_bstat == "เปิดบิลแล้ว" else 1,
+                                              horizontal=True, key="t7_bstat")
+                        if st.button("💾 บันทึกสถานะบิล", key="t7_save_bstat"):
+                            for _tid in _t7_tids:
+                                db.update_transaction_status(_tid, bill_status=_t7_bstat)
+                            st.success(f"✅ อัพเดต {len(_t7_tids)} รายการ → {_t7_bstat}")
+                            st.rerun()
+
+                    with st.expander("💳 สถานะการจ่าย"):
+                        _cur_pstat = show_p["สถานะจ่าย"].iloc[0]
+                        _t7_pstat = st.radio("สถานะ", ["จ่ายแล้ว", "ค้างจ่าย"],
+                                              index=0 if _cur_pstat == "จ่ายแล้ว" else 1,
+                                              horizontal=True, key="t7_pstat")
+                        if st.button("💾 บันทึกสถานะจ่าย", key="t7_save_pstat"):
+                            for _tid in _t7_tids:
+                                db.update_transaction_status(_tid, pay_status=_t7_pstat)
+                            st.success(f"✅ อัพเดต {len(_t7_tids)} รายการ → {_t7_pstat}")
+                            st.rerun()
+
+                    if _t7_single:
+                        with st.expander("📦 บันทึกรับของ"):
+                            _recv_base = show_p[["สินค้า","สั่ง","รับแล้ว","ค้างรับ"]].copy().reset_index(drop=True)
+                            _recv_ids  = show_p["id"].reset_index(drop=True)
+                            _recv_base["รับเพิ่ม"] = pd.Series([0]*len(_recv_base), dtype="int64")
+                            _recv_edit = st.data_editor(
+                                _recv_base,
+                                hide_index=True, use_container_width=True,
+                                column_config={
+                                    "รับเพิ่ม": st.column_config.NumberColumn("รับเพิ่ม", min_value=0, step=1, width="small"),
+                                },
+                                disabled=["สินค้า","สั่ง","รับแล้ว","ค้างรับ"],
+                                key="t7_recv_edit"
+                            )
+                            if st.button("💾 บันทึกรับของ", key="t7_save_recv"):
+                                _saved_r = 0
+                                for _ri, _rrow in _recv_edit.iterrows():
+                                    _delta = int(_rrow["รับเพิ่ม"] or 0)
+                                    if _delta <= 0:
+                                        continue
+                                    _cap = int(_recv_base.iloc[_ri]["ค้างรับ"])
+                                    _delta = min(_delta, _cap)
+                                    db.insert_partial_event({
+                                        "id":             str(uuid.uuid4()),
+                                        "date":           str(date.today()),
+                                        "transaction_id": _recv_ids.iloc[_ri],
+                                        "qty_received":   _delta,
+                                        "amount_paid":    0.0,
+                                        "event_type":     "รับของ",
+                                    })
+                                    _saved_r += 1
+                                if _saved_r:
+                                    st.success(f"✅ บันทึกรับของ {_saved_r} รายการ")
+                                    st.rerun()
+                                else:
+                                    st.warning("ไม่มีรายการที่เปลี่ยนแปลง")
+
                     # ── เปลี่ยนลูกค้าในบิล ──────────────────────────────────
                     with st.expander("✏️ เปลี่ยนลูกค้าในบิลนี้"):
                         st.caption(f"บิลปัจจุบัน: {bill_nos_str} | ลูกค้า: {_t7_cust_name}")
@@ -2876,6 +2939,18 @@ with tab7:
                                 st.session_state["_print_cust_picked"] = _new_cust_name
                             st.success(f"✅ เปลี่ยนเป็น {_new_cust_name} แล้ว")
                             st.rerun()
+
+                    if _t7_single:
+                        with st.expander("🗑️ ลบบิล"):
+                            st.warning(f"ลบบิล **{bill_nos[0]}** และรายการทั้งหมด ({len(show_p)} รายการ) — กู้คืนไม่ได้")
+                            _t7_del_chk = st.checkbox("ยืนยันการลบ", key="t7_del_confirm")
+                            if st.button("🗑️ ลบบิล", disabled=not _t7_del_chk,
+                                         type="secondary", key="t7_del_bill"):
+                                db.delete_bill(bill_nos[0])
+                                st.success("✅ ลบบิลแล้ว")
+                                st.session_state.pop("_print_bill_picked", None)
+                                st.session_state.pop("_print_cust_picked", None)
+                                st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
