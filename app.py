@@ -1185,8 +1185,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 if _sp_saved:
                     st.caption("⚡ เลือกที่อยู่เดิม")
                     for _sa in _sp_saved:
-                        _lbl = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
-                        if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=True):
+                        _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
+                        if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
                             for _k, _fld in [("sp_rname", "recipient_name"), ("sp_rphone", "phone"),
                                              ("sp_al", "address_line"), ("sp_dt", "district"),
                                              ("sp_am", "amphure"), ("sp_pv", "province")]:
