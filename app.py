@@ -760,13 +760,17 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                     for _sa in _saved_addrs:
                                         _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
                                         if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
+                                            _qa_dt = (_sa.get("district", "") or "").strip()
+                                            _qa_pc = (_sa.get("postal_code", "") or "").strip()
                                             st.session_state["r_name"]  = _sa.get("recipient_name", "")
                                             st.session_state["r_phone"] = _sa.get("phone", "")
                                             st.session_state["r_al"]    = _sa.get("address_line", "")
-                                            st.session_state["r_dt"]    = _sa.get("district", "")
-                                            st.session_state["r_am"]    = _sa.get("amphure", "")
-                                            st.session_state["r_pv"]    = _sa.get("province", "")
-                                            st.session_state["_staged_pc"] = _sa.get("postal_code", "")
+                                            st.session_state["_fr_dt"]  = _qa_dt
+                                            st.session_state["_fr_am"]  = _sa.get("amphure", "")
+                                            st.session_state["_fr_pv"]  = _sa.get("province", "")
+                                            st.session_state["_staged_pc"]     = _qa_pc
+                                            st.session_state["_r_last_dt"]     = _qa_dt
+                                            st.session_state["_r_last_pc"]     = _qa_pc
                                             st.session_state["_last_rph_fill"] = _sa.get("phone", "")
                                             st.rerun()
                         _parse_key = f"_show_paste_{_cid}"
