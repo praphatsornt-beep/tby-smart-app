@@ -2284,6 +2284,10 @@ with tab5:
         _cleared_mask = all_df["เคลียร์แล้ว"].reset_index(drop=True)
         chk_df.insert(1, "สถานะ", _cleared_mask.map({True: "✅ เคลียร์", False: ""}))
 
+        _is_dup_bill = chk_df["เลขที่บิล"].ne("") & (chk_df["เลขที่บิล"] == chk_df["เลขที่บิล"].shift(1).fillna(""))
+        for _col in ("เลขที่บิล", "วันที่", "ลูกค้า"):
+            chk_df[_col] = chk_df[_col].where(~_is_dup_bill, "")
+
         edited_h = st.data_editor(
             chk_df,
             use_container_width=True,
