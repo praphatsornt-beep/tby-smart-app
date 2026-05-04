@@ -3013,6 +3013,53 @@ with tab7:
                             st.success(f"✅ อัพเดต {len(_t7_tids)} รายการ → {_t7_pstat}")
                             st.rerun()
 
+                    with st.expander("💰 บันทึกรับเงิน"):
+                        _t7_owed = float(show_p["ค้างจ่าย"].sum())
+                        _t7_paid_so_far = float(show_p["จ่ายแล้ว"].sum())
+                        _t7_total_amt   = float(show_p["ยอดรวม"].sum())
+                        pm1, pm2, pm3 = st.columns(3)
+                        pm1.metric("ยอดรวมบิล",  f"{_t7_total_amt:,.0f} ฿")
+                        pm2.metric("จ่ายแล้ว",    f"{_t7_paid_so_far:,.0f} ฿")
+                        pm3.metric("ค้างจ่าย",    f"{_t7_owed:,.0f} ฿")
+                        if _t7_owed <= 0.01:
+                            st.success("✅ ชำระครบแล้ว")
+                        else:
+                            _t7_pay_date = st.date_input("วันที่รับเงิน", value=date.today(), key="t7_pay_date")
+                            _t7_pay_amt  = st.number_input(
+                                "จำนวนเงินที่รับ (บาท)",
+                                min_value=0.0, max_value=float(_t7_owed),
+                                value=float(_t7_owed), step=1.0, key="t7_pay_amount",
+                            )
+                            if st.button("💾 บันทึกรับเงิน", key="t7_save_pay", type="primary",
+                                         use_container_width=True):
+                                _owed_rows = show_p[show_p["ค้างจ่าย"] > 0.01].reset_index(drop=True)
+                                _owed_ids  = _owed_rows["id"].tolist()
+                                _row_owed  = _owed_rows["ค้างจ่าย"].tolist()
+                                _total_row_owed = sum(_row_owed)
+                                _remaining = float(_t7_pay_amt)
+                                for _pi, (_tid_p, _row_o) in enumerate(zip(_owed_ids, _row_owed)):
+                                    if _remaining <= 0:
+                                        break
+                                    if _pi == len(_owed_ids) - 1:
+                                        _share = _remaining
+                                    else:
+                                        _share = round(_row_o / _total_row_owed * float(_t7_pay_amt), 2)
+                                        _share = min(_share, _remaining)
+                                    db.insert_partial_event({
+                                        "id":             str(uuid.uuid4()),
+                                        "date":           str(_t7_pay_date),
+                                        "transaction_id": _tid_p,
+                                        "qty_received":   0,
+                                        "amount_paid":    _share,
+                                        "event_type":     "จ่าย",
+                                    })
+                                    _remaining -= _share
+                                if float(_t7_pay_amt) >= _t7_owed - 0.01:
+                                    for _tid in _t7_tids:
+                                        db.update_transaction_status(_tid, pay_status="จ่ายแล้ว")
+                                st.success(f"✅ บันทึกรับเงิน {_t7_pay_amt:,.0f} ฿ แล้ว")
+                                st.rerun()
+
                     if _t7_single:
                         with st.expander("📦 บันทึกรับของ"):
                             _recv_base = show_p[["สินค้า","สั่ง","รับแล้ว","ค้างรับ"]].copy().reset_index(drop=True)
