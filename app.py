@@ -2252,6 +2252,13 @@ with tab4:
                 key="addr_tbl",
             )
             _to_delete = [_addr_ids[i] for i, v in enumerate(_edited_addr["ลบ"]) if v]
+            _checked_idx = [i for i, v in enumerate(_edited_addr["ลบ"]) if v]
+            if len(_checked_idx) == 1:
+                _sel_a = show_addr[_checked_idx[0]]
+                _auto_key = f"{_sel_a.get('phone','')} — {_sel_a.get('recipient_name','')}"
+                if st.session_state.get("addr3_edit_sel") != _auto_key:
+                    st.session_state["addr3_edit_sel"] = _auto_key
+                    st.rerun()
             if _to_delete:
                 if st.button(f"🗑️ ลบที่เลือก ({len(_to_delete)} รายการ)", type="primary", key="del_checked_btn"):
                     for _did in _to_delete:
