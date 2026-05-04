@@ -1058,7 +1058,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
     with _sub_ship:
         _sp_keys = ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc",
                     "sp_track","sp_notes","sp_cart","_sp_cust_picked","sp_cust_search",
-                    "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc"]
+                    "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
+                    "sp_carrier","_sp_prev_pc","_sp_staged_carrier"]
 
         _sc1, _sc2 = st.columns([6, 1])
         _sc1.subheader("บันทึกการส่งของ")
@@ -1268,10 +1269,14 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if _sp_fees:
             _sp_fc1.caption(f"Flash: {_sp_fees['Flash Express']['zone'] or 'ปกติ'} | +{_sp_fees['Flash Express']['surcharge']} ฿")
             _sp_fc2.caption(f"SPX:   {_sp_fees['SPX Express']['zone']   or 'ปกติ'} | +{_sp_fees['SPX Express']['surcharge']} ฿")
-            _auto_car = _pick_carrier(_sp_pc.strip())
-            if st.session_state.get("_sp_prev_pc") != _sp_pc:
-                st.session_state["sp_carrier"] = _auto_car
-                st.session_state["_sp_prev_pc"] = _sp_pc
+            _sp_auto = ("Flash Express" if _sp_fees["Flash Express"]["total"] <= _sp_fees["SPX Express"]["total"]
+                        else "SPX Express")
+            if st.session_state.get("_sp_prev_pc") != _sp_pc.strip():
+                st.session_state["_sp_staged_carrier"] = _sp_auto
+                st.session_state["_sp_prev_pc"] = _sp_pc.strip()
+                st.rerun()
+        if "_sp_staged_carrier" in st.session_state:
+            st.session_state["sp_carrier"] = st.session_state.pop("_sp_staged_carrier")
         _sp_carrier = _sp_fc3.radio("ขนส่ง", ["Flash Express", "SPX Express"], key="sp_carrier")
         _sp_ship_base = {"Flash Express": 50, "SPX Express": 55}.get(_sp_carrier, 50)
         _sp_sur = (_sp_fees[_sp_carrier]["surcharge"] if _sp_fees else 0)
@@ -2276,6 +2281,8 @@ with tab5:
 
         chk_df = show_df.copy()
         chk_df.insert(0, "🗑️", False)
+        _cleared_mask = all_df["เคลียร์แล้ว"].reset_index(drop=True)
+        chk_df.insert(1, "สถานะ", _cleared_mask.map({True: "✅ เคลียร์", False: ""}))
 
         edited_h = st.data_editor(
             chk_df,
@@ -2283,6 +2290,7 @@ with tab5:
             hide_index=True,
             column_config={
                 "🗑️":      st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
+                "สถานะ":   st.column_config.TextColumn("สถานะ", width="small"),
                 "ยอดรวม":  st.column_config.NumberColumn("ยอดรวม",  format="%,.0f"),
                 "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
                 "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
