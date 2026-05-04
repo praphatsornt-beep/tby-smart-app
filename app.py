@@ -1178,6 +1178,28 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
         _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
 
+        # ── รายการสินค้าที่ส่ง ───────────────────────────────────────────
+        st.caption("รายการสินค้าที่ส่ง (ไม่ตัด stock)")
+        _sp_prod_keys = [f"{p['id']} — {p['name']}" for p in _sp]
+        _sp_prod_map  = {f"{p['id']} — {p['name']}": p for p in _sp}
+        _sp_cart_df   = pd.DataFrame({"สินค้า": pd.Series([""] * 3, dtype="object"),
+                                      "จำนวน": pd.Series([0] * 3, dtype="int64")})
+        _sp_cart_edit = st.data_editor(
+            _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=True,
+            key="sp_cart",
+            column_config={
+                "สินค้า": st.column_config.SelectboxColumn("สินค้า", options=_sp_prod_keys),
+                "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
+            },
+        )
+        _sp_items = [
+            {"product_id": _sp_prod_map[r["สินค้า"]]["id"],
+             "name": _sp_prod_map[r["สินค้า"]]["name"],
+             "qty": int(r["จำนวน"] or 0)}
+            for _, r in _sp_cart_edit.iterrows()
+            if str(r.get("สินค้า","")) in _sp_prod_map and int(r.get("จำนวน") or 0) > 0
+        ]
+
         # ── ที่อยู่เดิม (collapsed) ───────────────────────────────────────
         if _sp_cid:
             try:
@@ -1258,28 +1280,6 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "postal_code":    st.session_state.get("sp_pc", ""),
                 })
                 st.success("✅ บันทึกที่อยู่แล้ว")
-
-        # ── รายการสินค้าที่ส่ง ───────────────────────────────────────────
-        st.caption("รายการสินค้าที่ส่ง (ไม่ตัด stock)")
-        _sp_prod_keys = [f"{p['id']} — {p['name']}" for p in _sp]
-        _sp_prod_map  = {f"{p['id']} — {p['name']}": p for p in _sp}
-        _sp_cart_df   = pd.DataFrame({"สินค้า": pd.Series([""] * 3, dtype="object"),
-                                      "จำนวน": pd.Series([0] * 3, dtype="int64")})
-        _sp_cart_edit = st.data_editor(
-            _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=True,
-            key="sp_cart",
-            column_config={
-                "สินค้า": st.column_config.SelectboxColumn("สินค้า", options=_sp_prod_keys),
-                "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
-            },
-        )
-        _sp_items = [
-            {"product_id": _sp_prod_map[r["สินค้า"]]["id"],
-             "name": _sp_prod_map[r["สินค้า"]]["name"],
-             "qty": int(r["จำนวน"] or 0)}
-            for _, r in _sp_cart_edit.iterrows()
-            if str(r.get("สินค้า","")) in _sp_prod_map and int(r.get("จำนวน") or 0) > 0
-        ]
 
         # ── ขนส่ง + ค่าส่ง ───────────────────────────────────────────────
         _sp_fc1, _sp_fc2, _sp_fc3 = st.columns(3)
