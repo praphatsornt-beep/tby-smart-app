@@ -370,7 +370,7 @@ def _pick_carrier(pc: str, kg: float = 0) -> str:
 
 
 with tab1:
-    _sub_sale, _sub_ship, _sub_shiphist = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง"])
+    _sub_sale, _sub_ship, _sub_shiphist, _sub_pending = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง", "⏳ ส่งของที่ค้าง"])
 
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
@@ -1698,6 +1698,49 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.rerun()
         else:
             st.info("ยังไม่มีประวัติการส่งของ")
+
+    with _sub_pending:
+        st.subheader("ส่งของที่ค้าง")
+        st.caption("รายการจากบิลที่มี ค้างรับ > 0 — กด ส่งพัสดุ เพื่อเปิดฟอร์มส่งของพร้อมเชื่อมบิล")
+
+        _pend_df = db.get_all_transactions_df()
+        if _pend_df.empty:
+            st.info("ไม่มีข้อมูล")
+        else:
+            _pend_df = _pend_df[_pend_df["ค้างรับ"] > 0].copy()
+            if _pend_df.empty:
+                st.success("✅ ไม่มีรายการค้างส่ง")
+            else:
+                # group by ลูกค้า แล้ว bill
+                for _pc, _pc_df in _pend_df.groupby("ลูกค้า", sort=False):
+                    with st.expander(f"👤 **{_pc}** — {len(_pc_df)} รายการค้างรับ", expanded=False):
+                        for _pb, _pb_df in _pc_df.groupby("เลขที่บิล", sort=False):
+                            _pb_label = _pb if _pb else "— ยังไม่เปิดบิล —"
+                            st.markdown(f"**📄 {_pb_label}**")
+                            _disp = _pb_df[["รหัส","สินค้า","สั่ง","รับแล้ว","ค้างรับ"]].reset_index(drop=True)
+                            st.dataframe(_disp, hide_index=True, use_container_width=True)
+                            if _pb:
+                                if st.button(f"🚚 เตรียมส่งพัสดุ — บิล {_pb}", key=f"pend_ship_{_pb}",
+                                              type="primary", use_container_width=True):
+                                    _txn_map_p = {
+                                        r["รหัส"]: {"tid": r["id"], "ค้างรับ": int(r["ค้างรับ"])}
+                                        for _, r in _pb_df.iterrows()
+                                    }
+                                    _lnk_items_p = [
+                                        {"product": {"id": r["รหัส"], "name": r["สินค้า"], "weight_grams": 0},
+                                         "qty": int(r["ค้างรับ"])}
+                                        for _, r in _pb_df.iterrows()
+                                    ]
+                                    st.session_state["_sp_linked_bill_no"]   = _pb
+                                    st.session_state["_sp_linked_bill_txns"] = _txn_map_p
+                                    st.session_state["_sp_quick_items"]      = _lnk_items_p
+                                    _pv = st.session_state.get("_sp_cart_ver", 0) + 1
+                                    st.session_state["_sp_cart_ver"] = _pv
+                                    st.session_state.pop("_sp_cart_base", None)
+                                    if not st.session_state.get("_sp_cust_picked"):
+                                        st.session_state["_sp_cust_picked"] = _pc
+                                    st.success(f"✅ เตรียมข้อมูลบิล {_pb} แล้ว — คลิก tab **ส่งของ** เพื่อดำเนินการต่อ")
+                            st.divider()
 
 # Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
 # ─────────────────────────────────────────────────────────────────────────────
