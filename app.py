@@ -1174,16 +1174,14 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
         _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
 
-        # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────────
-        with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
-            # quick-select จากที่อยู่เดิมของลูกค้า
-            if _sp_cid:
-                try:
-                    _sp_saved = db.get_customer_addresses(customer_id=_sp_cid)
-                except Exception:
-                    _sp_saved = []
-                if _sp_saved:
-                    st.caption("⚡ เลือกที่อยู่เดิม")
+        # ── ที่อยู่เดิม (collapsed) ───────────────────────────────────────
+        if _sp_cid:
+            try:
+                _sp_saved = db.get_customer_addresses(customer_id=_sp_cid)
+            except Exception:
+                _sp_saved = []
+            if _sp_saved:
+                with st.expander(f"⚡ ที่อยู่เดิม ({len(_sp_saved)} รายการ)", expanded=False):
                     for _sa in _sp_saved:
                         _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
                         if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
@@ -1196,8 +1194,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             st.session_state["_sp_last_pc"] = _sa_pc
                             st.session_state["_sp_last_dt"] = _sa.get("district", "")
                             st.rerun()
-                    st.divider()
 
+        # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────────
+        with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
             # apply staged address fill ก่อน render widgets
             for _fk, _wk in [("_fsp_dt","sp_dt"),("_fsp_am","sp_am"),
                               ("_fsp_pv","sp_pv"),("_fsp_pc","sp_pc")]:
