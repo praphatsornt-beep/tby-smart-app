@@ -1158,6 +1158,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _sp_cust = "— เลือกลูกค้า —"
                 if _sp_search.strip():
                     _sp_matches = [n for n in _sc_map if _sp_search.upper() in n.upper()][:6]
+                    if len(_sp_matches) == 1:
+                        st.session_state["_sp_cust_picked"] = _sp_matches[0]
+                        st.rerun()
                     for _sm in _sp_matches:
                         if st.button(f"👤 {_sm}", key=f"sp_pick_{_sm}", use_container_width=True):
                             st.session_state["_sp_cust_picked"] = _sm
