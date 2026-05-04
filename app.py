@@ -1085,7 +1085,10 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _spp = st.session_state["_sp_iship_pending"]
             _spp_addr  = f"{_spp.get('address_line','')} {_spp.get('district','')} {_spp.get('amphure','')} {_spp.get('province','')} {_spp.get('zipcode','')}".strip()
             _spp_items = ", ".join(f"{it.get('product_id','')} {it.get('name','')} ×{it.get('qty',0)}" for it in (_spp.get("_items") or []))
-            st.info(f"📦 **{_spp['dst_name']}** | ☎ {_spp.get('dst_phone','')}  \n{_spp_addr}  \n🛍️ {_spp_items}" if _spp_items else f"📦 **{_spp['dst_name']}** | ☎ {_spp.get('dst_phone','')}  \n{_spp_addr}")
+            _spp_cust  = _spp.get("_customer_name", "")
+            _cust_line = f"🧑 ลูกค้า: **{_spp_cust}**  \n" if _spp_cust else ""
+            _item_line = f"  \n🛍️ {_spp_items}" if _spp_items else ""
+            st.info(f"{_cust_line}📦 **{_spp['dst_name']}** | ☎ {_spp.get('dst_phone','')}  \n{_spp_addr}{_item_line}")
             _si1, _si2 = st.columns([3, 1])
             _sp_car_pick = _si1.radio("ขนส่ง", ["Flash Express", "SPX Express"],
                                       index=0 if _spp["carrier"] == "Flash Express" else 1,
@@ -1151,8 +1154,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sp_picked = st.session_state.get("_sp_cust_picked", "")
             if _sp_picked:
                 _spx, _spy = st.columns([5, 1])
-                _spx.markdown(f"👤 **{_sp_picked}**")
-                if _spy.button("✕", key="sp_cust_clear"):
+                _spx.success(f"👤 **{_sp_picked}**")
+                if _spy.button("✕ เปลี่ยน", key="sp_cust_clear"):
                     st.session_state.pop("_sp_cust_picked", None)
                     st.rerun()
                 _sp_cust = _sp_picked
@@ -1349,8 +1352,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "item_detail":  ", ".join(f"{it['name']} x{it['qty']}" for it in _sp_items) or _sp_remark,
                     "products":     [{"name": it["name"], "qty": it["qty"], "price": 0} for it in _sp_items],
                     "_items":       _sp_items,
-                    "_shipment_id": _sp_new_id,
-                    "_customer_id": _sp_cid or "",
+                    "_shipment_id":   _sp_new_id,
+                    "_customer_id":   _sp_cid or "",
+                    "_customer_name": _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
                 }
                 for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes",
                            "_sp_cust_picked","sp_cust_search"]:
