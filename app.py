@@ -1191,7 +1191,10 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                              ("sp_al", "address_line"), ("sp_dt", "district"),
                                              ("sp_am", "amphure"), ("sp_pv", "province")]:
                                 st.session_state[_k] = _sa.get(_fld, "")
-                            st.session_state["sp_pc"] = _sa.get("postal_code", "")
+                            _sa_pc = _sa.get("postal_code", "")
+                            st.session_state["sp_pc"] = _sa_pc
+                            st.session_state["_sp_last_pc"] = _sa_pc
+                            st.session_state["_sp_last_dt"] = _sa.get("district", "")
                             st.rerun()
                     st.divider()
 
