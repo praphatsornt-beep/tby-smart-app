@@ -2591,7 +2591,9 @@ with tab5:
         for _col in ("เลขที่บิล", "วันที่", "ลูกค้า"):
             chk_df[_col] = chk_df[_col].where(~_is_dup_bill, "")
 
-        _editable = ("🗑️", "รับแล้ว", "สั่ง", "ยอดรวม", "จ่ายแล้ว", "สถานะบิล", "สถานะจ่าย")
+        _editable = ("🗑️", "รับแล้ว", "สั่ง", "ยอดรวม", "จ่ายแล้ว", "ลูกค้า", "สถานะบิล", "สถานะจ่าย")
+        _cust_names_h = [c["name"] for c in customers_h]
+        _cust_id_map_h = {c["name"]: c["id"] for c in customers_h}
         edited_h = st.data_editor(
             chk_df,
             use_container_width=True,
@@ -2604,6 +2606,8 @@ with tab5:
                 "ยอดรวม":   st.column_config.NumberColumn("ยอดรวม", format="%,.0f"),
                 "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
                 "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
+                "ลูกค้า":    st.column_config.SelectboxColumn("ลูกค้า",
+                    options=_cust_names_h, width="medium"),
                 "สถานะบิล": st.column_config.SelectboxColumn("สถานะบิล",
                     options=["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], width="medium"),
                 "สถานะจ่าย": st.column_config.SelectboxColumn("สถานะจ่าย",
@@ -2658,6 +2662,10 @@ with tab5:
             # ยอดรวม
             if abs(float(_orig["ยอดรวม"]) - float(_edit["ยอดรวม"] or 0)) > 0.01:
                 _ch["total"] = float(_edit["ยอดรวม"] or 0)
+            # ลูกค้า
+            _new_cust = str(_edit["ลูกค้า"] or "")
+            if _new_cust and _new_cust != str(_orig["ลูกค้า"]) and _new_cust in _cust_id_map_h:
+                _ch["customer_id"] = _cust_id_map_h[_new_cust]
             # สถานะบิล
             if str(_orig["สถานะบิล"]) != str(_edit["สถานะบิล"] or ""):
                 _ch["bill_status"] = str(_edit["สถานะบิล"])
@@ -2699,8 +2707,9 @@ with tab5:
                                 "event_type":     "จ่าย",
                             })
                     _txn_upd = {}
-                    if "qty"   in _ch: _txn_upd["qty"]          = _ch["qty"]
-                    if "total" in _ch: _txn_upd["total_amount"]  = _ch["total"]
+                    if "qty"         in _ch: _txn_upd["qty"]          = _ch["qty"]
+                    if "total"       in _ch: _txn_upd["total_amount"]  = _ch["total"]
+                    if "customer_id" in _ch: _txn_upd["customer_id"]   = _ch["customer_id"]
                     if _txn_upd:
                         db.update_transaction(_tid, _txn_upd)
                     if "bill_status" in _ch or "pay_status" in _ch:
