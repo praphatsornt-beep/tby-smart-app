@@ -614,6 +614,51 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 st.rerun()
             m_date = mc2.date_input("วันที่", value=date.today(), key="m_date")
 
+            # ── รับของจากบิลเก่า ─────────────────────────────────────────────
+            if m_customer != "— เลือกลูกค้า —" and m_customer in customer_map:
+                _recv_cid = customer_map[m_customer]["id"]
+                _pending_rx = db.get_pending_receipts_for_customer(_recv_cid)
+                if _pending_rx:
+                    with st.expander(f"📦 รับของจากบิลเก่า ({sum(p['ค้างรับ'] for p in _pending_rx)} ชิ้นค้างรับ)", expanded=False):
+                        _prod_map_rx = {p["id"]: p["name"] for p in products}
+                        _rx_df = pd.DataFrame([{
+                            "สินค้า":   _prod_map_rx.get(p["product_id"], p["product_id"]),
+                            "ค้างรับ":  p["ค้างรับ"],
+                            "รับวันนี้": 0,
+                            "_tid":     p["id"],
+                            "_max":     p["ค้างรับ"],
+                        } for p in _pending_rx])
+                        _rx_edit = st.data_editor(
+                            _rx_df[["สินค้า","ค้างรับ","รับวันนี้"]],
+                            hide_index=True, use_container_width=True,
+                            column_config={
+                                "รับวันนี้": st.column_config.NumberColumn("รับวันนี้", min_value=0, step=1, width="small"),
+                            },
+                            disabled=["สินค้า","ค้างรับ"],
+                            key="sale_recv_old",
+                        )
+                        if st.button("💾 บันทึกรับของ", key="sale_recv_old_btn", type="primary"):
+                            _saved_rx = 0
+                            for _ri, _rrow in _rx_edit.iterrows():
+                                _delta = int(_rrow["รับวันนี้"] or 0)
+                                if _delta <= 0:
+                                    continue
+                                _cap = int(_rx_df.iloc[_ri]["_max"])
+                                db.insert_partial_event({
+                                    "id":             str(uuid.uuid4()),
+                                    "date":           str(m_date),
+                                    "transaction_id": _rx_df.iloc[_ri]["_tid"],
+                                    "qty_received":   min(_delta, _cap),
+                                    "amount_paid":    0.0,
+                                    "event_type":     "รับของ",
+                                })
+                                _saved_rx += 1
+                            if _saved_rx:
+                                st.success(f"✅ บันทึกรับของ {_saved_rx} รายการ")
+                                st.rerun()
+                            else:
+                                st.warning("ยังไม่ได้กรอกจำนวนรับ")
+
             # ── วางรหัสสินค้าลงตาราง ─────────────────────────────────────────
             with st.expander("⚡ วางรหัสสินค้า", expanded=False):
                 q_text = st.text_area(
