@@ -615,11 +615,18 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             m_date = mc2.date_input("วันที่", value=date.today(), key="m_date")
 
             # ── รับของจากบิลเก่า ─────────────────────────────────────────────
+            _rx_df = None
+            _rx_edit = None
+            _pending_rx = []
+            _cur_delivery = st.session_state.get("m_delivery", "ฝากของ")
             if m_customer != "— เลือกลูกค้า —" and m_customer in customer_map:
                 _recv_cid = customer_map[m_customer]["id"]
                 _pending_rx = db.get_pending_receipts_for_customer(_recv_cid)
                 if _pending_rx:
-                    with st.expander(f"📦 รับของจากบิลเก่า ({sum(p['ค้างรับ'] for p in _pending_rx)} ชิ้นค้างรับ)", expanded=False):
+                    _rx_label = ("📦 รับของจากบิลเก่า — จะรวมในพัสดุอัตโนมัติ"
+                                 if _cur_delivery == "ส่งพัสดุ"
+                                 else f"📦 รับของจากบิลเก่า ({sum(p['ค้างรับ'] for p in _pending_rx)} ชิ้นค้างรับ)")
+                    with st.expander(_rx_label, expanded=(_cur_delivery == "ส่งพัสดุ")):
                         _prod_map_rx = {p["id"]: p["name"] for p in products}
                         _rx_df = pd.DataFrame([{
                             "สินค้า":   _prod_map_rx.get(p["product_id"], p["product_id"]),
@@ -637,27 +644,30 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             disabled=["สินค้า","ค้างรับ"],
                             key="sale_recv_old",
                         )
-                        if st.button("💾 บันทึกรับของ", key="sale_recv_old_btn", type="primary"):
-                            _saved_rx = 0
-                            for _ri, _rrow in _rx_edit.iterrows():
-                                _delta = int(_rrow["รับวันนี้"] or 0)
-                                if _delta <= 0:
-                                    continue
-                                _cap = int(_rx_df.iloc[_ri]["_max"])
-                                db.insert_partial_event({
-                                    "id":             str(uuid.uuid4()),
-                                    "date":           str(m_date),
-                                    "transaction_id": _rx_df.iloc[_ri]["_tid"],
-                                    "qty_received":   min(_delta, _cap),
-                                    "amount_paid":    0.0,
-                                    "event_type":     "รับของ",
-                                })
-                                _saved_rx += 1
-                            if _saved_rx:
-                                st.success(f"✅ บันทึกรับของ {_saved_rx} รายการ")
-                                st.rerun()
-                            else:
-                                st.warning("ยังไม่ได้กรอกจำนวนรับ")
+                        if _cur_delivery == "ส่งพัสดุ":
+                            st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด")
+                        else:
+                            if st.button("💾 บันทึกรับของ", key="sale_recv_old_btn", type="primary"):
+                                _saved_rx = 0
+                                for _ri, _rrow in _rx_edit.iterrows():
+                                    _delta = int(_rrow["รับวันนี้"] or 0)
+                                    if _delta <= 0:
+                                        continue
+                                    _cap = int(_rx_df.iloc[_ri]["_max"])
+                                    db.insert_partial_event({
+                                        "id":             str(uuid.uuid4()),
+                                        "date":           str(m_date),
+                                        "transaction_id": _rx_df.iloc[_ri]["_tid"],
+                                        "qty_received":   min(_delta, _cap),
+                                        "amount_paid":    0.0,
+                                        "event_type":     "รับของ",
+                                    })
+                                    _saved_rx += 1
+                                if _saved_rx:
+                                    st.success(f"✅ บันทึกรับของ {_saved_rx} รายการ")
+                                    st.rerun()
+                                else:
+                                    st.warning("ยังไม่ได้กรอกจำนวนรับ")
 
             # ── วางรหัสสินค้าลงตาราง ─────────────────────────────────────────
             with st.expander("⚡ วางรหัสสินค้า", expanded=False):
@@ -1039,6 +1049,31 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
                 # สร้าง iship text สำหรับวางใน iship.com
                 if is_shipping and r_addr_line:
+                    # รวมของเก่าจากบิลค้างเข้าพัสดุ (ถ้ามี)
+                    _old_ship_items = []
+                    if _rx_df is not None and _rx_edit is not None:
+                        for _ri, _rrow in _rx_edit.iterrows():
+                            _delta = int(_rrow["รับวันนี้"] or 0)
+                            if _delta <= 0:
+                                continue
+                            _cap = int(_rx_df.iloc[_ri]["_max"])
+                            _recv = min(_delta, _cap)
+                            db.insert_partial_event({
+                                "id":             str(uuid.uuid4()),
+                                "date":           str(m_date),
+                                "transaction_id": _rx_df.iloc[_ri]["_tid"],
+                                "qty_received":   _recv,
+                                "amount_paid":    0.0,
+                                "event_type":     "รับของ",
+                            })
+                            _old_ship_items.append({
+                                "product_id": _pending_rx[_ri]["product_id"],
+                                "name":       str(_rrow["สินค้า"]),
+                                "qty":        _recv,
+                            })
+                    _new_items = [{"product_id": p["id"], "name": p["name"], "qty": qty}
+                                  for p, qty, _ in valid_items]
+                    _all_items = _new_items + _old_ship_items
                     product_line = ", ".join(f"{p['name']} ×{qty}" for p, qty, _ in valid_items)
                     _prod_codes  = " ".join(f"{p['id'].upper()}-{qty}" for p, qty, _ in valid_items)
                     st.session_state["_iship_pending"] = {
@@ -1049,16 +1084,16 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         "amphure":     r_amphure,
                         "province":    r_province,
                         "zipcode":     m_postcode,
-                        "weight_kg":   (total_w_g + 500) / 1000,  # +500g กล่อง
+                        "weight_kg":   (total_w_g + 500) / 1000,
                         "cod_amount":  ceil(collect) if m_cod else 0,
                         "carrier":      m_carrier,
                         "remark":       f"{customer['name']} {_prod_codes}",
-                        "item_detail":  ", ".join(f"{p['name']} x{qty}" for p, qty, _ in valid_items),
-                        "products":     [{"name": p["name"], "qty": qty, "price": float(p["price"])}
-                                         for p, qty, _ in valid_items],
+                        "item_detail":  ", ".join(f"{it['name']} x{it['qty']}" for it in _all_items),
+                        "products":     [{"name": it["name"], "qty": it["qty"],
+                                          "price": float(next((p["price"] for p, q, _ in valid_items if p["id"] == it["product_id"]), 0))}
+                                         for it in _all_items],
                         "sender_name":  customer["name"],
-                        "_items": [{"product_id": p["id"], "name": p["name"], "qty": qty}
-                                   for p, qty, _ in valid_items],
+                        "_items":       _all_items,
                         "_customer_id": customer["id"],
                     }
                 # เก็บข้อมูลสำหรับ popup พิมพ์บิล
