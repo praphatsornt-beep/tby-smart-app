@@ -563,26 +563,6 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.rerun()
                 st.divider()
 
-            # ── วางรหัสสินค้าลงตาราง ─────────────────────────────────────────
-            with st.expander("⚡ วางรหัสสินค้า", expanded=False):
-                q_text = st.text_area(
-                    "รหัส-จำนวน คั่นด้วยเว้นวรรค",
-                    placeholder="เช่น: tf2581-38 ty2006-1 rb2306-1 tu3315-1",
-                    height=80, key="q_text",
-                )
-                if st.button("📋 ใส่ลงตาราง", key="q_to_cart", type="primary", use_container_width=True):
-                    _qf, _qu = _parse_quick_order(q_text or "", products)
-                    if _qu:
-                        st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
-                    if _qf:
-                        st.session_state["_quick_cart_items"] = _qf
-                        st.session_state.pop(_cart_key, None)
-                        st.session_state.pop("_cart_base", None)
-                        st.rerun()
-
-            st.divider()
-            # ── บันทึกหลายรายการพร้อมกัน ────────────────────────────────────
-
             # ── ค้นหาลูกค้าจากเบอร์โทร ─────────────────────────────────────
             mc1, mc2 = st.columns([3, 1])
             with mc1:
@@ -643,6 +623,25 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 st.session_state.pop("_adding_cust", None)
                                 st.rerun()
             m_date = mc2.date_input("วันที่", value=date.today(), key="m_date")
+
+            # ── วางรหัสสินค้าลงตาราง ─────────────────────────────────────────
+            with st.expander("⚡ วางรหัสสินค้า", expanded=False):
+                q_text = st.text_area(
+                    "รหัส-จำนวน คั่นด้วยเว้นวรรค",
+                    placeholder="เช่น: tf2581-38 ty2006-1 rb2306-1 tu3315-1",
+                    height=80, key="q_text",
+                )
+                if st.button("📋 ใส่ลงตาราง", key="q_to_cart", type="primary", use_container_width=True):
+                    _qf, _qu = _parse_quick_order(q_text or "", products)
+                    if _qu:
+                        st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
+                    if _qf:
+                        st.session_state["_quick_cart_items"] = _qf
+                        st.session_state.pop(_cart_key, None)
+                        st.session_state.pop("_cart_base", None)
+                        st.rerun()
+
+            st.divider()
 
             # ── Reset recipient fields when customer changes ─────────────────────
             if m_customer != "— เลือกลูกค้า —":
