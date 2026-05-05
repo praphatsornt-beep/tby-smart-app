@@ -379,6 +379,32 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     return rows
 
 
+def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
+    """คืน transactions ที่ยังค้างรับของ สำหรับลูกค้านี้ เรียงจากเก่าสุด
+    [{id, product_id, ค้างรับ}]"""
+    db = get_supabase()
+    txns = (db.table("transactions")
+            .select("id, product_id, qty, initial_qty_received, date")
+            .eq("customer_id", customer_id)
+            .order("date")
+            .execute().data)
+    if not txns:
+        return []
+    txn_ids = [t["id"] for t in txns]
+    events_by_txn: dict[str, int] = defaultdict(int)
+    for i in range(0, len(txn_ids), 200):
+        chunk = txn_ids[i:i+200]
+        evts = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", chunk).execute().data
+        for e in evts:
+            events_by_txn[e["transaction_id"]] += e["qty_received"]
+    result = []
+    for t in txns:
+        outstanding = t["qty"] - (t["initial_qty_received"] + events_by_txn[t["id"]])
+        if outstanding > 0:
+            result.append({"id": t["id"], "product_id": t["product_id"], "ค้างรับ": outstanding})
+    return result
+
+
 def delete_product(product_id: str) -> None:
     get_supabase().table("products").delete().eq("id", product_id).execute()
 

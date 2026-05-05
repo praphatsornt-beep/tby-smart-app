@@ -1475,22 +1475,30 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.error("❌ ยังไม่ได้สร้าง table shipments — รัน SQL ใน supabase_setup.sql ก่อน")
                     st.stop()
                 # ── บันทึกรับของในบิลเก่าที่เชื่อมอยู่ ───────────────────
-                _lnk_bill = st.session_state.get("_sp_linked_bill_no", "")
-                _lnk_txns = st.session_state.get("_sp_linked_bill_txns", {})
-                if _lnk_bill and _lnk_txns:
+                # ── บันทึกรับของ auto-match กับ bills ค้างของลูกค้า ──────────
+                if _sp_cid and _sp_items:
+                    _pending_rxn = db.get_pending_receipts_for_customer(_sp_cid)
+                    # group by product_id (FIFO: oldest first)
+                    _pend_by_pid: dict[str, list] = {}
+                    for _pr in _pending_rxn:
+                        _pend_by_pid.setdefault(_pr["product_id"], []).append(_pr)
                     for _sit in _sp_items:
                         _pid = _sit["product_id"]
-                        if _pid in _lnk_txns:
-                            _recv_qty = min(_sit["qty"], _lnk_txns[_pid]["ค้างรับ"])
+                        _remaining = int(_sit["qty"])
+                        for _pr in _pend_by_pid.get(_pid, []):
+                            if _remaining <= 0:
+                                break
+                            _recv_qty = min(_remaining, _pr["ค้างรับ"])
                             if _recv_qty > 0:
                                 db.insert_partial_event({
                                     "id":             str(uuid.uuid4()),
                                     "date":           str(_sp_date),
-                                    "transaction_id": _lnk_txns[_pid]["tid"],
+                                    "transaction_id": _pr["id"],
                                     "qty_received":   _recv_qty,
                                     "amount_paid":    0.0,
                                     "event_type":     "รับของ",
                                 })
+                                _remaining -= _recv_qty
                 # ตั้ง iShip pending เพื่อส่งขนส่ง
                 _sp_item_codes = " ".join(f"{it['product_id']}-{it['qty']}" for it in _sp_items)
                 _sp_remark = " ".join(filter(None, [
