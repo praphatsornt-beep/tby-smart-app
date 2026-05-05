@@ -592,7 +592,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         _matches = [n for n in customer_map if cust_search.upper() in n.upper()][:6]
                         _prev_cs  = st.session_state.get("_prev_cust_search", "")
                         st.session_state["_prev_cust_search"] = cust_search.strip()
-                        if _matches and (len(_matches) == 1 or cust_search.strip() == _prev_cs):
+                        if _matches and cust_search.strip() == _prev_cs:
                             st.session_state["_cust_picked"] = _matches[0]
                             st.rerun()
                         for _mn in _matches:
@@ -1072,7 +1072,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
                     "_sp_last_rph_fill","_sp_parse_open","_sp_carrier_sig",
                     "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search",
-                    "_sp_adding_cust"]
+                    "_sp_adding_cust","_sp_prev_cust_search"]
         _sp_cart_ver_now = st.session_state.get("_sp_cart_ver", 0)
 
         _sc1, _sc2 = st.columns([6, 1])
@@ -1177,7 +1177,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _sp_cust = "— เลือกลูกค้า —"
                 if _sp_search.strip():
                     _sp_matches = [n for n in _sc_map if _sp_search.upper() in n.upper()][:6]
-                    if len(_sp_matches) == 1:
+                    _sp_prev_cs = st.session_state.get("_sp_prev_cust_search", "")
+                    st.session_state["_sp_prev_cust_search"] = _sp_search.strip()
+                    if _sp_matches and _sp_search.strip() == _sp_prev_cs:
                         st.session_state["_sp_cust_picked"] = _sp_matches[0]
                         st.rerun()
                     for _sm in _sp_matches:
