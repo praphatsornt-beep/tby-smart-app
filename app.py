@@ -1870,7 +1870,7 @@ with tab2:
                             _total_paid = _ldf["amount"].sum()
                             _total_order = grp["ยอดรวม"].sum()
                             _summ = " | ".join(f"{p}: {int(q)}" for p, q in _pending_prods.items())
-                            st.info(f"📦 คงเหลือ: {_summ or 'ครบแล้ว'}  |  💰 จ่ายแล้ว: {_total_paid:,.0f} ฿  |  ค้างจ่าย: {max(0, _total_order - _total_paid):,.0f} ฿")
+                            st.info(f"📦 คงเหลือ: {_summ or 'ครบแล้ว'}  |  💰 จ่ายแล้ว: {_total_paid:,.0f} ฿  |  ค้างจ่าย: {owed:,.0f} ฿")
                         else:
                             st.caption("ไม่มีประวัติ")
                         st.divider()
