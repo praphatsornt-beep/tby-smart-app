@@ -1206,52 +1206,6 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.session_state.pop("_sp_cart_base", None)
                     st.rerun()
 
-        # ── เชื่อมกับบิลเก่า ─────────────────────────────────────────────
-        with st.expander("🔗 เชื่อมกับบิลเก่า (บันทึกรับของอัตโนมัติ)", expanded=False):
-            _sp_linked = st.session_state.get("_sp_linked_bill_no", "")
-            if _sp_linked:
-                st.success(f"✅ เชื่อมกับบิล **{_sp_linked}** แล้ว — ของในบิลจะถูกบันทึกรับอัตโนมัติเมื่อ save")
-                if st.button("✕ ยกเลิกเชื่อม", key="sp_unlink_bill"):
-                    st.session_state.pop("_sp_linked_bill_no", None)
-                    st.session_state.pop("_sp_linked_bill_txns", None)
-                    st.rerun()
-            else:
-                _sp_lnk_q = st.text_input("ค้นเลขบิล หรือ ชื่อลูกค้า", key="sp_link_search",
-                                            placeholder="เช่น 260504 หรือ Aime")
-                if _sp_lnk_q.strip():
-                    _bill_sums = db.get_bill_summaries()
-                    _lnk_matches = [b for b in _bill_sums
-                                    if _sp_lnk_q.strip() in b["bill_no"]
-                                    or _sp_lnk_q.strip().upper() in b["customer_name"].upper()][:6]
-                    if not _lnk_matches:
-                        st.caption("ไม่พบบิล")
-                    for _lb in _lnk_matches:
-                        _lbl = f"📄 {_lb['bill_no']}  |  {_lb['customer_name']}  |  {_lb['total']:,.0f} ฿  |  {_lb['date']}"
-                        if st.button(_lbl, key=f"sp_link_{_lb['bill_no']}", use_container_width=True):
-                            _lnk_df = db.get_all_transactions_df(bill_no=_lb["bill_no"])
-                            _lnk_rows = _lnk_df[_lnk_df["ค้างรับ"] > 0] if not _lnk_df.empty else _lnk_df
-                            if _lnk_rows.empty:
-                                st.warning("บิลนี้รับของครบแล้ว")
-                            else:
-                                _txn_map = {
-                                    r["รหัส"]: {"tid": r["id"], "ค้างรับ": int(r["ค้างรับ"])}
-                                    for _, r in _lnk_rows.iterrows()
-                                }
-                                st.session_state["_sp_linked_bill_no"]   = _lb["bill_no"]
-                                st.session_state["_sp_linked_bill_txns"] = _txn_map
-                                if not st.session_state.get("_sp_cust_picked"):
-                                    st.session_state["_sp_cust_picked"] = _lb["customer_name"]
-                                _lnk_items = [
-                                    {"product": {"id": r["รหัส"], "name": r["สินค้า"], "weight_grams": 0},
-                                     "qty": int(r["ค้างรับ"])}
-                                    for _, r in _lnk_rows.iterrows()
-                                ]
-                                st.session_state["_sp_quick_items"] = _lnk_items
-                                _new_ver = st.session_state.get("_sp_cart_ver", 0) + 1
-                                st.session_state["_sp_cart_ver"] = _new_ver
-                                st.session_state.pop("_sp_cart_base", None)
-                                st.rerun()
-
         st.divider()
 
         # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
@@ -1439,8 +1393,14 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if _sp_fees:
             _sp_fc1.caption(f"Flash: {_sp_fees['Flash Express']['zone'] or 'ปกติ'} | +{_sp_fees['Flash Express']['surcharge']} ฿")
             _sp_fc2.caption(f"SPX:   {_sp_fees['SPX Express']['zone']   or 'ปกติ'} | +{_sp_fees['SPX Express']['surcharge']} ฿")
-            _sp_auto = ("Flash Express" if _sp_fees["Flash Express"]["total"] <= _sp_fees["SPX Express"]["total"]
-                        else "SPX Express")
+            _sp_f_tot = _sp_fees["Flash Express"]["total"]
+            _sp_s_tot = _sp_fees["SPX Express"]["total"]
+            if _sp_f_tot < _sp_s_tot:
+                _sp_auto = "Flash Express"
+            elif _sp_s_tot < _sp_f_tot:
+                _sp_auto = "SPX Express"
+            else:
+                _sp_auto = _pick_carrier(_sp_pc.strip(), round(_sp_total_weight / 1000, 2))
             _sp_sig = (_sp_pc.strip(), round(_sp_total_weight / 1000, 2))
             if _sp_sig != st.session_state.get("_sp_carrier_sig"):
                 st.session_state["_sp_carrier_sig"]    = _sp_sig
