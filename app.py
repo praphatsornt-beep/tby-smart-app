@@ -1072,7 +1072,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "sp_carrier","_sp_prev_pc","_sp_staged_carrier","sp_date",
                     "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
                     "_sp_last_rph_fill","_sp_parse_open","_sp_carrier_sig",
-                    "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search"]
+                    "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search",
+                    "_sp_adding_cust"]
         _sp_cart_ver_now = st.session_state.get("_sp_cart_ver", 0)
 
         _sc1, _sc2 = st.columns([6, 1])
@@ -1183,6 +1184,30 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     for _sm in _sp_matches:
                         if st.button(f"👤 {_sm}", key=f"sp_pick_{_sm}", use_container_width=True):
                             st.session_state["_sp_cust_picked"] = _sm
+                            st.rerun()
+                    if _sp_search.upper() not in [n.upper() for n in _sp_matches]:
+                        if st.button(f"➕ เพิ่ม '{_sp_search}'", key="sp_cust_add_btn",
+                                      use_container_width=True):
+                            st.session_state["_sp_adding_cust"] = _sp_search
+                if st.session_state.get("_sp_adding_cust"):
+                    _sp_new_name = st.session_state["_sp_adding_cust"]
+                    with st.form("sp_add_cust_quick"):
+                        _spf_n = st.text_input("ชื่อลูกค้า", value=_sp_new_name)
+                        _spf_p = st.text_input("เบอร์โทร (ถ้ามี)")
+                        _spfc1, _spfc2 = st.columns(2)
+                        if _spfc1.form_submit_button("💾 บันทึก", type="primary"):
+                            _all_cids_sp = [c["id"] for c in db.get_customers()]
+                            _cmax_sp = max((int(re.match(r'C-(\d+)', x).group(1))
+                                            for x in _all_cids_sp if re.match(r'C-(\d+)', x)), default=0)
+                            _new_cid_sp = f"C-{_cmax_sp + 1:03d}"
+                            db.upsert_customer({"id": _new_cid_sp,
+                                                "name": _spf_n.strip(), "phone": _spf_p.strip()})
+                            db.get_customers.clear()
+                            st.session_state["_sp_cust_picked"] = _spf_n.strip()
+                            st.session_state.pop("_sp_adding_cust", None)
+                            st.rerun()
+                        if _spfc2.form_submit_button("ยกเลิก"):
+                            st.session_state.pop("_sp_adding_cust", None)
                             st.rerun()
         _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
         _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
