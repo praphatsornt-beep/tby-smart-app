@@ -2718,19 +2718,6 @@ with tab5:
                     st.success("✅ แก้ไขแล้ว")
                     st.rerun()
 
-        # ── ลบที่เคลียร์แล้วทั้งหมด ──────────────────────────────────────────
-        cleared_ids = all_df[all_df["เคลียร์แล้ว"]]["id"].tolist()
-        if cleared_ids:
-            st.divider()
-            bc1, bc2 = st.columns([3, 1])
-            bc1.caption(f"มี {len(cleared_ids)} รายการที่เคลียร์แล้ว (จ่ายและรับครบ)")
-            h_confirm_bulk = bc1.checkbox(f"ยืนยันลบทั้งหมดที่เคลียร์แล้ว", key="hist_bulk_chk")
-            if bc2.button(f"🗑️ ลบเคลียร์แล้วทั้งหมด ({len(cleared_ids)})",
-                          disabled=not h_confirm_bulk, use_container_width=True, key="hist_del_bulk"):
-                for tid in cleared_ids:
-                    db.delete_transaction(tid)
-                st.success(f"✅ ลบ {len(cleared_ids)} รายการแล้ว")
-                st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
