@@ -378,7 +378,8 @@ with tab1:
                       "_cart_base","m_postcode","m_carrier","m_zone",
                       "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
-                      "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv"]
+                      "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv",
+                      "_prev_cust_search"]
         _cart_ver = st.session_state.get("_cart_version", 0)
         _cart_key = f"m_cart_{_cart_ver}"
 
@@ -609,7 +610,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     m_customer = "— เลือกลูกค้า —"
                     if cust_search.strip():
                         _matches = [n for n in customer_map if cust_search.upper() in n.upper()][:6]
-                        if len(_matches) == 1:
+                        _prev_cs  = st.session_state.get("_prev_cust_search", "")
+                        st.session_state["_prev_cust_search"] = cust_search.strip()
+                        if _matches and (len(_matches) == 1 or cust_search.strip() == _prev_cs):
                             st.session_state["_cust_picked"] = _matches[0]
                             st.rerun()
                         for _mn in _matches:
