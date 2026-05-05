@@ -1771,7 +1771,10 @@ with tab2:
                                 "product": "สินค้า", "qty_in": "เข้า", "qty_out": "ออก",
                                 "amount": "จ่าย ฿",
                             })[["วันที่","รายการ","บิล","สินค้า","เข้า","ออก","จ่าย ฿"]]
-                            _lshow = _lshow.replace(0, "").replace("", "")
+                            # แสดงค่าว่างแทน 0 โดยไม่ใช้ None
+                            _lshow["เข้า"]   = _lshow["เข้า"].apply(lambda x: int(x) if x else None)
+                            _lshow["ออก"]    = _lshow["ออก"].apply(lambda x: int(x) if x else None)
+                            _lshow["จ่าย ฿"] = _lshow["จ่าย ฿"].apply(lambda x: float(x) if x else None)
                             st.dataframe(_lshow, hide_index=True, use_container_width=True,
                                          column_config={
                                              "เข้า":   st.column_config.NumberColumn("เข้า",   format="%d", width="small"),

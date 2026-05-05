@@ -138,6 +138,7 @@ def insert_partial_event(data: dict) -> None:
     get_outstanding_df.clear()
     get_unbilled_pv_summary.clear()
     bill_has_partial_events.clear()
+    get_customer_ledger.clear()
 
 
 def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
