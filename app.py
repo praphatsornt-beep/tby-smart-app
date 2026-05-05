@@ -2595,37 +2595,44 @@ with tab5:
                 st.success(f"✅ ลบ {len(_bulk_del_cleared)} รายการแล้ว")
                 st.rerun()
 
-        for _bk, _bgrp in all_df.groupby("เลขที่บิล", dropna=False, sort=False):
-            _bno  = str(_bk) if _bk and str(_bk) != "nan" else ""
-            _cust = _bgrp["ลูกค้า"].iloc[0]
-            _dt   = _bgrp["วันที่"].iloc[0]
-            _tot  = _bgrp["ยอดรวม"].sum()
-            _owed = _bgrp["ค้างจ่าย"].sum()
-            _clr  = _bgrp["เคลียร์แล้ว"].all()
-            _n    = len(_bgrp)
+        def _render_bill_group(grp: pd.DataFrame, bno: str, uid: str) -> None:
+            _cust = grp["ลูกค้า"].iloc[0]
+            _dt   = grp["วันที่"].iloc[0]
+            _tot  = grp["ยอดรวม"].sum()
+            _owed = grp["ค้างจ่าย"].sum()
+            _clr  = grp["เคลียร์แล้ว"].all()
+            _n    = len(grp)
             _icon = "✅" if _clr else ("🔴" if _owed > 0.01 else "🟡")
-            _blbl = _bno if _bno else "ยังไม่เปิดบิล"
+            _blbl = bno if bno else "ยังไม่เปิดบิล"
             _exp  = f"{_icon} **{_blbl}**  ·  {_cust}  ·  {_dt}  ·  {_n} รายการ  ·  {_tot:,.0f} ฿"
             if _owed > 0.01: _exp += f"  ·  ค้าง {_owed:,.0f} ฿"
-
             with st.expander(_exp, expanded=False):
-                _bdf = _bgrp[_disp_cols].reset_index(drop=True)
+                _bdf = grp[_disp_cols].reset_index(drop=True)
                 _bdf["หมายเหตุ"] = _bdf["หมายเหตุ"].fillna("").apply(_fmt_note)
                 st.dataframe(_bdf, hide_index=True, use_container_width=True, column_config=_col_cfg)
-                _btids = _bgrp["id"].tolist()
                 _ba1, _ba2, _ba3 = st.columns([2, 2, 1])
-                # ปุ่มลิงก์ไปจัดการบิล
-                if _bno:
-                    if _ba1.button(f"✏️ จัดการบิล {_bno}", key=f"hgo_{_bno}", use_container_width=True):
-                        st.session_state["print_search"] = _bno
+                if bno:
+                    if _ba1.button(f"✏️ จัดการบิล {bno}", key=f"hgo_{uid}", use_container_width=True):
+                        st.session_state["print_search"] = bno
                         st.rerun()
-                _del_confirm = _ba2.checkbox("ยืนยันลบ", key=f"hdelchk_{_bno or _dt}_{_cust}")
-                if _ba3.button("🗑️ ลบ", key=f"hdel_{_bno or _dt}_{_cust}",
+                _del_confirm = _ba2.checkbox("ยืนยันลบ", key=f"hdelchk_{uid}")
+                if _ba3.button("🗑️ ลบ", key=f"hdel_{uid}",
                                disabled=not _del_confirm, type="secondary", use_container_width=True):
-                    for tid in _btids:
+                    for tid in grp["id"].tolist():
                         db.delete_transaction(tid)
-                    st.success(f"✅ ลบแล้ว")
+                    st.success("✅ ลบแล้ว")
                     st.rerun()
+
+        # มีเลขบิล → group ตาม bill_no
+        _has_bill = all_df[all_df["เลขที่บิล"].ne("")]
+        for _bk, _bgrp in _has_bill.groupby("เลขที่บิล", sort=False):
+            _render_bill_group(_bgrp, str(_bk), str(_bk))
+
+        # ไม่มีเลขบิล → group ตาม (ลูกค้า + วันที่) แยกต่างหาก
+        _no_bill = all_df[all_df["เลขที่บิล"] == ""]
+        for (_ck, _dk), _bgrp in _no_bill.groupby(["ลูกค้า", "วันที่"], sort=False):
+            _uid = f"nobill_{_ck}_{_dk}"
+            _render_bill_group(_bgrp, "", _uid)
 
         st.divider()
         with st.expander("✏️ แก้ไขรายการ"):
