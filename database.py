@@ -356,28 +356,37 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
         txn = txn_map.get(e["transaction_id"], {})
         if float(e.get("qty_received") or 0) > 0:
             rows.append({
-                "date":    e["date"][:10],
-                "type":    "รับของ",
-                "bill_no": txn.get("bill_no") or "",
-                "product": txn.get("product_name", ""),
-                "qty_in":  0,
-                "qty_out": int(e["qty_received"]),
-                "amount":  0.0,
-                "txn_id":  e["transaction_id"],
+                "date":     e["date"][:10],
+                "type":     "รับของ",
+                "bill_no":  txn.get("bill_no") or "",
+                "product":  txn.get("product_name", ""),
+                "qty_in":   0,
+                "qty_out":  int(e["qty_received"]),
+                "amount":   0.0,
+                "txn_id":   e["transaction_id"],
+                "event_id": e["id"],
             })
         if float(e.get("amount_paid") or 0) > 0:
             rows.append({
-                "date":    e["date"][:10],
-                "type":    "จ่ายเงิน",
-                "bill_no": txn.get("bill_no") or "",
-                "product": "",
-                "qty_in":  0,
-                "qty_out": 0,
-                "amount":  float(e["amount_paid"]),
-                "txn_id":  e["transaction_id"],
+                "date":     e["date"][:10],
+                "type":     "จ่ายเงิน",
+                "bill_no":  txn.get("bill_no") or "",
+                "product":  "",
+                "qty_in":   0,
+                "qty_out":  0,
+                "amount":   float(e["amount_paid"]),
+                "txn_id":   e["transaction_id"],
+                "event_id": e["id"],
             })
     rows.sort(key=lambda r: r["date"])
     return rows
+
+
+def delete_partial_event(event_id: str) -> None:
+    get_supabase().table("partial_events").delete().eq("id", event_id).execute()
+    get_outstanding_df.clear()
+    get_unbilled_pv_summary.clear()
+    get_customer_ledger.clear()
 
 
 def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:

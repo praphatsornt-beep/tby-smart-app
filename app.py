@@ -1844,25 +1844,26 @@ with tab2:
                         _ledger = db.get_customer_ledger(_cust_id_t)
                         if _ledger:
                             _ldf = pd.DataFrame(_ledger)
-                            # running balance per product
                             _ldf["qty_net"] = _ldf["qty_in"] - _ldf["qty_out"]
                             _ldf["สินค้าคง"] = _ldf.groupby("product")["qty_net"].cumsum()
-                            # display columns
-                            _lshow = _ldf.rename(columns={
-                                "date": "วันที่", "type": "รายการ", "bill_no": "บิล",
-                                "product": "สินค้า", "qty_in": "เข้า", "qty_out": "ออก",
-                                "amount": "จ่าย ฿",
-                            })[["วันที่","รายการ","บิล","สินค้า","เข้า","ออก","จ่าย ฿"]]
-                            # แสดงค่าว่างแทน 0 โดยไม่ใช้ None
-                            _lshow["เข้า"]   = _lshow["เข้า"].apply(lambda x: int(x) if x else None)
-                            _lshow["ออก"]    = _lshow["ออก"].apply(lambda x: int(x) if x else None)
-                            _lshow["จ่าย ฿"] = _lshow["จ่าย ฿"].apply(lambda x: float(x) if x else None)
-                            st.dataframe(_lshow, hide_index=True, use_container_width=True,
-                                         column_config={
-                                             "เข้า":   st.column_config.NumberColumn("เข้า",   format="%d", width="small"),
-                                             "ออก":    st.column_config.NumberColumn("ออก",    format="%d", width="small"),
-                                             "จ่าย ฿": st.column_config.NumberColumn("จ่าย ฿", format="%.0f"),
-                                         })
+                            # แสดงทีละแถว พร้อมปุ่มลบสำหรับ partial_events
+                            _lcols = st.columns([2,2,2,3,1,1,2,1])
+                            for _h, _w in zip(["วันที่","รายการ","บิล","สินค้า","เข้า","ออก","จ่าย ฿",""], _lcols):
+                                _w.caption(_h)
+                            for _li, _lr in _ldf.iterrows():
+                                _lc = st.columns([2,2,2,3,1,1,2,1])
+                                _lc[0].write(_lr["date"])
+                                _lc[1].write(_lr["type"])
+                                _lc[2].write(_lr["bill_no"] or "")
+                                _lc[3].write(_lr["product"] or "")
+                                _lc[4].write(int(_lr["qty_in"]) if _lr["qty_in"] else "")
+                                _lc[5].write(int(_lr["qty_out"]) if _lr["qty_out"] else "")
+                                _lc[6].write(f"{_lr['amount']:,.0f}" if _lr["amount"] else "")
+                                _eid = _lr.get("event_id", "")
+                                if _eid and _lc[7].button("🗑️", key=f"del_ev_{_eid}", help="ลบรายการนี้"):
+                                    db.delete_partial_event(_eid)
+                                    st.rerun()
+                            st.divider()
                             # summary
                             _qty_sum = _ldf.groupby("product")["qty_net"].sum()
                             _pending_prods = _qty_sum[_qty_sum > 0]
