@@ -2591,19 +2591,25 @@ with tab5:
         for _col in ("เลขที่บิล", "วันที่", "ลูกค้า"):
             chk_df[_col] = chk_df[_col].where(~_is_dup_bill, "")
 
+        _editable = ("🗑️", "รับแล้ว", "สั่ง", "ยอดรวม", "สถานะบิล", "สถานะจ่าย")
         edited_h = st.data_editor(
             chk_df,
             use_container_width=True,
             hide_index=True,
             column_config={
-                "🗑️":      st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
-                "สถานะ":   st.column_config.TextColumn("สถานะ", width="small"),
-                "ยอดรวม":  st.column_config.NumberColumn("ยอดรวม",  format="%,.0f"),
+                "🗑️":       st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
+                "สถานะ":    st.column_config.TextColumn("สถานะ", width="small"),
+                "สั่ง":     st.column_config.NumberColumn("สั่ง", min_value=1, step=1, width="small"),
+                "รับแล้ว":  st.column_config.NumberColumn("รับแล้ว", min_value=0, step=1, width="small"),
+                "ยอดรวม":   st.column_config.NumberColumn("ยอดรวม", format="%,.0f"),
                 "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
                 "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
-                "รับแล้ว":  st.column_config.NumberColumn("รับแล้ว",  min_value=0, step=1, width="small"),
+                "สถานะบิล": st.column_config.SelectboxColumn("สถานะบิล",
+                    options=["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], width="medium"),
+                "สถานะจ่าย": st.column_config.SelectboxColumn("สถานะจ่าย",
+                    options=["จ่ายแล้ว", "ค้างจ่าย", "COD"], width="medium"),
             },
-            disabled=[c for c in chk_df.columns if c not in ("🗑️", "รับแล้ว")],
+            disabled=[c for c in chk_df.columns if c not in _editable],
             key="hist_table",
         )
 
@@ -2628,30 +2634,64 @@ with tab5:
                 st.session_state.pop("hist_table", None)
                 st.rerun()
 
-        _recv_changes = [
-            (i, int(chk_df.iloc[i]["รับแล้ว"]), int(edited_h.iloc[i]["รับแล้ว"]))
-            for i in range(len(chk_df))
-            if int(chk_df.iloc[i]["รับแล้ว"]) != int(edited_h.iloc[i]["รับแล้ว"])
-            and i < len(id_map)
-        ]
-        if _recv_changes:
-            rc1, rc2 = st.columns([3, 1])
-            rc1.info(f"แก้ไขรับแล้ว {len(_recv_changes)} รายการ")
-            if rc2.button("💾 บันทึกแก้ไข", type="primary", use_container_width=True, key="save_recv_fix"):
-                for i, old_recv, new_recv in _recv_changes:
-                    txn_id = id_map.iloc[i]
-                    max_recv = int(chk_df.iloc[i]["สั่ง"])
-                    new_recv = max(0, min(new_recv, max_recv))
-                    delta = new_recv - old_recv
-                    if delta != 0:
-                        db.insert_partial_event({
-                            "id":             str(uuid.uuid4()),
-                            "date":           str(date.today()),
-                            "transaction_id": txn_id,
-                            "qty_received":   delta,
-                            "amount_paid":    0.0,
-                            "event_type":     "รับของ",
-                        })
+        # ตรวจหาการแก้ไขทุกประเภท (เทียบกับ show_df ที่ไม่ blank)
+        _any_changes = []
+        for _i in range(len(show_df)):
+            if _i >= len(id_map): break
+            _orig = show_df.iloc[_i]
+            _edit = edited_h.iloc[_i]
+            _tid  = id_map.iloc[_i]
+            _ch   = {}
+            # รับแล้ว → partial_event
+            _old_recv = int(_orig["รับแล้ว"])
+            _new_recv = int(_edit["รับแล้ว"] or 0)
+            if _old_recv != _new_recv:
+                _ch["recv"] = (_old_recv, _new_recv)
+            # สั่ง
+            if int(_orig["สั่ง"]) != int(_edit["สั่ง"] or 1):
+                _ch["qty"] = int(_edit["สั่ง"] or 1)
+            # ยอดรวม
+            if abs(float(_orig["ยอดรวม"]) - float(_edit["ยอดรวม"] or 0)) > 0.01:
+                _ch["total"] = float(_edit["ยอดรวม"] or 0)
+            # สถานะบิล
+            if str(_orig["สถานะบิล"]) != str(_edit["สถานะบิล"] or ""):
+                _ch["bill_status"] = str(_edit["สถานะบิล"])
+            # สถานะจ่าย
+            if str(_orig["สถานะจ่าย"]) != str(_edit["สถานะจ่าย"] or ""):
+                _ch["pay_status"] = str(_edit["สถานะจ่าย"])
+            if _ch:
+                _any_changes.append((_i, _tid, _ch))
+
+        if _any_changes:
+            _sc1, _sc2 = st.columns([3, 1])
+            _sc1.info(f"แก้ไข {len(_any_changes)} รายการ")
+            if _sc2.button("💾 บันทึกแก้ไข", type="primary", use_container_width=True, key="save_all_fix"):
+                for _i, _tid, _ch in _any_changes:
+                    if "recv" in _ch:
+                        _old_r, _new_r = _ch["recv"]
+                        _max_r = int(show_df.iloc[_i]["สั่ง"])
+                        _new_r = max(0, min(_new_r, _max_r))
+                        _delta = _new_r - _old_r
+                        if _delta != 0:
+                            db.insert_partial_event({
+                                "id":             str(uuid.uuid4()),
+                                "date":           str(date.today()),
+                                "transaction_id": _tid,
+                                "qty_received":   _delta,
+                                "amount_paid":    0.0,
+                                "event_type":     "รับของ",
+                            })
+                    _txn_upd = {}
+                    if "qty"   in _ch: _txn_upd["qty"]          = _ch["qty"]
+                    if "total" in _ch: _txn_upd["total_amount"]  = _ch["total"]
+                    if _txn_upd:
+                        db.update_transaction(_tid, _txn_upd)
+                    if "bill_status" in _ch or "pay_status" in _ch:
+                        db.update_transaction_status(
+                            _tid,
+                            bill_status=_ch.get("bill_status"),
+                            pay_status=_ch.get("pay_status"),
+                        )
                 st.success("✅ บันทึกแล้ว")
                 st.session_state.pop("hist_table", None)
                 st.rerun()
