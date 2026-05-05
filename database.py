@@ -102,6 +102,7 @@ def _clear_transaction_caches() -> None:
     get_outstanding_df.clear()
     get_unbilled_pv_summary.clear()
     get_customer_ledger.clear()
+    get_bill_summaries.clear()
 
 
 def insert_transaction(data: dict) -> None:
@@ -245,6 +246,7 @@ def delete_transaction(transaction_id: str) -> None:
     db = get_supabase()
     db.table("partial_events").delete().eq("transaction_id", transaction_id).execute()
     db.table("transactions").delete().eq("id", transaction_id).execute()
+    _clear_transaction_caches()
 
 
 def get_bill_details(bill_no: str) -> list[dict]:
@@ -277,6 +279,7 @@ def delete_bill(bill_no: str) -> int:
     for r in rows:
         db.table("partial_events").delete().eq("transaction_id", r["id"]).execute()
     db.table("transactions").delete().eq("bill_no", bill_no).execute()
+    _clear_transaction_caches()
     return len(rows)
 
 
@@ -387,9 +390,8 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
 
 def delete_partial_event(event_id: str) -> None:
     get_supabase().table("partial_events").delete().eq("id", event_id).execute()
-    get_outstanding_df.clear()
-    get_unbilled_pv_summary.clear()
-    get_customer_ledger.clear()
+    _clear_transaction_caches()
+    bill_has_partial_events.clear()
 
 
 def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
