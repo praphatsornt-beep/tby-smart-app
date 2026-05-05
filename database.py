@@ -312,6 +312,73 @@ def get_bill_summaries() -> list[dict]:
     return list(seen.values())
 
 
+@st.cache_data(ttl=60)
+def get_customer_ledger(customer_id: str) -> list[dict]:
+    """คืน timeline ของลูกค้า 1 คน เรียงตามวันที่
+    แต่ละ row: {date, type, bill_no, product, qty_in, qty_out, amount, txn_id}
+    type: สั่งซื้อ | รับของ | จ่ายเงิน
+    """
+    db = get_supabase()
+    txns = db.table("transactions").select(
+        "id, date, bill_no, product_id, product_name, qty, total_amount, pay_status"
+    ).eq("customer_id", customer_id).order("date").execute().data
+    if not txns:
+        return []
+    txn_ids = [t["id"] for t in txns]
+    txn_map = {t["id"]: t for t in txns}
+
+    # partial_events in batches
+    all_events = []
+    _batch = 200
+    for _i in range(0, len(txn_ids), _batch):
+        _chunk = txn_ids[_i:_i + _batch]
+        _evts = db.table("partial_events").select(
+            "id, date, transaction_id, qty_received, amount_paid, event_type"
+        ).in_("transaction_id", _chunk).order("date").execute().data
+        all_events.extend(_evts)
+
+    rows = []
+    # order rows
+    for t in txns:
+        rows.append({
+            "date":     t["date"][:10],
+            "type":     "สั่งซื้อ",
+            "bill_no":  t.get("bill_no") or "",
+            "product":  t["product_name"],
+            "qty_in":   t["qty"],
+            "qty_out":  0,
+            "amount":   0.0,
+            "txn_id":   t["id"],
+        })
+    # partial event rows
+    for e in all_events:
+        txn = txn_map.get(e["transaction_id"], {})
+        if float(e.get("qty_received") or 0) > 0:
+            rows.append({
+                "date":    e["date"][:10],
+                "type":    "รับของ",
+                "bill_no": txn.get("bill_no") or "",
+                "product": txn.get("product_name", ""),
+                "qty_in":  0,
+                "qty_out": int(e["qty_received"]),
+                "amount":  0.0,
+                "txn_id":  e["transaction_id"],
+            })
+        if float(e.get("amount_paid") or 0) > 0:
+            rows.append({
+                "date":    e["date"][:10],
+                "type":    "จ่ายเงิน",
+                "bill_no": txn.get("bill_no") or "",
+                "product": "",
+                "qty_in":  0,
+                "qty_out": 0,
+                "amount":  float(e["amount_paid"]),
+                "txn_id":  e["transaction_id"],
+            })
+    rows.sort(key=lambda r: r["date"])
+    return rows
+
+
 def delete_product(product_id: str) -> None:
     get_supabase().table("products").delete().eq("id", product_id).execute()
 

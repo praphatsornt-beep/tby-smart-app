@@ -1803,6 +1803,44 @@ with tab2:
                 exp_label = f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
 
                 with st.expander(exp_label, expanded=single_cust):
+                    # ── บัตรลูกค้า (timeline) ────────────────────────────
+                    _cust_obj  = next((c for c in customers if c["name"] == customer_name), None)
+                    _cust_id_t = _cust_obj["id"] if _cust_obj else ""
+                    _ledger_key = f"_show_ledger_{customer_name}"
+                    _lc1, _lc2 = st.columns([1, 5])
+                    if _lc1.button("📋 บัตรลูกค้า", key=f"btn_ledger_{customer_name}",
+                                   use_container_width=True):
+                        st.session_state[_ledger_key] = not st.session_state.get(_ledger_key, False)
+                    if st.session_state.get(_ledger_key) and _cust_id_t:
+                        _ledger = db.get_customer_ledger(_cust_id_t)
+                        if _ledger:
+                            _ldf = pd.DataFrame(_ledger)
+                            # running balance per product
+                            _ldf["qty_net"] = _ldf["qty_in"] - _ldf["qty_out"]
+                            _ldf["สินค้าคง"] = _ldf.groupby("product")["qty_net"].cumsum()
+                            # display columns
+                            _lshow = _ldf.rename(columns={
+                                "date": "วันที่", "type": "รายการ", "bill_no": "บิล",
+                                "product": "สินค้า", "qty_in": "เข้า", "qty_out": "ออก",
+                                "amount": "จ่าย ฿",
+                            })[["วันที่","รายการ","บิล","สินค้า","เข้า","ออก","จ่าย ฿"]]
+                            _lshow = _lshow.replace(0, "").replace("", "")
+                            st.dataframe(_lshow, hide_index=True, use_container_width=True,
+                                         column_config={
+                                             "เข้า":   st.column_config.NumberColumn("เข้า",   format="%d", width="small"),
+                                             "ออก":    st.column_config.NumberColumn("ออก",    format="%d", width="small"),
+                                             "จ่าย ฿": st.column_config.NumberColumn("จ่าย ฿", format="%.0f"),
+                                         })
+                            # summary
+                            _qty_sum = _ldf.groupby("product")["qty_net"].sum()
+                            _pending_prods = _qty_sum[_qty_sum > 0]
+                            _total_paid = _ldf["amount"].sum()
+                            _total_order = grp["ยอดรวม"].sum()
+                            _summ = " | ".join(f"{p}: {int(q)}" for p, q in _pending_prods.items())
+                            st.info(f"📦 คงเหลือ: {_summ or 'ครบแล้ว'}  |  💰 จ่ายแล้ว: {_total_paid:,.0f} ฿  |  ค้างจ่าย: {max(0, _total_order - _total_paid):,.0f} ฿")
+                        else:
+                            st.caption("ไม่มีประวัติ")
+                        st.divider()
                     # ── ใบรับของ popup ───────────────────────────────────
                     _rp = st.session_state.get("_recv_popup")
                     if _rp and _rp.get("customer_name") == customer_name:
