@@ -588,7 +588,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _cust_picked = st.session_state.get("_cust_picked", "")
                 if _cust_picked:
                     cp1, cp2 = st.columns([5, 1])
-                    cp1.markdown(f"👤 **{_cust_picked}**")
+                    cp1.success(f"👤 **{_cust_picked}**")
                     _r_preview = " · ".join(filter(None, [
                         st.session_state.get("r_name", ""),
                         st.session_state.get("r_al", ""),
