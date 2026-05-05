@@ -2575,82 +2575,57 @@ with tab5:
             key="dl_hist",
         )
 
-        chk_df = show_df.copy()
-        chk_df.insert(0, "🗑️", False)
-        _cleared_mask = all_df["เคลียร์แล้ว"].reset_index(drop=True)
-        chk_df.insert(1, "สถานะ", _cleared_mask.map({True: "✅ เคลียร์", False: ""}))
-
-        _is_dup_bill = chk_df["เลขที่บิล"].ne("") & (chk_df["เลขที่บิล"] == chk_df["เลขที่บิล"].shift(1).fillna(""))
-        for _col in ("เลขที่บิล", "วันที่", "ลูกค้า"):
-            chk_df[_col] = chk_df[_col].where(~_is_dup_bill, "")
-
-        edited_h = st.data_editor(
-            chk_df,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "🗑️":      st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
-                "สถานะ":   st.column_config.TextColumn("สถานะ", width="small"),
-                "ยอดรวม":  st.column_config.NumberColumn("ยอดรวม",  format="%,.0f"),
-                "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
-                "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
-                "รับแล้ว":  st.column_config.NumberColumn("รับแล้ว",  min_value=0, step=1, width="small"),
-            },
-            disabled=[c for c in chk_df.columns if c not in ("🗑️", "รับแล้ว")],
-            key="hist_table",
-        )
-
-        to_del_idx = edited_h[edited_h["🗑️"]].index.tolist()
-
-        # ถ้าเลือก 1 รายการ → auto-fill ใน expander แก้ไขด้านล่าง
-        if len(to_del_idx) == 1 and to_del_idx[0] < len(id_map):
-            _auto_tid = id_map.iloc[to_del_idx[0]]
-            _auto_rows = all_df[all_df["id"] == _auto_tid]
-            if not _auto_rows.empty:
-                _ar = _auto_rows.iloc[0]
-                _auto_label = f"{_ar['วันที่']}  {_ar['ลูกค้า']}  {_ar['สินค้า']} ×{int(_ar['สั่ง'])}"
-                if st.session_state.get("edit_sel") != _auto_label:
-                    st.session_state["edit_sel"] = _auto_label
-
-        if to_del_idx:
-            d1, d2 = st.columns([2, 1])
-            d1.warning(f"เลือก {len(to_del_idx)} รายการ")
-            if d2.button("🗑️ ลบรายการที่เลือก", type="secondary", use_container_width=True, key="hist_del_chk_btn"):
-                for i in to_del_idx:
-                    db.delete_transaction(id_map.iloc[i])
-                st.success(f"✅ ลบ {len(to_del_idx)} รายการแล้ว")
-                st.session_state.pop("hist_table", None)
+        # ── แสดงแบบแยกบิล ────────────────────────────────────────────────
+        _disp_cols = ["รหัส","สินค้า","สั่ง","รับแล้ว","ยอดรวม","จ่ายแล้ว","ค้างจ่าย","ค้างรับ","สถานะบิล","สถานะจ่าย","หมายเหตุ"]
+        _col_cfg = {
+            "ยอดรวม":  st.column_config.NumberColumn(format="%,.0f"),
+            "จ่ายแล้ว": st.column_config.NumberColumn(format="%,.0f"),
+            "ค้างจ่าย": st.column_config.NumberColumn(format="%,.0f"),
+        }
+        _bulk_del_cleared = all_df[all_df["เคลียร์แล้ว"]]["id"].tolist()
+        if _bulk_del_cleared:
+            _bc1, _bc2 = st.columns([3, 1])
+            _bc1.caption(f"มี {len(_bulk_del_cleared)} รายการที่เคลียร์แล้ว")
+            _bc1_chk = _bc1.checkbox("ยืนยันลบทั้งหมดที่เคลียร์แล้ว", key="hist_bulk_chk")
+            if _bc2.button(f"🗑️ ลบเคลียร์แล้วทั้งหมด ({len(_bulk_del_cleared)})",
+                           key="hist_bulk_del", type="secondary",
+                           disabled=not _bc1_chk, use_container_width=True):
+                for tid in _bulk_del_cleared:
+                    db.delete_transaction(tid)
+                st.success(f"✅ ลบ {len(_bulk_del_cleared)} รายการแล้ว")
                 st.rerun()
 
-        _recv_changes = [
-            (i, int(chk_df.iloc[i]["รับแล้ว"]), int(edited_h.iloc[i]["รับแล้ว"]))
-            for i in range(len(chk_df))
-            if int(chk_df.iloc[i]["รับแล้ว"]) != int(edited_h.iloc[i]["รับแล้ว"])
-            and i < len(id_map)
-        ]
-        if _recv_changes:
-            rc1, rc2 = st.columns([3, 1])
-            rc1.info(f"แก้ไขรับแล้ว {len(_recv_changes)} รายการ")
-            if rc2.button("💾 บันทึกแก้ไข", type="primary", use_container_width=True, key="save_recv_fix"):
-                for i, old_recv, new_recv in _recv_changes:
-                    txn_id = id_map.iloc[i]
-                    max_recv = int(chk_df.iloc[i]["สั่ง"])
-                    new_recv = max(0, min(new_recv, max_recv))
-                    delta = new_recv - old_recv
-                    if delta != 0:
-                        db.insert_partial_event({
-                            "id":             str(uuid.uuid4()),
-                            "date":           str(date.today()),
-                            "transaction_id": txn_id,
-                            "qty_received":   delta,
-                            "amount_paid":    0.0,
-                            "event_type":     "รับของ",
-                            "notes":          f"แก้รับแล้ว: {old_recv} → {new_recv}",
-                        })
-                st.success("✅ บันทึกแล้ว")
-                db.get_all_transactions_df.clear()
-                st.session_state.pop("hist_table", None)
-                st.rerun()
+        for _bk, _bgrp in all_df.groupby("เลขที่บิล", dropna=False, sort=False):
+            _bno  = str(_bk) if _bk and str(_bk) != "nan" else ""
+            _cust = _bgrp["ลูกค้า"].iloc[0]
+            _dt   = _bgrp["วันที่"].iloc[0]
+            _tot  = _bgrp["ยอดรวม"].sum()
+            _owed = _bgrp["ค้างจ่าย"].sum()
+            _clr  = _bgrp["เคลียร์แล้ว"].all()
+            _n    = len(_bgrp)
+            _icon = "✅" if _clr else ("🔴" if _owed > 0.01 else "🟡")
+            _blbl = _bno if _bno else "ยังไม่เปิดบิล"
+            _exp  = f"{_icon} **{_blbl}**  ·  {_cust}  ·  {_dt}  ·  {_n} รายการ  ·  {_tot:,.0f} ฿"
+            if _owed > 0.01: _exp += f"  ·  ค้าง {_owed:,.0f} ฿"
+
+            with st.expander(_exp, expanded=False):
+                _bdf = _bgrp[_disp_cols].reset_index(drop=True)
+                _bdf["หมายเหตุ"] = _bdf["หมายเหตุ"].fillna("").apply(_fmt_note)
+                st.dataframe(_bdf, hide_index=True, use_container_width=True, column_config=_col_cfg)
+                _btids = _bgrp["id"].tolist()
+                _ba1, _ba2, _ba3 = st.columns([2, 2, 1])
+                # ปุ่มลิงก์ไปจัดการบิล
+                if _bno:
+                    if _ba1.button(f"✏️ จัดการบิล {_bno}", key=f"hgo_{_bno}", use_container_width=True):
+                        st.session_state["print_search"] = _bno
+                        st.rerun()
+                _del_confirm = _ba2.checkbox("ยืนยันลบ", key=f"hdelchk_{_bno or _dt}_{_cust}")
+                if _ba3.button("🗑️ ลบ", key=f"hdel_{_bno or _dt}_{_cust}",
+                               disabled=not _del_confirm, type="secondary", use_container_width=True):
+                    for tid in _btids:
+                        db.delete_transaction(tid)
+                    st.success(f"✅ ลบแล้ว")
+                    st.rerun()
 
         st.divider()
         with st.expander("✏️ แก้ไขรายการ"):
