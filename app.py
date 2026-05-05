@@ -2591,7 +2591,7 @@ with tab5:
         for _col in ("เลขที่บิล", "วันที่", "ลูกค้า"):
             chk_df[_col] = chk_df[_col].where(~_is_dup_bill, "")
 
-        _editable = ("🗑️", "รับแล้ว", "สั่ง", "ยอดรวม", "สถานะบิล", "สถานะจ่าย")
+        _editable = ("🗑️", "รับแล้ว", "สั่ง", "ยอดรวม", "จ่ายแล้ว", "สถานะบิล", "สถานะจ่าย")
         edited_h = st.data_editor(
             chk_df,
             use_container_width=True,
@@ -2642,11 +2642,16 @@ with tab5:
             _edit = edited_h.iloc[_i]
             _tid  = id_map.iloc[_i]
             _ch   = {}
-            # รับแล้ว → partial_event
+            # รับแล้ว → partial_event qty
             _old_recv = int(_orig["รับแล้ว"])
             _new_recv = int(_edit["รับแล้ว"] or 0)
             if _old_recv != _new_recv:
                 _ch["recv"] = (_old_recv, _new_recv)
+            # จ่ายแล้ว → partial_event amount
+            _old_paid = float(_orig["จ่ายแล้ว"])
+            _new_paid = float(_edit["จ่ายแล้ว"] or 0)
+            if abs(_old_paid - _new_paid) > 0.01:
+                _ch["paid"] = (_old_paid, _new_paid)
             # สั่ง
             if int(_orig["สั่ง"]) != int(_edit["สั่ง"] or 1):
                 _ch["qty"] = int(_edit["สั่ง"] or 1)
@@ -2680,6 +2685,18 @@ with tab5:
                                 "qty_received":   _delta,
                                 "amount_paid":    0.0,
                                 "event_type":     "รับของ",
+                            })
+                    if "paid" in _ch:
+                        _old_p, _new_p = _ch["paid"]
+                        _delta_p = _new_p - _old_p
+                        if abs(_delta_p) > 0.01:
+                            db.insert_partial_event({
+                                "id":             str(uuid.uuid4()),
+                                "date":           str(date.today()),
+                                "transaction_id": _tid,
+                                "qty_received":   0,
+                                "amount_paid":    _delta_p,
+                                "event_type":     "จ่าย",
                             })
                     _txn_upd = {}
                     if "qty"   in _ch: _txn_upd["qty"]          = _ch["qty"]
