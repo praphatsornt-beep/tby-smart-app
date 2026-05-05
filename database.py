@@ -101,6 +101,7 @@ def _clear_transaction_caches() -> None:
     get_all_transactions_df.clear()
     get_outstanding_df.clear()
     get_unbilled_pv_summary.clear()
+    get_customer_ledger.clear()
 
 
 def insert_transaction(data: dict) -> None:
@@ -135,6 +136,7 @@ def get_next_bill_no(date_str: str) -> str:
 
 def insert_partial_event(data: dict) -> None:
     get_supabase().table("partial_events").insert(data).execute()
+    get_all_transactions_df.clear()
     get_outstanding_df.clear()
     get_unbilled_pv_summary.clear()
     bill_has_partial_events.clear()
@@ -354,14 +356,15 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     # partial event rows
     for e in all_events:
         txn = txn_map.get(e["transaction_id"], {})
-        if float(e.get("qty_received") or 0) > 0:
+        _qr = float(e.get("qty_received") or 0)
+        if _qr != 0:
             rows.append({
                 "date":     e["date"][:10],
-                "type":     "รับของ",
+                "type":     "รับของ" if _qr > 0 else "แก้ไขรับ",
                 "bill_no":  txn.get("bill_no") or "",
                 "product":  txn.get("product_name", ""),
                 "qty_in":   0,
-                "qty_out":  int(e["qty_received"]),
+                "qty_out":  int(_qr),
                 "amount":   0.0,
                 "txn_id":   e["transaction_id"],
                 "event_id": e["id"],
