@@ -582,6 +582,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     if cp2.button("✕", key="cust_clear", help="เลือกลูกค้าใหม่"):
                         st.session_state.pop("_cust_picked", None)
                         st.session_state.pop("_prev_shipping_cid", None)
+                        st.session_state.pop("m_cust_search", None)
                         st.rerun()
                     m_customer = _cust_picked
                 else:
@@ -1240,6 +1241,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _spx.success(f"👤 **{_sp_picked}**")
                 if _spy.button("✕ เปลี่ยน", key="sp_cust_clear"):
                     st.session_state.pop("_sp_cust_picked", None)
+                    st.session_state.pop("sp_cust_search", None)
                     st.rerun()
                 _sp_cust = _sp_picked
             else:
