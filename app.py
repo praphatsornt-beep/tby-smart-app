@@ -585,28 +585,17 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         st.rerun()
                     m_customer = _cust_picked
                 else:
-                    cust_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อเพื่อค้นหา...",
-                                                 key="m_cust_search")
+                    _cust_options = ["— เลือกลูกค้า —"] + sorted(customer_map.keys())
+                    _cust_sel = st.selectbox("ลูกค้า", _cust_options, key="m_cust_search")
                     m_customer = "— เลือกลูกค้า —"
-                    if cust_search.strip():
-                        _matches = [n for n in customer_map if cust_search.upper() in n.upper()][:6]
-                        _prev_cs  = st.session_state.get("_prev_cust_search", "")
-                        st.session_state["_prev_cust_search"] = cust_search.strip()
-                        if _matches and cust_search.strip() == _prev_cs:
-                            st.session_state["_cust_picked"] = _matches[0]
-                            st.rerun()
-                        for _mn in _matches:
-                            if st.button(f"👤 {_mn}", key=f"cp_{_mn}", use_container_width=True):
-                                st.session_state["_cust_picked"] = _mn
-                                st.rerun()
-                        if cust_search.upper() not in [n.upper() for n in _matches]:
-                            if st.button(f"➕ เพิ่ม '{cust_search}'", key="cust_add_btn",
-                                          use_container_width=True):
-                                st.session_state["_adding_cust"] = cust_search
-                    if st.session_state.get("_adding_cust"):
-                        _new_cust_name = st.session_state["_adding_cust"]
+                    if _cust_sel != "— เลือกลูกค้า —":
+                        st.session_state["_cust_picked"] = _cust_sel
+                        st.rerun()
+                    if st.button("➕ เพิ่มลูกค้าใหม่", key="cust_add_btn", use_container_width=False):
+                        st.session_state["_adding_cust"] = ""
+                    if st.session_state.get("_adding_cust") is not None and "_adding_cust" in st.session_state:
                         with st.form("add_cust_quick"):
-                            _fn = st.text_input("ชื่อลูกค้า", value=_new_cust_name)
+                            _fn = st.text_input("ชื่อลูกค้า")
                             _fp = st.text_input("เบอร์โทร (ถ้ามี)")
                             _fc1, _fc2 = st.columns(2)
                             if _fc1.form_submit_button("💾 บันทึก", type="primary"):
@@ -616,6 +605,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 _new_cid = f"C-{_cmax + 1:03d}"
                                 db.upsert_customer({"id": _new_cid,
                                                     "name": _fn.strip(), "phone": _fp.strip()})
+                                db.get_customers.clear()
                                 st.session_state["_cust_picked"] = _fn.strip()
                                 st.session_state.pop("_adding_cust", None)
                                 st.rerun()
@@ -1173,27 +1163,17 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.rerun()
                 _sp_cust = _sp_picked
             else:
-                _sp_search = st.text_input("ลูกค้า", placeholder="พิมพ์ชื่อ...", key="sp_cust_search")
+                _sp_options = ["— เลือกลูกค้า —"] + sorted(_sc_map.keys())
+                _sp_sel = st.selectbox("ลูกค้า", _sp_options, key="sp_cust_search")
                 _sp_cust = "— เลือกลูกค้า —"
-                if _sp_search.strip():
-                    _sp_matches = [n for n in _sc_map if _sp_search.upper() in n.upper()][:6]
-                    _sp_prev_cs = st.session_state.get("_sp_prev_cust_search", "")
-                    st.session_state["_sp_prev_cust_search"] = _sp_search.strip()
-                    if _sp_matches and _sp_search.strip() == _sp_prev_cs:
-                        st.session_state["_sp_cust_picked"] = _sp_matches[0]
-                        st.rerun()
-                    for _sm in _sp_matches:
-                        if st.button(f"👤 {_sm}", key=f"sp_pick_{_sm}", use_container_width=True):
-                            st.session_state["_sp_cust_picked"] = _sm
-                            st.rerun()
-                    if _sp_search.upper() not in [n.upper() for n in _sp_matches]:
-                        if st.button(f"➕ เพิ่ม '{_sp_search}'", key="sp_cust_add_btn",
-                                      use_container_width=True):
-                            st.session_state["_sp_adding_cust"] = _sp_search
-                if st.session_state.get("_sp_adding_cust"):
-                    _sp_new_name = st.session_state["_sp_adding_cust"]
+                if _sp_sel != "— เลือกลูกค้า —":
+                    st.session_state["_sp_cust_picked"] = _sp_sel
+                    st.rerun()
+                if st.button("➕ เพิ่มลูกค้าใหม่", key="sp_cust_add_btn", use_container_width=False):
+                    st.session_state["_sp_adding_cust"] = ""
+                if "_sp_adding_cust" in st.session_state:
                     with st.form("sp_add_cust_quick"):
-                        _spf_n = st.text_input("ชื่อลูกค้า", value=_sp_new_name)
+                        _spf_n = st.text_input("ชื่อลูกค้า")
                         _spf_p = st.text_input("เบอร์โทร (ถ้ามี)")
                         _spfc1, _spfc2 = st.columns(2)
                         if _spfc1.form_submit_button("💾 บันทึก", type="primary"):
