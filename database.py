@@ -531,10 +531,14 @@ def get_billed_not_received_qty_by_product() -> dict:
     if not txns:
         return {}
     txn_ids = [t["id"] for t in txns]
-    events = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", txn_ids).execute().data
-    events_by_txn = defaultdict(int)
-    for e in events:
-        events_by_txn[e["transaction_id"]] += e["qty_received"]
+    events_by_txn: dict[str, int] = defaultdict(int)
+    # แบ่ง batch ป้องกัน URL เกิน limit ของ PostgREST
+    _batch = 200
+    for _i in range(0, len(txn_ids), _batch):
+        _chunk = txn_ids[_i:_i + _batch]
+        _evts = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", _chunk).execute().data
+        for e in _evts:
+            events_by_txn[e["transaction_id"]] += e["qty_received"]
     result = defaultdict(int)
     for t in txns:
         outstanding = t["qty"] - (t["initial_qty_received"] + events_by_txn[t["id"]])
