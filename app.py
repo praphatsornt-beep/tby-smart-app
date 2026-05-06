@@ -538,7 +538,7 @@ with tab1:
                     st.session_state["_prev_shipping_cid"] = _cid_detect
                     _ca_d = customer_map[m_customer]
                     for _k, _v in [
-                        ("r_name",  _ca_d.get("name", "")),
+                        ("r_name",  ""),
                         ("r_phone", ""),
                         ("r_al",    ""),
                         ("r_dt",    ""),
