@@ -944,7 +944,7 @@ with tab1:
                     "customer_id":   customer["id"],
                     "bill_date":     str(m_date),
                     "bill_no":       bill_no,
-                    "items": [{"name": p["name"], "qty": qty,
+                    "items": [{"product_id": p["id"], "name": p["name"], "qty": qty,
                                "price": float(p["price"]),
                                "total": float(p["price"]) * qty,
                                "pv":    float(p["points_per_unit"]) * qty}
@@ -1010,13 +1010,14 @@ with tab1:
                 if st.session_state.get("_popup_show_print") and st.session_state.get("_print_popup"):
                     _pit = _pd.get("items", [])
                     _rows_html = "".join(
-                        f"<tr><td>{it['name']}</td><td style='text-align:center'>{it['qty']}</td>"
+                        f"<tr><td style='font-size:11px;color:#666'>{it.get('product_id','')}</td>"
+                        f"<td>{it['name']}</td><td style='text-align:center'>{it['qty']}</td>"
                         f"<td style='text-align:right'>{float(it['price']):,.0f}</td>"
                         f"<td style='text-align:right'>{float(it['total']):,.0f}</td></tr>"
                         for it in _pit
                     )
-                    _ship_row = f"<tr><td>ค่าส่ง ({_pd.get('carrier','')})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
-                    _cod_row  = f"<tr><td>COD (3%)</td><td></td><td></td><td style='text-align:right'>{_pd['cod_fee']:,.0f}</td></tr>" if _pd.get("is_cod") else ""
+                    _ship_row = f"<tr><td></td><td>ค่าส่ง ({_pd.get('carrier','')})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
+                    _cod_row  = f"<tr><td></td><td>COD (3%)</td><td></td><td></td><td style='text-align:right'>{_pd['cod_fee']:,.0f}</td></tr>" if _pd.get("is_cod") else ""
                     _bill_html_popup = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 html,body{{background:#fff!important;color:#000!important;margin:0;padding:0}}
@@ -1034,7 +1035,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 <h3>TBY — ใบเสร็จรับเงิน</h3>
 <div class='info'>บิล: <b>{_pd['bill_no']}</b> | วันที่: {_pd['bill_date']}<br>
 ลูกค้า: <b>{_pd['customer_name']}</b> | สถานะ: {_pd['pay_status']}</div>
-<table><tr><th>สินค้า</th><th>จำนวน</th><th>ราคา/ชิ้น</th><th>รวม</th></tr>
+<table><tr><th>รหัส</th><th>สินค้า</th><th>จำนวน</th><th>ราคา/ชิ้น</th><th>รวม</th></tr>
 {_rows_html}{_ship_row}{_cod_row}
 </table>
 <div class='total'>ยอดรวม: {_grand:,.0f} ฿ &nbsp;|&nbsp; PV: {_pd['total_pv']:.0f}</div>
