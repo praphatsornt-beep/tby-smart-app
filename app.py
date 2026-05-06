@@ -3158,7 +3158,7 @@ with tab7:
     <tr><td>ยอดรวม (รวมค่าส่ง)</td><td><b>{total_amount + int(ship_fee_str or 0):,.0f} บาท</b></td></tr>
     <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
     <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
-    <tr><td>⭐ PV รวม</td><td><b style="color:#b8860b">{total_pv:.0f}</b></td></tr>
+    <tr><td>⭐ PV รวม (ยังไม่เปิดบิล)</td><td><b style="color:#b8860b">{unbilled_pv:.0f}</b></td></tr>
   </table>
 </div>"""
 
