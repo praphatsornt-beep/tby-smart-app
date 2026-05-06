@@ -375,7 +375,7 @@ with tab1:
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
                       "m_bill","m_pay","m_delivery","m_cod",
-                      "_cart_base","m_postcode","m_carrier","m_zone",
+                      "_cart_base","m_postcode","m_carrier","m_zone","m_iship_note",
                       "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
                       "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv",
@@ -793,6 +793,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 if "_staged_carrier" in st.session_state:
                     st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
                 m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"], key="m_carrier")
+                m_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key="m_iship_note")
 
                 # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
                 _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
@@ -1088,7 +1089,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         "weight_kg":   (total_w_g + 500) / 1000,
                         "cod_amount":  ceil(collect) if m_cod else 0,
                         "carrier":      m_carrier,
-                        "remark":       f"{customer['name']} {_prod_codes}",
+                        "remark":       " ".join(filter(None, [customer['name'], _prod_codes, st.session_state.get("m_iship_note","").strip()])),
                         "item_detail":  ", ".join(f"{it['name']} x{it['qty']}" for it in _all_items),
                         "products":     [{"name": it["name"], "qty": it["qty"],
                                           "price": float(next((p["price"] for p, q, _ in valid_items if p["id"] == it["product_id"]), 0))}
