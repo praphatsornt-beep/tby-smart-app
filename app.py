@@ -835,6 +835,13 @@ with tab1:
             if m_delivery is None: m_errors.append("เลือกการรับสินค้า")
             if not valid_items:    m_errors.append("กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ")
 
+            if not m_errors and valid_items:
+                _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡"}.get(m_pay or "", "⚪")
+                _deliv_color = {"ส่งพัสดุ": "🚚", "ฝากของ": "📦", "รับแล้ว": "✅"}.get(m_delivery or "", "⚪")
+                _bill_color  = "🟠" if m_bill == "ยังไม่เปิดบิล" else "🟢"
+                _carrier_tag = f" · {m_carrier}" if m_delivery == "ส่งพัสดุ" else ""
+                st.info(f"📋 **{m_customer}** · {_deliv_color} {m_delivery} · {_pay_color} {m_pay} · {_bill_color} {m_bill}{_carrier_tag}")
+
             if st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True, key="m_submit",
                          disabled=bool(m_errors)):
                 customer     = customer_map[m_customer]
