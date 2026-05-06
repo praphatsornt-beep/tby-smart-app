@@ -2673,6 +2673,12 @@ with tab5:
             # ยอดรวม
             if abs(float(_orig["ยอดรวม"]) - float(_edit["ยอดรวม"] or 0)) > 0.01:
                 _ch["total"] = float(_edit["ยอดรวม"] or 0)
+            # ถ้าแก้ สั่ง แต่ไม่ได้แก้ ยอดรวม → คำนวณ ยอดรวมใหม่ อัตโนมัติ
+            if "qty" in _ch and "total" not in _ch:
+                _orig_qty = int(_orig["สั่ง"])
+                if _orig_qty > 0:
+                    _price_per = float(_orig["ยอดรวม"]) / _orig_qty
+                    _ch["total"] = _price_per * _ch["qty"]
             # ลูกค้า
             _new_cust = str(_edit["ลูกค้า"] or "")
             if _new_cust and _new_cust != str(_orig["ลูกค้า"]) and _new_cust in _cust_id_map_h:
