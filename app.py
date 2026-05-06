@@ -1861,7 +1861,7 @@ with tab2:
                                 _lc[6].write(f"{_lr['amount']:,.0f}" if _lr["amount"] else "")
                                 _eid = str(_lr.get("event_id") or "")
                                 _eid_real = _eid.removesuffix("-r").removesuffix("-p")
-                                if _eid and _lc[7].button("🗑️", key=f"del_ev_{_eid}", help="ลบรายการนี้"):
+                                if _eid and _lc[7].button("🗑️", key=f"del_ev_{_li}_{customer_name}", help="ลบรายการนี้"):
                                     db.delete_partial_event(_eid_real)
                                     st.rerun()
                             st.divider()
