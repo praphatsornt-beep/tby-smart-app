@@ -1861,7 +1861,8 @@ with tab2:
                                     for _di, _eid in _del_rows:
                                         _lr2 = _ledger[_di]
                                         _eid_real = _eid.removesuffix("-r").removesuffix("-p")
-                                        _label = f"{_lr2['date'][:10]}  {_lr2['type']}  {_lr2.get('product','') or ''}  {'฿'+f\"{_lr2['amount']:,.0f}\" if _lr2['amount'] else ''}"
+                                        _amt_str = f"฿{_lr2['amount']:,.0f}" if _lr2['amount'] else ""
+                                        _label = f"{_lr2['date'][:10]}  {_lr2['type']}  {_lr2.get('product','') or ''}  {_amt_str}"
                                         if st.button(f"🗑️ {_label}", key=f"del_ev_{_di}_{customer_name}"):
                                             db.delete_partial_event(_eid_real)
                                             st.rerun()
