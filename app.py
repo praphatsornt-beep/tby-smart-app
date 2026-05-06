@@ -2941,11 +2941,33 @@ with tab7:
     else:
         cust_map_p = {c["name"]: c for c in customers_p}
 
-        if "_print_search_stage" in st.session_state:
-            st.session_state["print_search"] = st.session_state.pop("_print_search_stage")
-        _p_q = st.text_input("🔍 ชื่อลูกค้า หรือ เลขที่บิล",
-                              placeholder="เช่น KONAING  หรือ  260427-001",
-                              key="print_search")
+        _pt_c1, _pt_c2 = st.columns([3, 2])
+
+        # ── ช่องลูกค้า (selectbox) ────────────────────────────────────────
+        with _pt_c1:
+            _p_picked = st.session_state.get("_print_cust_picked", "")
+            if _p_picked:
+                _ppx, _ppy = st.columns([5, 1])
+                _ppx.success(f"👤 **{_p_picked}**")
+                if _ppy.button("✕", key="print_cust_clear"):
+                    st.session_state.pop("_print_cust_picked", None)
+                    st.session_state.pop("print_cust_search", None)
+                    st.rerun()
+                sel_p = _p_picked
+            else:
+                _pt_options = ["— เลือกลูกค้า —"] + sorted(cust_map_p.keys())
+                _pt_sel = st.selectbox("👤 ลูกค้า", _pt_options, key="print_cust_search")
+                sel_p = "— เลือก —"
+                if _pt_sel != "— เลือกลูกค้า —":
+                    st.session_state["_print_cust_picked"] = _pt_sel
+                    st.rerun()
+
+        # ── ช่องเลขที่บิล ────────────────────────────────────────────────
+        with _pt_c2:
+            if "_print_search_stage" in st.session_state:
+                st.session_state["print_search"] = st.session_state.pop("_print_search_stage")
+            _p_q = st.text_input("📄 เลขที่บิล", placeholder="เช่น 260427-001", key="print_search")
+
         _is_bill = bool(re.match(r'\d{6}-\d+', (_p_q or "").strip()))
         _is_partial_bill = bool(re.match(r'^\d+', (_p_q or "").strip())) and not _is_bill
 
@@ -2954,38 +2976,14 @@ with tab7:
             sel_p = "—"
         else:
             _sel_bill_no = None
-            _p_picked = st.session_state.get("_print_cust_picked", "")
-            if _p_picked and (_p_q.strip() == "" or _p_picked.upper() not in _p_q.strip().upper()):
-                st.session_state.pop("_print_cust_picked", None)
-                st.session_state.pop("_print_bill_picked", None)
-                _p_picked = ""
-            if _p_picked:
-                _ppx, _ppy = st.columns([5, 1])
-                _ppx.markdown(f"👤 **{_p_picked}**")
-                if _ppy.button("✕", key="print_cust_clear"):
-                    st.session_state.pop("_print_cust_picked", None)
-                    st.rerun()
-                sel_p = _p_picked
-            else:
-                sel_p = "— เลือก —"
-                if _p_q.strip():
-                    if _is_partial_bill:
-                        _bill_sums = db.get_bill_summaries()
-                        _bill_matches = [b for b in _bill_sums if _p_q.strip() in b["bill_no"]][:8]
-                        for _bm in _bill_matches:
-                            _lbl = f"📄 {_bm['bill_no']}  |  {_bm['customer_name']}  |  {_bm['total']:,.0f} ฿  |  {_bm['date']}"
-                            if st.button(_lbl, key=f"pb_sug_{_bm['bill_no']}", use_container_width=True):
-                                st.session_state["_print_search_stage"] = _bm["bill_no"]
-                                st.rerun()
-                    else:
-                        _p_matches = [n for n in cust_map_p if _p_q.strip().upper() in n.upper()][:8]
-                        if len(_p_matches) == 1:
-                            st.session_state["_print_cust_picked"] = _p_matches[0]
-                            st.rerun()
-                        for _pm in _p_matches:
-                            if st.button(f"👤 {_pm}", key=f"pp_{_pm}", use_container_width=True):
-                                st.session_state["_print_cust_picked"] = _pm
-                                st.rerun()
+            if _is_partial_bill and _p_q.strip():
+                _bill_sums = db.get_bill_summaries()
+                _bill_matches = [b for b in _bill_sums if _p_q.strip() in b["bill_no"]][:8]
+                for _bm in _bill_matches:
+                    _lbl = f"📄 {_bm['bill_no']}  |  {_bm['customer_name']}  |  {_bm['total']:,.0f} ฿  |  {_bm['date']}"
+                    if st.button(_lbl, key=f"pb_sug_{_bm['bill_no']}", use_container_width=True):
+                        st.session_state["_print_search_stage"] = _bm["bill_no"]
+                        st.rerun()
 
         filter_p = "ทั้งหมด"
         date_from_p = date_to_p = None
