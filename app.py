@@ -426,7 +426,7 @@ with tab1:
                         st.rerun()
                     m_customer = _cust_picked
                 else:
-                    _cust_options = ["— เลือกลูกค้า —"] + sorted(customer_map.keys())
+                    _cust_options = ["— เลือกลูกค้า —"] + sorted(customer_map.keys(), key=str.casefold)
                     _cust_sel = st.selectbox("ลูกค้า", _cust_options, key="m_cust_search")
                     m_customer = "— เลือกลูกค้า —"
                     if _cust_sel != "— เลือกลูกค้า —":
@@ -1168,7 +1168,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.rerun()
                 _sp_cust = _sp_picked
             else:
-                _sp_options = ["— เลือกลูกค้า —"] + sorted(_sc_map.keys())
+                _sp_options = ["— เลือกลูกค้า —"] + sorted(_sc_map.keys(), key=str.casefold)
                 _sp_sel = st.selectbox("ลูกค้า", _sp_options, key="sp_cust_search")
                 _sp_cust = "— เลือกลูกค้า —"
                 if _sp_sel != "— เลือกลูกค้า —":
@@ -2959,7 +2959,7 @@ with tab7:
                     st.rerun()
                 sel_p = _p_picked
             else:
-                _pt_options = ["— เลือกลูกค้า —"] + sorted(cust_map_p.keys())
+                _pt_options = ["— เลือกลูกค้า —"] + sorted(cust_map_p.keys(), key=str.casefold)
                 _pt_sel = st.selectbox("👤 ลูกค้า", _pt_options, key="print_cust_search")
                 sel_p = "— เลือก —"
                 if _pt_sel != "— เลือกลูกค้า —":
