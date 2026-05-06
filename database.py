@@ -370,7 +370,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
                 "qty_out":  int(_qr),
                 "amount":   0.0,
                 "txn_id":   e["transaction_id"],
-                "event_id": e["id"],
+                "event_id": e["id"] + "-r",
             })
         if float(e.get("amount_paid") or 0) > 0:
             rows.append({
@@ -382,7 +382,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
                 "qty_out":  0,
                 "amount":   float(e["amount_paid"]),
                 "txn_id":   e["transaction_id"],
-                "event_id": e["id"],
+                "event_id": e["id"] + "-p",
             })
     rows.sort(key=lambda r: r["date"])
     return rows
