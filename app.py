@@ -785,6 +785,8 @@ with tab1:
             COD_FEE_RATE = 0.0321  # 3.21%
 
             if valid_items:
+                _item_summary = "  |  ".join(f"**{p['id']}** ×{q}" for p, q, _ in valid_items)
+                st.success(f"🛒 {_item_summary}")
                 total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
                 total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
                 total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items)
