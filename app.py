@@ -2588,6 +2588,9 @@ with tab5:
         for _col in ("เลขที่บิล", "วันที่", "ลูกค้า"):
             chk_df[_col] = chk_df[_col].where(~_is_dup_bill, "")
 
+        # ── placeholder สำหรับปุ่มบันทึกเหนือตาราง (fill หลัง data_editor)
+        _save_placeholder = st.empty()
+
         _editable = ("🗑️", "รับแล้ว", "สั่ง", "ยอดรวม", "จ่ายแล้ว", "ลูกค้า", "สถานะบิล", "สถานะจ่าย")
         _cust_names_h = [c["name"] for c in customers_h]
         _cust_id_map_h = {c["name"]: c["id"] for c in customers_h}
@@ -2673,9 +2676,16 @@ with tab5:
                 _any_changes.append((_i, _tid, _ch))
 
         if _any_changes:
+            with _save_placeholder.container():
+                _sp1, _sp2 = st.columns([3, 1])
+                _sp1.warning(f"⚠️ มีการแก้ไข {len(_any_changes)} รายการ — ยังไม่ได้บันทึก")
+                _top_save = _sp2.button("💾 บันทึกแก้ไข", type="primary",
+                                        use_container_width=True, key="save_all_fix_top")
             _sc1, _sc2 = st.columns([3, 1])
             _sc1.info(f"แก้ไข {len(_any_changes)} รายการ")
-            if _sc2.button("💾 บันทึกแก้ไข", type="primary", use_container_width=True, key="save_all_fix"):
+            _bottom_save = _sc2.button("💾 บันทึกแก้ไข", type="primary",
+                                       use_container_width=True, key="save_all_fix")
+            if _top_save or _bottom_save:
                 for _i, _tid, _ch in _any_changes:
                     if "recv" in _ch:
                         _old_r, _new_r = _ch["recv"]
