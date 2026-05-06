@@ -335,7 +335,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
 
     # partial_events in batches
     all_events = []
-    _batch = 100
+    _batch = 50
     for _i in range(0, len(txn_ids), _batch):
         _chunk = txn_ids[_i:_i + _batch]
         _evts = db.table("partial_events").select(
@@ -407,8 +407,8 @@ def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
         return []
     txn_ids = [t["id"] for t in txns]
     events_by_txn: dict[str, int] = defaultdict(int)
-    for i in range(0, len(txn_ids), 100):
-        chunk = txn_ids[i:i+100]
+    for i in range(0, len(txn_ids), 50):
+        chunk = txn_ids[i:i+50]
         evts = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", chunk).execute().data
         for e in evts:
             events_by_txn[e["transaction_id"]] += e["qty_received"]
@@ -640,8 +640,8 @@ def get_billed_not_received_qty_by_product() -> dict:
         return {}
     txn_ids = [t["id"] for t in txns]
     events_by_txn: dict[str, int] = defaultdict(int)
-    for _i in range(0, len(txn_ids), 100):
-        _chunk = txn_ids[_i:_i + 100]
+    for _i in range(0, len(txn_ids), 50):
+        _chunk = txn_ids[_i:_i + 50]
         _evts = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", _chunk).execute().data
         for e in _evts:
             events_by_txn[e["transaction_id"]] += e["qty_received"]
