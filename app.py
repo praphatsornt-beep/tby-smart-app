@@ -383,73 +383,6 @@ with tab1:
         _cart_ver = st.session_state.get("_cart_version", 0)
         _cart_key = f"m_cart_{_cart_ver}"
 
-        if st.session_state.get("_print_popup"):
-            _pd = st.session_state["_print_popup"]
-            _grand = _pd.get("collect", _pd["total_amt"])
-            _items_txt = ", ".join(f"{it['name']} ×{it['qty']}" for it in _pd.get("items", []))
-            with st.container(border=True):
-                _pb1, _pb2, _pb3, _pb4, _pb5 = st.columns([4, 3, 1, 1, 1])
-                _pb1.markdown(
-                    f"✅ **{_pd['customer_name']}** — บิล `{_pd['bill_no']}` | {_pd['bill_date']}"
-                    f"\n\n_{_items_txt}_"
-                )
-                _pb2.markdown(
-                    f"💰 **{_grand:,.0f} ฿** &nbsp;&nbsp; ⭐ PV {_pd['total_pv']:.0f}"
-                )
-                _popup_line_uid = db.get_customer_line_user_id(_pd.get("customer_id", "")) if _pd.get("customer_id") else ""
-                if _pb3.button("📨 LINE", key="popup_line_btn",
-                               disabled=not bool(_popup_line_uid),
-                               use_container_width=True,
-                               help="ส่งสรุปบิลให้ลูกค้าใน LINE" if _popup_line_uid else "ลูกค้าไม่มี LINE ID"):
-                    _res = line_api.push_bill_summary(
-                        _popup_line_uid, _pd["customer_name"], _pd["bill_no"],
-                        _pd.get("items", []), _pd["total_amt"], _pd["pay_status"]
-                    )
-                    if _res["ok"]:
-                        st.toast("✅ ส่ง LINE แล้ว")
-                    else:
-                        st.error(f"LINE error: {_res['error']}")
-                if _pb4.button("🖨️ พิมพ์", key="popup_print_btn", use_container_width=True):
-                    st.session_state["_popup_show_print"] = not st.session_state.get("_popup_show_print", False)
-                if _pb5.button("✕ ปิด", key="popup_close", use_container_width=True):
-                    del st.session_state["_print_popup"]
-                    st.session_state.pop("_popup_show_print", None)
-                    st.rerun()
-
-            if st.session_state.get("_popup_show_print") and st.session_state.get("_print_popup"):
-                _pit = _pd.get("items", [])
-                _rows_html = "".join(
-                    f"<tr><td>{it['name']}</td><td style='text-align:center'>{it['qty']}</td>"
-                    f"<td style='text-align:right'>{float(it['price']):,.0f}</td>"
-                    f"<td style='text-align:right'>{float(it['total']):,.0f}</td></tr>"
-                    for it in _pit
-                )
-                _ship_row = f"<tr><td>ค่าส่ง ({_pd.get('carrier','')})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
-                _cod_row  = f"<tr><td>COD (3%)</td><td></td><td></td><td style='text-align:right'>{_pd['cod_fee']:,.0f}</td></tr>" if _pd.get("is_cod") else ""
-                _bill_html_popup = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
-<style>
-html,body{{background:#fff!important;color:#000!important;margin:0;padding:0}}
-body{{font-family:'Sarabun',sans-serif;padding:14px;font-size:13px}}
-h3{{margin:0 0 4px;font-size:15px}}
-.info{{font-size:12px;margin-bottom:8px;color:#333}}
-table{{width:100%;border-collapse:collapse;margin:6px 0;font-size:12px}}
-th{{background:#333;color:#fff;padding:4px 6px;text-align:left}}
-td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
-.total{{font-weight:bold;font-size:14px;text-align:right;margin-top:6px}}
-.btn{{display:inline-block;margin:0 0 10px;padding:5px 16px;background:#333;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
-@media print{{.btn{{display:none}}@page{{size:A5;margin:8mm}}}}
-</style></head><body style="background:#fff;color:#000">
-<button class='btn' onclick='window.print()'>🖨️ พิมพ์บิล</button>
-<h3>TBY — ใบเสร็จรับเงิน</h3>
-<div class='info'>บิล: <b>{_pd['bill_no']}</b> | วันที่: {_pd['bill_date']}<br>
-ลูกค้า: <b>{_pd['customer_name']}</b> | สถานะ: {_pd['pay_status']}</div>
-<table><tr><th>สินค้า</th><th>จำนวน</th><th>ราคา/ชิ้น</th><th>รวม</th></tr>
-{_rows_html}{_ship_row}{_cod_row}
-</table>
-<div class='total'>ยอดรวม: {_grand:,.0f} ฿ &nbsp;|&nbsp; PV: {_pd['total_pv']:.0f}</div>
-</body></html>"""
-                components.html(_bill_html_popup, height=420, scrolling=True)
-
         _sale_h1, _sale_h2 = st.columns([6, 1])
         _sale_h1.subheader("บันทึกรายการขาย")
         if _sale_h2.button("🗑️ ล้าง", key="sale_clear_form", use_container_width=True):
@@ -469,99 +402,6 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         else:
             product_map = {p["name"]: p for p in products}
             customer_map = {c["name"]: c for c in customers}
-
-            # ── แสดง tracking ล่าสุดจาก iShip ──────────────────────────────
-            if st.session_state.get("_sale_last_tracking"):
-                _slt = st.session_state["_sale_last_tracking"]
-                _stc1, _stc2 = st.columns([5, 1])
-                _stc1.success(f"✅ iShip สำเร็จ — Tracking: **{_slt}**")
-                if _stc2.button("✕", key="sale_clear_tracking", use_container_width=True):
-                    del st.session_state["_sale_last_tracking"]
-                    st.rerun()
-
-            # ── iShip pending (แสดงหลัง save ส่งพัสดุ) ──────────────────────
-            if st.session_state.get("_iship_pending"):
-                _p = st.session_state["_iship_pending"]
-                addr_full = f"{_p['address_line']} {_p['district']} {_p['amphure']} {_p['province']} {_p['zipcode']}".strip()
-                _sender_name = _p.get("sender_name", "")
-                st.info(
-                    f"{'👤 ลูกค้า: **' + _sender_name + '**  →  ' if _sender_name else ''}"
-                    f"📦 **{_p['dst_name']}**  {_p['dst_phone']}\n\n"
-                    f"{addr_full}\n\n"
-                    f"น้ำหนัก {_p['weight_kg']:.2f} kg  |  COD {_p['cod_amount']:,} ฿"
-                )
-                # เลือกขนส่งก่อนส่ง
-                _carrier_choice = st.radio("ขนส่ง", ["Flash Express", "SPX Express"],
-                                           index=0 if _p["carrier"] == "Flash Express" else 1,
-                                           horizontal=True, key="iship_carrier_pick")
-                _p["carrier"] = _carrier_choice
-
-                col_s1, col_s2 = st.columns([3, 1])
-                if col_s1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="do_iship"):
-                    if iship_api.is_configured():
-                        _api_keys = {"dst_name","dst_phone","address_line","district",
-                                     "amphure","province","zipcode","weight_kg",
-                                     "cod_amount","carrier","remark","item_detail","products"}
-                        _call = {k: v for k, v in _p.items() if k in _api_keys}
-                        with st.spinner("กำลังสร้างรายการใน iShip..."):
-                            resp = iship_api.create_order(**_call)
-                        if resp.get("status"):
-                            _rd = resp.get("data") or {}
-                            tracking = (_rd.get("tracking_code") or _rd.get("tracking_number")
-                                        or resp.get("tracking_code") or resp.get("tracking_number") or "")
-                            st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
-                            # บันทึก shipment record จาก บันทึกขาย
-                            try:
-                                db.create_shipment({
-                                    "customer_id":    _p.get("_customer_id") or None,
-                                    "recipient_name": _p.get("dst_name",""),
-                                    "phone":          _p.get("dst_phone",""),
-                                    "address_line":   _p.get("address_line",""),
-                                    "district":       _p.get("district",""),
-                                    "amphure":        _p.get("amphure",""),
-                                    "province":       _p.get("province",""),
-                                    "postal_code":    _p.get("zipcode",""),
-                                    "carrier":        _p.get("carrier",""),
-                                    "items":          _p.get("_items",[]),
-                                    "tracking_no":    tracking,
-                                    "cod_amount":     _p.get("cod_amount", 0),
-                                    "notes":          "",
-                                })
-                            except Exception:
-                                pass
-                            if tracking:
-                                st.session_state["_sale_last_tracking"] = tracking
-                                if line_api.is_configured():
-                                    _cid = _p.get("_customer_id", "")
-                                    _luid = db.get_customer_line_user_id(_cid) if _cid else ""
-                                    if _luid:
-                                        line_api.push_tracking(
-                                            _luid, _p.get("dst_name",""), tracking,
-                                            _carrier_choice, float(_p.get("cod_amount",0))
-                                        )
-                            del st.session_state["_iship_pending"]
-                        else:
-                            _err_msg = resp.get("message") or resp.get("msg") or str(resp)
-                            if "NotSupportAddress" in _err_msg:
-                                st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
-                                with st.expander("🔍 ดู response จาก iShip"):
-                                    st.json(resp)
-                                    st.write("ที่ส่งไป →", {
-                                        "district": _call.get("district"),
-                                        "amphure":  _call.get("amphure"),
-                                        "province": _call.get("province"),
-                                        "zipcode":  _call.get("zipcode"),
-                                    })
-                            else:
-                                st.error(f"❌ iShip Error: {_err_msg}")
-                                with st.expander("🔍 raw response"):
-                                    st.json(resp)
-                    else:
-                        st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
-                if col_s2.button("ปิด", key="cancel_iship", use_container_width=True):
-                    del st.session_state["_iship_pending"]
-                    st.rerun()
-                st.divider()
 
             # ── ค้นหาลูกค้าจากเบอร์โทร ─────────────────────────────────────
             mc1, mc2 = st.columns([3, 1])
@@ -1133,6 +973,160 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
                 st.caption("⚠️ " + " | ".join(m_errors))
 
+            # ── ผลลัพธ์หลังบันทึก (popup + iShip) ─────────────────────────
+            if st.session_state.get("_print_popup"):
+                _pd = st.session_state["_print_popup"]
+                _grand = _pd.get("collect", _pd["total_amt"])
+                _items_txt = ", ".join(f"{it['name']} ×{it['qty']}" for it in _pd.get("items", []))
+                with st.container(border=True):
+                    _pb1, _pb2, _pb3, _pb4, _pb5 = st.columns([4, 3, 1, 1, 1])
+                    _pb1.markdown(
+                        f"✅ **{_pd['customer_name']}** — บิล `{_pd['bill_no']}` | {_pd['bill_date']}"
+                        f"\n\n_{_items_txt}_"
+                    )
+                    _pb2.markdown(
+                        f"💰 **{_grand:,.0f} ฿** &nbsp;&nbsp; ⭐ PV {_pd['total_pv']:.0f}"
+                    )
+                    _popup_line_uid = db.get_customer_line_user_id(_pd.get("customer_id", "")) if _pd.get("customer_id") else ""
+                    if _pb3.button("📨 LINE", key="popup_line_btn",
+                                   disabled=not bool(_popup_line_uid),
+                                   use_container_width=True,
+                                   help="ส่งสรุปบิลให้ลูกค้าใน LINE" if _popup_line_uid else "ลูกค้าไม่มี LINE ID"):
+                        _res = line_api.push_bill_summary(
+                            _popup_line_uid, _pd["customer_name"], _pd["bill_no"],
+                            _pd.get("items", []), _pd["total_amt"], _pd["pay_status"]
+                        )
+                        if _res["ok"]:
+                            st.toast("✅ ส่ง LINE แล้ว")
+                        else:
+                            st.error(f"LINE error: {_res['error']}")
+                    if _pb4.button("🖨️ พิมพ์", key="popup_print_btn", use_container_width=True):
+                        st.session_state["_popup_show_print"] = not st.session_state.get("_popup_show_print", False)
+                    if _pb5.button("✕ ปิด", key="popup_close", use_container_width=True):
+                        del st.session_state["_print_popup"]
+                        st.session_state.pop("_popup_show_print", None)
+                        st.rerun()
+
+                if st.session_state.get("_popup_show_print") and st.session_state.get("_print_popup"):
+                    _pit = _pd.get("items", [])
+                    _rows_html = "".join(
+                        f"<tr><td>{it['name']}</td><td style='text-align:center'>{it['qty']}</td>"
+                        f"<td style='text-align:right'>{float(it['price']):,.0f}</td>"
+                        f"<td style='text-align:right'>{float(it['total']):,.0f}</td></tr>"
+                        for it in _pit
+                    )
+                    _ship_row = f"<tr><td>ค่าส่ง ({_pd.get('carrier','')})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
+                    _cod_row  = f"<tr><td>COD (3%)</td><td></td><td></td><td style='text-align:right'>{_pd['cod_fee']:,.0f}</td></tr>" if _pd.get("is_cod") else ""
+                    _bill_html_popup = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+html,body{{background:#fff!important;color:#000!important;margin:0;padding:0}}
+body{{font-family:'Sarabun',sans-serif;padding:14px;font-size:13px}}
+h3{{margin:0 0 4px;font-size:15px}}
+.info{{font-size:12px;margin-bottom:8px;color:#333}}
+table{{width:100%;border-collapse:collapse;margin:6px 0;font-size:12px}}
+th{{background:#333;color:#fff;padding:4px 6px;text-align:left}}
+td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
+.total{{font-weight:bold;font-size:14px;text-align:right;margin-top:6px}}
+.btn{{display:inline-block;margin:0 0 10px;padding:5px 16px;background:#333;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
+@media print{{.btn{{display:none}}@page{{size:A5;margin:8mm}}}}
+</style></head><body style="background:#fff;color:#000">
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์บิล</button>
+<h3>TBY — ใบเสร็จรับเงิน</h3>
+<div class='info'>บิล: <b>{_pd['bill_no']}</b> | วันที่: {_pd['bill_date']}<br>
+ลูกค้า: <b>{_pd['customer_name']}</b> | สถานะ: {_pd['pay_status']}</div>
+<table><tr><th>สินค้า</th><th>จำนวน</th><th>ราคา/ชิ้น</th><th>รวม</th></tr>
+{_rows_html}{_ship_row}{_cod_row}
+</table>
+<div class='total'>ยอดรวม: {_grand:,.0f} ฿ &nbsp;|&nbsp; PV: {_pd['total_pv']:.0f}</div>
+</body></html>"""
+                    components.html(_bill_html_popup, height=420, scrolling=True)
+
+            if st.session_state.get("_sale_last_tracking"):
+                _slt = st.session_state["_sale_last_tracking"]
+                _stc1, _stc2 = st.columns([5, 1])
+                _stc1.success(f"✅ iShip สำเร็จ — Tracking: **{_slt}**")
+                if _stc2.button("✕", key="sale_clear_tracking", use_container_width=True):
+                    del st.session_state["_sale_last_tracking"]
+                    st.rerun()
+
+            if st.session_state.get("_iship_pending"):
+                _p = st.session_state["_iship_pending"]
+                addr_full = f"{_p['address_line']} {_p['district']} {_p['amphure']} {_p['province']} {_p['zipcode']}".strip()
+                _sender_name = _p.get("sender_name", "")
+                st.info(
+                    f"{'👤 ลูกค้า: **' + _sender_name + '**  →  ' if _sender_name else ''}"
+                    f"📦 **{_p['dst_name']}**  {_p['dst_phone']}\n\n"
+                    f"{addr_full}\n\n"
+                    f"น้ำหนัก {_p['weight_kg']:.2f} kg  |  COD {_p['cod_amount']:,} ฿"
+                )
+                _carrier_choice = st.radio("ขนส่ง", ["Flash Express", "SPX Express"],
+                                           index=0 if _p["carrier"] == "Flash Express" else 1,
+                                           horizontal=True, key="iship_carrier_pick")
+                _p["carrier"] = _carrier_choice
+                col_s1, col_s2 = st.columns([3, 1])
+                if col_s1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="do_iship"):
+                    if iship_api.is_configured():
+                        _api_keys = {"dst_name","dst_phone","address_line","district",
+                                     "amphure","province","zipcode","weight_kg",
+                                     "cod_amount","carrier","remark","item_detail","products"}
+                        _call = {k: v for k, v in _p.items() if k in _api_keys}
+                        with st.spinner("กำลังสร้างรายการใน iShip..."):
+                            resp = iship_api.create_order(**_call)
+                        if resp.get("status"):
+                            _rd = resp.get("data") or {}
+                            tracking = (_rd.get("tracking_code") or _rd.get("tracking_number")
+                                        or resp.get("tracking_code") or resp.get("tracking_number") or "")
+                            st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
+                            try:
+                                db.create_shipment({
+                                    "customer_id":    _p.get("_customer_id") or None,
+                                    "recipient_name": _p.get("dst_name",""),
+                                    "phone":          _p.get("dst_phone",""),
+                                    "address_line":   _p.get("address_line",""),
+                                    "district":       _p.get("district",""),
+                                    "amphure":        _p.get("amphure",""),
+                                    "province":       _p.get("province",""),
+                                    "postal_code":    _p.get("zipcode",""),
+                                    "carrier":        _p.get("carrier",""),
+                                    "items":          _p.get("_items",[]),
+                                    "tracking_no":    tracking,
+                                    "cod_amount":     _p.get("cod_amount", 0),
+                                    "notes":          "",
+                                })
+                            except Exception:
+                                pass
+                            if tracking:
+                                st.session_state["_sale_last_tracking"] = tracking
+                                if line_api.is_configured():
+                                    _cid = _p.get("_customer_id", "")
+                                    _luid = db.get_customer_line_user_id(_cid) if _cid else ""
+                                    if _luid:
+                                        line_api.push_tracking(
+                                            _luid, _p.get("dst_name",""), tracking,
+                                            _carrier_choice, float(_p.get("cod_amount",0))
+                                        )
+                            del st.session_state["_iship_pending"]
+                        else:
+                            _err_msg = resp.get("message") or resp.get("msg") or str(resp)
+                            if "NotSupportAddress" in _err_msg:
+                                st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
+                                with st.expander("🔍 ดู response จาก iShip"):
+                                    st.json(resp)
+                                    st.write("ที่ส่งไป →", {
+                                        "district": _call.get("district"),
+                                        "amphure":  _call.get("amphure"),
+                                        "province": _call.get("province"),
+                                        "zipcode":  _call.get("zipcode"),
+                                    })
+                            else:
+                                st.error(f"❌ iShip Error: {_err_msg}")
+                                with st.expander("🔍 raw response"):
+                                    st.json(resp)
+                    else:
+                        st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
+                if col_s2.button("ปิด", key="cancel_iship", use_container_width=True):
+                    del st.session_state["_iship_pending"]
+                    st.rerun()
 
     # ─────────────────────────────────────────────────────────────────────────────
 
@@ -1155,79 +1149,6 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             for _k in [f"sp_cart_{_sp_cart_ver_now}"]:
                 st.session_state.pop(_k, None)
             st.rerun()
-
-        # ── แสดง tracking ล่าสุด ─────────────────────────────────────────
-        if st.session_state.get("_sp_last_tracking"):
-            _lt = st.session_state["_sp_last_tracking"]
-            _ltc1, _ltc2 = st.columns([5, 1])
-            _ltc1.success(f"✅ iShip สำเร็จ — Tracking: **{_lt}**")
-            if _ltc2.button("✕", key="sp_clear_tracking", use_container_width=True):
-                del st.session_state["_sp_last_tracking"]
-                st.rerun()
-
-        # ── iShip pending (แสดงหลัง save) ────────────────────────────────
-        if st.session_state.get("_sp_iship_pending"):
-            _spp = st.session_state["_sp_iship_pending"]
-            _spp_addr  = f"{_spp.get('address_line','')} {_spp.get('district','')} {_spp.get('amphure','')} {_spp.get('province','')} {_spp.get('zipcode','')}".strip()
-            _spp_items = ", ".join(f"{it.get('product_id','')} {it.get('name','')} ×{it.get('qty',0)}" for it in (_spp.get("_items") or []))
-            _spp_cust  = _spp.get("_customer_name", "")
-            _cust_line = f"🧑 ลูกค้า: **{_spp_cust}**  \n" if _spp_cust else ""
-            _item_line = f"  \n🛍️ {_spp_items}" if _spp_items else ""
-            st.info(f"{_cust_line}📦 **{_spp['dst_name']}** | ☎ {_spp.get('dst_phone','')}  \n{_spp_addr}{_item_line}")
-            _si1, _si2 = st.columns([3, 1])
-            _sp_car_pick = _si1.radio("ขนส่ง", ["Flash Express", "SPX Express"],
-                                      index=0 if _spp["carrier"] == "Flash Express" else 1,
-                                      horizontal=True, key="sp_iship_carrier")
-            _spp["carrier"] = _sp_car_pick
-            if _si1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="sp_do_iship"):
-                if iship_api.is_configured():
-                    _sp_call = {k: _spp[k] for k in
-                                {"dst_name","dst_phone","address_line","district",
-                                 "amphure","province","zipcode","weight_kg",
-                                 "cod_amount","carrier","remark","item_detail","products"} if k in _spp}
-                    with st.spinner("กำลังสร้างรายการใน iShip..."):
-                        _sp_resp = iship_api.create_order(**_sp_call)
-                    if _sp_resp.get("status"):
-                        _d = _sp_resp.get("data") or {}
-                        _sp_tracking = (_d.get("tracking_code") or _d.get("tracking_number")
-                                        or _sp_resp.get("tracking_code") or _sp_resp.get("tracking_number") or "")
-                        if _spp.get("_shipment_id") and _sp_tracking:
-                            db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
-                        if _sp_tracking and line_api.is_configured():
-                            _sp_cid2 = _spp.get("_customer_id", "")
-                            _sp_luid = db.get_customer_line_user_id(_sp_cid2) if _sp_cid2 else ""
-                            if _sp_luid:
-                                _lr = line_api.push_tracking(
-                                    _sp_luid, _spp.get("dst_name",""), _sp_tracking,
-                                    _spp.get("carrier",""), float(_spp.get("cod_amount",0))
-                                )
-                                if _lr.get("ok") and _spp.get("_shipment_id"):
-                                    db.mark_line_notified(_spp["_shipment_id"])
-                        st.session_state["_sp_last_tracking"] = _sp_tracking
-                        del st.session_state["_sp_iship_pending"]
-                        st.rerun()
-                    else:
-                        _sp_err = _sp_resp.get("message") or str(_sp_resp)
-                        if "NotSupportAddress" in _sp_err:
-                            st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
-                        elif "500" in _sp_err or "DOCTYPE" in _sp_err:
-                            st.warning("⚠️ iShip API ไม่รองรับ COD อัตโนมัติ — กรุณาสร้างใน iShip เอง")
-                            _spp2 = st.session_state.get("_sp_iship_pending", {})
-                            st.code(
-                                f"ผู้รับ: {_spp2.get('dst_name','')} | {_spp2.get('dst_phone','')}\n"
-                                f"ที่อยู่: {_spp2.get('address_line','')} {_spp2.get('district','')} {_spp2.get('amphure','')} {_spp2.get('province','')} {_spp2.get('zipcode','')}\n"
-                                f"ขนส่ง: {_spp2.get('carrier','')} | COD: {_spp2.get('cod_amount',0):,} ฿\n"
-                                f"หมายเหตุ: {_spp2.get('remark','')}",
-                                language=None
-                            )
-                        else:
-                            st.error(f"❌ iShip Error: {_sp_err}")
-                else:
-                    st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
-            if _si2.button("ปิด", key="sp_cancel_iship", use_container_width=True):
-                del st.session_state["_sp_iship_pending"]
-                st.rerun()
-            st.divider()
 
         _sp = db.get_products()
         _sc = db.get_customers()
@@ -1601,6 +1522,77 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 st.rerun()
 
         st.caption("กรอกข้อมูลด้านบนแล้วกด 💾 บันทึกการส่งของ — tracking จะบันทึกอัตโนมัติหลังส่ง iShip")
+
+        # ── ผลลัพธ์หลังบันทึก ─────────────────────────────────────────────
+        if st.session_state.get("_sp_last_tracking"):
+            _lt = st.session_state["_sp_last_tracking"]
+            _ltc1, _ltc2 = st.columns([5, 1])
+            _ltc1.success(f"✅ iShip สำเร็จ — Tracking: **{_lt}**")
+            if _ltc2.button("✕", key="sp_clear_tracking", use_container_width=True):
+                del st.session_state["_sp_last_tracking"]
+                st.rerun()
+
+        if st.session_state.get("_sp_iship_pending"):
+            _spp = st.session_state["_sp_iship_pending"]
+            _spp_addr  = f"{_spp.get('address_line','')} {_spp.get('district','')} {_spp.get('amphure','')} {_spp.get('province','')} {_spp.get('zipcode','')}".strip()
+            _spp_items = ", ".join(f"{it.get('product_id','')} {it.get('name','')} ×{it.get('qty',0)}" for it in (_spp.get("_items") or []))
+            _spp_cust  = _spp.get("_customer_name", "")
+            _cust_line = f"🧑 ลูกค้า: **{_spp_cust}**  \n" if _spp_cust else ""
+            _item_line = f"  \n🛍️ {_spp_items}" if _spp_items else ""
+            st.info(f"{_cust_line}📦 **{_spp['dst_name']}** | ☎ {_spp.get('dst_phone','')}  \n{_spp_addr}{_item_line}")
+            _si1, _si2 = st.columns([3, 1])
+            _sp_car_pick = _si1.radio("ขนส่ง", ["Flash Express", "SPX Express"],
+                                      index=0 if _spp["carrier"] == "Flash Express" else 1,
+                                      horizontal=True, key="sp_iship_carrier")
+            _spp["carrier"] = _sp_car_pick
+            if _si1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="sp_do_iship"):
+                if iship_api.is_configured():
+                    _sp_call = {k: _spp[k] for k in
+                                {"dst_name","dst_phone","address_line","district",
+                                 "amphure","province","zipcode","weight_kg",
+                                 "cod_amount","carrier","remark","item_detail","products"} if k in _spp}
+                    with st.spinner("กำลังสร้างรายการใน iShip..."):
+                        _sp_resp = iship_api.create_order(**_sp_call)
+                    if _sp_resp.get("status"):
+                        _d = _sp_resp.get("data") or {}
+                        _sp_tracking = (_d.get("tracking_code") or _d.get("tracking_number")
+                                        or _sp_resp.get("tracking_code") or _sp_resp.get("tracking_number") or "")
+                        if _spp.get("_shipment_id") and _sp_tracking:
+                            db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
+                        if _sp_tracking and line_api.is_configured():
+                            _sp_cid2 = _spp.get("_customer_id", "")
+                            _sp_luid = db.get_customer_line_user_id(_sp_cid2) if _sp_cid2 else ""
+                            if _sp_luid:
+                                _lr = line_api.push_tracking(
+                                    _sp_luid, _spp.get("dst_name",""), _sp_tracking,
+                                    _spp.get("carrier",""), float(_spp.get("cod_amount",0))
+                                )
+                                if _lr.get("ok") and _spp.get("_shipment_id"):
+                                    db.mark_line_notified(_spp["_shipment_id"])
+                        st.session_state["_sp_last_tracking"] = _sp_tracking
+                        del st.session_state["_sp_iship_pending"]
+                        st.rerun()
+                    else:
+                        _sp_err = _sp_resp.get("message") or str(_sp_resp)
+                        if "NotSupportAddress" in _sp_err:
+                            st.error("❌ ที่อยู่ไม่ถูกต้อง — ตำบล / อำเภอ / จังหวัด ต้องตรงกับฐานข้อมูล iShip")
+                        elif "500" in _sp_err or "DOCTYPE" in _sp_err:
+                            st.warning("⚠️ iShip API ไม่รองรับ COD อัตโนมัติ — กรุณาสร้างใน iShip เอง")
+                            _spp2 = st.session_state.get("_sp_iship_pending", {})
+                            st.code(
+                                f"ผู้รับ: {_spp2.get('dst_name','')} | {_spp2.get('dst_phone','')}\n"
+                                f"ที่อยู่: {_spp2.get('address_line','')} {_spp2.get('district','')} {_spp2.get('amphure','')} {_spp2.get('province','')} {_spp2.get('zipcode','')}\n"
+                                f"ขนส่ง: {_spp2.get('carrier','')} | COD: {_spp2.get('cod_amount',0):,} ฿\n"
+                                f"หมายเหตุ: {_spp2.get('remark','')}",
+                                language=None
+                            )
+                        else:
+                            st.error(f"❌ iShip Error: {_sp_err}")
+                else:
+                    st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
+            if _si2.button("ปิด", key="sp_cancel_iship", use_container_width=True):
+                del st.session_state["_sp_iship_pending"]
+                st.rerun()
 
     with _sub_shiphist:
         st.subheader("ประวัติการส่งของ")
