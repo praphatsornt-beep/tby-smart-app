@@ -2869,22 +2869,26 @@ with tab6:
             })
 
         stock_df = pd.DataFrame(stock_rows)
-        cnt_date = st.date_input("วันที่นับ", value=date.today(), key="stock_cnt_date")
 
-        edited_stock = st.data_editor(
-            stock_df,
-            use_container_width=True,
-            hide_index=True,
-            disabled=["รหัส", "สินค้า", "เบิก", "ฝาก", "ส่วนต่าง", "สถานะ"],
-            column_config={
-                "คอม":      st.column_config.NumberColumn("คอม",     min_value=0, step=1, format="%d"),
-                "นับจริง":  st.column_config.NumberColumn("นับจริง", min_value=0, step=1, format="%d"),
-                "เบิก":     st.column_config.NumberColumn("เบิก",    format="%d"),
-                "ฝาก":      st.column_config.NumberColumn("ฝาก",     format="%d"),
-                "ส่วนต่าง": st.column_config.NumberColumn("ส่วนต่าง", format="%d"),
-            },
-            key="stock_editor",
-        )
+        with st.form("stock_form"):
+            cnt_date = st.date_input("วันที่นับ", value=date.today(), key="stock_cnt_date")
+            edited_stock = st.data_editor(
+                stock_df,
+                use_container_width=True,
+                hide_index=True,
+                disabled=["รหัส", "สินค้า", "เบิก", "ฝาก", "ส่วนต่าง", "สถานะ"],
+                column_config={
+                    "คอม":      st.column_config.NumberColumn("คอม",     min_value=0, step=1, format="%d"),
+                    "นับจริง":  st.column_config.NumberColumn("นับจริง", min_value=0, step=1, format="%d"),
+                    "เบิก":     st.column_config.NumberColumn("เบิก",    format="%d"),
+                    "ฝาก":      st.column_config.NumberColumn("ฝาก",     format="%d"),
+                    "ส่วนต่าง": st.column_config.NumberColumn("ส่วนต่าง", format="%d"),
+                },
+                key="stock_editor",
+            )
+            st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก")
+            _stock_submitted = st.form_submit_button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary")
+
         # ── สรุปยอดรวม ──────────────────────────────────────────────────────
         price_by_name = {p["name"]: float(p.get("price") or 0) for p in products}
         pv_by_name    = {p["name"]: float(p.get("points_per_unit") or 0) for p in products}
@@ -2901,16 +2905,12 @@ with tab6:
         sm4.metric("⭐ คะแนนที่คีย์ได้", f"{total_pv:,.0f} PV")
         st.divider()
 
-        st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก  |  ส่วนต่างอัปเดตหลังกด บันทึก")
-
-        if st.button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary", key="save_stock"):
+        if _stock_submitted:
             saved = 0
             errors = []
-            debug_lines = []
             for pid, (_, row) in zip(product_ids, edited_stock.iterrows()):
                 new_sys  = int(row["คอม"])     if pd.notna(row["คอม"])     else 0
                 new_phys = int(row["นับจริง"]) if pd.notna(row["นับจริง"]) else 0
-                debug_lines.append(f"{row['สินค้า']}: คอม={new_sys}, นับจริง={new_phys}, pid={pid}")
                 try:
                     db.upsert_stock_count({
                         "id":           str(uuid.uuid4()),
