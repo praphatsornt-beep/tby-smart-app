@@ -1846,24 +1846,25 @@ with tab2:
                             _ldf = pd.DataFrame(_ledger)
                             _ldf["qty_net"] = _ldf["qty_in"] - _ldf["qty_out"]
                             _ldf["สินค้าคง"] = _ldf.groupby("product")["qty_net"].cumsum()
-                            # แสดงทีละแถว พร้อมปุ่มลบสำหรับ partial_events
-                            _lcols = st.columns([2,2,2,3,1,1,2,1])
-                            for _h, _w in zip(["วันที่","รายการ","บิล","สินค้า","เข้า","ออก","จ่าย ฿",""], _lcols):
-                                _w.caption(_h)
-                            for _li, _lr in _ldf.iterrows():
-                                _lc = st.columns([2,2,2,3,1,1,2,1])
-                                _lc[0].write(_lr["date"])
-                                _lc[1].write(_lr["type"])
-                                _lc[2].write(_lr["bill_no"] or "")
-                                _lc[3].write(_lr["product"] or "")
-                                _lc[4].write(int(_lr["qty_in"]) if _lr["qty_in"] else "")
-                                _lc[5].write(int(_lr["qty_out"]) if _lr["qty_out"] else "")
-                                _lc[6].write(f"{_lr['amount']:,.0f}" if _lr["amount"] else "")
-                                _eid = str(_lr.get("event_id") or "")
-                                _eid_real = _eid.removesuffix("-r").removesuffix("-p")
-                                if _eid and _lc[7].button("🗑️", key=f"del_ev_{_li}_{customer_name}", help="ลบรายการนี้"):
-                                    db.delete_partial_event(_eid_real)
-                                    st.rerun()
+                            # ตารางแสดงผล
+                            _disp = _ldf[["date","type","bill_no","product","qty_in","qty_out","amount"]].copy()
+                            _disp.columns = ["วันที่","รายการ","บิล","สินค้า","เข้า","ออก","จ่าย ฿"]
+                            _disp["เข้า"]   = _disp["เข้า"].replace(0, "")
+                            _disp["ออก"]    = _disp["ออก"].replace(0, "")
+                            _disp["จ่าย ฿"] = _disp["จ่าย ฿"].apply(lambda x: f"{x:,.0f}" if x else "")
+                            st.dataframe(_disp, use_container_width=True, hide_index=True,
+                                         height=min(35 * len(_disp) + 38, 320))
+                            # ปุ่มลบ — แสดงเฉพาะแถวที่มี event
+                            _del_rows = [(i, str(r.get("event_id") or "")) for i, r in enumerate(_ledger) if r.get("event_id")]
+                            if _del_rows:
+                                with st.expander("🗑️ ลบรายการ"):
+                                    for _di, _eid in _del_rows:
+                                        _lr2 = _ledger[_di]
+                                        _eid_real = _eid.removesuffix("-r").removesuffix("-p")
+                                        _label = f"{_lr2['date'][:10]}  {_lr2['type']}  {_lr2.get('product','') or ''}  {'฿'+f\"{_lr2['amount']:,.0f}\" if _lr2['amount'] else ''}"
+                                        if st.button(f"🗑️ {_label}", key=f"del_ev_{_di}_{customer_name}"):
+                                            db.delete_partial_event(_eid_real)
+                                            st.rerun()
                             st.divider()
                             # summary
                             _qty_sum = _ldf.groupby("product")["qty_net"].sum()
