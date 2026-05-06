@@ -578,7 +578,7 @@ with tab1:
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False),
+                    "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False, width="large"),
                     "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
                 },
                 key=_cart_key,
@@ -1244,7 +1244,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=True,
             key=_sp_cart_key,
             column_config={
-                "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=_sp_prod_keys, required=False),
+                "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=_sp_prod_keys, required=False, width="large"),
                 "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
             },
         )
