@@ -230,11 +230,15 @@ def get_last_payment_date(transaction_ids: list) -> str:
     if not transaction_ids:
         return ""
     try:
-        rows = (get_supabase().table("partial_events")
-                .select("date, amount_paid")
-                .in_("transaction_id", transaction_ids)
-                .gt("amount_paid", 0)
-                .execute().data)
+        db = get_supabase()
+        rows = []
+        for _i in range(0, len(transaction_ids), 50):
+            _chunk = transaction_ids[_i:_i + 50]
+            rows += (db.table("partial_events")
+                     .select("date, amount_paid")
+                     .in_("transaction_id", _chunk)
+                     .gt("amount_paid", 0)
+                     .execute().data)
         if not rows:
             return ""
         return max(r["date"] for r in rows)[:10]
@@ -460,10 +464,12 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
         return pd.DataFrame()
 
     txn_ids = [t["id"] for t in txns]
-    events = db.table("partial_events").select("*").in_("transaction_id", txn_ids).execute().data
+    all_events: list = []
+    for _i in range(0, len(txn_ids), 50):
+        all_events += db.table("partial_events").select("*").in_("transaction_id", txn_ids[_i:_i+50]).execute().data
 
     events_by_txn: dict[str, list] = defaultdict(list)
-    for e in events:
+    for e in all_events:
         events_by_txn[e["transaction_id"]].append(e)
 
     rows = []
@@ -612,10 +618,10 @@ def get_unbilled_received_qty_by_product() -> dict:
     if not txns:
         return {}
     txn_ids = [t["id"] for t in txns]
-    events = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", txn_ids).execute().data
     events_by_txn = defaultdict(int)
-    for e in events:
-        events_by_txn[e["transaction_id"]] += e["qty_received"]
+    for _i in range(0, len(txn_ids), 50):
+        for e in db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", txn_ids[_i:_i+50]).execute().data:
+            events_by_txn[e["transaction_id"]] += e["qty_received"]
     result = defaultdict(int)
     for t in txns:
         received = t["initial_qty_received"] + events_by_txn[t["id"]]
@@ -667,10 +673,12 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
         return pd.DataFrame()
 
     txn_ids = [t["id"] for t in txns]
-    events = db.table("partial_events").select("*").in_("transaction_id", txn_ids).execute().data
+    all_events: list = []
+    for _i in range(0, len(txn_ids), 50):
+        all_events += db.table("partial_events").select("*").in_("transaction_id", txn_ids[_i:_i+50]).execute().data
 
     events_by_txn: dict[str, list] = defaultdict(list)
-    for e in events:
+    for e in all_events:
         events_by_txn[e["transaction_id"]].append(e)
 
     rows = []
