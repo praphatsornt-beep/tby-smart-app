@@ -603,9 +603,9 @@ with tab1:
                 st.session_state["_prev_pay"] = _cur_pay
             ms1, ms2, ms3 = st.columns(3)
             _delivery_opts = ["ส่งพัสดุ", "ฝากของ", "รับแล้ว"]
-            m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery")
-            m_pay  = ms2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD"], horizontal=True, key="m_pay")
-            m_bill = ms3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill")
+            m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery", index=None)
+            m_pay  = ms2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD"], horizontal=True, key="m_pay", index=None)
+            m_bill = ms3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
             m_cod     = (m_pay == "COD")
             m_receipt = "ฝากของ" if m_delivery == "ฝากของ" else "รับของแล้ว"
             m_postcode = ""
@@ -831,11 +831,13 @@ with tab1:
                     vm3.metric("รายการ",   f"{len(valid_items)} สินค้า")
 
             m_errors = []
-            if m_customer == "— เลือกลูกค้า —": m_errors.append("เลือกลูกค้าก่อน")
-            if m_bill is None:     m_errors.append("เลือกสถานะบิล")
-            if m_pay is None:      m_errors.append("เลือกสถานะจ่าย")
-            if m_delivery is None: m_errors.append("เลือกการรับสินค้า")
-            if not valid_items:    m_errors.append("กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ")
+            if m_customer == "— เลือกลูกค้า —": m_errors.append("⚠️ ยังไม่ได้เลือกลูกค้า")
+            if not valid_items:    m_errors.append("⚠️ ยังไม่ได้กรอกสินค้า")
+            if m_delivery is None: m_errors.append("⚠️ ยังไม่ได้เลือก การรับ/สถานะของ")
+            if m_pay is None:      m_errors.append("⚠️ ยังไม่ได้เลือก สถานะจ่าย")
+            if m_bill is None:     m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")
+            if m_errors:
+                st.warning("  \n".join(m_errors))
 
             if not m_errors and valid_items:
                 _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡"}.get(m_pay or "", "⚪")
