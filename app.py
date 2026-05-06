@@ -2941,6 +2941,8 @@ with tab7:
     else:
         cust_map_p = {c["name"]: c for c in customers_p}
 
+        if "_print_search_stage" in st.session_state:
+            st.session_state["print_search"] = st.session_state.pop("_print_search_stage")
         _p_q = st.text_input("🔍 ชื่อลูกค้า หรือ เลขที่บิล",
                               placeholder="เช่น KONAING  หรือ  260427-001",
                               key="print_search")
@@ -2973,7 +2975,7 @@ with tab7:
                         for _bm in _bill_matches:
                             _lbl = f"📄 {_bm['bill_no']}  |  {_bm['customer_name']}  |  {_bm['total']:,.0f} ฿  |  {_bm['date']}"
                             if st.button(_lbl, key=f"pb_sug_{_bm['bill_no']}", use_container_width=True):
-                                st.session_state["print_search"] = _bm["bill_no"]
+                                st.session_state["_print_search_stage"] = _bm["bill_no"]
                                 st.rerun()
                     else:
                         _p_matches = [n for n in cust_map_p if _p_q.strip().upper() in n.upper()][:8]
