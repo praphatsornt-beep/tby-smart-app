@@ -2651,6 +2651,21 @@ with tab5:
                 st.session_state.pop("hist_table", None)
                 st.rerun()
 
+            _sel_unbilled = [i for i in to_del_idx
+                             if i < len(all_df)
+                             and all_df.iloc[i]["สถานะบิล"] == "ยังไม่เปิดบิล"]
+            if _sel_unbilled:
+                ob1, ob2 = st.columns([2, 1])
+                ob1.info(f"📄 {len(_sel_unbilled)} รายการยังไม่เปิดบิล")
+                if ob2.button(f"📄 เปิดบิล {len(_sel_unbilled)} รายการ",
+                               type="primary", use_container_width=True,
+                               key="hist_open_bill_btn"):
+                    for i in _sel_unbilled:
+                        db.update_transaction_status(id_map.iloc[i], bill_status="เปิดบิลแล้ว")
+                    st.success(f"✅ เปิดบิล {len(_sel_unbilled)} รายการแล้ว")
+                    st.session_state.pop("hist_table", None)
+                    st.rerun()
+
         # ตรวจหาการแก้ไขทุกประเภท (เทียบกับ show_df ที่ไม่ blank)
         _any_changes = []
         for _i in range(len(show_df)):
