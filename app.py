@@ -487,7 +487,9 @@ with tab1:
                         )
                         if _cur_delivery == "ส่งพัสดุ":
                             st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด")
-                        else:
+                        elif not _cur_delivery:
+                            st.caption("⬆️ เลือก การรับ/สถานะของ ด้านบนก่อน")
+                        elif _cur_delivery in ("ฝากของ", "รับแล้ว"):
                             if st.button("💾 บันทึกรับของ", key="sale_recv_old_btn", type="primary"):
                                 _saved_rx = 0
                                 for _ri, _rrow in _rx_edit.iterrows():
