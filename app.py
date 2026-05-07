@@ -1525,10 +1525,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "_customer_id":   _sp_cid or "",
                     "_customer_name": _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
                 }
-                for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_track","sp_notes",
-                           "_sp_cust_picked","sp_cust_search","_sp_cart_base","_sp_quick_items",
-                           "_sp_last_rph_fill","_sp_carrier_sig",
-                           "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search"]:
+                for _k in _sp_keys:
                     st.session_state.pop(_k, None)
                 _sp_cv = st.session_state.get("_sp_cart_ver", 0)
                 st.session_state.pop(f"sp_cart_{_sp_cv}", None)
