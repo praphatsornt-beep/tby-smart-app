@@ -973,12 +973,7 @@ with tab1:
                     "pay_status":  actual_pay,
                 }
                 # ล้างฟอร์มสำหรับลูกค้าถัดไป
-                for _k in ["_cust_picked", "m_cust_search", "_adding_cust",
-                           "m_bill", "m_pay", "m_delivery", "m_cod", "m_cod_custom",
-                           "_cart_base", "m_postcode", "m_carrier", "m_zone",
-                           "r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv",
-                           "_carrier_sig", "_prev_pc", "_prev_pay",
-                           "_prev_shipping_cid", "_last_rph_fill"]:
+                for _k in _sale_keys:
                     st.session_state.pop(_k, None)
                 st.session_state.pop(_cart_key, None)
                 st.session_state["_cart_version"] = _cart_ver + 1
