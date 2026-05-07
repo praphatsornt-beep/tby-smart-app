@@ -241,6 +241,33 @@ st.markdown("""
 st.title("🛍️ TBY SMART APP")
 
 
+@st.dialog("✅ ส่ง iShip สำเร็จ", width="large")
+def _show_iship_success_dialog():
+    info = st.session_state.get("_iship_success_info", {})
+    st.success(f"🚚 Tracking: **{info.get('tracking', '')}**")
+    c1, c2 = st.columns(2)
+    if info.get("customer"):
+        c1.markdown(f"**ลูกค้า:** {info['customer']}")
+    c1.markdown(f"**ผู้รับ:** {info.get('dst_name','')}  {info.get('dst_phone','')}")
+    c1.markdown(f"**ที่อยู่:** {info.get('address','')}")
+    c2.markdown(f"**ขนส่ง:** {info.get('carrier','')}")
+    c2.markdown(f"**น้ำหนัก:** {info.get('weight_kg',0):.2f} kg  |  COD: {info.get('cod_amount',0):,} ฿")
+    if info.get("items"):
+        st.markdown("**รายการ:**  " + "  ·  ".join(
+            f"{it.get('name','')} ×{it.get('qty',0)}" for it in info["items"]
+        ))
+    st.divider()
+    if st.button("✅ ตกลง / เริ่มออเดอร์ใหม่", type="primary", use_container_width=True):
+        _tab = info.get("tab", "sale")
+        st.session_state.pop("_iship_success_info", None)
+        st.session_state["_do_clear_after_iship"] = _tab
+        st.rerun()
+
+
+if st.session_state.get("_iship_success_info"):
+    _show_iship_success_dialog()
+
+
 tab_dash, tab1, tab2, tab5, tab6, tab7, tab_fin, tab_ecom, tab4 = st.tabs([
     "🏠 หน้าแรก",
     "📋 บันทึกรายการ",
@@ -385,6 +412,16 @@ with tab1:
 
         _sale_h1, _sale_h2 = st.columns([6, 1])
         _sale_h1.subheader("บันทึกรายการขาย")
+        if st.session_state.get("_do_clear_after_iship") == "sale":
+            st.session_state.pop("_do_clear_after_iship", None)
+            for _k in _sale_keys:
+                st.session_state.pop(_k, None)
+            st.session_state.pop("_print_popup", None)
+            st.session_state.pop("_popup_show_print", None)
+            st.session_state.pop("_sale_last_tracking", None)
+            st.session_state.pop(_cart_key, None)
+            st.session_state["_cart_version"] = _cart_ver + 1
+
         if _sale_h2.button("🗑️ ล้าง", key="sale_clear_form", use_container_width=True):
             for _k in _sale_keys:
                 st.session_state.pop(_k, None)
@@ -1085,7 +1122,6 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             _rd = resp.get("data") or {}
                             tracking = (_rd.get("tracking_code") or _rd.get("tracking_number")
                                         or resp.get("tracking_code") or resp.get("tracking_number") or "")
-                            st.success(f"✅ สร้างรายการสำเร็จ — Tracking: **{tracking}**")
                             try:
                                 db.create_shipment({
                                     "customer_id":    _p.get("_customer_id") or None,
@@ -1104,17 +1140,28 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 })
                             except Exception:
                                 pass
-                            if tracking:
-                                st.session_state["_sale_last_tracking"] = tracking
-                                if line_api.is_configured():
-                                    _cid = _p.get("_customer_id", "")
-                                    _luid = db.get_customer_line_user_id(_cid) if _cid else ""
-                                    if _luid:
-                                        line_api.push_tracking(
-                                            _luid, _p.get("dst_name",""), tracking,
-                                            _carrier_choice, float(_p.get("cod_amount",0))
-                                        )
+                            if tracking and line_api.is_configured():
+                                _cid = _p.get("_customer_id", "")
+                                _luid = db.get_customer_line_user_id(_cid) if _cid else ""
+                                if _luid:
+                                    line_api.push_tracking(
+                                        _luid, _p.get("dst_name",""), tracking,
+                                        _carrier_choice, float(_p.get("cod_amount",0))
+                                    )
                             del st.session_state["_iship_pending"]
+                            st.session_state["_iship_success_info"] = {
+                                "tracking":   tracking,
+                                "tab":        "sale",
+                                "customer":   _p.get("sender_name",""),
+                                "dst_name":   _p.get("dst_name",""),
+                                "dst_phone":  _p.get("dst_phone",""),
+                                "address":    addr_full,
+                                "carrier":    _carrier_choice,
+                                "weight_kg":  _p.get("weight_kg",0),
+                                "cod_amount": _p.get("cod_amount",0),
+                                "items":      _p.get("_items",[]),
+                            }
+                            st.rerun()
                         else:
                             _err_msg = resp.get("message") or resp.get("msg") or str(resp)
                             if "NotSupportAddress" in _err_msg:
@@ -1152,6 +1199,14 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 
         _sc1, _sc2 = st.columns([6, 1])
         _sc1.subheader("บันทึกการส่งของ")
+        if st.session_state.get("_do_clear_after_iship") == "ship":
+            st.session_state.pop("_do_clear_after_iship", None)
+            for _k in _sp_keys:
+                st.session_state.pop(_k, None)
+            st.session_state.pop("_sp_last_tracking", None)
+            st.session_state.pop(f"sp_cart_{_sp_cart_ver_now}", None)
+            st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
+
         if _sc2.button("🗑️ ล้าง", key="sp_clear_form", use_container_width=True):
             for _k in _sp_keys:
                 st.session_state.pop(_k, None)
@@ -1575,8 +1630,20 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 )
                                 if _lr.get("ok") and _spp.get("_shipment_id"):
                                     db.mark_line_notified(_spp["_shipment_id"])
-                        st.session_state["_sp_last_tracking"] = _sp_tracking
                         del st.session_state["_sp_iship_pending"]
+                        _spp_addr = f"{_spp.get('address_line','')} {_spp.get('district','')} {_spp.get('amphure','')} {_spp.get('province','')} {_spp.get('zipcode','')}".strip()
+                        st.session_state["_iship_success_info"] = {
+                            "tracking":   _sp_tracking,
+                            "tab":        "ship",
+                            "customer":   _spp.get("_customer_name",""),
+                            "dst_name":   _spp.get("dst_name",""),
+                            "dst_phone":  _spp.get("dst_phone",""),
+                            "address":    _spp_addr,
+                            "carrier":    _spp.get("carrier",""),
+                            "weight_kg":  _spp.get("weight_kg",0),
+                            "cod_amount": _spp.get("cod_amount",0),
+                            "items":      _spp.get("_items",[]),
+                        }
                         st.rerun()
                     else:
                         _sp_err = _sp_resp.get("message") or str(_sp_resp)
