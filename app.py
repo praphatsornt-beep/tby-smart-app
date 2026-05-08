@@ -416,6 +416,8 @@ with tab1:
             st.session_state.pop("_do_clear_after_iship", None)
             for _k in _sale_keys:
                 st.session_state.pop(_k, None)
+            for _k in ["r_name","r_phone","r_al","r_dt","r_am","r_pv","m_postcode","m_iship_note"]:
+                st.session_state[_k] = ""
             st.session_state.pop("_print_popup", None)
             st.session_state.pop("_popup_show_print", None)
             st.session_state.pop("_sale_last_tracking", None)
@@ -1257,6 +1259,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             st.session_state.pop("_do_clear_after_iship", None)
             for _k in _sp_keys:
                 st.session_state.pop(_k, None)
+            for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_notes","sp_track"]:
+                st.session_state[_k] = ""
             st.session_state.pop("_sp_last_tracking", None)
             st.session_state.pop(f"sp_cart_{_sp_cart_ver_now}", None)
             st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
@@ -1669,6 +1673,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.session_state["_sp_iship_pending"] = _sp_iship_args
                 for _k in _sp_keys:
                     st.session_state.pop(_k, None)
+                for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_notes","sp_track"]:
+                    st.session_state[_k] = ""
                 _sp_cv = st.session_state.get("_sp_cart_ver", 0)
                 st.session_state.pop(f"sp_cart_{_sp_cv}", None)
                 st.session_state["_sp_cart_ver"] = _sp_cv + 1
