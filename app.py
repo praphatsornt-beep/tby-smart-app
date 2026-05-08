@@ -1243,8 +1243,11 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
     # ─────────────────────────────────────────────────────────────────────────────
 
     with _sub_ship:
-        _sp_keys = ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc",
-                    "sp_track","sp_notes","_sp_cust_picked","sp_cust_search",
+        _sp_av   = st.session_state.get("_sp_addr_ver", 0)
+        _sp_keys = [f"sp_rname_v{_sp_av}",f"sp_rphone_v{_sp_av}",f"sp_al_v{_sp_av}",
+                    f"sp_dt_v{_sp_av}",f"sp_am_v{_sp_av}",f"sp_pv_v{_sp_av}",
+                    f"sp_pc_v{_sp_av}",f"sp_track_v{_sp_av}",f"sp_notes_v{_sp_av}",
+                    "_sp_cust_picked","sp_cust_search",
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
                     "sp_carrier","_sp_prev_pc","_sp_staged_carrier","sp_date",
                     "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
@@ -1259,8 +1262,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             st.session_state.pop("_do_clear_after_iship", None)
             for _k in _sp_keys:
                 st.session_state.pop(_k, None)
-            for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_notes","sp_track"]:
-                st.session_state[_k] = ""
+            st.session_state["_sp_addr_ver"] = _sp_av + 1
             st.session_state.pop("_sp_last_tracking", None)
             st.session_state.pop(f"sp_cart_{_sp_cart_ver_now}", None)
             st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
@@ -1269,8 +1271,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if _sc2.button("🗑️ ล้าง", key="sp_clear_form", use_container_width=True):
             for _k in _sp_keys:
                 st.session_state.pop(_k, None)
-            for _k in [f"sp_cart_{_sp_cart_ver_now}"]:
-                st.session_state.pop(_k, None)
+            st.session_state["_sp_addr_ver"] = _sp_av + 1
+            st.session_state.pop(f"sp_cart_{_sp_cart_ver_now}", None)
             st.rerun()
 
         _sp = db.get_products()
@@ -1396,9 +1398,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
                             _sa_dt = (_sa.get("district", "") or "").strip()
                             _sa_pc = (_sa.get("postal_code", "") or "").strip()
-                            st.session_state["sp_rname"]  = _sa.get("recipient_name", "")
-                            st.session_state["sp_rphone"] = _sa.get("phone", "")
-                            st.session_state["sp_al"]     = _sa.get("address_line", "")
+                            st.session_state[f"sp_rname_v{_sp_av}"]  = _sa.get("recipient_name", "")
+                            st.session_state[f"sp_rphone_v{_sp_av}"] = _sa.get("phone", "")
+                            st.session_state[f"sp_al_v{_sp_av}"]     = _sa.get("address_line", "")
                             st.session_state["_fsp_dt"]   = _sa_dt
                             st.session_state["_fsp_am"]   = _sa.get("amphure", "")
                             st.session_state["_fsp_pv"]   = _sa.get("province", "")
@@ -1420,12 +1422,13 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _spc1, _spc2 = st.columns([1, 1])
                 if _spc1.button("✅ ตกลง", key="sp_parse_btn", type="primary"):
                     _sp_parsed = _parse_iship_address(_sp_paste)
-                    for _sk in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv"]:
+                    for _sk in [f"sp_rname_v{_sp_av}",f"sp_rphone_v{_sp_av}",f"sp_al_v{_sp_av}",
+                                f"sp_dt_v{_sp_av}",f"sp_am_v{_sp_av}",f"sp_pv_v{_sp_av}"]:
                         st.session_state[_sk] = ""
                     st.session_state["_fsp_pc"] = ""
-                    if _sp_parsed["dst_name"]:     st.session_state["sp_rname"]  = _sp_parsed["dst_name"]
-                    if _sp_parsed["dst_phone"]:    st.session_state["sp_rphone"] = _sp_parsed["dst_phone"]
-                    if _sp_parsed["address_line"]: st.session_state["sp_al"]     = _sp_parsed["address_line"]
+                    if _sp_parsed["dst_name"]:     st.session_state[f"sp_rname_v{_sp_av}"]  = _sp_parsed["dst_name"]
+                    if _sp_parsed["dst_phone"]:    st.session_state[f"sp_rphone_v{_sp_av}"] = _sp_parsed["dst_phone"]
+                    if _sp_parsed["address_line"]: st.session_state[f"sp_al_v{_sp_av}"]     = _sp_parsed["address_line"]
                     if _sp_parsed["district"]:
                         st.session_state["_fsp_dt"] = _sp_parsed["district"]
                         st.session_state["_sp_last_dt"] = _sp_parsed["district"]
@@ -1442,13 +1445,13 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             st.divider()
 
             # apply staged address fill ก่อน render widgets
-            for _fk, _wk in [("_fsp_dt","sp_dt"),("_fsp_am","sp_am"),
-                              ("_fsp_pv","sp_pv"),("_fsp_pc","sp_pc")]:
+            for _fk, _wk in [("_fsp_dt",f"sp_dt_v{_sp_av}"),("_fsp_am",f"sp_am_v{_sp_av}"),
+                              ("_fsp_pv",f"sp_pv_v{_sp_av}"),("_fsp_pc",f"sp_pc_v{_sp_av}")]:
                 if _fk in st.session_state:
                     st.session_state[_wk] = st.session_state.pop(_fk)
 
             # phone lookup อัตโนมัติ
-            _sp_cur_rph = st.session_state.get("sp_rphone", "")
+            _sp_cur_rph = st.session_state.get(f"sp_rphone_v{_sp_av}", "")
             if len(_sp_cur_rph.strip()) == 10 and st.session_state.get("_sp_last_rph_fill") != _sp_cur_rph.strip():
                 try:
                     _sp_rph_addr = db.get_address_by_phone(_sp_cur_rph.strip())
@@ -1456,15 +1459,15 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     _sp_rph_addr = None
                 st.session_state["_sp_last_rph_fill"] = _sp_cur_rph.strip()
                 if _sp_rph_addr:
-                    for _k, _v in [("sp_rname", _sp_rph_addr.get("recipient_name") or ""),
-                                   ("sp_al",    _sp_rph_addr.get("address_line") or ""),
-                                   ("sp_dt",    _sp_rph_addr.get("district") or ""),
-                                   ("sp_am",    _sp_rph_addr.get("amphure") or ""),
-                                   ("sp_pv",    _sp_rph_addr.get("province") or "")]:
+                    for _k, _v in [(f"sp_rname_v{_sp_av}", _sp_rph_addr.get("recipient_name") or ""),
+                                   (f"sp_al_v{_sp_av}",    _sp_rph_addr.get("address_line") or ""),
+                                   (f"sp_dt_v{_sp_av}",    _sp_rph_addr.get("district") or ""),
+                                   (f"sp_am_v{_sp_av}",    _sp_rph_addr.get("amphure") or ""),
+                                   (f"sp_pv_v{_sp_av}",    _sp_rph_addr.get("province") or "")]:
                         if _v: st.session_state[_k] = _v
                     if _sp_rph_addr.get("postal_code"):
                         _sp_rph_pc = _sp_rph_addr["postal_code"]
-                        st.session_state["sp_pc"] = _sp_rph_pc
+                        st.session_state[f"sp_pc_v{_sp_av}"] = _sp_rph_pc
                         st.session_state["_sp_last_pc"] = _sp_rph_pc
                     _sp_rph_cust = (_sp_rph_addr.get("customers") or {}).get("name", "")
                     if _sp_rph_cust and not st.session_state.get("_sp_cust_picked"):
@@ -1472,13 +1475,13 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.rerun()
 
             _sa1, _sa2 = st.columns(2)
-            _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key="sp_rname")
-            _sp_rphone = _sa2.text_input("เบอร์โทร",      key="sp_rphone")
-            _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key="sp_al")
+            _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key=f"sp_rname_v{_sp_av}")
+            _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}")
+            _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key=f"sp_al_v{_sp_av}")
             _sb1, _sb2, _sb3 = st.columns(3)
-            _sp_dt = _sb1.text_input("ตำบล/แขวง",  key="sp_dt")
-            _sp_am = _sb2.text_input("อำเภอ/เขต",   key="sp_am")
-            _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key="sp_pv")
+            _sp_dt = _sb1.text_input("ตำบล/แขวง",  key=f"sp_dt_v{_sp_av}")
+            _sp_am = _sb2.text_input("อำเภอ/เขต",   key=f"sp_am_v{_sp_av}")
+            _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
             _sp_last_dt = st.session_state.get("_sp_last_dt", "")
             if len((_sp_dt or "").strip()) >= 2 and _sp_dt.strip() != _sp_last_dt:
                 _dt_opts = thai_address.lookup_by_tambon(_sp_dt.strip())
@@ -1492,7 +1495,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         st.session_state["_sp_last_dt"] = _o["tambon"]
                         st.session_state["_sp_last_pc"] = _o["zipcode"]
                         st.rerun()
-            _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key="sp_pc", placeholder="เช่น 10400")
+            _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key=f"sp_pc_v{_sp_av}", placeholder="เช่น 10400")
             _sp_last_pc = st.session_state.get("_sp_last_pc", "")
             if len((_sp_pc or "").strip()) == 5 and _sp_pc.strip() != _sp_last_pc:
                 _sp_pc_opts = thai_address.lookup(_sp_pc.strip())
@@ -1510,13 +1513,13 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 db.upsert_customer_address({
                     "id":             str(uuid.uuid4()),
                     "customer_id":    _sp_cid,
-                    "recipient_name": st.session_state.get("sp_rname", ""),
-                    "phone":          st.session_state.get("sp_rphone", ""),
-                    "address_line":   st.session_state.get("sp_al", ""),
-                    "district":       st.session_state.get("sp_dt", ""),
-                    "amphure":        st.session_state.get("sp_am", ""),
-                    "province":       st.session_state.get("sp_pv", ""),
-                    "postal_code":    st.session_state.get("sp_pc", ""),
+                    "recipient_name": _sp_rname,
+                    "phone":          _sp_rphone,
+                    "address_line":   _sp_al,
+                    "district":       _sp_dt,
+                    "amphure":        _sp_am,
+                    "province":       _sp_pv,
+                    "postal_code":    _sp_pc,
                 })
                 st.success("✅ บันทึกที่อยู่แล้ว")
 
@@ -1550,8 +1553,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sm3.metric("📦 รายการ", f"{len(_sp_items)} สินค้า")
 
         # ── tracking + หมายเหตุ ───────────────────────────────────────────
-        _sp_track = st.text_input("เลข tracking (กรอกทีหลังได้)", key="sp_track", placeholder="TH123456789")
-        _sp_notes = st.text_input("หมายเหตุ", key="sp_notes")
+        _sp_track = st.text_input("เลข tracking (กรอกทีหลังได้)", key=f"sp_track_v{_sp_av}", placeholder="TH123456789")
+        _sp_notes = st.text_input("หมายเหตุ", key=f"sp_notes_v{_sp_av}")
 
         # ── บันทึก ────────────────────────────────────────────────────────
         if st.button("💾 บันทึกการส่งของ", type="primary", use_container_width=True, key="sp_save"):
@@ -1673,8 +1676,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.session_state["_sp_iship_pending"] = _sp_iship_args
                 for _k in _sp_keys:
                     st.session_state.pop(_k, None)
-                for _k in ["sp_rname","sp_rphone","sp_al","sp_dt","sp_am","sp_pv","sp_pc","sp_notes","sp_track"]:
-                    st.session_state[_k] = ""
+                st.session_state["_sp_addr_ver"] = _sp_av + 1
                 _sp_cv = st.session_state.get("_sp_cart_ver", 0)
                 st.session_state.pop(f"sp_cart_{_sp_cv}", None)
                 st.session_state["_sp_cart_ver"] = _sp_cv + 1
