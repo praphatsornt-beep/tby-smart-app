@@ -1247,7 +1247,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         _sp_keys = [f"sp_rname_v{_sp_av}",f"sp_rphone_v{_sp_av}",f"sp_al_v{_sp_av}",
                     f"sp_dt_v{_sp_av}",f"sp_am_v{_sp_av}",f"sp_pv_v{_sp_av}",
                     f"sp_pc_v{_sp_av}",f"sp_track_v{_sp_av}",f"sp_notes_v{_sp_av}",
-                    "_sp_cust_picked","sp_cust_search",
+                    "_sp_cust_picked",f"sp_cust_search_v{_sp_av}",
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
                     "sp_carrier","_sp_prev_pc","_sp_staged_carrier","sp_date",
                     "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
@@ -1293,7 +1293,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _sp_cust = _sp_picked
             else:
                 _sp_options = ["— เลือกลูกค้า —"] + sorted(_sc_map.keys(), key=str.casefold)
-                _sp_sel = st.selectbox("ลูกค้า", _sp_options, key="sp_cust_search")
+                _sp_sel = st.selectbox("ลูกค้า", _sp_options, key=f"sp_cust_search_v{_sp_av}")
                 _sp_cust = "— เลือกลูกค้า —"
                 if _sp_sel != "— เลือกลูกค้า —":
                     st.session_state["_sp_cust_picked"] = _sp_sel
