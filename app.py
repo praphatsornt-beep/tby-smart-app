@@ -694,9 +694,9 @@ with tab1:
                                         if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
                                             _qa_dt = (_sa.get("district", "") or "").strip()
                                             _qa_pc = (_sa.get("postal_code", "") or "").strip()
-                                            st.session_state["r_name"]  = _sa.get("recipient_name", "")
-                                            st.session_state["r_phone"] = _sa.get("phone", "")
-                                            st.session_state["r_al"]    = _sa.get("address_line", "")
+                                            st.session_state["_fr_rname"] = _sa.get("recipient_name", "")
+                                            st.session_state["_fr_rphone"]= _sa.get("phone", "")
+                                            st.session_state["_fr_al"]  = _sa.get("address_line", "")
                                             st.session_state["_fr_dt"]  = _qa_dt
                                             st.session_state["_fr_am"]  = _sa.get("amphure", "")
                                             st.session_state["_fr_pv"]  = _sa.get("province", "")
@@ -717,16 +717,13 @@ with tab1:
                             _pc1, _pc2 = st.columns([1, 1])
                             if _pc1.button("✅ ตกลง", key=f"parse_btn_{_cid}", type="primary"):
                                 _parsed = _parse_iship_address(paste_txt)
-                                for _sk in ["r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv"]:
-                                    st.session_state[_sk] = ""
-                                st.session_state["_staged_pc"] = ""
-                                if _parsed["dst_name"]:     st.session_state["r_name"]  = _parsed["dst_name"]
-                                if _parsed["dst_phone"]:    st.session_state["r_phone"] = _parsed["dst_phone"]
-                                if _parsed["address_line"]: st.session_state["r_al"]    = _parsed["address_line"]
-                                if _parsed["district"]:     st.session_state["r_dt"]    = _parsed["district"]
-                                if _parsed["amphure"]:      st.session_state["r_am"]    = _parsed["amphure"]
-                                if _parsed["province"]:     st.session_state["r_pv"]    = _parsed["province"]
-                                if _parsed["zipcode"]:      st.session_state["_staged_pc"] = _parsed["zipcode"]
+                                st.session_state["_fr_rname"]  = _parsed.get("dst_name", "")
+                                st.session_state["_fr_rphone"] = _parsed.get("dst_phone", "")
+                                st.session_state["_fr_al"]     = _parsed.get("address_line", "")
+                                st.session_state["_fr_dt"]     = _parsed.get("district", "")
+                                st.session_state["_fr_am"]     = _parsed.get("amphure", "")
+                                st.session_state["_fr_pv"]     = _parsed.get("province", "")
+                                st.session_state["_staged_pc"] = _parsed.get("zipcode", "")
                                 st.session_state[_parse_key] = False
                                 st.rerun()
                             if _pc2.button("ยกเลิก", key=f"parse_cancel_{_cid}"):
@@ -761,7 +758,8 @@ with tab1:
                         r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                         col_c, col_d, col_e = st.columns(3)
                         # apply staged address fill ก่อน render
-                        for _fk, _wk in [("_fr_dt","r_dt"),("_fr_am","r_am"),("_fr_pv","r_pv")]:
+                        for _fk, _wk in [("_fr_rname","r_name"),("_fr_rphone","r_phone"),("_fr_al","r_al"),
+                                          ("_fr_dt","r_dt"),("_fr_am","r_am"),("_fr_pv","r_pv")]:
                             if _fk in st.session_state:
                                 st.session_state[_wk] = st.session_state.pop(_fk)
                         r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
@@ -1399,9 +1397,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
                             _sa_dt = (_sa.get("district", "") or "").strip()
                             _sa_pc = (_sa.get("postal_code", "") or "").strip()
-                            st.session_state[f"sp_rname_v{_sp_av}"]  = _sa.get("recipient_name", "")
-                            st.session_state[f"sp_rphone_v{_sp_av}"] = _sa.get("phone", "")
-                            st.session_state[f"sp_al_v{_sp_av}"]     = _sa.get("address_line", "")
+                            st.session_state["_fsp_rname"] = _sa.get("recipient_name", "")
+                            st.session_state["_fsp_rphone"]= _sa.get("phone", "")
+                            st.session_state["_fsp_al"]   = _sa.get("address_line", "")
                             st.session_state["_fsp_dt"]   = _sa_dt
                             st.session_state["_fsp_am"]   = _sa.get("amphure", "")
                             st.session_state["_fsp_pv"]   = _sa.get("province", "")
@@ -1423,21 +1421,15 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _spc1, _spc2 = st.columns([1, 1])
                 if _spc1.button("✅ ตกลง", key="sp_parse_btn", type="primary"):
                     _sp_parsed = _parse_iship_address(_sp_paste)
-                    for _sk in [f"sp_rname_v{_sp_av}",f"sp_rphone_v{_sp_av}",f"sp_al_v{_sp_av}",
-                                f"sp_dt_v{_sp_av}",f"sp_am_v{_sp_av}",f"sp_pv_v{_sp_av}"]:
-                        st.session_state[_sk] = ""
-                    st.session_state["_fsp_pc"] = ""
-                    if _sp_parsed["dst_name"]:     st.session_state[f"sp_rname_v{_sp_av}"]  = _sp_parsed["dst_name"]
-                    if _sp_parsed["dst_phone"]:    st.session_state[f"sp_rphone_v{_sp_av}"] = _sp_parsed["dst_phone"]
-                    if _sp_parsed["address_line"]: st.session_state[f"sp_al_v{_sp_av}"]     = _sp_parsed["address_line"]
-                    if _sp_parsed["district"]:
-                        st.session_state["_fsp_dt"] = _sp_parsed["district"]
-                        st.session_state["_sp_last_dt"] = _sp_parsed["district"]
-                    if _sp_parsed["amphure"]:      st.session_state["_fsp_am"] = _sp_parsed["amphure"]
-                    if _sp_parsed["province"]:     st.session_state["_fsp_pv"] = _sp_parsed["province"]
-                    if _sp_parsed["zipcode"]:
-                        st.session_state["_fsp_pc"] = _sp_parsed["zipcode"]
-                        st.session_state["_sp_last_pc"] = _sp_parsed["zipcode"]
+                    st.session_state["_fsp_rname"] = _sp_parsed.get("dst_name", "")
+                    st.session_state["_fsp_rphone"]= _sp_parsed.get("dst_phone", "")
+                    st.session_state["_fsp_al"]   = _sp_parsed.get("address_line", "")
+                    st.session_state["_fsp_dt"]   = _sp_parsed.get("district", "")
+                    st.session_state["_fsp_am"]   = _sp_parsed.get("amphure", "")
+                    st.session_state["_fsp_pv"]   = _sp_parsed.get("province", "")
+                    st.session_state["_fsp_pc"]   = _sp_parsed.get("zipcode", "")
+                    if _sp_parsed.get("district"):  st.session_state["_sp_last_dt"] = _sp_parsed["district"]
+                    if _sp_parsed.get("zipcode"):   st.session_state["_sp_last_pc"] = _sp_parsed["zipcode"]
                     st.session_state[_sp_parse_key] = False
                     st.rerun()
                 if _spc2.button("ยกเลิก", key="sp_parse_cancel"):
@@ -1446,7 +1438,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             st.divider()
 
             # apply staged address fill ก่อน render widgets
-            for _fk, _wk in [("_fsp_dt",f"sp_dt_v{_sp_av}"),("_fsp_am",f"sp_am_v{_sp_av}"),
+            for _fk, _wk in [("_fsp_rname",f"sp_rname_v{_sp_av}"),("_fsp_rphone",f"sp_rphone_v{_sp_av}"),
+                              ("_fsp_al",f"sp_al_v{_sp_av}"),
+                              ("_fsp_dt",f"sp_dt_v{_sp_av}"),("_fsp_am",f"sp_am_v{_sp_av}"),
                               ("_fsp_pv",f"sp_pv_v{_sp_av}"),("_fsp_pc",f"sp_pc_v{_sp_av}")]:
                 if _fk in st.session_state:
                     st.session_state[_wk] = st.session_state.pop(_fk)
