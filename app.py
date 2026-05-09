@@ -1962,17 +1962,20 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         _calc_customers = db.get_customers()
         _calc_cust_map  = {c["name"]: c for c in _calc_customers}
 
+        _calc_ver = st.session_state.get("_calc_ver", 0)
+
         _calc_col1, _calc_col2 = st.columns([3, 2])
         with _calc_col1:
             _calc_text = st.text_area(
                 "รหัสสินค้า",
-                key="_calc_text",
+                key=f"_calc_text_v{_calc_ver}",
                 height=100,
                 placeholder="TF2581-2 RB2306-1 SH-kg12170 COD",
             )
         with _calc_col2:
             _calc_cust_opts = ["— ไม่ระบุ —"] + sorted(_calc_cust_map.keys(), key=str.casefold)
-            _calc_cust_sel  = st.selectbox("ลูกค้า (ถ้าจะส่ง LINE)", _calc_cust_opts, key="_calc_cust")
+            _calc_cust_sel  = st.selectbox("ลูกค้า (ถ้าจะส่ง LINE)", _calc_cust_opts,
+                                           key=f"_calc_cust_v{_calc_ver}")
             _line_btn_slot  = st.empty()
 
         _cbtn1, _cbtn2 = st.columns([1, 1])
@@ -1983,8 +1986,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _cr = _parse_calc_order(_calc_text, _calc_products)
                 st.session_state["_calc_result"] = _cr
         if _cbtn2.button("🗑️ ล้าง", key="calc_clear_btn", use_container_width=True):
-            for _k in ["_calc_text", "_calc_cust", "_calc_result"]:
-                st.session_state.pop(_k, None)
+            st.session_state.pop("_calc_result", None)
+            st.session_state["_calc_ver"] = _calc_ver + 1
             st.rerun()
 
         _cr = st.session_state.get("_calc_result")
