@@ -1951,6 +1951,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         with _calc_col2:
             _calc_cust_opts = ["— ไม่ระบุ —"] + sorted(_calc_cust_map.keys(), key=str.casefold)
             _calc_cust_sel  = st.selectbox("ลูกค้า (ถ้าจะส่ง LINE)", _calc_cust_opts, key="_calc_cust")
+            _line_btn_slot  = st.empty()
 
         if st.button("🔢 คำนวณ", type="primary", key="calc_btn"):
             if not _calc_text.strip():
@@ -2047,12 +2048,12 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             for o in _rows_exc:
                                 st.caption(f"❌ {o['name']} รับได้สูงสุด {o['max_kg']} kg")
 
-                # ─── ปุ่มส่ง LINE ────────────────────────────────────────
+                # ─── ปุ่มส่ง LINE (แสดงใน slot ข้างชื่อลูกค้า) ───────────
                 if _calc_cust_sel != "— ไม่ระบุ —" and line_api.is_configured():
                     _c_cust  = _calc_cust_map.get(_calc_cust_sel, {})
                     _c_luid  = db.get_customer_line_user_id(_c_cust.get("id", "")) if _c_cust.get("id") else ""
                     if _c_luid:
-                        if st.button(f"📨 ส่ง LINE ให้คุณ {_calc_cust_sel}", type="primary", key="calc_line_btn"):
+                        if _line_btn_slot.button(f"📨 ส่ง LINE ให้คุณ {_calc_cust_sel}", type="primary", key="calc_line_btn", use_container_width=True):
                             _c_msg_lines = [f"📝 รายการสินค้า\n"]
                             _c_msg_lines += _c_lines
                             _c_msg_lines += [f"\n✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg\n",
@@ -2068,7 +2069,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             else:
                                 st.error(f"❌ {_c_res['error']}")
                     else:
-                        st.info(f"👤 {_calc_cust_sel} ยังไม่มี LINE ID (ให้ลูกค้าพิมพ์ สมัคร เบอร์โทร ใน LINE OA)")
+                        _line_btn_slot.caption(f"👤 ยังไม่มี LINE ID")
 
 # Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
 # ─────────────────────────────────────────────────────────────────────────────
