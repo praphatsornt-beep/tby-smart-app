@@ -108,6 +108,27 @@ def push_outstanding(line_user_id: str, customer_name: str,
         return {"ok": False, "error": str(e)}
 
 
+def push_text(line_user_id: str, text: str) -> dict:
+    """ส่งข้อความอิสระหา LINE user"""
+    token = _token()
+    if not token:
+        return {"ok": False, "error": "ไม่มี LINE_CHANNEL_ACCESS_TOKEN ใน secrets"}
+    if not line_user_id:
+        return {"ok": False, "error": "ไม่มี line_user_id"}
+    body = {"to": line_user_id, "messages": [{"type": "text", "text": text}]}
+    try:
+        r = requests.post(
+            LINE_PUSH_URL, json=body,
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return {"ok": True}
+        return {"ok": False, "error": f"LINE API HTTP {r.status_code}: {r.text[:200]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
                       items: list, total_amount: float, pay_status: str) -> dict:
     """ส่งสรุปบิลให้ลูกค้าใน LINE

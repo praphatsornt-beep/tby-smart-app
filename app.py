@@ -398,7 +398,7 @@ def _pick_carrier(pc: str, kg: float = 0) -> str:
 
 
 with tab1:
-    _sub_sale, _sub_ship, _sub_shiphist = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง"])
+    _sub_sale, _sub_ship, _sub_shiphist, _sub_calc = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง", "🔢 คำนวณยอด"])
 
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
@@ -1895,6 +1895,142 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.rerun()
         else:
             st.info("ยังไม่มีประวัติการส่งของ")
+
+    with _sub_calc:
+        st.subheader("คำนวณยอด")
+        st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ เช่น `TF2581-2 RB2306-1 SH-kg12170 COD`")
+
+        def _parse_quick_order(text: str, products: list) -> dict:
+            product_map = {p["id"].upper(): p for p in products}
+            tokens = text.strip().upper().split()
+            items, ship_zip, manual_ship, is_cod, errors = [], "", -1, False, []
+            for token in tokens:
+                if token == "COD":
+                    is_cod = True
+                    continue
+                if "-" not in token:
+                    continue
+                parts = token.split("-", 1)
+                code, val = parts[0], parts[1]
+                if code == "SH":
+                    if val.startswith("KG"):
+                        z = val[2:]
+                        if len(z) == 5:
+                            ship_zip = z
+                    else:
+                        try:
+                            manual_ship = float(val)
+                        except Exception:
+                            pass
+                else:
+                    try:
+                        qty = float(val)
+                        if qty > 0:
+                            if code in product_map:
+                                items.append({"product": product_map[code], "qty": qty})
+                            else:
+                                errors.append(f"ไม่พบรหัส {code}")
+                    except Exception:
+                        pass
+            return {"items": items, "ship_zip": ship_zip,
+                    "manual_ship": manual_ship, "is_cod": is_cod, "errors": errors}
+
+        _calc_products  = db.get_products()
+        _calc_customers = db.get_customers()
+        _calc_cust_map  = {c["name"]: c for c in _calc_customers}
+
+        _calc_col1, _calc_col2 = st.columns([3, 2])
+        with _calc_col1:
+            _calc_text = st.text_area(
+                "รหัสสินค้า",
+                key="_calc_text",
+                height=100,
+                placeholder="TF2581-2 RB2306-1 SH-kg12170 COD",
+            )
+        with _calc_col2:
+            _calc_cust_opts = ["— ไม่ระบุ —"] + sorted(_calc_cust_map.keys(), key=str.casefold)
+            _calc_cust_sel  = st.selectbox("ลูกค้า (ถ้าจะส่ง LINE)", _calc_cust_opts, key="_calc_cust")
+
+        if st.button("🔢 คำนวณ", type="primary", key="calc_btn"):
+            if not _calc_text.strip():
+                st.warning("กรุณากรอกรหัสสินค้าก่อน")
+            else:
+                _cr = _parse_quick_order(_calc_text, _calc_products)
+                st.session_state["_calc_result"] = _cr
+
+        _cr = st.session_state.get("_calc_result")
+        if _cr:
+            if _cr["errors"]:
+                for _e in _cr["errors"]:
+                    st.error(f"⚠️ {_e}")
+
+            if _cr["items"]:
+                st.divider()
+                _c_total_amt = 0.0
+                _c_total_pv  = 0.0
+                _c_total_w   = 0
+                _c_lines     = []
+                for _ci in _cr["items"]:
+                    _cp  = _ci["product"]
+                    _cq  = int(_ci["qty"])
+                    _camt = float(_cp["price"]) * _cq
+                    _cpv  = float(_cp.get("points_per_unit", 0)) * _cq
+                    _cw   = int(_cp.get("weight_grams", 0)) * _cq
+                    _c_total_amt += _camt
+                    _c_total_pv  += _cpv
+                    _c_total_w   += _cw
+                    st.markdown(f"📦 **[{_cp['id'].upper()}]** {_cp['name']} ×{_cq} &nbsp; `{_cq} × {float(_cp['price']):,.0f} = {_camt:,.0f}`")
+                    _c_lines.append(f"📦 [{_cp['id'].upper()}] {_cp['name']} ×{_cq}  {_camt:,.0f}฿")
+
+                _c_weight_kg = (_c_total_w + 500) / 1000
+                st.markdown(f"✨ **{_c_total_pv:,.0f} PV** &nbsp;|&nbsp; ⚖️ {_c_weight_kg:.2f} kg")
+                st.divider()
+
+                _c_ship_fee = 0.0
+                _c_ship_label = ""
+                if _cr["ship_zip"]:
+                    _c_fees = carrier_fees(_c_total_w, _cr["ship_zip"])
+                    if _c_fees:
+                        _fl = _c_fees["Flash Express"]["total"]
+                        _sx = _c_fees["SPX Express"]["total"]
+                        _c_ship_fee  = min(_fl, _sx)
+                        _c_ship_label = f"Flash Express" if _fl <= _sx else "SPX Express"
+                elif _cr["manual_ship"] >= 0:
+                    _c_ship_fee  = _cr["manual_ship"]
+                    _c_ship_label = "ระบุเอง"
+
+                _c_cod_fee   = ceil((_c_total_amt + _c_ship_fee) * 0.0321) if _cr["is_cod"] else 0
+                _c_grand     = _c_total_amt + _c_ship_fee + _c_cod_fee
+
+                st.markdown(f"💵 สินค้า: **{_c_total_amt:,.0f} ฿**")
+                if _c_ship_fee > 0:
+                    st.markdown(f"🚚 ค่าส่ง: **{_c_ship_fee:,.0f} ฿** ({_c_ship_label})")
+                if _c_cod_fee > 0:
+                    st.markdown(f"➕ COD 3.21%: **{_c_cod_fee:,.0f} ฿**")
+                st.markdown(f"### 💰 รวม: {_c_grand:,.0f} ฿")
+
+                # ─── ปุ่มส่ง LINE ────────────────────────────────────────
+                if _calc_cust_sel != "— ไม่ระบุ —" and line_api.is_configured():
+                    _c_cust  = _calc_cust_map.get(_calc_cust_sel, {})
+                    _c_luid  = db.get_customer_line_user_id(_c_cust.get("id", "")) if _c_cust.get("id") else ""
+                    if _c_luid:
+                        if st.button(f"📨 ส่ง LINE ให้คุณ {_calc_cust_sel}", type="primary", key="calc_line_btn"):
+                            _c_msg_lines = [f"📝 รายการสินค้า\n"]
+                            _c_msg_lines += _c_lines
+                            _c_msg_lines += [f"\n✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg\n",
+                                             f"💵 สินค้า: ฿{_c_total_amt:,.0f}"]
+                            if _c_ship_fee > 0:
+                                _c_msg_lines.append(f"🚚 ค่าส่ง: ฿{_c_ship_fee:,.0f} ({_c_ship_label})")
+                            if _c_cod_fee > 0:
+                                _c_msg_lines.append(f"➕ COD 3.21%: ฿{_c_cod_fee:,.0f}")
+                            _c_msg_lines.append(f"💰 รวม: ฿{_c_grand:,.0f}")
+                            _c_res = line_api.push_text(_c_luid, "\n".join(_c_msg_lines))
+                            if _c_res["ok"]:
+                                st.success(f"✅ ส่ง LINE ให้ {_calc_cust_sel} แล้ว")
+                            else:
+                                st.error(f"❌ {_c_res['error']}")
+                    else:
+                        st.info(f"👤 {_calc_cust_sel} ยังไม่มี LINE ID (ให้ลูกค้าพิมพ์ สมัคร เบอร์โทร ใน LINE OA)")
 
 # Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
 # ─────────────────────────────────────────────────────────────────────────────
