@@ -59,6 +59,11 @@ FLASH_ZONES: dict[str, str] = {
     "71180": "remote",  # กาญจนบุรี ทองผาภูมิ
     "71240": "remote",  # กาญจนบุรี สังขละบุรี
 
+    # ─── พื้นที่ท่องเที่ยว พังงา (เพิ่มเติม) ─────────────────────────────────
+    "82110": "tourist",  # พังงา ท้ายเหมือง
+    "82130": "tourist",  # พังงา ท้ายเหมือง (กะปง)
+    "82140": "tourist",  # พังงา เมืองพังงา
+
     # ─── พื้นที่ห่างไกล ภาคใต้ ───────────────────────────────────────────────
     "82150": "remote",  # พังงา คุระบุรี
     # ปัตตานี
@@ -68,6 +73,8 @@ FLASH_ZONES: dict[str, str] = {
     # ยะลา
     "95000": "remote", "95110": "remote", "95120": "remote", "95130": "remote",
     "95140": "remote", "95150": "remote", "95160": "remote", "95170": "remote",
+    # ปัตตานี เพิ่มเติม
+    "94190": "remote",
     # นราธิวาส
     "96000": "remote", "96110": "remote", "96120": "remote", "96130": "remote",
     "96140": "remote", "96150": "remote", "96160": "remote", "96170": "remote",
@@ -81,13 +88,32 @@ ZONE_LABELS = {
     "remote":         ("พื้นที่ห่างไกล",           50),
 }
 
+# ค่าส่งตามน้ำหนัก สำหรับพื้นที่ท่องเที่ยว/เกาะ (Flash Express)
+# tourist:        ≤7kg=+30, 7–20kg=+100, >20kg=+200
+# tourist_island: ≤7kg=+60, 7–20kg=+100, >20kg=+200
+_TOURIST_TIERS = {
+    "tourist":        [(7, 30), (20, 100), (999, 200)],
+    "tourist_island": [(7, 60), (20, 100), (999, 200)],
+}
+
 
 def lookup_zone(postcode: str) -> str:
     return FLASH_ZONES.get(str(postcode).strip(), "normal")
 
 
 def zone_surcharge(postcode: str) -> int:
+    """คืนค่าส่วนเพิ่มสำหรับ ≤7kg (ใช้เพื่อแสดงผล)"""
     return ZONE_LABELS[lookup_zone(postcode)][1]
+
+
+def zone_surcharge_by_weight(postcode: str, weight_kg: float) -> int:
+    """คืนค่าส่วนเพิ่ม Flash Express ตามน้ำหนักจริง"""
+    zone = lookup_zone(postcode)
+    if zone in _TOURIST_TIERS:
+        for threshold, surcharge in _TOURIST_TIERS[zone]:
+            if weight_kg <= threshold:
+                return surcharge
+    return ZONE_LABELS.get(zone, ("", 0))[1]
 
 
 # ─── SPX Express — พื้นที่ห่างไกล (+50) ───────────────────────────────────────
@@ -102,7 +128,7 @@ SPX_REMOTE: set[str] = {
     "81120", "81150", "81210",
     "82160",
     "84280", "84360", "84370",
-    "94120", "94230",
+    "94120", "94190", "94230",
     "95110", "95130", "95150", "95160", "95170",
     "96110", "96120", "96130", "96140", "96150",
     "96160", "96190", "96210", "96220",
@@ -127,7 +153,7 @@ def carrier_fees(weight_grams: float, postcode: str, box_weight_g: int = 500) ->
     kg   = (weight_grams + box_weight_g) / 1000
     base = 39 + max(0, ceil(kg - 5)) * 10
 
-    flash_sur  = zone_surcharge(postcode)
+    flash_sur  = zone_surcharge_by_weight(postcode, kg)  # weight-based tiers
     spx_sur    = spx_surcharge(postcode)
     flash_zone = lookup_zone(postcode)
 
