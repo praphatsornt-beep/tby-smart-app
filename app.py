@@ -1017,6 +1017,7 @@ with tab1:
                                     "tracking_no":    tracking,
                                     "cod_amount":     ceil(collect) if m_cod else 0,
                                     "notes":          "",
+                                    "source":         "sale",
                                 })
                             except Exception:
                                 pass
@@ -1194,6 +1195,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                     "tracking_no":    tracking,
                                     "cod_amount":     _p.get("cod_amount", 0),
                                     "notes":          "",
+                                    "source":         "sale",
                                 })
                             except Exception:
                                 pass
@@ -1580,6 +1582,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         "tracking_no":    _sp_track.strip(),
                         "cod_amount":     0,
                         "notes":          _sp_notes.strip(),
+                        "source":         "ship",
                     })
                 except Exception as _e:
                     st.error(f"❌ บันทึกไม่สำเร็จ: {_e}")
@@ -1806,8 +1809,16 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if _sh_cod_map:
             _sh_cod_col.caption(f"✅ COD โอนแล้ว {len(_sh_cod_map)} tracking")
 
+        # ── filter ลูกค้า ─────────────────────────────────────────────────
+        _sh_customers = db.get_customers()
+        _sh_cust_map  = {c["name"]: c["id"] for c in _sh_customers}
+        _sh_cust_opts = ["— ทั้งหมด —"] + sorted(_sh_cust_map.keys(), key=str.casefold)
+        _sh_cust_sel  = st.selectbox("ลูกค้า", _sh_cust_opts, key="sh_cust_filter",
+                                     label_visibility="collapsed")
+        _sh_filter_cid = _sh_cust_map.get(_sh_cust_sel) if _sh_cust_sel != "— ทั้งหมด —" else None
+
         try:
-            _sh_all = db.get_shipments()
+            _sh_all = db.get_shipments(customer_id=_sh_filter_cid)
         except Exception:
             st.warning("⚙️ ยังไม่ได้สร้าง table shipments")
             _sh_all = []
@@ -1837,8 +1848,15 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     return "❌"
                 return "🚚"
 
+            def _src_icon(r):
+                s = r.get("source", "")
+                if s == "sale": return "🛒"
+                if s == "ship": return "📦"
+                return "—"
+
             _sh_df   = pd.DataFrame([{
                 "ลบ":              False,
+                "แหล่ง":           _src_icon(r),
                 "วันที่/เวลา":     _to_bkk(r.get("created_at") or ""),
                 "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
                 "COD":             float(r.get("cod_amount") or 0),
@@ -1863,11 +1881,13 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sh_edit = st.data_editor(
                 _sh_df,
                 hide_index=True, use_container_width=False, key="sh_hist_tbl",
-                disabled=["วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
+                disabled=["แหล่ง","วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
                           "รายการ","ขนส่ง","COD","💸","สถานะส่ง","🔗","หมายเหตุ"],
                 column_config={
                     "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                    "แหล่ง":    st.column_config.TextColumn("แหล่ง", width="small",
+                                    help="🛒 = บันทึกขาย  📦 = ส่งของ"),
                     "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
                     "💸":       st.column_config.TextColumn("💸", width="small"),
                     "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width="medium"),
