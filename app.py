@@ -2383,7 +2383,7 @@ with tab4:
     # ── Backup ──────────────────────────────────────────────────────────────
     with st.expander("💾 Backup ข้อมูล", expanded=False):
         st.caption("ดาวน์โหลดข้อมูลทั้งหมดเป็นไฟล์ ZIP (แนะนำทำทุกสิ้นเดือน)")
-        if st.button("📦 สร้าง Backup ZIP", type="primary"):
+        if st.button("📦 สร้าง Backup ZIP", type="primary", key="backup_zip_btn"):
             _tables = {
                 "customers":         db.get_supabase().table("customers").select("*").execute().data,
                 "transactions":      db.get_supabase().table("transactions").select("*").execute().data,
@@ -2406,7 +2406,42 @@ with tab4:
                 mime="application/zip",
                 type="primary",
                 use_container_width=True,
+                key="backup_zip_dl",
             )
+
+    with st.expander("📊 Export ยอดขายประจำเดือน", expanded=False):
+        st.caption("export รายการขายทั้งหมดของเดือนที่เลือก พร้อมยอดชำระและยอดค้าง")
+        _exp_col1, _exp_col2 = st.columns(2)
+        _exp_year  = _exp_col1.number_input("ปี (พ.ศ.)", min_value=2567, max_value=2580,
+                                             value=date.today().year + 543, step=1, key="exp_year")
+        _exp_month = _exp_col2.selectbox("เดือน", list(range(1, 13)),
+                                          format_func=lambda m: ["ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.",
+                                                                  "ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."][m-1],
+                                          index=date.today().month - 1, key="exp_month")
+        _exp_year_ad = _exp_year - 543
+        if st.button("📋 สร้าง Export", type="primary", key="exp_sales_btn"):
+            _all_df = db.get_all_transactions_df()
+            if _all_df.empty:
+                st.warning("ไม่มีข้อมูล")
+            else:
+                _all_df["_dt"] = pd.to_datetime(_all_df["วันที่"], errors="coerce")
+                _monthly = _all_df[
+                    (_all_df["_dt"].dt.year  == _exp_year_ad) &
+                    (_all_df["_dt"].dt.month == _exp_month)
+                ].drop(columns=["_dt", "id", "เคลียร์แล้ว", "last_payment_date"], errors="ignore")
+                if _monthly.empty:
+                    st.warning(f"ไม่มีข้อมูลเดือน {_exp_month}/{_exp_year_ad}")
+                else:
+                    _exp_fname = f"sales_{_exp_year_ad}{_exp_month:02d}.csv"
+                    st.download_button(
+                        label=f"⬇️ ดาวน์โหลด {_exp_fname} ({len(_monthly)} รายการ)",
+                        data=_monthly.to_csv(index=False).encode("utf-8-sig"),
+                        file_name=_exp_fname,
+                        mime="text/csv",
+                        type="primary",
+                        use_container_width=True,
+                        key="exp_sales_dl",
+                    )
     st.divider()
 
     sub1, sub2, sub3, sub4 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "🗑️ ลบบิล"])
