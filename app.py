@@ -2003,12 +2003,14 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _c_cod_fee   = ceil((_c_total_amt + _c_ship_fee) * 0.0321) if _cr["is_cod"] else 0
                 _c_grand     = _c_total_amt + _c_ship_fee + _c_cod_fee
 
-                st.markdown(f"💵 สินค้า: **{_c_total_amt:,.0f} ฿**")
-                if _c_ship_fee > 0:
-                    st.markdown(f"🚚 ค่าส่ง: **{_c_ship_fee:,.0f} ฿** ({_c_ship_label})")
-                if _c_cod_fee > 0:
-                    st.markdown(f"➕ COD 3.21%: **{_c_cod_fee:,.0f} ฿**")
-                st.markdown(f"### 💰 รวม: {_c_grand:,.0f} ฿")
+                _det_col, _tot_col = st.columns([2, 1])
+                with _det_col:
+                    st.markdown(f"💵 สินค้า: **{_c_total_amt:,.0f} ฿**")
+                    if _c_ship_fee > 0:
+                        st.markdown(f"🚚 ค่าส่ง: **{_c_ship_fee:,.0f} ฿** ({_c_ship_label})")
+                    if _c_cod_fee > 0:
+                        st.markdown(f"➕ COD 3.21%: **{_c_cod_fee:,.0f} ฿**")
+                _tot_col.metric("💰 รวม", f"{_c_grand:,.0f} ฿")
 
                 # ─── ตารางเปรียบเทียบค่าส่งทุกขนส่ง ──────────────────────
                 if _cr["ship_zip"]:
