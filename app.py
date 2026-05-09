@@ -1975,12 +1975,17 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _calc_cust_sel  = st.selectbox("ลูกค้า (ถ้าจะส่ง LINE)", _calc_cust_opts, key="_calc_cust")
             _line_btn_slot  = st.empty()
 
-        if st.button("🔢 คำนวณ", type="primary", key="calc_btn"):
+        _cbtn1, _cbtn2 = st.columns([1, 1])
+        if _cbtn1.button("🔢 คำนวณ", type="primary", key="calc_btn", use_container_width=True):
             if not _calc_text.strip():
                 st.warning("กรุณากรอกรหัสสินค้าก่อน")
             else:
                 _cr = _parse_calc_order(_calc_text, _calc_products)
                 st.session_state["_calc_result"] = _cr
+        if _cbtn2.button("🗑️ ล้าง", key="calc_clear_btn", use_container_width=True):
+            for _k in ["_calc_text", "_calc_cust", "_calc_result"]:
+                st.session_state.pop(_k, None)
+            st.rerun()
 
         _cr = st.session_state.get("_calc_result")
         if _cr:
