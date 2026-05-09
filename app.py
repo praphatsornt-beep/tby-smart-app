@@ -1581,8 +1581,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         "cod_amount":     0,
                         "notes":          _sp_notes.strip(),
                     })
-                except Exception:
-                    st.error("❌ ยังไม่ได้สร้าง table shipments — รัน SQL ใน supabase_setup.sql ก่อน")
+                except Exception as _e:
+                    st.error(f"❌ บันทึกไม่สำเร็จ: {_e}")
                     st.stop()
                 # ตั้ง iShip pending เพื่อส่งขนส่ง
                 _sp_item_codes = " ".join(f"{it['product_id']}-{it['qty']}" for it in _sp_items)
