@@ -398,7 +398,7 @@ def _pick_carrier(pc: str, kg: float = 0) -> str:
 
 
 with tab1:
-    _sub_sale, _sub_ship, _sub_shiphist, _sub_calc = st.tabs(["📝 บันทึกขาย", "📦 ส่งของ", "📋 ประวัติการส่ง", "🔢 คำนวณยอด"])
+    _sub_calc, _sub_ship, _sub_sale, _sub_shiphist = st.tabs(["🔢 คำนวณยอด", "📦 ส่งของ", "📝 บันทึกขาย", "📋 ประวัติการส่ง"])
 
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
