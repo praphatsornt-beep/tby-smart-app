@@ -2020,21 +2020,25 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     _rows_ok  = [o for o in _opts if not o["exceeds_max"]]
                     _rows_exc = [o for o in _opts if o["exceeds_max"]]
                     _cmp_data = []
-                    for o in _rows_ok:
-                        _sur_txt = f"+{o['surcharge']} ({o['sur_label']})" if o["surcharge"] else "-"
+                    for _ci, o in enumerate(_rows_ok):
+                        _sur_txt  = f"+{o['surcharge']} ({o['sur_label']})" if o["surcharge"] else "-"
                         _fuel_txt = f"+{o['fuel']}" if o["fuel"] else "-"
                         _cod_txt  = f"+{o['cod_fee']:,}" if o["cod_fee"] else "-"
+                        _badge    = "🥇 " if _ci == 0 else ""
                         _cmp_data.append({
-                            "ขนส่ง":     o["name"],
-                            "ค่าส่ง":    o["base"],
+                            "ขนส่ง":      _badge + o["name"],
+                            "ค่าส่ง":     o["base"],
                             "พื้นที่พิเศษ": _sur_txt,
-                            "น้ำมัน":    _fuel_txt,
-                            "รวม (฿)":   o["total"],
-                            "COD":       _cod_txt,
+                            "น้ำมัน":     _fuel_txt,
+                            "รวม (฿)":    o["total"],
+                            "COD":        _cod_txt,
                         })
                     if _cmp_data:
                         _cmp_df = pd.DataFrame(_cmp_data)
-                        st.dataframe(_cmp_df, hide_index=True, use_container_width=True,
+                        def _highlight_cheapest(row):
+                            return ["background-color: #1a4a1a; font-weight: bold" if row.name == 0 else "" for _ in row]
+                        _styled = _cmp_df.style.apply(_highlight_cheapest, axis=1)
+                        st.dataframe(_styled, hide_index=True, use_container_width=True,
                                      column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
                     if _rows_exc:
                         with st.expander(f"⚠️ เกินน้ำหนักสูงสุด ({len(_rows_exc)} ขนส่ง)"):
