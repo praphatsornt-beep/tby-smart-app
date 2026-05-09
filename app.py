@@ -1982,7 +1982,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     _c_total_pv  += _cpv
                     _c_total_w   += _cw
                     st.markdown(f"📦 **[{_cp['id'].upper()}]** {_cp['name']} ×{_cq} &nbsp; `{_cq} × {float(_cp['price']):,.0f} = {_camt:,.0f}`")
-                    _c_lines.append(f"📦 [{_cp['id'].upper()}] {_cp['name']} ×{_cq}  {_camt:,.0f}฿")
+                    _c_lines.append(f"📦 [{_cp['id'].upper()}] - {_cq} * {int(_cp['price']):,} = {int(_camt):,}")
 
                 _c_weight_kg = (_c_total_w + 500) / 1000
                 st.markdown(f"✨ **{_c_total_pv:,.0f} PV** &nbsp;|&nbsp; ⚖️ {_c_weight_kg:.2f} kg")
@@ -2054,15 +2054,21 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     _c_luid  = db.get_customer_line_user_id(_c_cust.get("id", "")) if _c_cust.get("id") else ""
                     if _c_luid:
                         if _line_btn_slot.button(f"📨 ส่ง LINE ให้คุณ {_calc_cust_sel}", type="primary", key="calc_line_btn", use_container_width=True):
-                            _c_msg_lines = [f"📝 รายการสินค้า\n"]
+                            _c_msg_lines = ["📝 รายการสินค้า", ""]
                             _c_msg_lines += _c_lines
-                            _c_msg_lines += [f"\n✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg\n",
+                            _c_msg_lines += ["",
+                                             f"✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg",
+                                             "",
                                              f"💵 สินค้า: ฿{_c_total_amt:,.0f}"]
                             if _c_ship_fee > 0:
-                                _c_msg_lines.append(f"🚚 ค่าส่ง: ฿{_c_ship_fee:,.0f} ({_c_ship_label})")
+                                _c_msg_lines.append(f"🚚 ค่าส่ง: ฿{_c_ship_fee:,.0f}")
                             if _c_cod_fee > 0:
-                                _c_msg_lines.append(f"➕ COD 3.21%: ฿{_c_cod_fee:,.0f}")
-                            _c_msg_lines.append(f"💰 รวม: ฿{_c_grand:,.0f}")
+                                _c_msg_lines.append(f"➕ COD: ฿{_c_cod_fee:,.0f}")
+                            _parts = [str(int(_c_total_amt))]
+                            if _c_ship_fee > 0: _parts.append(str(int(_c_ship_fee)))
+                            if _c_cod_fee  > 0: _parts.append(str(int(_c_cod_fee)))
+                            _formula = " + ".join(_parts)
+                            _c_msg_lines.append(f"\n💰 รวม {_formula} = {int(_c_grand):,} บาท")
                             _c_res = line_api.push_text(_c_luid, "\n".join(_c_msg_lines))
                             if _c_res["ok"]:
                                 st.success(f"✅ ส่ง LINE ให้ {_calc_cust_sel} แล้ว")
