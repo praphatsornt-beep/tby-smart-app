@@ -408,6 +408,7 @@ with tab1:
                       "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
                       "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv",
+                      "_fr_rname","_fr_rphone","_fr_al",
                       "_prev_cust_search"]
         _cart_ver = st.session_state.get("_cart_version", 0)
         _cart_key = f"m_cart_{_cart_ver}"
@@ -1249,6 +1250,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     f"sp_pc_v{_sp_av}",f"sp_track_v{_sp_av}",f"sp_notes_v{_sp_av}",
                     "_sp_cust_picked",f"sp_cust_search_v{_sp_av}",
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
+                    "_fsp_rname","_fsp_rphone","_fsp_al",
                     "sp_carrier","_sp_prev_pc","_sp_staged_carrier","sp_date",
                     "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
                     "_sp_last_rph_fill","_sp_parse_open","_sp_carrier_sig",
@@ -1901,7 +1903,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         st.subheader("คำนวณยอด")
         st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ เช่น `TF2581-2 RB2306-1 SH-kg12170 COD`")
 
-        def _parse_quick_order(text: str, products: list) -> dict:
+        def _parse_calc_order(text: str, products: list) -> dict:
             product_map = {p["id"].upper(): p for p in products}
             tokens = text.strip().upper().split()
             items, ship_zip, manual_ship, is_cod, errors = [], "", -1, False, []
@@ -1957,7 +1959,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             if not _calc_text.strip():
                 st.warning("กรุณากรอกรหัสสินค้าก่อน")
             else:
-                _cr = _parse_quick_order(_calc_text, _calc_products)
+                _cr = _parse_calc_order(_calc_text, _calc_products)
                 st.session_state["_calc_result"] = _cr
 
         _cr = st.session_state.get("_calc_result")
