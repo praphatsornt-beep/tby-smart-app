@@ -39,8 +39,10 @@ def lookup(zipcode: str) -> list[dict]:
         return []
 
 
-def lookup_by_tambon(text: str, limit: int = 8) -> list[dict]:
-    """คืน [{tambon, amphure, province, zipcode}] ที่ชื่อตำบลมี text นั้น"""
+def lookup_by_tambon(text: str, limit: int = 10, province: str = "") -> list[dict]:
+    """คืน [{tambon, amphure, province, zipcode}] ที่ชื่อตำบลมี text นั้น
+    ถ้าระบุ province จะ filter เฉพาะจังหวัดนั้นก่อน (แสดงครบกว่าเมื่อพิมพ์ชื่อซ้ำ)
+    """
     if not text or len(text) < 2:
         return []
     try:
@@ -48,4 +50,9 @@ def lookup_by_tambon(text: str, limit: int = 8) -> list[dict]:
     except Exception:
         return []
     text_lower = text.lower()
-    return [r for r in rows if text_lower in r["tambon"].lower()][:limit]
+    matched = [r for r in rows if text_lower in r["tambon"].lower()]
+    if province:
+        prov_matched = [r for r in matched if r["province"] == province]
+        if prov_matched:
+            return prov_matched[:limit]
+    return matched[:limit]

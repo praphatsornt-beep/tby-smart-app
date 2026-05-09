@@ -769,7 +769,7 @@ with tab1:
                         r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
                         _r_last_dt = st.session_state.get("_r_last_dt", "")
                         if len((r_district or "").strip()) >= 2 and r_district.strip() != _r_last_dt:
-                            _rdt_opts = thai_address.lookup_by_tambon(r_district.strip())
+                            _rdt_opts = thai_address.lookup_by_tambon(r_district.strip(), province=r_province)
                             for _o in _rdt_opts:
                                 _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
                                 if st.button(_lbl, key=f"rdt_fill_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
@@ -1485,7 +1485,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
             _sp_last_dt = st.session_state.get("_sp_last_dt", "")
             if len((_sp_dt or "").strip()) >= 2 and _sp_dt.strip() != _sp_last_dt:
-                _dt_opts = thai_address.lookup_by_tambon(_sp_dt.strip())
+                _dt_opts = thai_address.lookup_by_tambon(_sp_dt.strip(), province=_sp_pv)
                 for _o in _dt_opts:
                     _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
                     if st.button(_lbl, key=f"sp_dt_fill_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
