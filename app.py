@@ -17,6 +17,7 @@ def _to_bkk(ts: str) -> str:
 from math import floor
 import uuid
 import io
+import zipfile
 
 import database as db
 import thai_address
@@ -2378,6 +2379,35 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
     st.subheader("จัดการข้อมูลหลัก")
+
+    # ── Backup ──────────────────────────────────────────────────────────────
+    with st.expander("💾 Backup ข้อมูล", expanded=False):
+        st.caption("ดาวน์โหลดข้อมูลทั้งหมดเป็นไฟล์ ZIP (แนะนำทำทุกสิ้นเดือน)")
+        if st.button("📦 สร้าง Backup ZIP", type="primary"):
+            _tables = {
+                "customers":         db.get_supabase().table("customers").select("*").execute().data,
+                "transactions":      db.get_supabase().table("transactions").select("*").execute().data,
+                "partial_events":    db.get_supabase().table("partial_events").select("*").execute().data,
+                "shipments":         db.get_supabase().table("shipments").select("*").execute().data,
+                "products":          db.get_supabase().table("products").select("*").execute().data,
+                "customer_addresses":db.get_supabase().table("customer_addresses").select("*").execute().data,
+            }
+            _zip_buf = io.BytesIO()
+            with zipfile.ZipFile(_zip_buf, "w", zipfile.ZIP_DEFLATED) as _zf:
+                for _tname, _rows in _tables.items():
+                    _csv = pd.DataFrame(_rows).to_csv(index=False)
+                    _zf.writestr(f"{_tname}.csv", _csv)
+            _zip_buf.seek(0)
+            _fname = f"backup_{date.today().strftime('%Y%m%d')}.zip"
+            st.download_button(
+                label=f"⬇️ ดาวน์โหลด {_fname}",
+                data=_zip_buf.getvalue(),
+                file_name=_fname,
+                mime="application/zip",
+                type="primary",
+                use_container_width=True,
+            )
+    st.divider()
 
     sub1, sub2, sub3, sub4 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "🗑️ ลบบิล"])
 
