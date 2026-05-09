@@ -20,6 +20,7 @@ import io
 import zipfile
 
 import database as db
+import carriers as carr
 import thai_address
 
 thai_address._load_db()  # pre-warm cache ตอน app โหลด
@@ -2008,6 +2009,37 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 if _c_cod_fee > 0:
                     st.markdown(f"➕ COD 3.21%: **{_c_cod_fee:,.0f} ฿**")
                 st.markdown(f"### 💰 รวม: {_c_grand:,.0f} ฿")
+
+                # ─── ตารางเปรียบเทียบค่าส่งทุกขนส่ง ──────────────────────
+                if _cr["ship_zip"]:
+                    st.divider()
+                    st.markdown("**🚚 เปรียบเทียบค่าส่งทุกขนส่ง**")
+                    _opts = carr.get_shipping_options(
+                        _c_weight_kg, _cr["ship_zip"], _cr["is_cod"], _c_total_amt
+                    )
+                    _rows_ok  = [o for o in _opts if not o["exceeds_max"]]
+                    _rows_exc = [o for o in _opts if o["exceeds_max"]]
+                    _cmp_data = []
+                    for o in _rows_ok:
+                        _sur_txt = f"+{o['surcharge']} ({o['sur_label']})" if o["surcharge"] else "-"
+                        _fuel_txt = f"+{o['fuel']}" if o["fuel"] else "-"
+                        _cod_txt  = f"+{o['cod_fee']:,}" if o["cod_fee"] else "-"
+                        _cmp_data.append({
+                            "ขนส่ง":     o["name"],
+                            "ค่าส่ง":    o["base"],
+                            "พื้นที่พิเศษ": _sur_txt,
+                            "น้ำมัน":    _fuel_txt,
+                            "รวม (฿)":   o["total"],
+                            "COD":       _cod_txt,
+                        })
+                    if _cmp_data:
+                        _cmp_df = pd.DataFrame(_cmp_data)
+                        st.dataframe(_cmp_df, hide_index=True, use_container_width=True,
+                                     column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
+                    if _rows_exc:
+                        with st.expander(f"⚠️ เกินน้ำหนักสูงสุด ({len(_rows_exc)} ขนส่ง)"):
+                            for o in _rows_exc:
+                                st.caption(f"❌ {o['name']} รับได้สูงสุด {o['max_kg']} kg")
 
                 # ─── ปุ่มส่ง LINE ────────────────────────────────────────
                 if _calc_cust_sel != "— ไม่ระบุ —" and line_api.is_configured():

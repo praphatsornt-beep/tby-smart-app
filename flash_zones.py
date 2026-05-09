@@ -92,8 +92,8 @@ ZONE_LABELS = {
 # tourist:        ≤7kg=+30, 7–20kg=+100, >20kg=+200
 # tourist_island: ≤7kg=+60, 7–20kg=+100, >20kg=+200
 _TOURIST_TIERS = {
-    "tourist":        [(7, 30), (20, 100), (999, 200)],
-    "tourist_island": [(7, 60), (20, 100), (999, 200)],
+    "tourist":        [(7,  30), (20, 100), (999, 200)],
+    "tourist_island": [(7,  60), (20, 130), (999, 230)],  # +30 island on every tier
 }
 
 
