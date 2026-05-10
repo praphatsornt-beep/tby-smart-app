@@ -259,6 +259,22 @@ def _show_iship_success_dialog():
             f"{it.get('name','')} ×{it.get('qty',0)}" for it in info["items"]
         ))
     st.divider()
+    _dluid = info.get("line_user_id", "")
+    if _dluid and line_api.is_configured():
+        if st.button("📨 ส่งแจ้งลูกค้าทาง LINE", use_container_width=True):
+            _dlr = line_api.push_tracking(
+                _dluid,
+                info.get("dst_name", ""),
+                info.get("tracking", ""),
+                info.get("carrier", ""),
+                float(info.get("cod_amount", 0)),
+            )
+            if _dlr.get("ok"):
+                st.success("✅ ส่ง LINE แล้ว")
+                if info.get("shipment_id"):
+                    db.mark_line_notified(info["shipment_id"])
+            else:
+                st.error(f"❌ {_dlr.get('error','')}")
     if st.button("✅ ตกลง / เริ่มออเดอร์ใหม่", type="primary", use_container_width=True):
         _tab = info.get("tab", "sale")
         st.session_state.pop("_iship_success_info", None)
@@ -1021,23 +1037,21 @@ with tab1:
                                 })
                             except Exception:
                                 pass
-                            if tracking and line_api.is_configured():
-                                _luid = db.get_customer_line_user_id(customer["id"]) if customer["id"] else ""
-                                if _luid:
-                                    line_api.push_tracking(_luid, r_name or customer["name"],
-                                                           tracking, m_carrier, float(ceil(collect) if m_cod else 0))
+                            _luid_s1 = db.get_customer_line_user_id(customer["id"]) if (tracking and customer.get("id")) else ""
                             _addr_full = f"{r_addr_line} {r_district} {r_amphure} {r_province} {m_postcode}".strip()
                             st.session_state["_iship_success_info"] = {
-                                "tracking":   tracking,
-                                "tab":        "sale",
-                                "customer":   customer["name"],
-                                "dst_name":   r_name or customer["name"],
-                                "dst_phone":  r_phone,
-                                "address":    _addr_full,
-                                "carrier":    m_carrier,
-                                "weight_kg":  (total_w_g + 500) / 1000,
-                                "cod_amount": ceil(collect) if m_cod else 0,
-                                "items":      _all_items,
+                                "tracking":      tracking,
+                                "tab":           "sale",
+                                "customer":      customer["name"],
+                                "dst_name":      r_name or customer["name"],
+                                "dst_phone":     r_phone,
+                                "address":       _addr_full,
+                                "carrier":       m_carrier,
+                                "weight_kg":     (total_w_g + 500) / 1000,
+                                "cod_amount":    ceil(collect) if m_cod else 0,
+                                "items":         _all_items,
+                                "line_user_id":  _luid_s1,
+                                "shipment_id":   "",
                             }
                         else:
                             _auto_err = _auto_resp.get("message") or _auto_resp.get("msg") or str(_auto_resp)
@@ -1199,26 +1213,22 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 })
                             except Exception:
                                 pass
-                            if tracking and line_api.is_configured():
-                                _cid = _p.get("_customer_id", "")
-                                _luid = db.get_customer_line_user_id(_cid) if _cid else ""
-                                if _luid:
-                                    line_api.push_tracking(
-                                        _luid, _p.get("dst_name",""), tracking,
-                                        _carrier_choice, float(_p.get("cod_amount",0))
-                                    )
+                            _cid_s2 = _p.get("_customer_id", "")
+                            _luid_s2 = db.get_customer_line_user_id(_cid_s2) if (tracking and _cid_s2) else ""
                             del st.session_state["_iship_pending"]
                             st.session_state["_iship_success_info"] = {
-                                "tracking":   tracking,
-                                "tab":        "sale",
-                                "customer":   _p.get("sender_name",""),
-                                "dst_name":   _p.get("dst_name",""),
-                                "dst_phone":  _p.get("dst_phone",""),
-                                "address":    addr_full,
-                                "carrier":    _carrier_choice,
-                                "weight_kg":  _p.get("weight_kg",0),
-                                "cod_amount": _p.get("cod_amount",0),
-                                "items":      _p.get("_items",[]),
+                                "tracking":      tracking,
+                                "tab":           "sale",
+                                "customer":      _p.get("sender_name",""),
+                                "dst_name":      _p.get("dst_name",""),
+                                "dst_phone":     _p.get("dst_phone",""),
+                                "address":       addr_full,
+                                "carrier":       _carrier_choice,
+                                "weight_kg":     _p.get("weight_kg",0),
+                                "cod_amount":    _p.get("cod_amount",0),
+                                "items":         _p.get("_items",[]),
+                                "line_user_id":  _luid_s2,
+                                "shipment_id":   "",
                             }
                             _show_iship_success_dialog()
                         else:
@@ -1625,25 +1635,21 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                         or _sp_auto_resp.get("tracking_code") or _sp_auto_resp.get("tracking_number") or "")
                         if _sp_tracking:
                             db.update_shipment_tracking(_sp_new_id, _sp_tracking)
-                        if _sp_tracking and line_api.is_configured():
-                            _sp_luid = db.get_customer_line_user_id(_sp_cid) if _sp_cid else ""
-                            if _sp_luid:
-                                _lr = line_api.push_tracking(_sp_luid, _sp_rname.strip(),
-                                                             _sp_tracking, _sp_carrier, 0.0)
-                                if _lr.get("ok"):
-                                    db.mark_line_notified(_sp_new_id)
+                        _sp_luid_a = db.get_customer_line_user_id(_sp_cid) if (_sp_tracking and _sp_cid) else ""
                         _spp_addr = f"{_sp_al.strip()} {_sp_dt.strip()} {_sp_am.strip()} {_sp_pv.strip()} {_sp_pc.strip()}".strip()
                         st.session_state["_iship_success_info"] = {
-                            "tracking":   _sp_tracking,
-                            "tab":        "ship",
-                            "customer":   _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
-                            "dst_name":   _sp_rname.strip(),
-                            "dst_phone":  _sp_rphone.strip(),
-                            "address":    _spp_addr,
-                            "carrier":    _sp_carrier,
-                            "weight_kg":  max(0.5, _sp_wt),
-                            "cod_amount": 0,
-                            "items":      _sp_items,
+                            "tracking":      _sp_tracking,
+                            "tab":           "ship",
+                            "customer":      _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
+                            "dst_name":      _sp_rname.strip(),
+                            "dst_phone":     _sp_rphone.strip(),
+                            "address":       _spp_addr,
+                            "carrier":       _sp_carrier,
+                            "weight_kg":     max(0.5, _sp_wt),
+                            "cod_amount":    0,
+                            "items":         _sp_items,
+                            "line_user_id":  _sp_luid_a,
+                            "shipment_id":   _sp_new_id,
                         }
                     else:
                         _sp_auto_err = _sp_auto_resp.get("message") or str(_sp_auto_resp)
@@ -1698,29 +1704,23 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                         or _sp_resp.get("tracking_code") or _sp_resp.get("tracking_number") or "")
                         if _spp.get("_shipment_id") and _sp_tracking:
                             db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
-                        if _sp_tracking and line_api.is_configured():
-                            _sp_cid2 = _spp.get("_customer_id", "")
-                            _sp_luid = db.get_customer_line_user_id(_sp_cid2) if _sp_cid2 else ""
-                            if _sp_luid:
-                                _lr = line_api.push_tracking(
-                                    _sp_luid, _spp.get("dst_name",""), _sp_tracking,
-                                    _spp.get("carrier",""), float(_spp.get("cod_amount",0))
-                                )
-                                if _lr.get("ok") and _spp.get("_shipment_id"):
-                                    db.mark_line_notified(_spp["_shipment_id"])
+                        _sp_cid2 = _spp.get("_customer_id", "")
+                        _sp_luid_b = db.get_customer_line_user_id(_sp_cid2) if (_sp_tracking and _sp_cid2) else ""
                         del st.session_state["_sp_iship_pending"]
                         _spp_addr = f"{_spp.get('address_line','')} {_spp.get('district','')} {_spp.get('amphure','')} {_spp.get('province','')} {_spp.get('zipcode','')}".strip()
                         st.session_state["_iship_success_info"] = {
-                            "tracking":   _sp_tracking,
-                            "tab":        "ship",
-                            "customer":   _spp.get("_customer_name",""),
-                            "dst_name":   _spp.get("dst_name",""),
-                            "dst_phone":  _spp.get("dst_phone",""),
-                            "address":    _spp_addr,
-                            "carrier":    _spp.get("carrier",""),
-                            "weight_kg":  _spp.get("weight_kg",0),
-                            "cod_amount": _spp.get("cod_amount",0),
-                            "items":      _spp.get("_items",[]),
+                            "tracking":      _sp_tracking,
+                            "tab":           "ship",
+                            "customer":      _spp.get("_customer_name",""),
+                            "dst_name":      _spp.get("dst_name",""),
+                            "dst_phone":     _spp.get("dst_phone",""),
+                            "address":       _spp_addr,
+                            "carrier":       _spp.get("carrier",""),
+                            "weight_kg":     _spp.get("weight_kg",0),
+                            "cod_amount":    _spp.get("cod_amount",0),
+                            "items":         _spp.get("_items",[]),
+                            "line_user_id":  _sp_luid_b,
+                            "shipment_id":   _spp.get("_shipment_id", ""),
                         }
                         _show_iship_success_dialog()
                     else:
