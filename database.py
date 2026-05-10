@@ -332,8 +332,6 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     txns = db.table("transactions").select(
         "id, date, bill_no, product_id, product_name, qty, total_amount, pay_status"
     ).eq("customer_id", customer_id).order("date").execute().data
-    if not txns:
-        return []
     txn_ids = [t["id"] for t in txns]
     txn_map = {t["id"]: t for t in txns}
 
@@ -346,6 +344,11 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
             "id, date, transaction_id, qty_received, amount_paid, event_type"
         ).in_("transaction_id", _chunk).order("date").execute().data
         all_events.extend(_evts)
+
+    # shipments
+    ships = db.table("shipments").select(
+        "id, created_at, carrier, tracking_no, items, source"
+    ).eq("customer_id", customer_id).order("created_at").execute().data
 
     rows = []
     # order rows
@@ -388,6 +391,27 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
                 "txn_id":   e["transaction_id"],
                 "event_id": e["id"] + "-p",
             })
+    # shipment rows
+    for s in ships:
+        _sdate    = (s.get("created_at") or "")[:10]
+        _tracking = s.get("tracking_no") or "—"
+        _carrier  = s.get("carrier") or ""
+        _source   = s.get("source") or "ship"
+        _items    = ", ".join(
+            f"{it.get('name','?')}×{it.get('qty',0)}"
+            for it in (s.get("items") or [])[:3]
+        )
+        _type_label = "📦 ส่งของ" if _source == "ship" else "💰 ส่งของ"
+        rows.append({
+            "date":    _sdate,
+            "type":    _type_label,
+            "bill_no": _tracking,
+            "product": _items or _carrier,
+            "qty_in":  0,
+            "qty_out": 0,
+            "amount":  0.0,
+            "txn_id":  "",
+        })
     rows.sort(key=lambda r: r["date"])
     return rows
 

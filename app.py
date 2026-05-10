@@ -2068,10 +2068,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         })
                     if _cmp_data:
                         _cmp_df = pd.DataFrame(_cmp_data)
-                        def _highlight_cheapest(row):
-                            return ["background-color: #1a4a1a; font-weight: bold" if row.name == 0 else "" for _ in row]
-                        _styled = _cmp_df.style.apply(_highlight_cheapest, axis=1)
-                        st.dataframe(_styled, hide_index=True, use_container_width=True,
+                        st.dataframe(_cmp_df, hide_index=True, use_container_width=True,
                                      column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
                     if _rows_exc:
                         with st.expander(f"⚠️ เกินน้ำหนักสูงสุด ({len(_rows_exc)} ขนส่ง)"):
@@ -2197,7 +2194,7 @@ with tab2:
                             _ldf["สินค้าคง"] = _ldf.groupby("product")["qty_net"].cumsum()
                             # ตารางแสดงผล
                             _disp = _ldf[["date","type","bill_no","product","qty_in","qty_out","amount"]].copy()
-                            _disp.columns = ["วันที่","รายการ","บิล","สินค้า","เข้า","ออก","จ่าย ฿"]
+                            _disp.columns = ["วันที่","รายการ","บิล/Tracking","สินค้า","เข้า","ออก","จ่าย ฿"]
                             _disp["เข้า"]   = _disp["เข้า"].replace(0, "")
                             _disp["ออก"]    = _disp["ออก"].replace(0, "")
                             _disp["จ่าย ฿"] = _disp["จ่าย ฿"].apply(lambda x: f"{x:,.0f}" if x else "")
@@ -3272,6 +3269,29 @@ with tab5:
                     st.success("✅ แก้ไขแล้ว")
                     st.rerun()
 
+    st.divider()
+    with st.expander("📦 ประวัติการส่งของ", expanded=False):
+        _hist_ships = db.get_shipments(customer_id=h_cid)
+        if not _hist_ships:
+            st.caption("ไม่มีข้อมูลการส่งของ")
+        else:
+            _ship_rows_h = []
+            for _s in _hist_ships:
+                _items_str_h = ", ".join(
+                    f"{it.get('name','?')}×{it.get('qty',0)}"
+                    for it in (_s.get("items") or [])[:3]
+                )
+                _src_h = _s.get("source") or "ship"
+                _ship_rows_h.append({
+                    "วันที่":    (_s.get("created_at") or "")[:10],
+                    "แหล่ง":    "📦 ส่งของ" if _src_h == "ship" else "💰 บันทึกขาย",
+                    "ลูกค้า":   (_s.get("customers") or {}).get("name", ""),
+                    "ขนส่ง":    _s.get("carrier", ""),
+                    "Tracking": _s.get("tracking_no", ""),
+                    "สินค้า":   _items_str_h,
+                })
+            _ship_df_h = pd.DataFrame(_ship_rows_h)
+            st.dataframe(_ship_df_h, hide_index=True, use_container_width=True)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
