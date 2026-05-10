@@ -1850,7 +1850,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 
             def _src_icon(r):
                 s = r.get("source", "")
-                if s == "sale": return "🛒"
+                if s == "sale": return "💰"
                 if s == "ship": return "📦"
                 return "—"
 

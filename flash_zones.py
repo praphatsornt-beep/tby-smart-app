@@ -73,8 +73,6 @@ FLASH_ZONES: dict[str, str] = {
     # ยะลา
     "95000": "remote", "95110": "remote", "95120": "remote", "95130": "remote",
     "95140": "remote", "95150": "remote", "95160": "remote", "95170": "remote",
-    # ปัตตานี เพิ่มเติม
-    "94190": "remote",
     # นราธิวาส
     "96000": "remote", "96110": "remote", "96120": "remote", "96130": "remote",
     "96140": "remote", "96150": "remote", "96160": "remote", "96170": "remote",

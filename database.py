@@ -809,6 +809,7 @@ def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
 def create_shipment(data: dict) -> None:
     get_supabase().table("shipments").insert(data).execute()
     get_shipments.clear()
+    get_customer_ledger.clear()
 
 
 @st.cache_data(ttl=60)
@@ -824,11 +825,13 @@ def update_shipment_tracking(shipment_id: str, tracking_no: str) -> None:
         {"tracking_no": tracking_no}
     ).eq("id", shipment_id).execute()
     get_shipments.clear()
+    get_customer_ledger.clear()
 
 
 def delete_shipment(shipment_id: str) -> None:
     get_supabase().table("shipments").delete().eq("id", shipment_id).execute()
     get_shipments.clear()
+    get_customer_ledger.clear()
 
 
 def mark_cod_transferred(tracking_nos: list[str]) -> None:
