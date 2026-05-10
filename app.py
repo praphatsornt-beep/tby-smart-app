@@ -2011,11 +2011,12 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     _c_total_amt += _camt
                     _c_total_pv  += _cpv
                     _c_total_w   += _cw
-                    st.markdown(f"📦 **[{_cp['id'].upper()}]** {_cp['name']} ×{_cq} &nbsp; `{_cq} × {float(_cp['price']):,.0f} = {_camt:,.0f}`")
-                    _c_lines.append(f"📦 [{_cp['id'].upper()}] - {_cq} * {int(_cp['price']):,} = {int(_camt):,}")
+                    _line_str = f"📦 [{_cp['id'].upper()}] - {_cq} * {int(_cp['price']):,} = {int(_camt):,}"
+                    st.markdown(_line_str)
+                    _c_lines.append(_line_str)
 
                 _c_weight_kg = (_c_total_w + 500) / 1000
-                st.markdown(f"✨ **{_c_total_pv:,.0f} PV** &nbsp;|&nbsp; ⚖️ {_c_weight_kg:.2f} kg")
+                st.markdown(f"✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg")
                 st.divider()
 
                 _cust_ship_fee = 0.0   # ราคาคิดลูกค้า (39+10/kg+พื้นที่)
@@ -2041,15 +2042,15 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _c_grand     = _c_total_amt + _cust_ship_fee + _c_cod_fee
 
                 # ─── ส่วนลูกค้า (copy / ส่ง LINE) ────────────────────────
-                st.markdown(f"💵 สินค้า: **{_c_total_amt:,.0f} ฿**")
+                st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
                 if _cust_ship_fee > 0:
-                    st.markdown(f"🚚 ค่าส่ง: **{_cust_ship_fee:,.0f} ฿**")
+                    st.markdown(f"🚚 ค่าส่ง: ฿{int(_cust_ship_fee):,}")
                 if _c_cod_fee > 0:
-                    st.markdown(f"➕ COD 3.21%: **{_c_cod_fee:,.0f} ฿**")
-                _parts_fmt = [f"{int(_c_total_amt):,}"]
-                if _cust_ship_fee > 0: _parts_fmt.append(f"{int(_cust_ship_fee):,}")
-                if _c_cod_fee > 0:     _parts_fmt.append(f"{int(_c_cod_fee):,}")
-                st.markdown(f"**💰 รวม {' + '.join(_parts_fmt)} = {_c_grand:,.0f} ฿**")
+                    st.markdown(f"➕ COD 3.21%: ฿{int(_c_cod_fee):,}")
+                _parts_raw = [str(int(_c_total_amt))]
+                if _cust_ship_fee > 0: _parts_raw.append(str(int(_cust_ship_fee)))
+                if _c_cod_fee > 0:     _parts_raw.append(str(int(_c_cod_fee)))
+                st.markdown(f"**{' + '.join(_parts_raw)} = {_c_grand:,.0f}**")
 
                 # ─── ส่วนเจ้าของ (ราคาจริง + ตารางขนส่ง) ─────────────────
                 st.divider()
