@@ -2018,10 +2018,12 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 st.markdown(f"✨ **{_c_total_pv:,.0f} PV** &nbsp;|&nbsp; ⚖️ {_c_weight_kg:.2f} kg")
                 st.divider()
 
-                _c_ship_fee = 0.0
-                _c_ship_label = ""
+                _cust_ship_fee = 0.0   # ราคาคิดลูกค้า (39+10/kg+พื้นที่)
+                _c_ship_fee    = 0.0   # ราคาจริงถูกสุดจากตารางขนส่ง
+                _c_ship_label  = ""
                 _opts = []
                 if _cr["ship_zip"]:
+                    _cust_ship_fee = calc_shipping(_c_total_w, _cr["ship_zip"])
                     _opts = carr.get_shipping_options(
                         _c_weight_kg, _cr["ship_zip"], _cr["is_cod"], _c_total_amt
                     )
@@ -2031,17 +2033,21 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         _c_ship_fee  = float(_best["total"])
                         _c_ship_label = _best["name"]
                 elif _cr["manual_ship"] >= 0:
-                    _c_ship_fee  = _cr["manual_ship"]
-                    _c_ship_label = "ระบุเอง"
+                    _cust_ship_fee = _cr["manual_ship"]
+                    _c_ship_fee    = _cr["manual_ship"]
+                    _c_ship_label  = "ระบุเอง"
 
-                _c_cod_fee   = ceil((_c_total_amt + _c_ship_fee) * 0.0321) if _cr["is_cod"] else 0
-                _c_grand     = _c_total_amt + _c_ship_fee + _c_cod_fee
+                _c_cod_fee   = ceil((_c_total_amt + _cust_ship_fee) * 0.0321) if _cr["is_cod"] else 0
+                _c_grand     = _c_total_amt + _cust_ship_fee + _c_cod_fee
 
                 _det_col, _tot_col = st.columns([2, 1])
                 with _det_col:
                     st.markdown(f"💵 สินค้า: **{_c_total_amt:,.0f} ฿**")
-                    if _c_ship_fee > 0:
-                        st.markdown(f"🚚 ค่าส่ง: **{_c_ship_fee:,.0f} ฿** ({_c_ship_label})")
+                    if _cust_ship_fee > 0 or _c_ship_fee > 0:
+                        _ship_disp = f"🚚 ค่าส่งลูกค้า: **{_cust_ship_fee:,.0f} ฿**"
+                        if _c_ship_fee > 0 and _c_ship_label and _c_ship_label != "ระบุเอง":
+                            _ship_disp += f"&nbsp;&nbsp;|&nbsp;&nbsp;ราคาจริง: **{_c_ship_fee:,.0f} ฿** ({_c_ship_label})"
+                        st.markdown(_ship_disp)
                     if _c_cod_fee > 0:
                         st.markdown(f"➕ COD 3.21%: **{_c_cod_fee:,.0f} ฿**")
                 _tot_col.metric("💰 รวม", f"{_c_grand:,.0f} ฿")
@@ -2087,12 +2093,12 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                              f"✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg",
                                              "",
                                              f"💵 สินค้า: ฿{_c_total_amt:,.0f}"]
-                            if _c_ship_fee > 0:
-                                _c_msg_lines.append(f"🚚 ค่าส่ง: ฿{_c_ship_fee:,.0f}")
+                            if _cust_ship_fee > 0:
+                                _c_msg_lines.append(f"🚚 ค่าส่ง: ฿{_cust_ship_fee:,.0f}")
                             if _c_cod_fee > 0:
                                 _c_msg_lines.append(f"➕ COD: ฿{_c_cod_fee:,.0f}")
                             _parts = [str(int(_c_total_amt))]
-                            if _c_ship_fee > 0: _parts.append(str(int(_c_ship_fee)))
+                            if _cust_ship_fee > 0: _parts.append(str(int(_cust_ship_fee)))
                             if _c_cod_fee  > 0: _parts.append(str(int(_c_cod_fee)))
                             _formula = " + ".join(_parts)
                             _c_msg_lines.append(f"\n💰 รวม {_formula} = {int(_c_grand):,} บาท")
