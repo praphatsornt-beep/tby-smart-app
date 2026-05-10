@@ -2055,7 +2055,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 st.divider()
                 st.caption("ข้อมูลขนส่ง (สำหรับเจ้าของร้าน)")
                 if _c_ship_fee > 0 and _c_ship_label and _c_ship_label != "ระบุเอง":
-                    st.markdown(f"🚛 ราคาจริง: **{_c_ship_fee:,.0f} ฿** ({_c_ship_label})")
+                    st.markdown(f"### 🚛 ราคาจริง: {_c_ship_fee:,.0f} ฿ ({_c_ship_label})")
 
                 if _cr["ship_zip"] and _opts:
                     _rows_ok  = [o for o in _opts if not o["exceeds_max"]]
