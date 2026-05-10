@@ -2020,13 +2020,16 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 
                 _c_ship_fee = 0.0
                 _c_ship_label = ""
+                _opts = []
                 if _cr["ship_zip"]:
-                    _c_fees = carrier_fees(_c_total_w, _cr["ship_zip"])
-                    if _c_fees:
-                        _fl = _c_fees["Flash Express"]["total"]
-                        _sx = _c_fees["SPX Express"]["total"]
-                        _c_ship_fee  = min(_fl, _sx)
-                        _c_ship_label = f"Flash Express" if _fl <= _sx else "SPX Express"
+                    _opts = carr.get_shipping_options(
+                        _c_weight_kg, _cr["ship_zip"], _cr["is_cod"], _c_total_amt
+                    )
+                    _opts_ok = [o for o in _opts if not o["exceeds_max"]]
+                    if _opts_ok:
+                        _best = _opts_ok[0]
+                        _c_ship_fee  = float(_best["total"])
+                        _c_ship_label = _best["name"]
                 elif _cr["manual_ship"] >= 0:
                     _c_ship_fee  = _cr["manual_ship"]
                     _c_ship_label = "ระบุเอง"
@@ -2044,12 +2047,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _tot_col.metric("💰 รวม", f"{_c_grand:,.0f} ฿")
 
                 # ─── ตารางเปรียบเทียบค่าส่งทุกขนส่ง ──────────────────────
-                if _cr["ship_zip"]:
+                if _cr["ship_zip"] and _opts:
                     st.divider()
                     st.markdown("**🚚 เปรียบเทียบค่าส่งทุกขนส่ง**")
-                    _opts = carr.get_shipping_options(
-                        _c_weight_kg, _cr["ship_zip"], _cr["is_cod"], _c_total_amt
-                    )
                     _rows_ok  = [o for o in _opts if not o["exceeds_max"]]
                     _rows_exc = [o for o in _opts if o["exceeds_max"]]
                     _cmp_data = []
