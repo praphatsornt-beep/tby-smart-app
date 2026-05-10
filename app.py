@@ -2040,22 +2040,24 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _c_cod_fee   = ceil((_c_total_amt + _cust_ship_fee) * 0.0321) if _cr["is_cod"] else 0
                 _c_grand     = _c_total_amt + _cust_ship_fee + _c_cod_fee
 
-                _det_col, _tot_col = st.columns([2, 1])
-                with _det_col:
-                    st.markdown(f"💵 สินค้า: **{_c_total_amt:,.0f} ฿**")
-                    if _cust_ship_fee > 0 or _c_ship_fee > 0:
-                        _ship_disp = f"🚚 ค่าส่งลูกค้า: **{_cust_ship_fee:,.0f} ฿**"
-                        if _c_ship_fee > 0 and _c_ship_label and _c_ship_label != "ระบุเอง":
-                            _ship_disp += f"&nbsp;&nbsp;|&nbsp;&nbsp;ราคาจริง: **{_c_ship_fee:,.0f} ฿** ({_c_ship_label})"
-                        st.markdown(_ship_disp)
-                    if _c_cod_fee > 0:
-                        st.markdown(f"➕ COD 3.21%: **{_c_cod_fee:,.0f} ฿**")
-                _tot_col.metric("💰 รวม", f"{_c_grand:,.0f} ฿")
+                # ─── ส่วนลูกค้า (copy / ส่ง LINE) ────────────────────────
+                st.markdown(f"💵 สินค้า: **{_c_total_amt:,.0f} ฿**")
+                if _cust_ship_fee > 0:
+                    st.markdown(f"🚚 ค่าส่ง: **{_cust_ship_fee:,.0f} ฿**")
+                if _c_cod_fee > 0:
+                    st.markdown(f"➕ COD 3.21%: **{_c_cod_fee:,.0f} ฿**")
+                _parts_fmt = [f"{int(_c_total_amt):,}"]
+                if _cust_ship_fee > 0: _parts_fmt.append(f"{int(_cust_ship_fee):,}")
+                if _c_cod_fee > 0:     _parts_fmt.append(f"{int(_c_cod_fee):,}")
+                st.markdown(f"**💰 รวม {' + '.join(_parts_fmt)} = {_c_grand:,.0f} ฿**")
 
-                # ─── ตารางเปรียบเทียบค่าส่งทุกขนส่ง ──────────────────────
+                # ─── ส่วนเจ้าของ (ราคาจริง + ตารางขนส่ง) ─────────────────
+                st.divider()
+                st.caption("ข้อมูลขนส่ง (สำหรับเจ้าของร้าน)")
+                if _c_ship_fee > 0 and _c_ship_label and _c_ship_label != "ระบุเอง":
+                    st.markdown(f"🚛 ราคาจริง: **{_c_ship_fee:,.0f} ฿** ({_c_ship_label})")
+
                 if _cr["ship_zip"] and _opts:
-                    st.divider()
-                    st.markdown("**🚚 เปรียบเทียบค่าส่งทุกขนส่ง**")
                     _rows_ok  = [o for o in _opts if not o["exceeds_max"]]
                     _rows_exc = [o for o in _opts if o["exceeds_max"]]
                     _cmp_data = []
@@ -2065,12 +2067,12 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         _cod_txt  = f"+{o['cod_fee']:,}" if o["cod_fee"] else "-"
                         _badge    = "🥇 " if _ci == 0 else ""
                         _cmp_data.append({
-                            "ขนส่ง":      _badge + o["name"],
-                            "ค่าส่ง":     o["base"],
+                            "ขนส่ง":        _badge + o["name"],
+                            "ค่าส่ง":       o["base"],
                             "พื้นที่พิเศษ": _sur_txt,
-                            "น้ำมัน":     _fuel_txt,
-                            "รวม (฿)":    o["total"],
-                            "COD":        _cod_txt,
+                            "น้ำมัน":       _fuel_txt,
+                            "รวม (฿)":      o["total"],
+                            "COD":          _cod_txt,
                         })
                     if _cmp_data:
                         _cmp_df = pd.DataFrame(_cmp_data)
