@@ -2050,7 +2050,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _parts_raw = [str(int(_c_total_amt))]
                 if _cust_ship_fee > 0: _parts_raw.append(str(int(_cust_ship_fee)))
                 if _c_cod_fee > 0:     _parts_raw.append(str(int(_c_cod_fee)))
-                st.markdown(f"**{' + '.join(_parts_raw)} = {_c_grand:,.0f}**")
+                st.markdown(f"{' + '.join(_parts_raw)} = {_c_grand:,.0f}")
+                st.markdown(f"**💰 ยอดโอนสุทธิ: ฿{_c_grand:,.0f}**")
 
                 # ─── ส่วนเจ้าของ (ราคาจริง + ตารางขนส่ง) ─────────────────
                 st.divider()
@@ -2104,7 +2105,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             if _cust_ship_fee > 0: _parts.append(str(int(_cust_ship_fee)))
                             if _c_cod_fee  > 0: _parts.append(str(int(_c_cod_fee)))
                             _formula = " + ".join(_parts)
-                            _c_msg_lines.append(f"\n💰 รวม {_formula} = {int(_c_grand):,} บาท")
+                            _c_msg_lines.append(f"\n{_formula} = {int(_c_grand):,}")
+                            _c_msg_lines.append(f"💰 ยอดโอนสุทธิ: ฿{int(_c_grand):,}")
                             _c_res = line_api.push_text(_c_luid, "\n".join(_c_msg_lines))
                             if _c_res["ok"]:
                                 st.success(f"✅ ส่ง LINE ให้ {_calc_cust_sel} แล้ว")
