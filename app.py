@@ -302,6 +302,12 @@ def _show_carrier_select():
         st.divider()
         _btn1, _btn2 = st.columns(2)
         if _btn1.button("📦 ส่ง iShip", type="primary", use_container_width=True, key="_cs_send"):
+            _cs_items       = info.get("items", [])
+            _cs_item_detail = ", ".join(f"{it.get('name','?')} x{it.get('qty',0)}" for it in _cs_items)
+            _cs_products    = [{"name": it.get("name",""), "qty": it.get("qty",0), "price": 0} for it in _cs_items]
+            _cs_remark      = info.get("remark", "") or _cs_item_detail
+            if info.get("customer_name"):
+                _cs_remark = f"{info['customer_name']} | {_cs_remark}" if _cs_remark else info["customer_name"]
             with st.spinner("กำลังสร้างรายการใน iShip..."):
                 _cs_resp = iship_api.create_order(
                     dst_name     = info.get("dst_name", ""),
@@ -314,7 +320,9 @@ def _show_carrier_select():
                     weight_kg    = weight_kg,
                     cod_amount   = cod_amt,
                     carrier      = _cs_carrier,
-                    remark       = info.get("remark", ""),
+                    remark       = _cs_remark,
+                    item_detail  = _cs_item_detail,
+                    products     = _cs_products,
                     length_cm    = int(_cs_len),
                     width_cm     = int(_cs_wid),
                     height_cm    = int(_cs_hgt),
