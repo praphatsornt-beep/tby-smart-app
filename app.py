@@ -1285,8 +1285,10 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if _sc2.button("🗑️ ล้าง", key="sp_clear_form", use_container_width=True):
             for _k in _sp_keys:
                 st.session_state.pop(_k, None)
+            st.session_state.pop("_sp_cart_base", None)
             st.session_state["_sp_addr_ver"] = _sp_av + 1
             st.session_state.pop(f"sp_cart_{_sp_cart_ver_now}", None)
+            st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
             st.rerun()
 
         _sp = db.get_products()
