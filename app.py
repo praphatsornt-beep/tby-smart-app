@@ -309,7 +309,7 @@ def _show_carrier_select():
             )
             _cs_item_detail = _cs_item_codes
             _cs_products    = [{"name": it.get("name",""), "qty": it.get("qty",0), "price": 0} for it in _cs_items]
-            _cs_remark      = _cs_item_codes or info.get("remark", "")
+            _cs_remark      = " ".join(filter(None, [info.get("customer_name",""), _cs_item_codes or info.get("remark","")])).strip()
             with st.spinner("กำลังสร้างรายการใน iShip..."):
                 _cs_resp = iship_api.create_order(
                     dst_name     = info.get("dst_name", ""),
