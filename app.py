@@ -2076,18 +2076,26 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             _ic_sel  = st.selectbox("📍 เลือกที่อยู่ผู้รับ", _ic_labels, key="calc_iship_addr")
                             _ic_addr = _ic_addrs[_ic_labels.index(_ic_sel)]
                             _ic_cod  = _c_grand if _cr["is_cod"] else 0.0
-                            _ic_courier_code = iship_api.COURIER_MAP.get(_c_ship_label, "")
+
+                            # ── เลือก carrier (default = ถูกสุด) ──────────
+                            _ic_carrier_opts = [o["name"] for o in _opts_ok]
+                            _ic_carrier_sel  = st.selectbox(
+                                "🚚 เลือกขนส่ง",
+                                _ic_carrier_opts,
+                                index=0,
+                                key="calc_iship_carrier",
+                            )
+                            _ic_courier_code = iship_api.COURIER_MAP.get(_ic_carrier_sel, "")
+                            _ic_chosen_total = next((o["total"] for o in _opts_ok if o["name"] == _ic_carrier_sel), _c_ship_fee)
                             if _ic_cod:
-                                st.markdown(f"🚚 ส่งด้วย: **{_c_ship_label}** | COD: **{int(_ic_cod):,} ฿**")
+                                st.caption(f"iShip code: `{_ic_courier_code}` | ราคาจริง: {_ic_chosen_total:,} ฿ | COD: {int(_ic_cod):,} ฿")
                             else:
-                                st.markdown(f"🚚 ส่งด้วย: **{_c_ship_label}**")
-                            if _ic_courier_code:
-                                st.caption(f"iShip code: `{_ic_courier_code}`")
-                            else:
-                                st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_c_ship_label}' — จะใช้ FlashExpressA แทน")
+                                st.caption(f"iShip code: `{_ic_courier_code}` | ราคาจริง: {_ic_chosen_total:,} ฿")
+                            if not _ic_courier_code:
+                                st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_ic_carrier_sel}'")
 
                             # ── กรอกขนาด ถ้าเป็น Bulky carrier ───────────
-                            _ic_is_bulky = "Bulky" in _c_ship_label or "bulky" in _c_ship_label
+                            _ic_is_bulky = "Bulky" in _ic_carrier_sel
                             _ic_len = _ic_wid = _ic_hgt = 0
                             if _ic_is_bulky:
                                 st.markdown("**📐 ขนาดกล่อง (จำเป็นสำหรับ Bulky)**")
@@ -2108,7 +2116,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                     zipcode      = _ic_addr.get("postal_code", ""),
                                     weight_kg    = _c_weight_kg,
                                     cod_amount   = _ic_cod,
-                                    carrier      = _c_ship_label,
+                                    carrier      = _ic_carrier_sel,
                                     remark       = "",
                                     length_cm    = int(_ic_len),
                                     width_cm     = int(_ic_wid),
