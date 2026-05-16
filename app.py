@@ -2061,6 +2061,51 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 if _c_ship_fee > 0 and _c_ship_label and _c_ship_label != "ระบุเอง":
                     st.markdown(f"### 🚛 ราคาจริง: {_c_ship_fee:,.0f} ฿ ({_c_ship_label})")
 
+                # ─── ทดลองส่ง iShip ──────────────────────────────────────
+                if _cr["ship_zip"] and _opts_ok and _calc_cust_sel != "— ไม่ระบุ —" and iship_api.is_configured():
+                    _ic_cust = _calc_cust_map.get(_calc_cust_sel, {})
+                    _ic_cid  = _ic_cust.get("id", "")
+                    if _ic_cid:
+                        _ic_addrs = db.get_customer_addresses(_ic_cid)
+                        if _ic_addrs:
+                            _ic_labels = [
+                                f"{a.get('recipient_name','')} · {a.get('phone','')} · "
+                                f"{a.get('address_line','')} {a.get('district','')} {a.get('amphure','')} {a.get('province','')} {a.get('postal_code','')}"
+                                for a in _ic_addrs
+                            ]
+                            _ic_sel  = st.selectbox("📍 เลือกที่อยู่ผู้รับ", _ic_labels, key="calc_iship_addr")
+                            _ic_addr = _ic_addrs[_ic_labels.index(_ic_sel)]
+                            _ic_cod  = _c_grand if _cr["is_cod"] else 0.0
+                            if _ic_cod:
+                                st.markdown(f"🚚 ส่งด้วย: **{_c_ship_label}** | COD: **{int(_ic_cod):,} ฿**")
+                            else:
+                                st.markdown(f"🚚 ส่งด้วย: **{_c_ship_label}**")
+                            if st.button("📦 ส่ง iShip ด้วยขนส่งที่ถูกสุด", type="primary",
+                                         key="calc_iship_btn", use_container_width=True):
+                                _ic_resp = iship_api.create_order(
+                                    dst_name     = _ic_addr.get("recipient_name", ""),
+                                    dst_phone    = _ic_addr.get("phone", ""),
+                                    address_line = _ic_addr.get("address_line", ""),
+                                    district     = _ic_addr.get("district", ""),
+                                    amphure      = _ic_addr.get("amphure", ""),
+                                    province     = _ic_addr.get("province", ""),
+                                    zipcode      = _ic_addr.get("postal_code", ""),
+                                    weight_kg    = _c_weight_kg,
+                                    cod_amount   = _ic_cod,
+                                    carrier      = _c_ship_label,
+                                    remark       = "",
+                                )
+                                if _ic_resp.get("status"):
+                                    _ic_track = ((_ic_resp.get("data") or {}).get("tracking_no")
+                                                 or _ic_resp.get("tracking_no", ""))
+                                    st.success(f"✅ ส่ง iShip สำเร็จ! Tracking: **{_ic_track}**")
+                                else:
+                                    st.error(f"❌ {_ic_resp.get('message', str(_ic_resp))}")
+                                    with st.expander("🔍 debug"):
+                                        st.json(_ic_resp)
+                        else:
+                            st.caption("ยังไม่มีที่อยู่บันทึกสำหรับลูกค้านี้")
+
                 if _cr["ship_zip"] and _opts:
                     _rows_ok  = [o for o in _opts if not o["exceeds_max"]]
                     _rows_exc = [o for o in _opts if o["exceeds_max"]]
