@@ -253,8 +253,17 @@ def _show_carrier_select():
     weight_kg = info.get("weight_kg", 0.5)
     cod_amt   = float(info.get("cod_amount", 0))
 
+    if info.get("customer_name"):
+        st.markdown(f"**ลูกค้า:** {info['customer_name']}")
     st.markdown(f"**ผู้รับ:** {info.get('dst_name','')}  {info.get('dst_phone','')}")
     st.caption(f"{info.get('address_line','')} {info.get('district','')} {info.get('amphure','')} {info.get('province','')} {postcode}")
+    _items_disp = info.get("items", [])
+    if _items_disp:
+        st.markdown("**สินค้า:** " + "  ·  ".join(
+            f"{it.get('name', it.get('product_name','?'))} ×{it.get('qty',0)}"
+            for it in _items_disp
+        ))
+    st.caption(f"⚖️ {weight_kg:.2f} kg" + (f"  |  COD: {int(cod_amt):,} ฿" if cod_amt else ""))
     st.divider()
 
     opts     = carr.get_shipping_options(weight_kg, postcode, cod_amt > 0, cod_amt)
