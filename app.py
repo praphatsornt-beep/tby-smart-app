@@ -371,6 +371,7 @@ def _show_carrier_select():
                     "shipment_id":  info.get("shipment_id", ""),
                 }
                 st.session_state.pop("_iship_carrier_select", None)
+                st.session_state["_open_success_dialog"] = True
                 st.session_state["_do_clear_after_iship"] = tab
                 st.rerun()
             else:
@@ -434,9 +435,9 @@ def _show_iship_success_dialog():
         st.rerun()
 
 
-if st.session_state.get("_iship_carrier_select"):
+if st.session_state.pop("_open_carrier_select", False):
     _show_carrier_select()
-if st.session_state.get("_iship_success_info"):
+if st.session_state.pop("_open_success_dialog", False):
     _show_iship_success_dialog()
 
 
@@ -1180,6 +1181,7 @@ with tab1:
                             "shipment_id":  "",
                             "remark":       "",
                         }
+                        st.session_state["_open_carrier_select"] = True
                 # เก็บข้อมูลสำหรับ popup พิมพ์บิล
                 st.session_state["_print_popup"] = {
                     "customer_name": customer["name"],
@@ -1352,7 +1354,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 "line_user_id":  _luid_s2,
                                 "shipment_id":   "",
                             }
-                            _show_iship_success_dialog()
+                            st.session_state["_open_success_dialog"] = True
+                            st.rerun()
                         else:
                             _err_msg = resp.get("message") or resp.get("msg") or str(resp)
                             if "NotSupportAddress" in _err_msg:
@@ -1765,6 +1768,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         "shipment_id":  _sp_new_id,
                         "remark":       _sp_remark,
                     }
+                    st.session_state["_open_carrier_select"] = True
                 for _k in _sp_keys:
                     st.session_state.pop(_k, None)
                 st.session_state["_sp_addr_ver"] = _sp_av + 1
@@ -1831,7 +1835,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             "line_user_id":  _sp_luid_b,
                             "shipment_id":   _spp.get("_shipment_id", ""),
                         }
-                        _show_iship_success_dialog()
+                        st.session_state["_open_success_dialog"] = True
+                        st.rerun()
                     else:
                         _sp_err = _sp_resp.get("message") or str(_sp_resp)
                         if "NotSupportAddress" in _sp_err:
