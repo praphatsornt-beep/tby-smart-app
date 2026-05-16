@@ -183,19 +183,19 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 
 
 # ── Carrier definitions ───────────────────────────────────────────────────────
-# (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free)
+# (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg)
 _CARRIER_DEFS = [
-    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True),
-    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True),
-    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True),
-    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True),
-    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False),
-    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True),
-    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False),
-    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False),
-    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False),
-    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True),
-    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True),
+    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0),
+    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0),
+    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0),
+    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0),
+    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01),
+    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0),
+    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0),
+    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0),
+    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0),
+    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0),
+    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0),
 ]
 
 
@@ -211,12 +211,14 @@ def get_shipping_options(weight_kg: float, postcode: str,
     bkk = _is_bkk(pc)
     results = []
 
-    for cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free in _CARRIER_DEFS:
+    for cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg in _CARRIER_DEFS:
+        if weight_kg < min_kg:
+            continue  # ไม่แสดงถ้าน้ำหนักต่ำกว่าขั้นต่ำ (เช่น Flash Pro DD Bulky ต้อง >5kg)
         exceeds = weight_kg > max_kg
         lookup_kg = min(weight_kg, max_kg) if exceeds else weight_kg
         base = _lookup(table, lookup_kg, bkk)
         if base is None:
-            continue  # should not happen
+            continue
         sur, sur_label = sur_fn(pc, weight_kg)
         subtotal = base + sur + fuel
         cod_fee = ceil(max(subtotal, cod_amount) * cod_pct / 100) if is_cod else 0
@@ -232,6 +234,7 @@ def get_shipping_options(weight_kg: float, postcode: str,
             "cod_pct":       cod_pct,
             "exceeds_max":   exceeds,
             "max_kg":        max_kg,
+            "min_kg":        min_kg,
             "return_free":   return_free,
         })
 

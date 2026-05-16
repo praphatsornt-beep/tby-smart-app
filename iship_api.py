@@ -305,9 +305,12 @@ def create_order(
     weight_kg: float, cod_amount: float, carrier: str, remark: str = "",
     item_detail: str = "",
     products: list = None,
+    length_cm: int = 0, width_cm: int = 0, height_cm: int = 0,
 ) -> dict:
+    from math import ceil as _ceil
     src = _src()
     is_cod = cod_amount > 0
+    _weight_int = max(1, _ceil(weight_kg))
     payload = {
         "courier_code": COURIER_MAP.get(carrier, "FlashExpressA"),
         "src_name":     src["ISHIP_SRC_NAME"],
@@ -324,10 +327,13 @@ def create_order(
         "dst_amphure":  amphure,
         "dst_province": _norm_province(province),
         "dst_zipcode":  zipcode,
-        "weight":       1,
+        "weight":       _weight_int,
         "cod_amount":   int(cod_amount),
         "remark":       remark,
     }
+    if length_cm: payload["length"] = length_cm
+    if width_cm:  payload["width"]  = width_cm
+    if height_cm: payload["height"] = height_cm
     if not is_cod:
         payload["use_onlabel"]   = "1"
         payload["label_name"]    = src["ISHIP_LABEL_NAME"]
@@ -358,10 +364,10 @@ def create_order(
             "category_id":       "2",
             "save_dst_address":  "0",
             "product_value":     "",
-            "weight":            "1",
-            "width":             "",
-            "length":            "",
-            "height":            "",
+            "weight":            str(_weight_int),
+            "width":             str(width_cm) if width_cm else "",
+            "length":            str(length_cm) if length_cm else "",
+            "height":            str(height_cm) if height_cm else "",
         })
         form_data = {k: str(v) for k, v in payload.items()}
         form_data["product_lists"] = json.dumps(_prod_list, ensure_ascii=False)
