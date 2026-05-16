@@ -843,7 +843,7 @@ with tab1:
                             if _saved_addrs:
                                 with st.expander(f"⚡ เลือกที่อยู่เดิม ({len(_saved_addrs)})", expanded=False):
                                     for _sa in _saved_addrs:
-                                        _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
+                                        _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}"
                                         if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
                                             _qa_dt = (_sa.get("district", "") or "").strip()
                                             _qa_pc = (_sa.get("postal_code", "") or "").strip()
@@ -1513,7 +1513,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             if _sp_saved:
                 with st.expander(f"⚡ ที่อยู่เดิม ({len(_sp_saved)} รายการ)", expanded=False):
                     for _sa in _sp_saved:
-                        _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('postal_code','')}"
+                        _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}"
                         if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
                             _sa_dt = (_sa.get("district", "") or "").strip()
                             _sa_pc = (_sa.get("postal_code", "") or "").strip()
