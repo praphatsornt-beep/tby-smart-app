@@ -770,16 +770,16 @@ with tab1:
                                 if _rph_cust and not st.session_state.get("_cust_picked"):
                                     st.session_state["_cust_picked"] = _rph_cust
                                     st.session_state["_prev_shipping_cid"] = _rph_addr.get("customer_id", "")
+                        # apply staged address fill ก่อน render ทุก widget
+                        for _fk, _wk in [("_fr_rname","r_name"),("_fr_rphone","r_phone"),("_fr_al","r_al"),
+                                          ("_fr_dt","r_dt"),("_fr_am","r_am"),("_fr_pv","r_pv")]:
+                            if _fk in st.session_state:
+                                st.session_state[_wk] = st.session_state.pop(_fk)
                         col_a, col_b = st.columns(2)
                         r_name      = col_a.text_input("ชื่อผู้รับ",   key="r_name")
                         r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone")
                         r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                         col_c, col_d, col_e = st.columns(3)
-                        # apply staged address fill ก่อน render
-                        for _fk, _wk in [("_fr_rname","r_name"),("_fr_rphone","r_phone"),("_fr_al","r_al"),
-                                          ("_fr_dt","r_dt"),("_fr_am","r_am"),("_fr_pv","r_pv")]:
-                            if _fk in st.session_state:
-                                st.session_state[_wk] = st.session_state.pop(_fk)
                         r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
                         r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
                         r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
