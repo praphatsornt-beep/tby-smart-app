@@ -435,8 +435,14 @@ def _show_iship_success_dialog():
         st.rerun()
 
 
-if st.session_state.pop("_open_carrier_select", False):
+# ── clean up stale iShip keys จาก version ก่อนหน้า ──────────────────────────
+for _stale in ("_iship_pending", "_sp_iship_pending"):
+    st.session_state.pop(_stale, None)
+
+# carrier select: persistent (ต้องเรียกทุก rerun เพื่อให้ interactive widget ทำงานได้)
+if st.session_state.get("_iship_carrier_select"):
     _show_carrier_select()
+# success dialog: pop-once (ไม่มี interactive widget ภายใน)
 if st.session_state.pop("_open_success_dialog", False):
     _show_iship_success_dialog()
 
@@ -588,6 +594,8 @@ with tab1:
         _sale_h1.subheader("บันทึกรายการขาย")
         if st.session_state.get("_do_clear_after_iship") == "sale":
             st.session_state.pop("_do_clear_after_iship", None)
+            st.session_state.pop("_iship_carrier_select", None)
+            st.session_state.pop("_iship_success_info", None)
             for _k in _sale_keys:
                 st.session_state.pop(_k, None)
             for _k in ["r_name","r_phone","r_al","r_dt","r_am","r_pv","m_postcode","m_iship_note"]:
@@ -1181,7 +1189,7 @@ with tab1:
                             "shipment_id":  "",
                             "remark":       "",
                         }
-                        st.session_state["_open_carrier_select"] = True
+                        pass  # _iship_carrier_select set above — dialog triggers automatically
                 # เก็บข้อมูลสำหรับ popup พิมพ์บิล
                 st.session_state["_print_popup"] = {
                     "customer_name": customer["name"],
@@ -1399,6 +1407,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         _sc1.subheader("บันทึกการส่งของ")
         if st.session_state.get("_do_clear_after_iship") == "ship":
             st.session_state.pop("_do_clear_after_iship", None)
+            st.session_state.pop("_iship_carrier_select", None)
+            st.session_state.pop("_iship_success_info", None)
             for _k in _sp_keys:
                 st.session_state.pop(_k, None)
             st.session_state["_sp_addr_ver"] = _sp_av + 1
