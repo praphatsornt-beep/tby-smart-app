@@ -243,6 +243,139 @@ st.markdown("""
 st.title("🛍️ TBY SMART APP")
 
 
+@st.dialog("🚚 เลือกขนส่ง", width="large")
+def _show_carrier_select():
+    info = st.session_state.get("_iship_carrier_select", {})
+    if not info:
+        return
+    tab       = info.get("tab", "ship")
+    postcode  = info.get("postcode", "")
+    weight_kg = info.get("weight_kg", 0.5)
+    cod_amt   = float(info.get("cod_amount", 0))
+
+    st.markdown(f"**ผู้รับ:** {info.get('dst_name','')}  {info.get('dst_phone','')}")
+    st.caption(f"{info.get('address_line','')} {info.get('district','')} {info.get('amphure','')} {info.get('province','')} {postcode}")
+    st.divider()
+
+    opts     = carr.get_shipping_options(weight_kg, postcode, cod_amt > 0, cod_amt)
+    opts_ok  = [o for o in opts if not o["exceeds_max"]]
+    opts_exc = [o for o in opts if o["exceeds_max"]]
+
+    if opts_ok:
+        _cmp = []
+        for _ci, o in enumerate(opts_ok):
+            _sur_txt  = f"+{o['surcharge']} ({o['sur_label']})" if o["surcharge"] else "-"
+            _fuel_txt = f"+{o['fuel']}" if o["fuel"] else "-"
+            _cod_txt  = f"+{o['cod_fee']:,}" if o["cod_fee"] else "-"
+            _cmp.append({"ขนส่ง": ("🥇 " if _ci == 0 else "") + o["name"],
+                         "ค่าส่ง": o["base"], "พื้นที่พิเศษ": _sur_txt,
+                         "น้ำมัน": _fuel_txt, "รวม (฿)": o["total"], "COD": _cod_txt})
+        st.dataframe(pd.DataFrame(_cmp), hide_index=True, use_container_width=True,
+                     column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
+
+        _cs_carrier = st.selectbox("เลือกขนส่ง", [o["name"] for o in opts_ok],
+                                   index=0, key="_cs_carrier_sel")
+        _cs_code    = iship_api.COURIER_MAP.get(_cs_carrier, "")
+        _cs_total   = next((o["total"] for o in opts_ok if o["name"] == _cs_carrier), 0)
+        st.caption(f"iShip code: `{_cs_code}` | ราคาจริง: {_cs_total:,} ฿")
+        if not _cs_code:
+            st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_cs_carrier}'")
+
+        _cs_is_bulky = "Bulky" in _cs_carrier
+        _cs_len = _cs_wid = _cs_hgt = 0
+        if _cs_is_bulky:
+            st.markdown("**📐 ขนาดกล่อง (จำเป็นสำหรับ Bulky)**")
+            _b1, _b2, _b3 = st.columns(3)
+            _cs_len = _b1.number_input("ยาว (cm)", 1, 300, 30, key="_cs_len")
+            _cs_wid = _b2.number_input("กว้าง (cm)", 1, 300, 30, key="_cs_wid")
+            _cs_hgt = _b3.number_input("สูง (cm)", 1, 300, 20, key="_cs_hgt")
+
+        st.divider()
+        _btn1, _btn2 = st.columns(2)
+        if _btn1.button("📦 ส่ง iShip", type="primary", use_container_width=True, key="_cs_send"):
+            with st.spinner("กำลังสร้างรายการใน iShip..."):
+                _cs_resp = iship_api.create_order(
+                    dst_name     = info.get("dst_name", ""),
+                    dst_phone    = info.get("dst_phone", ""),
+                    address_line = info.get("address_line", ""),
+                    district     = info.get("district", ""),
+                    amphure      = info.get("amphure", ""),
+                    province     = info.get("province", ""),
+                    zipcode      = postcode,
+                    weight_kg    = weight_kg,
+                    cod_amount   = cod_amt,
+                    carrier      = _cs_carrier,
+                    remark       = info.get("remark", ""),
+                    length_cm    = int(_cs_len),
+                    width_cm     = int(_cs_wid),
+                    height_cm    = int(_cs_hgt),
+                )
+            if _cs_resp.get("status"):
+                _cs_d       = _cs_resp.get("data") or {}
+                _cs_track   = (_cs_d.get("tracking_code") or _cs_d.get("tracking_number")
+                               or _cs_resp.get("tracking_code") or _cs_resp.get("tracking_number") or "")
+                if tab == "ship" and info.get("shipment_id") and _cs_track:
+                    db.update_shipment_tracking(info["shipment_id"], _cs_track)
+                if tab == "sale":
+                    try:
+                        db.create_shipment({
+                            "customer_id":    info.get("customer_id") or None,
+                            "recipient_name": info.get("dst_name", ""),
+                            "phone":          info.get("dst_phone", ""),
+                            "address_line":   info.get("address_line", ""),
+                            "district":       info.get("district", ""),
+                            "amphure":        info.get("amphure", ""),
+                            "province":       info.get("province", ""),
+                            "postal_code":    postcode,
+                            "carrier":        _cs_carrier,
+                            "items":          info.get("items", []),
+                            "tracking_no":    _cs_track,
+                            "cod_amount":     int(cod_amt),
+                            "notes":          "",
+                            "source":         "sale",
+                        })
+                    except Exception:
+                        pass
+                _cs_luid = db.get_customer_line_user_id(info.get("customer_id","")) if info.get("customer_id") else ""
+                st.session_state["_iship_success_info"] = {
+                    "tracking":     _cs_track,
+                    "tab":          tab,
+                    "customer":     info.get("customer_name", ""),
+                    "dst_name":     info.get("dst_name", ""),
+                    "dst_phone":    info.get("dst_phone", ""),
+                    "address":      f"{info.get('address_line','')} {info.get('district','')} {info.get('amphure','')} {info.get('province','')} {postcode}".strip(),
+                    "carrier":      _cs_carrier,
+                    "weight_kg":    weight_kg,
+                    "cod_amount":   int(cod_amt),
+                    "items":        info.get("items", []),
+                    "line_user_id": _cs_luid,
+                    "shipment_id":  info.get("shipment_id", ""),
+                }
+                st.session_state.pop("_iship_carrier_select", None)
+                st.session_state["_do_clear_after_iship"] = tab
+                st.rerun()
+            else:
+                st.error(f"❌ {_cs_resp.get('message', str(_cs_resp))}")
+                with st.expander("🔍 debug"):
+                    st.json(_cs_resp)
+
+        if _btn2.button("ข้าม (ไม่ส่ง iShip)", use_container_width=True, key="_cs_skip"):
+            st.session_state.pop("_iship_carrier_select", None)
+            st.session_state["_do_clear_after_iship"] = tab
+            st.rerun()
+
+        if opts_exc:
+            with st.expander(f"⚠️ เกินน้ำหนักสูงสุด ({len(opts_exc)} ขนส่ง)"):
+                for o in opts_exc:
+                    st.caption(f"❌ {o['name']} รับได้สูงสุด {o['max_kg']} kg")
+    else:
+        st.warning("ไม่มีขนส่งที่รองรับน้ำหนักนี้")
+        if st.button("ปิด", key="_cs_close"):
+            st.session_state.pop("_iship_carrier_select", None)
+            st.session_state["_do_clear_after_iship"] = tab
+            st.rerun()
+
+
 @st.dialog("✅ ส่ง iShip สำเร็จ", width="large")
 def _show_iship_success_dialog():
     info = st.session_state.get("_iship_success_info", {})
@@ -282,6 +415,8 @@ def _show_iship_success_dialog():
         st.rerun()
 
 
+if st.session_state.get("_iship_carrier_select"):
+    _show_carrier_select()
 if st.session_state.get("_iship_success_info"):
     _show_iship_success_dialog()
 
@@ -1009,55 +1144,23 @@ with tab1:
                         "_customer_id": customer["id"],
                     }
                     if iship_api.is_configured():
-                        _api_keys = {"dst_name","dst_phone","address_line","district",
-                                     "amphure","province","zipcode","weight_kg",
-                                     "cod_amount","carrier","remark","item_detail","products"}
-                        with st.spinner("กำลังสร้างรายการใน iShip..."):
-                            _auto_resp = iship_api.create_order(**{k: v for k, v in _iship_args.items() if k in _api_keys})
-                        if _auto_resp.get("status"):
-                            _rd = _auto_resp.get("data") or {}
-                            tracking = (_rd.get("tracking_code") or _rd.get("tracking_number")
-                                        or _auto_resp.get("tracking_code") or _auto_resp.get("tracking_number") or "")
-                            try:
-                                db.create_shipment({
-                                    "customer_id":    customer["id"] or None,
-                                    "recipient_name": r_name or customer["name"],
-                                    "phone":          r_phone,
-                                    "address_line":   r_addr_line,
-                                    "district":       r_district,
-                                    "amphure":        r_amphure,
-                                    "province":       r_province,
-                                    "postal_code":    m_postcode,
-                                    "carrier":        m_carrier,
-                                    "items":          _all_items,
-                                    "tracking_no":    tracking,
-                                    "cod_amount":     ceil(collect) if m_cod else 0,
-                                    "notes":          "",
-                                    "source":         "sale",
-                                })
-                            except Exception:
-                                pass
-                            _luid_s1 = db.get_customer_line_user_id(customer["id"]) if (tracking and customer.get("id")) else ""
-                            _addr_full = f"{r_addr_line} {r_district} {r_amphure} {r_province} {m_postcode}".strip()
-                            st.session_state["_iship_success_info"] = {
-                                "tracking":      tracking,
-                                "tab":           "sale",
-                                "customer":      customer["name"],
-                                "dst_name":      r_name or customer["name"],
-                                "dst_phone":     r_phone,
-                                "address":       _addr_full,
-                                "carrier":       m_carrier,
-                                "weight_kg":     (total_w_g + 500) / 1000,
-                                "cod_amount":    ceil(collect) if m_cod else 0,
-                                "items":         _all_items,
-                                "line_user_id":  _luid_s1,
-                                "shipment_id":   "",
-                            }
-                        else:
-                            _auto_err = _auto_resp.get("message") or _auto_resp.get("msg") or str(_auto_resp)
-                            st.session_state["_iship_pending"] = {**_iship_args, "_auto_error": _auto_err}
-                    else:
-                        st.session_state["_iship_pending"] = _iship_args
+                        st.session_state["_iship_carrier_select"] = {
+                            "tab":          "sale",
+                            "postcode":     m_postcode,
+                            "weight_kg":    (total_w_g + 500) / 1000,
+                            "dst_name":     r_name or customer["name"],
+                            "dst_phone":    r_phone,
+                            "address_line": r_addr_line,
+                            "district":     r_district,
+                            "amphure":      r_amphure,
+                            "province":     r_province,
+                            "cod_amount":   ceil(collect) if m_cod else 0,
+                            "items":        _all_items,
+                            "customer_id":  customer["id"],
+                            "customer_name":customer["name"],
+                            "shipment_id":  "",
+                            "remark":       "",
+                        }
                 # เก็บข้อมูลสำหรับ popup พิมพ์บิล
                 st.session_state["_print_popup"] = {
                     "customer_name": customer["name"],
@@ -1626,38 +1729,23 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "_customer_name": _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
                 }
                 if iship_api.is_configured():
-                    _sp_api_keys = {"dst_name","dst_phone","address_line","district",
-                                    "amphure","province","zipcode","weight_kg",
-                                    "cod_amount","carrier","remark","item_detail","products"}
-                    with st.spinner("กำลังสร้างรายการใน iShip..."):
-                        _sp_auto_resp = iship_api.create_order(**{k: v for k, v in _sp_iship_args.items() if k in _sp_api_keys})
-                    if _sp_auto_resp.get("status"):
-                        _d = _sp_auto_resp.get("data") or {}
-                        _sp_tracking = (_d.get("tracking_code") or _d.get("tracking_number")
-                                        or _sp_auto_resp.get("tracking_code") or _sp_auto_resp.get("tracking_number") or "")
-                        if _sp_tracking:
-                            db.update_shipment_tracking(_sp_new_id, _sp_tracking)
-                        _sp_luid_a = db.get_customer_line_user_id(_sp_cid) if (_sp_tracking and _sp_cid) else ""
-                        _spp_addr = f"{_sp_al.strip()} {_sp_dt.strip()} {_sp_am.strip()} {_sp_pv.strip()} {_sp_pc.strip()}".strip()
-                        st.session_state["_iship_success_info"] = {
-                            "tracking":      _sp_tracking,
-                            "tab":           "ship",
-                            "customer":      _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
-                            "dst_name":      _sp_rname.strip(),
-                            "dst_phone":     _sp_rphone.strip(),
-                            "address":       _spp_addr,
-                            "carrier":       _sp_carrier,
-                            "weight_kg":     max(0.5, _sp_wt),
-                            "cod_amount":    0,
-                            "items":         _sp_items,
-                            "line_user_id":  _sp_luid_a,
-                            "shipment_id":   _sp_new_id,
-                        }
-                    else:
-                        _sp_auto_err = _sp_auto_resp.get("message") or str(_sp_auto_resp)
-                        st.session_state["_sp_iship_pending"] = {**_sp_iship_args, "_auto_error": _sp_auto_err}
-                else:
-                    st.session_state["_sp_iship_pending"] = _sp_iship_args
+                    st.session_state["_iship_carrier_select"] = {
+                        "tab":          "ship",
+                        "postcode":     _sp_pc.strip(),
+                        "weight_kg":    max(0.5, _sp_wt),
+                        "dst_name":     _sp_rname.strip(),
+                        "dst_phone":    _sp_rphone.strip(),
+                        "address_line": _sp_al.strip(),
+                        "district":     _sp_dt.strip(),
+                        "amphure":      _sp_am.strip(),
+                        "province":     _sp_pv.strip(),
+                        "cod_amount":   0,
+                        "items":        _sp_items,
+                        "customer_id":  _sp_cid or "",
+                        "customer_name":_sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
+                        "shipment_id":  _sp_new_id,
+                        "remark":       _sp_remark,
+                    }
                 for _k in _sp_keys:
                     st.session_state.pop(_k, None)
                 st.session_state["_sp_addr_ver"] = _sp_av + 1
