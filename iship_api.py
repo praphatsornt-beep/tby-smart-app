@@ -10,8 +10,17 @@ BASE_URL  = "https://app.iship.cloud/api"
 WEB_BASE  = "https://app.iship.cloud"
 
 COURIER_MAP = {
-    "Flash Express": "FlashExpressA",  # Flash Thunder
-    "SPX Express":   "ShopeeExpress",
+    "Flash Thunder":       "FlashExpressA",
+    "Flash Pro DD":        "FlashExpressD",
+    "Flash Pro OK":        "FlashLive",
+    "Flash 100CM":         "FlashExpressC",
+    "Flash Pro DD Bulky":  "FlashExpressDBulky",
+    "SPX Express":         "ShopeeExpress",
+    "KEX Express":         "KerryExpress",
+    "KEX Bulky":           "KexBulky",
+    "DHL eCommerce":       "DHL",
+    "ไปรษณีย์ EMS":        "THP_eParcelX",
+    "ไปรษณีย์ EMS Bulky":  "THP_eParcelZ",
 }
 
 _PROVINCE_MAP = {
