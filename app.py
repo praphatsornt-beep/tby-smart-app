@@ -2076,10 +2076,15 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             _ic_sel  = st.selectbox("📍 เลือกที่อยู่ผู้รับ", _ic_labels, key="calc_iship_addr")
                             _ic_addr = _ic_addrs[_ic_labels.index(_ic_sel)]
                             _ic_cod  = _c_grand if _cr["is_cod"] else 0.0
+                            _ic_courier_code = iship_api.COURIER_MAP.get(_c_ship_label, "")
                             if _ic_cod:
                                 st.markdown(f"🚚 ส่งด้วย: **{_c_ship_label}** | COD: **{int(_ic_cod):,} ฿**")
                             else:
                                 st.markdown(f"🚚 ส่งด้วย: **{_c_ship_label}**")
+                            if _ic_courier_code:
+                                st.caption(f"iShip code: `{_ic_courier_code}`")
+                            else:
+                                st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_c_ship_label}' — จะใช้ FlashExpressA แทน")
                             if st.button("📦 ส่ง iShip ด้วยขนส่งที่ถูกสุด", type="primary",
                                          key="calc_iship_btn", use_container_width=True):
                                 _ic_resp = iship_api.create_order(

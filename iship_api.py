@@ -309,7 +309,7 @@ def create_order(
     src = _src()
     is_cod = cod_amount > 0
     payload = {
-        "courier_code": COURIER_MAP.get(carrier, "FlashExpress"),
+        "courier_code": COURIER_MAP.get(carrier, "FlashExpressA"),
         "src_name":     src["ISHIP_SRC_NAME"],
         "src_phone":    src["ISHIP_SRC_PHONE"],
         "src_address":  src["ISHIP_SRC_ADDRESS"],
