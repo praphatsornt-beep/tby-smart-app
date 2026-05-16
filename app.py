@@ -2085,6 +2085,17 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 st.caption(f"iShip code: `{_ic_courier_code}`")
                             else:
                                 st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_c_ship_label}' — จะใช้ FlashExpressA แทน")
+
+                            # ── กรอกขนาด ถ้าเป็น Bulky carrier ───────────
+                            _ic_is_bulky = "Bulky" in _c_ship_label or "bulky" in _c_ship_label
+                            _ic_len = _ic_wid = _ic_hgt = 0
+                            if _ic_is_bulky:
+                                st.markdown("**📐 ขนาดกล่อง (จำเป็นสำหรับ Bulky)**")
+                                _bd1, _bd2, _bd3 = st.columns(3)
+                                _ic_len = _bd1.number_input("ยาว (cm)", min_value=1, max_value=300, value=30, step=1, key="calc_iship_len")
+                                _ic_wid = _bd2.number_input("กว้าง (cm)", min_value=1, max_value=300, value=30, step=1, key="calc_iship_wid")
+                                _ic_hgt = _bd3.number_input("สูง (cm)", min_value=1, max_value=300, value=20, step=1, key="calc_iship_hgt")
+
                             if st.button("📦 ส่ง iShip ด้วยขนส่งที่ถูกสุด", type="primary",
                                          key="calc_iship_btn", use_container_width=True):
                                 _ic_resp = iship_api.create_order(
@@ -2099,6 +2110,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                     cod_amount   = _ic_cod,
                                     carrier      = _c_ship_label,
                                     remark       = "",
+                                    length_cm    = int(_ic_len),
+                                    width_cm     = int(_ic_wid),
+                                    height_cm    = int(_ic_hgt),
                                 )
                                 if _ic_resp.get("status"):
                                     _ic_track = ((_ic_resp.get("data") or {}).get("tracking_no")
