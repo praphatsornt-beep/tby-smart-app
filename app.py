@@ -2730,7 +2730,7 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                             for _n in range(1, min(_outs_q, 5) + 1):
                                 _hint += f"  ·  {_n} ชิ้น = {_n * _price:,.0f} ฿"
                             st.caption(_hint)
-                            _def_amt = float(balance["outstanding_amount"]) if evt_type != "รับของ" else 0.0
+                            _def_amt = max(0.0, float(balance["outstanding_amount"])) if evt_type != "รับของ" else 0.0
                             _def_qty = _outs_q if evt_type != "จ่ายเงิน" else 0
                             with st.form(f"evt_{txn_id}", clear_on_submit=True):
                                 fc1, fc2, fc3 = st.columns([2, 2, 1])
