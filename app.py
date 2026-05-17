@@ -2316,7 +2316,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
     # ─────────────────────────────────────────────────────────────────────────
     with _sub_boxcalc:
         st.subheader("📦 คำนวณการแบ่งกล่อง")
-        st.caption("ดึงน้ำหนักจาก tab คำนวณยอด อัตโนมัติ — กดคำนวณที่นั่นก่อน")
+        st.caption("ดึงน้ำหนักจาก tab 🔢 คำนวณยอด — กดคำนวณที่นั่นก่อน")
 
         # ── ตั้งค่า preset กล่อง ──────────────────────────────────────────
         with st.expander("⚙️ ตั้งค่าขนาดกล่อง", expanded=False):
@@ -2332,6 +2332,28 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             try: return float(s.strip())
             except: return 0.0
 
+        def _pack_boxes(items: list, max_kg: float) -> list:
+            """First-Fit Decreasing bin packing. Returns list of boxes [{weight_kg, items:{code:qty}}]"""
+            units = []
+            for it in items:
+                w = it["product"].get("weight_grams", 0) / 1000
+                code = it["product"]["id"].upper()
+                for _ in range(int(it["qty"])):
+                    units.append((code, w))
+            units.sort(key=lambda x: -x[1])
+            boxes: list[dict] = []
+            for code, w in units:
+                placed = False
+                for box in boxes:
+                    if box["weight_kg"] + w <= max_kg + 1e-9:
+                        box["weight_kg"] += w
+                        box["items"][code] = box["items"].get(code, 0) + 1
+                        placed = True
+                        break
+                if not placed:
+                    boxes.append({"weight_kg": w, "items": {code: 1}})
+            return boxes
+
         _box_sizes = sorted({v for s in _box_str.split(",") if (v := _safe_float_box(s)) > 0})
 
         # ── ดึงข้อมูลจาก calc result ──────────────────────────────────────
@@ -2339,77 +2361,88 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if not _bx_cr or not _bx_cr.get("items"):
             st.info("กรุณาคำนวณยอดใน tab 🔢 คำนวณยอด ก่อน")
         else:
-            _bx_total_w = sum(
-                int(_ci["product"].get("weight_grams", 0)) * int(_ci["qty"])
-                for _ci in _bx_cr["items"]
-            )
-            _bx_prod_kg = _bx_total_w / 1000
+            _bx_prod_kg  = sum(int(_ci["product"].get("weight_grams",0))*int(_ci["qty"]) for _ci in _bx_cr["items"]) / 1000
             _bx_postcode = _bx_cr.get("ship_zip", "")
-
             st.markdown(f"⚖️ น้ำหนักสินค้ารวม: **{_bx_prod_kg:.3f} kg**"
-                        + (f"  |  📮 รหัสไปรษณีย์: **{_bx_postcode}**" if _bx_postcode else ""))
+                        + (f"  |  📮 **{_bx_postcode}**" if _bx_postcode else ""))
 
             if not _box_sizes:
                 st.warning("กรุณาตั้งค่าขนาดกล่องก่อน")
             else:
-                _bx_rows = []
-                _min_ship_cost = None
+                # ── สรุปทุก config (เปรียบเทียบ) ──────────────────────────
+                _summary_rows = []
+                _config_data  = {}   # bmax → {boxes, carrier_totals}
+                _all_carrier_names = []
+
                 for _bmax in _box_sizes:
-                    _n     = ceil(_bx_prod_kg / _bmax)
-                    _full  = _n - 1
-                    _last  = _bx_prod_kg - _full * _bmax
-                    _det   = (f"{_full}×{_bmax:.0f}kg + 1×{_last:.2f}kg"
-                              if _full > 0 else f"1×{_last:.2f}kg")
-                    _ship_total_kg = _bx_prod_kg + _n * 0.5
+                    _boxes = _pack_boxes(_bx_cr["items"], _bmax)
+                    _n     = len(_boxes)
+                    _total_ship_kg = _bx_prod_kg + _n * 0.5
 
-                    # ค่าส่งถูกสุด
-                    _bx_ship_cost = None
-                    _bx_carrier   = ""
+                    # ค่าส่งทุกขนส่ง
+                    _carrier_totals: dict[str, int] = {}
                     if _bx_postcode:
-                        _bx_cost_total = 0
-                        _bx_names = []
-                        # กล่องเต็ม (n-1 ใบ)
-                        if _full > 0:
-                            _bx_fo = carr.get_shipping_options(_bmax + 0.5, _bx_postcode)
-                            _bx_fok = [o for o in _bx_fo if not o["exceeds_max"]]
-                            if _bx_fok:
-                                _bx_cost_total += _full * _bx_fok[0]["total"]
-                                _bx_names.append(_bx_fok[0]["name"])
-                        # กล่องสุดท้าย
-                        _bx_lo = carr.get_shipping_options(_last + 0.5, _bx_postcode)
-                        _bx_lok = [o for o in _bx_lo if not o["exceeds_max"]]
-                        if _bx_lok:
-                            _bx_cost_total += _bx_lok[0]["total"]
-                            _bx_names.append(_bx_lok[0]["name"])
-                        if _bx_lok or _full > 0:
-                            _bx_ship_cost = _bx_cost_total
-                            _bx_carrier   = _bx_names[-1] if _bx_names else ""
+                        for _box in _boxes:
+                            _bopts = carr.get_shipping_options(_box["weight_kg"] + 0.5, _bx_postcode)
+                            for _o in _bopts:
+                                if not _o["exceeds_max"]:
+                                    _cn = _o["name"]
+                                    _carrier_totals[_cn] = _carrier_totals.get(_cn, 0) + _o["total"]
+                                    if _cn not in _all_carrier_names:
+                                        _all_carrier_names.append(_cn)
 
-                    _row = {
-                        "กล่อง max":              f"{_bmax:.0f} kg",
-                        "จำนวนกล่อง":              _n,
-                        "น้ำหนักต่อกล่อง":          _det,
-                        "น้ำหนักส่ง รวมกล่อง (kg)": f"{_ship_total_kg:.2f}",
-                    }
-                    if _bx_postcode and _bx_ship_cost is not None:
-                        _row["ขนส่งถูกสุด"]    = _bx_carrier
-                        _row["ค่าส่งรวม (฿)"]  = _bx_ship_cost
-                        if _min_ship_cost is None or _bx_ship_cost < _min_ship_cost:
-                            _min_ship_cost = _bx_ship_cost
-                    _bx_rows.append(_row)
+                    _cheapest_cost = min(_carrier_totals.values()) if _carrier_totals else None
+                    _cheapest_name = next((k for k,v in _carrier_totals.items() if v == _cheapest_cost), "-") if _cheapest_cost else "-"
 
-                _bx_df = pd.DataFrame(_bx_rows)
-                if "ค่าส่งรวม (฿)" in _bx_df.columns:
-                    _cheapest_idx = _bx_df["ค่าส่งรวม (฿)"].idxmin()
-                    _bx_df["กล่อง max"] = _bx_df.apply(
-                        lambda r: ("⭐ " if r.name == _cheapest_idx else "") + r["กล่อง max"], axis=1
-                    )
-                    st.dataframe(_bx_df, hide_index=True, use_container_width=True,
-                                 column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn("ค่าส่งรวม (฿)", format="%d ฿")})
-                    st.caption("⭐ = ตัวเลือกที่ค่าส่งรวมถูกสุด")
+                    _config_data[_bmax] = {"boxes": _boxes, "carrier_totals": _carrier_totals}
+                    _row = {"กล่อง max": f"{_bmax:.0f} kg", "จำนวนกล่อง": _n,
+                            "น้ำหนักส่งรวม (kg)": f"{_total_ship_kg:.2f}",
+                            "ขนส่งถูกสุด": _cheapest_name}
+                    if _cheapest_cost:
+                        _row["ค่าส่งรวม (฿)"] = _cheapest_cost
+                    _summary_rows.append(_row)
+
+                _sum_df = pd.DataFrame(_summary_rows)
+                if "ค่าส่งรวม (฿)" in _sum_df.columns:
+                    _ci_min = _sum_df["ค่าส่งรวม (฿)"].idxmin()
+                    _sum_df["กล่อง max"] = _sum_df.apply(
+                        lambda r: ("⭐ " if r.name == _ci_min else "") + r["กล่อง max"], axis=1)
+                    st.dataframe(_sum_df, hide_index=True, use_container_width=True,
+                                 column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
+                    st.caption("⭐ = ค่าส่งรวมถูกสุด")
                 else:
-                    st.dataframe(_bx_df, hide_index=True, use_container_width=True)
-                    st.caption("ใส่รหัสไปรษณีย์ใน tab คำนวณยอด เพื่อดูค่าส่งเปรียบเทียบ")
+                    st.dataframe(_sum_df, hide_index=True, use_container_width=True)
+
+                # ── รายละเอียด config ที่เลือก ─────────────────────────────
+                st.divider()
+                _sel_label = st.selectbox(
+                    "ดูรายละเอียด — เลือก config กล่อง",
+                    [f"{b:.0f} kg" for b in _box_sizes],
+                    key="_bx_sel_config",
+                )
+                _sel_bmax  = next((b for b in _box_sizes if f"{b:.0f} kg" == _sel_label), _box_sizes[0])
+                _sel_data  = _config_data[_sel_bmax]
+                _sel_boxes = _sel_data["boxes"]
+
+                # ① สินค้าในแต่ละกล่อง
+                st.markdown(f"**📦 การจัดสินค้า ({len(_sel_boxes)} กล่อง)**")
+                for _bi, _box in enumerate(_sel_boxes, 1):
+                    _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
+                    _bkg = _box["weight_kg"] + 0.5
+                    st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`")
+
+                # ② ตารางเปรียบเทียบทุกขนส่ง
+                if _bx_postcode and _sel_data["carrier_totals"]:
+                    st.divider()
+                    st.markdown("**🚚 เปรียบเทียบค่าส่งทุกขนส่ง**")
+                    _ct = _sel_data["carrier_totals"]
+                    _ct_min = min(_ct.values())
+                    _ct_rows = [{"ขนส่ง": ("🥇 " if v == _ct_min else "") + k, "ค่าส่งรวม (฿)": v}
+                                for k, v in sorted(_ct.items(), key=lambda x: x[1])]
+                    st.dataframe(pd.DataFrame(_ct_rows), hide_index=True, use_container_width=True,
+                                 column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
+                elif not _bx_postcode:
+                    st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อดูค่าส่งเปรียบเทียบ")
 
 # Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
 # ─────────────────────────────────────────────────────────────────────────────
