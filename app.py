@@ -2523,7 +2523,9 @@ with tab2:
                 pending = int(grp["ค้างรับ"].sum())
                 txn_ids = grp["id"].tolist()
                 _luid   = _cust_line_map.get(customer_name, "")
-                exp_label = f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
+                _unbilled_pv = grp.loc[grp["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in grp.columns else 0
+                exp_label = (f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
+                             + (f" | ⭐ PV ค้างเปิดบิล {_unbilled_pv:,.0f}" if _unbilled_pv > 0 else ""))
 
                 with st.expander(exp_label, expanded=single_cust):
                     # ── บัตรลูกค้า (timeline) ────────────────────────────
