@@ -2379,17 +2379,25 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     _n     = len(_boxes)
                     _total_ship_kg = _bx_prod_kg + _n * 0.5
 
-                    # ค่าส่งทุกขนส่ง
+                    # ค่าส่งทุกขนส่ง — ต้องรองรับทุกกล่อง จึงจะแสดง
                     _carrier_totals: dict[str, int] = {}
+                    _carrier_ok: dict[str, bool] = {}
                     if _bx_postcode:
                         for _box in _boxes:
                             _bopts = carr.get_shipping_options(_box["weight_kg"] + 0.5, _bx_postcode)
                             for _o in _bopts:
-                                if not _o["exceeds_max"]:
-                                    _cn = _o["name"]
-                                    _carrier_totals[_cn] = _carrier_totals.get(_cn, 0) + _o["total"]
+                                _cn = _o["name"]
+                                if _o["exceeds_max"]:
+                                    _carrier_ok[_cn] = False
+                                else:
+                                    if _cn not in _carrier_ok:
+                                        _carrier_ok[_cn] = True
+                                    if _carrier_ok.get(_cn):
+                                        _carrier_totals[_cn] = _carrier_totals.get(_cn, 0) + _o["total"]
                                     if _cn not in _all_carrier_names:
                                         _all_carrier_names.append(_cn)
+                        # ลบขนส่งที่รองรับไม่ครบทุกกล่อง
+                        _carrier_totals = {k: v for k, v in _carrier_totals.items() if _carrier_ok.get(k)}
 
                     _cheapest_cost = min(_carrier_totals.values()) if _carrier_totals else None
                     _cheapest_name = next((k for k,v in _carrier_totals.items() if v == _cheapest_cost), "-") if _cheapest_cost else "-"
