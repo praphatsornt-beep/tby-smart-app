@@ -311,17 +311,17 @@ def _show_carrier_select():
                 "XTRA: 30×42×26\n"
                 "น้ำผลไม้: 44×28×29"
             )
+            if "_bulky_presets_txt" not in st.session_state:
+                st.session_state["_bulky_presets_txt"] = _BULKY_DEFAULT
             with st.expander("⚙️ ตั้งค่า preset กล่อง"):
-                _bulky_txt = st.text_area(
+                st.text_area(
                     "ชื่อ: ยาว×กว้าง×สูง — บรรทัดละ 1 ขนาด",
-                    value=st.session_state.get("_bulky_presets_txt", _BULKY_DEFAULT),
-                    height=160, key="_bulky_presets_ta",
+                    height=160, key="_bulky_presets_txt",
                 )
-                st.session_state["_bulky_presets_txt"] = _bulky_txt
 
             # parse
             _bulky_presets: list[dict] = []
-            for _ln in st.session_state.get("_bulky_presets_txt", _BULKY_DEFAULT).splitlines():
+            for _ln in st.session_state["_bulky_presets_txt"].splitlines():
                 if ":" not in _ln:
                     continue
                 _pn, _pd = _ln.split(":", 1)
