@@ -253,6 +253,10 @@ def _show_carrier_select():
     weight_kg = info.get("weight_kg", 0.5)
     cod_amt   = float(info.get("cod_amount", 0))
 
+    _old_track = st.session_state.pop("_change_carrier_old_track", None)
+    if _old_track:
+        st.warning(f"⚠️ กรุณายกเลิก tracking **{_old_track}** ใน iShip ด้วยตนเองก่อน แล้วค่อยส่งใหม่")
+
     if info.get("customer_name"):
         st.markdown(f"**ลูกค้า:** {info['customer_name']}")
     st.markdown(f"**ผู้รับ:** {info.get('dst_name','')}  {info.get('dst_phone','')}")
@@ -357,18 +361,19 @@ def _show_carrier_select():
                         pass
                 _cs_luid = db.get_customer_line_user_id(info.get("customer_id","")) if info.get("customer_id") else ""
                 st.session_state["_iship_success_info"] = {
-                    "tracking":     _cs_track,
-                    "tab":          tab,
-                    "customer":     info.get("customer_name", ""),
-                    "dst_name":     info.get("dst_name", ""),
-                    "dst_phone":    info.get("dst_phone", ""),
-                    "address":      f"{info.get('address_line','')} {info.get('district','')} {info.get('amphure','')} {info.get('province','')} {postcode}".strip(),
-                    "carrier":      _cs_carrier,
-                    "weight_kg":    weight_kg,
-                    "cod_amount":   int(cod_amt),
-                    "items":        info.get("items", []),
-                    "line_user_id": _cs_luid,
-                    "shipment_id":  info.get("shipment_id", ""),
+                    "tracking":             _cs_track,
+                    "tab":                  tab,
+                    "customer":             info.get("customer_name", ""),
+                    "dst_name":             info.get("dst_name", ""),
+                    "dst_phone":            info.get("dst_phone", ""),
+                    "address":              f"{info.get('address_line','')} {info.get('district','')} {info.get('amphure','')} {info.get('province','')} {postcode}".strip(),
+                    "carrier":              _cs_carrier,
+                    "weight_kg":            weight_kg,
+                    "cod_amount":           int(cod_amt),
+                    "items":                info.get("items", []),
+                    "line_user_id":         _cs_luid,
+                    "shipment_id":          info.get("shipment_id", ""),
+                    "_carrier_select_info": info,
                 }
                 st.session_state.pop("_iship_carrier_select", None)
                 st.session_state["_open_success_dialog"] = True
@@ -1980,6 +1985,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 
             _sh_df   = pd.DataFrame([{
                 "ลบ":              False,
+                "📤":              False,
                 "แหล่ง":           _src_icon(r),
                 "วันที่/เวลา":     _to_bkk(r.get("created_at") or ""),
                 "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
@@ -2010,6 +2016,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                           "รายการ","ขนส่ง","COD","💸","สถานะส่ง","🔗","หมายเหตุ"],
                 column_config={
                     "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                    "📤":       st.column_config.CheckboxColumn("📤", default=False, width="small",
+                                    help="เลือกเพื่อส่ง iShip ใหม่"),
                     "แหล่ง":    st.column_config.TextColumn("แหล่ง", width="small",
                                     help="🛒 = บันทึกขาย  📦 = ส่งของ"),
                     "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
@@ -2038,6 +2046,37 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             db.delete_shipment(_did)
                         except Exception:
                             pass
+                    st.session_state.pop("sh_hist_tbl", None)
+                    st.rerun()
+
+            _sh_to_resend = [i for i, v in enumerate(_sh_edit["📤"]) if v]
+            if len(_sh_to_resend) > 1:
+                st.warning("เลือกได้ทีละ 1 รายการสำหรับส่ง iShip ใหม่")
+            elif len(_sh_to_resend) == 1:
+                _rs_i   = _sh_to_resend[0]
+                _rs_row = _sh_all[_rs_i]
+                _rs_w   = st.number_input("น้ำหนักรวมกล่อง (kg)", 0.1, 100.0, 0.5, 0.1, key="sh_resend_w")
+                if st.button("📤 ส่ง iShip ใหม่", type="primary", key="sh_resend_btn"):
+                    _old_tn = (_rs_row.get("tracking_no") or "").strip()
+                    st.session_state["_iship_carrier_select"] = {
+                        "tab":           "ship",
+                        "postcode":      _rs_row.get("postal_code", ""),
+                        "weight_kg":     _rs_w,
+                        "cod_amount":    float(_rs_row.get("cod_amount") or 0),
+                        "customer_name": (_rs_row.get("customers") or {}).get("name", ""),
+                        "customer_id":   _rs_row.get("customer_id", ""),
+                        "dst_name":      _rs_row.get("recipient_name", ""),
+                        "dst_phone":     _rs_row.get("phone", ""),
+                        "address_line":  _rs_row.get("address_line", ""),
+                        "district":      _rs_row.get("district", ""),
+                        "amphure":       _rs_row.get("amphure", ""),
+                        "province":      _rs_row.get("province", ""),
+                        "items":         _rs_row.get("items") or [],
+                        "shipment_id":   _rs_row["id"],
+                        "remark":        _rs_row.get("notes", ""),
+                    }
+                    if _old_tn:
+                        st.session_state["_change_carrier_old_track"] = _old_tn
                     st.session_state.pop("sh_hist_tbl", None)
                     st.rerun()
         else:
