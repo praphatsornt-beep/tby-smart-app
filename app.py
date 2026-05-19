@@ -298,10 +298,47 @@ def _show_carrier_select():
         _cs_len = _cs_wid = _cs_hgt = 0
         if _cs_is_bulky:
             st.markdown("**📐 ขนาดกล่อง (จำเป็นสำหรับ Bulky)**")
+
+            # ── preset กล่อง ──────────────────────────────────────────────
+            _BULKY_DEFAULT = (
+                "ผงเล็ก: 55×33×28\n"
+                "ผงใหญ่: 60×45×35\n"
+                "กล่องเบอร์ AA: 70×50×40"
+            )
+            with st.expander("⚙️ ตั้งค่า preset กล่อง"):
+                _bulky_txt = st.text_area(
+                    "ชื่อ: ยาว×กว้าง×สูง — บรรทัดละ 1 ขนาด",
+                    value=st.session_state.get("_bulky_presets_txt", _BULKY_DEFAULT),
+                    height=160, key="_bulky_presets_ta",
+                )
+                st.session_state["_bulky_presets_txt"] = _bulky_txt
+
+            # parse
+            _bulky_presets: list[dict] = []
+            for _ln in st.session_state.get("_bulky_presets_txt", _BULKY_DEFAULT).splitlines():
+                if ":" not in _ln:
+                    continue
+                _pn, _pd = _ln.split(":", 1)
+                _pd_parts = re.split(r"[×xX*]", _pd.strip())
+                if len(_pd_parts) == 3:
+                    try:
+                        _bulky_presets.append({
+                            "name": _pn.strip(),
+                            "l": int(_pd_parts[0]), "w": int(_pd_parts[1]), "h": int(_pd_parts[2]),
+                        })
+                    except ValueError:
+                        pass
+
+            # dropdown เลือกขนาด
+            _preset_opts = ["-- เลือกขนาดกล่อง --"] + [p["name"] for p in _bulky_presets] + ["กรอกเอง"]
+            _preset_sel  = st.selectbox("ขนาดกล่อง", _preset_opts, key="_cs_bulky_preset")
+            _pm = next((p for p in _bulky_presets if p["name"] == _preset_sel), None)
+            _def_l, _def_w, _def_h = (_pm["l"], _pm["w"], _pm["h"]) if _pm else (30, 30, 20)
+
             _b1, _b2, _b3 = st.columns(3)
-            _cs_len = _b1.number_input("ยาว (cm)", 1, 300, 30, key="_cs_len")
-            _cs_wid = _b2.number_input("กว้าง (cm)", 1, 300, 30, key="_cs_wid")
-            _cs_hgt = _b3.number_input("สูง (cm)", 1, 300, 20, key="_cs_hgt")
+            _cs_len = _b1.number_input("ยาว (cm)", 1, 300, _def_l, key=f"_cs_len_{_preset_sel}")
+            _cs_wid = _b2.number_input("กว้าง (cm)", 1, 300, _def_w, key=f"_cs_wid_{_preset_sel}")
+            _cs_hgt = _b3.number_input("สูง (cm)", 1, 300, _def_h, key=f"_cs_hgt_{_preset_sel}")
 
         st.divider()
         _btn1, _btn2 = st.columns(2)
