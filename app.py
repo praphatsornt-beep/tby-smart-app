@@ -2053,9 +2053,16 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             if len(_sh_to_resend) > 1:
                 st.warning("เลือกได้ทีละ 1 รายการสำหรับส่ง iShip ใหม่")
             elif len(_sh_to_resend) == 1:
-                _rs_i   = _sh_to_resend[0]
-                _rs_row = _sh_all[_rs_i]
-                _rs_w   = st.number_input("น้ำหนักรวมกล่อง (kg)", 0.1, 100.0, 0.5, 0.1, key="sh_resend_w")
+                _rs_i        = _sh_to_resend[0]
+                _rs_row      = _sh_all[_rs_i]
+                _rs_prod_map = {p["id"]: p for p in db.get_products()}
+                _rs_items    = _rs_row.get("items") or []
+                _rs_total_g  = sum(
+                    float(_rs_prod_map.get(it.get("product_id", ""), {}).get("weight_grams") or 0) * it.get("qty", 0)
+                    for it in _rs_items
+                )
+                _rs_w_def = max(0.5, round((_rs_total_g + BOX_WEIGHT_G) / 1000, 2))
+                _rs_w   = st.number_input("น้ำหนักรวมกล่อง (kg)", 0.1, 100.0, _rs_w_def, 0.1, key=f"sh_resend_w_{_rs_i}")
                 if st.button("📤 ส่ง iShip ใหม่", type="primary", key="sh_resend_btn"):
                     _old_tn = (_rs_row.get("tracking_no") or "").strip()
                     st.session_state["_iship_carrier_select"] = {
