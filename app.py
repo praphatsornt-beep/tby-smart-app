@@ -748,11 +748,11 @@ with tab1:
                                           else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿",
                             "ค้างรับ":    p["ค้างรับ"],
                             "รับวันนี้":  0,
-                            "จ่าย (฿)":  _rx_auto.get(i, int(round(p.get("outstanding_amt", 0)))) if p.get("outstanding_amt", 0) > 0.01 else 0,
+                            "จ่าย (฿)":  _rx_auto.get(p["id"], int(round(p.get("outstanding_amt", 0)))) if p.get("outstanding_amt", 0) > 0.01 else 0,
                             "_tid":       p["id"],
                             "_max":       p["ค้างรับ"],
                             "_owed":      p.get("outstanding_amt", 0.0),
-                        } for i, p in enumerate(_pending_rx)])
+                        } for p in _pending_rx])
                         _rx_edit = st.data_editor(
                             _rx_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้","จ่าย (฿)"]],
                             hide_index=True, use_container_width=True,
@@ -764,32 +764,41 @@ with tab1:
                             key=f"sale_recv_old_{_recv_cid}",
                         )
                         # auto-update จ่าย (฿) proportionally when รับวันนี้ changes
+                        # keyed by TXN ID (not row index) so list shrinks don't trigger false reruns
                         _rx_qty_key  = f"_rx_qty_{_recv_cid}"
                         _rx_qty_prev = st.session_state.get(_rx_qty_key, None)
-                        _cur_qtys    = {ri: int(_rx_edit.at[ri, "รับวันนี้"] or 0) for ri in _rx_edit.index}
+                        _cur_qtys    = {_rx_df.at[ri, "_tid"]: int(_rx_edit.at[ri, "รับวันนี้"] or 0) for ri in _rx_edit.index}
                         if _rx_qty_prev is None:
                             st.session_state[_rx_qty_key] = _cur_qtys
                         elif _cur_qtys != _rx_qty_prev:
-                            _new_auto = {}
-                            for _ri in _rx_edit.index:
-                                _q  = int(_rx_edit.at[_ri, "รับวันนี้"] or 0)
-                                _mx = int(_rx_df.at[_ri, "_max"])
-                                _ow = float(_rx_df.at[_ri, "_owed"])
-                                if _q > 0 and _ow > 0.01:
-                                    _new_auto[_ri] = int(round(_ow)) if _q >= _mx else int(round(_ow * _q / _mx))
-                                else:
-                                    _new_auto[_ri] = 0
-                            # clear auto-managed จ่าย (฿) edits only if user hasn't overridden
-                            _ekey  = f"sale_recv_old_{_recv_cid}"
-                            _erows = st.session_state.get(_ekey, {}).get("edited_rows", {})
-                            for _ri in _rx_edit.index:
-                                _prev_pay = float(_rx_auto.get(_ri, int(round(_rx_df.at[_ri, "_owed"])) if _rx_df.at[_ri, "_owed"] > 0.01 else 0))
-                                _cur_pay  = float(_rx_edit.at[_ri, "จ่าย (฿)"] or 0)
-                                if abs(_cur_pay - _prev_pay) < 0.5 and _ri in _erows:
-                                    _erows[_ri].pop("จ่าย (฿)", None)
-                            st.session_state[_rx_qty_key]  = _cur_qtys
-                            st.session_state[_rx_auto_key] = _new_auto
-                            st.rerun()
+                            _all_tids = set(list(_cur_qtys.keys()) + list(_rx_qty_prev.keys()))
+                            _any_changed = any(_cur_qtys.get(t, 0) != _rx_qty_prev.get(t, 0) for t in _all_tids)
+                            if _any_changed:
+                                _new_auto = {}
+                                for _ri in _rx_edit.index:
+                                    _q    = int(_rx_edit.at[_ri, "รับวันนี้"] or 0)
+                                    _mx   = int(_rx_df.at[_ri, "_max"])
+                                    _ow   = float(_rx_df.at[_ri, "_owed"])
+                                    _tid2 = _rx_df.at[_ri, "_tid"]
+                                    if _q > 0 and _ow > 0.01:
+                                        _new_auto[_tid2] = int(round(_ow)) if _q >= _mx else int(round(_ow * _q / _mx))
+                                    else:
+                                        _new_auto[_tid2] = 0
+                                # clear auto-managed จ่าย (฿) edits only if user hasn't overridden
+                                _ekey  = f"sale_recv_old_{_recv_cid}"
+                                _erows = st.session_state.get(_ekey, {}).get("edited_rows", {})
+                                for _ri in _rx_edit.index:
+                                    _tid2     = _rx_df.at[_ri, "_tid"]
+                                    _prev_pay = float(_rx_auto.get(_tid2, int(round(_rx_df.at[_ri, "_owed"])) if _rx_df.at[_ri, "_owed"] > 0.01 else 0))
+                                    _cur_pay  = float(_rx_edit.at[_ri, "จ่าย (฿)"] or 0)
+                                    if abs(_cur_pay - _prev_pay) < 0.5 and _ri in _erows:
+                                        _erows[_ri].pop("จ่าย (฿)", None)
+                                st.session_state[_rx_qty_key]  = _cur_qtys
+                                st.session_state[_rx_auto_key] = _new_auto
+                                st.rerun()
+                            else:
+                                # list size changed but no qty values changed — sync without rerun
+                                st.session_state[_rx_qty_key] = _cur_qtys
                         if _cur_delivery == "ส่งพัสดุ":
                             st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด")
                         elif not _cur_delivery:
