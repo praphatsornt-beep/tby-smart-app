@@ -508,7 +508,7 @@ tab_dash, tab1, tab5, tab6, tab_fin, tab_ecom, tab4 = st.tabs([
 # sub-tabs ของ tab5 ต้องนิยามก่อนใช้ (with _t5_out: / _t5_cust: อยู่ก่อน with tab5: ในไฟล์)
 with tab5:
     _t5_out, _t5_ledger, _t5_cust, _t5_txn, _t5_ship = st.tabs([
-        "💰 ยอดค้าง", "👤 บัตรลูกค้า", "🖨️ รายละเอียดบิล", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"
+        "💰 ยอดค้าง", "👤 บัตรลูกค้า", "🖨️ จัดการบิล", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"
     ])
 
 
@@ -4005,7 +4005,7 @@ with tab6:
 # Tab 7: จัดการบิล
 # ─────────────────────────────────────────────────────────────────────────────
 with _t5_cust:
-    st.subheader("รายละเอียดบิล")
+    st.subheader("จัดการบิล")
 
     customers_p = db.get_customers()
     if not customers_p:
