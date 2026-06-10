@@ -739,6 +739,8 @@ with tab1:
                                  else f"📦 รับของจากบิลเก่า ({sum(p['ค้างรับ'] for p in _pending_rx)} ชิ้นค้างรับ)")
                     with st.expander(_rx_label, expanded=(_cur_delivery == "ส่งพัสดุ")):
                         _prod_map_rx = {p["id"]: p["name"] for p in products}
+                        _rx_auto_key = f"_rx_auto_{_recv_cid}"
+                        _rx_auto     = st.session_state.get(_rx_auto_key, {})
                         _rx_df = pd.DataFrame([{
                             "สินค้า":     _prod_map_rx.get(p["product_id"], p["product_id"]),
                             "บิล":        p.get("bill_no") or "—",
@@ -746,11 +748,11 @@ with tab1:
                                           else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿",
                             "ค้างรับ":    p["ค้างรับ"],
                             "รับวันนี้":  0,
-                            "จ่าย (฿)":  int(round(p.get("outstanding_amt", 0))) if p.get("outstanding_amt", 0) > 0.01 else 0,
+                            "จ่าย (฿)":  _rx_auto.get(i, int(round(p.get("outstanding_amt", 0)))) if p.get("outstanding_amt", 0) > 0.01 else 0,
                             "_tid":       p["id"],
                             "_max":       p["ค้างรับ"],
                             "_owed":      p.get("outstanding_amt", 0.0),
-                        } for p in _pending_rx])
+                        } for i, p in enumerate(_pending_rx)])
                         _rx_edit = st.data_editor(
                             _rx_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้","จ่าย (฿)"]],
                             hide_index=True, use_container_width=True,
@@ -761,6 +763,33 @@ with tab1:
                             disabled=["สินค้า","บิล","สถานะจ่าย","ค้างรับ"],
                             key=f"sale_recv_old_{_recv_cid}",
                         )
+                        # auto-update จ่าย (฿) proportionally when รับวันนี้ changes
+                        _rx_qty_key  = f"_rx_qty_{_recv_cid}"
+                        _rx_qty_prev = st.session_state.get(_rx_qty_key, None)
+                        _cur_qtys    = {ri: int(_rx_edit.at[ri, "รับวันนี้"] or 0) for ri in _rx_edit.index}
+                        if _rx_qty_prev is None:
+                            st.session_state[_rx_qty_key] = _cur_qtys
+                        elif _cur_qtys != _rx_qty_prev:
+                            _new_auto = {}
+                            for _ri in _rx_edit.index:
+                                _q  = int(_rx_edit.at[_ri, "รับวันนี้"] or 0)
+                                _mx = int(_rx_df.at[_ri, "_max"])
+                                _ow = float(_rx_df.at[_ri, "_owed"])
+                                if _q > 0 and _ow > 0.01:
+                                    _new_auto[_ri] = int(round(_ow)) if _q >= _mx else int(round(_ow * _q / _mx))
+                                else:
+                                    _new_auto[_ri] = 0
+                            # clear auto-managed จ่าย (฿) edits only if user hasn't overridden
+                            _ekey  = f"sale_recv_old_{_recv_cid}"
+                            _erows = st.session_state.get(_ekey, {}).get("edited_rows", {})
+                            for _ri in _rx_edit.index:
+                                _prev_pay = float(_rx_auto.get(_ri, int(round(_rx_df.at[_ri, "_owed"])) if _rx_df.at[_ri, "_owed"] > 0.01 else 0))
+                                _cur_pay  = float(_rx_edit.at[_ri, "จ่าย (฿)"] or 0)
+                                if abs(_cur_pay - _prev_pay) < 0.5 and _ri in _erows:
+                                    _erows[_ri].pop("จ่าย (฿)", None)
+                            st.session_state[_rx_qty_key]  = _cur_qtys
+                            st.session_state[_rx_auto_key] = _new_auto
+                            st.rerun()
                         if _cur_delivery == "ส่งพัสดุ":
                             st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด")
                         elif not _cur_delivery:
@@ -807,6 +836,8 @@ with tab1:
                                     if _saved_pay:
                                         _parts.append(f"จ่าย ฿{_total_pay:,.0f}")
                                     st.success("✅ บันทึก: " + " + ".join(_parts))
+                                    st.session_state.pop(f"_rx_qty_{_recv_cid}", None)
+                                    st.session_state.pop(f"_rx_auto_{_recv_cid}", None)
                                     st.rerun()
                                 else:
                                     st.warning("ยังไม่ได้กรอกจำนวนรับหรือยอดเงิน")
