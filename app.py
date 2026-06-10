@@ -624,7 +624,7 @@ def _pick_carrier(pc: str, kg: float = 0) -> str:
 
 
 with tab1:
-    _sub_calc, _sub_ship, _sub_pending, _sub_sale, _sub_shiphist, _sub_boxcalc = st.tabs(["🔢 คำนวณยอด", "📦 ส่งของ", "📬 ส่งของค้าง", "📝 บันทึกขาย", "📋 ประวัติการส่ง", "📦 แบ่งกล่อง"])
+    _sub_calc, _sub_ship, _sub_sale = st.tabs(["🔢 คำนวณยอด", "📦 ส่งของ", "📝 บันทึกขาย"])
 
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
@@ -2062,221 +2062,6 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 del st.session_state["_sp_iship_pending"]
                 st.rerun()
 
-    with _sub_shiphist:
-        st.subheader("ประวัติการส่งของ")
-
-        _sh_cod_col, _sh_status_col, _sh_sync_col = st.columns([4, 2, 2])
-        if _sh_status_col.button("🚚 สถานะส่ง", key="sh_status_sync", use_container_width=True):
-            _pending_tn = db.get_pending_delivery_tracking()
-            if not _pending_tn:
-                st.info("ทุก tracking จัดส่งสำเร็จแล้ว")
-            else:
-                with st.spinner(f"ดึงสถานะ {len(_pending_tn)} tracking..."):
-                    _sr = iship_api.get_shipment_statuses(days_back=90)
-                if _sr.get("error"):
-                    st.error(f"❌ {_sr['error']}")
-                else:
-                    _to_update = {tn: st for tn, st in _sr["statuses"].items() if tn in set(_pending_tn)}
-                    if _to_update:
-                        db.update_delivery_statuses(_to_update)
-                        st.success(f"✅ อัปเดต {len(_to_update)} tracking")
-                        st.rerun()
-                    else:
-                        st.info("ไม่มีสถานะใหม่")
-                        with st.expander("🔍 debug"):
-                            st.write(f"iShip คืนมา {len(_sr['statuses'])} tracking: {list(_sr['statuses'].keys())[:5]}")
-                            st.write(f"pending ในระบบ {len(_pending_tn)}: {_pending_tn[:5]}")
-                            st.write(f"debug: {_sr.get('_debug')}")
-        if _sh_sync_col.button("🔄 ตรวจสอบ COD", key="sh_cod_sync", use_container_width=True):
-            try:
-                _pending = db.get_pending_cod_tracking()
-            except Exception:
-                _pending = None  # column ยังไม่มี — ดึงทั้งหมด
-            if _pending is not None and len(_pending) == 0:
-                st.info("✅ COD ทุกรายการโอนแล้ว ไม่ต้องดึงข้อมูลใหม่")
-            else:
-                with st.spinner("กำลังดึงข้อมูลจาก iShip..."):
-                    _r = iship_api.get_cod_transfers(days_back=90)
-                if _r.get("error"):
-                    st.error(f"❌ {_r['error']}")
-                else:
-                    _cod_transfers = _r.get("transfers", {})
-                    st.session_state["_sh_cod_map"] = _cod_transfers
-                    if _cod_transfers:
-                        try:
-                            db.mark_cod_transferred(list(_cod_transfers.keys()))
-                        except Exception:
-                            pass
-                        st.rerun()
-                    else:
-                        st.info("ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
-        _sh_cod_map = st.session_state.get("_sh_cod_map", {})
-        # โหลดสถานะที่บันทึกใน DB ด้วย
-        try:
-            _db_transferred = set(
-                r["tracking_no"] for r in
-                db.get_supabase().table("shipments")
-                    .select("tracking_no").not_.is_("cod_transferred_at","null")
-                    .not_.is_("tracking_no","null").execute().data
-                if r.get("tracking_no")
-            )
-            _sh_cod_map = {**{tn: {} for tn in _db_transferred}, **_sh_cod_map}
-        except Exception:
-            pass
-        if _sh_cod_map:
-            _sh_cod_col.caption(f"✅ COD โอนแล้ว {len(_sh_cod_map)} tracking")
-
-        # ── filter ลูกค้า ─────────────────────────────────────────────────
-        _sh_customers = db.get_customers()
-        _sh_cust_map  = {c["name"]: c["id"] for c in _sh_customers}
-        _sh_cust_opts = ["— ทั้งหมด —"] + sorted(_sh_cust_map.keys(), key=str.casefold)
-        _sh_cust_sel  = st.selectbox("ลูกค้า", _sh_cust_opts, key="sh_cust_filter",
-                                     label_visibility="collapsed")
-        _sh_filter_cid = _sh_cust_map.get(_sh_cust_sel) if _sh_cust_sel != "— ทั้งหมด —" else None
-
-        try:
-            _sh_all = db.get_shipments(customer_id=_sh_filter_cid)
-        except Exception:
-            st.warning("⚙️ ยังไม่ได้สร้าง table shipments")
-            _sh_all = []
-
-        if _sh_all:
-            def _items_str(items):
-                if not items:
-                    return ""
-                return ", ".join(f"{it.get('product_id','')} ×{it.get('qty',0)}" for it in items)
-
-            _sh_ids  = [r["id"] for r in _sh_all]
-            def _cod_status(r):
-                tn  = r.get("tracking_no", "") or ""
-                cod = float(r.get("cod_amount") or 0)
-                if cod <= 0:
-                    return ""
-                if tn and tn in _sh_cod_map:
-                    return "✅"
-                return "⏳"
-
-            def _delivery_icon(status: str) -> str:
-                if not status:
-                    return ""
-                if "จัดส่งแล้ว" in status:
-                    return "✅"
-                if "ตีกลับ" in status or "ยกเลิก" in status:
-                    return "❌"
-                return "🚚"
-
-            def _src_icon(r):
-                s = r.get("source", "")
-                if s == "sale": return "💰"
-                if s == "ship": return "📦"
-                return "—"
-
-            _sh_df   = pd.DataFrame([{
-                "ลบ":              False,
-                "📤":              False,
-                "แหล่ง":           _src_icon(r),
-                "วันที่/เวลา":     _to_bkk(r.get("created_at") or ""),
-                "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
-                "COD":             float(r.get("cod_amount") or 0),
-                "💸":              _cod_status(r),
-                "สถานะส่ง":        (_delivery_icon(r.get("delivery_status") or "") + " " +
-                                    (r.get("delivery_status") or "")).strip(),
-                "ผู้รับ":           r.get("recipient_name", ""),
-                "เบอร์":            r.get("phone", ""),
-                "รายการ":          _items_str(r.get("items")),
-                "ขนส่ง":           r.get("carrier", ""),
-                "Tracking":        r.get("tracking_no", "") or "",
-                "🔗":              (f"https://app.iship.cloud/tracking?track={r['tracking_no']}"
-                                   if r.get("tracking_no") else ""),
-                "บ้านเลขที่/ถนน":  r.get("address_line", ""),
-                "ตำบล":            r.get("district", ""),
-                "อำเภอ":           r.get("amphure", ""),
-                "จังหวัด":         r.get("province", ""),
-                "รหัสปณ.":         r.get("postal_code", ""),
-                "หมายเหตุ":        r.get("notes", ""),
-            } for r in _sh_all])
-
-            _sh_edit = st.data_editor(
-                _sh_df,
-                hide_index=True, use_container_width=False, key="sh_hist_tbl",
-                disabled=["แหล่ง","วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
-                          "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
-                          "รายการ","ขนส่ง","COD","💸","สถานะส่ง","🔗","หมายเหตุ"],
-                column_config={
-                    "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
-                    "📤":       st.column_config.CheckboxColumn("📤", default=False, width="small",
-                                    help="เลือกเพื่อส่ง iShip ใหม่"),
-                    "แหล่ง":    st.column_config.TextColumn("แหล่ง", width="small",
-                                    help="🛒 = บันทึกขาย  📦 = ส่งของ"),
-                    "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
-                    "💸":       st.column_config.TextColumn("💸", width="small"),
-                    "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width="medium"),
-                    "Tracking": st.column_config.TextColumn("Tracking", width="small"),
-                    "🔗":       st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
-                },
-            )
-
-            # บันทึก Tracking ที่แก้ไข
-            for _si, _srow in _sh_edit.iterrows():
-                _orig_tn = _sh_df.at[_si, "Tracking"]
-                _new_tn  = (_srow["Tracking"] or "").strip()
-                if _new_tn != _orig_tn:
-                    db.update_shipment_tracking(_sh_ids[_si], _new_tn)
-                    st.session_state.pop("sh_hist_tbl", None)
-                    st.rerun()
-
-            _sh_to_del = [_sh_ids[i] for i, v in enumerate(_sh_edit["ลบ"]) if v]
-
-            if _sh_to_del:
-                if st.button(f"🗑️ ลบที่เลือก ({len(_sh_to_del)} รายการ)", type="primary", key="sh_del_btn"):
-                    for _did in _sh_to_del:
-                        try:
-                            db.delete_shipment(_did)
-                        except Exception:
-                            pass
-                    st.session_state.pop("sh_hist_tbl", None)
-                    st.rerun()
-
-            _sh_to_resend = [i for i, v in enumerate(_sh_edit["📤"]) if v]
-            if len(_sh_to_resend) > 1:
-                st.warning("เลือกได้ทีละ 1 รายการสำหรับส่ง iShip ใหม่")
-            elif len(_sh_to_resend) == 1:
-                _rs_i        = _sh_to_resend[0]
-                _rs_row      = _sh_all[_rs_i]
-                _rs_prod_map = {p["id"]: p for p in db.get_products()}
-                _rs_items    = _rs_row.get("items") or []
-                _rs_total_g  = sum(
-                    float(_rs_prod_map.get(it.get("product_id", ""), {}).get("weight_grams") or 0) * it.get("qty", 0)
-                    for it in _rs_items
-                )
-                _rs_w_def = max(0.5, round((_rs_total_g + BOX_WEIGHT_G) / 1000, 2))
-                _rs_w   = st.number_input("น้ำหนักรวมกล่อง (kg)", 0.1, 100.0, _rs_w_def, 0.1, key=f"sh_resend_w_{_rs_i}")
-                if st.button("📤 ส่ง iShip ใหม่", type="primary", key="sh_resend_btn"):
-                    _old_tn = (_rs_row.get("tracking_no") or "").strip()
-                    st.session_state["_iship_carrier_select"] = {
-                        "tab":           "ship",
-                        "postcode":      _rs_row.get("postal_code", ""),
-                        "weight_kg":     _rs_w,
-                        "cod_amount":    float(_rs_row.get("cod_amount") or 0),
-                        "customer_name": (_rs_row.get("customers") or {}).get("name", ""),
-                        "customer_id":   _rs_row.get("customer_id", ""),
-                        "dst_name":      _rs_row.get("recipient_name", ""),
-                        "dst_phone":     _rs_row.get("phone", ""),
-                        "address_line":  _rs_row.get("address_line", ""),
-                        "district":      _rs_row.get("district", ""),
-                        "amphure":       _rs_row.get("amphure", ""),
-                        "province":      _rs_row.get("province", ""),
-                        "items":         _rs_row.get("items") or [],
-                        "shipment_id":   _rs_row["id"],
-                        "remark":        _rs_row.get("notes", ""),
-                    }
-                    if _old_tn:
-                        st.session_state["_change_carrier_old_track"] = _old_tn
-                    st.session_state.pop("sh_hist_tbl", None)
-                    st.rerun()
-        else:
-            st.info("ยังไม่มีประวัติการส่งของ")
-
     with _sub_calc:
         st.subheader("คำนวณยอด")
         st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ เช่น `TF2581-2 RB2306-1 SH-kg12170 COD`")
@@ -2545,462 +2330,146 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     else:
                         _line_btn_slot.caption(f"👤 ยังไม่มี LINE ID")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # Sub-tab: แบ่งกล่อง
-    # ─────────────────────────────────────────────────────────────────────────
-    with _sub_boxcalc:
-        st.subheader("📦 คำนวณการแบ่งกล่อง")
-        st.caption("ดึงน้ำหนักจาก tab 🔢 คำนวณยอด — กดคำนวณที่นั่นก่อน")
+        # ── แบ่งกล่อง ──────────────────────────────────────────────────────
+        if st.button("📦 แบ่งกล่อง", key="toggle_boxcalc", use_container_width=True):
+            st.session_state["_show_boxcalc"] = not st.session_state.get("_show_boxcalc", False)
+        if st.session_state.get("_show_boxcalc"):
+            st.subheader("📦 คำนวณการแบ่งกล่อง")
+            st.caption("ดึงน้ำหนักจาก tab 🔢 คำนวณยอด — กดคำนวณที่นั่นก่อน")
 
-        # ── ตั้งค่า preset กล่อง ──────────────────────────────────────────
-        with st.expander("⚙️ ตั้งค่าขนาดกล่อง", expanded=False):
-            _box_str_input = st.text_input(
-                "น้ำหนักสูงสุดต่อกล่อง (kg) คั่นด้วยลูกน้ำ",
-                value=st.session_state.get("_box_presets_str", "5, 10, 20"),
-                key="_box_presets_input",
-            )
-            st.session_state["_box_presets_str"] = _box_str_input
-        _box_str = st.session_state.get("_box_presets_str", "5, 10, 20")
+            # ── ตั้งค่า preset กล่อง ──────────────────────────────────────────
+            with st.expander("⚙️ ตั้งค่าขนาดกล่อง", expanded=False):
+                _box_str_input = st.text_input(
+                    "น้ำหนักสูงสุดต่อกล่อง (kg) คั่นด้วยลูกน้ำ",
+                    value=st.session_state.get("_box_presets_str", "5, 10, 20"),
+                    key="_box_presets_input",
+                )
+                st.session_state["_box_presets_str"] = _box_str_input
+            _box_str = st.session_state.get("_box_presets_str", "5, 10, 20")
 
-        def _safe_float_box(s: str) -> float:
-            try: return float(s.strip())
-            except: return 0.0
+            def _safe_float_box(s: str) -> float:
+                try: return float(s.strip())
+                except: return 0.0
 
-        def _pack_boxes(items: list, max_kg: float) -> list:
-            """First-Fit Decreasing bin packing. Returns list of boxes [{weight_kg, items:{code:qty}}]"""
-            units = []
-            for it in items:
-                w = it["product"].get("weight_grams", 0) / 1000
-                code = it["product"]["id"].upper()
-                for _ in range(int(it["qty"])):
-                    units.append((code, w))
-            units.sort(key=lambda x: -x[1])
-            boxes: list[dict] = []
-            for code, w in units:
-                placed = False
-                for box in boxes:
-                    if box["weight_kg"] + w <= max_kg + 1e-9:
-                        box["weight_kg"] += w
-                        box["items"][code] = box["items"].get(code, 0) + 1
-                        placed = True
-                        break
-                if not placed:
-                    boxes.append({"weight_kg": w, "items": {code: 1}})
-            return boxes
+            def _pack_boxes(items: list, max_kg: float) -> list:
+                """First-Fit Decreasing bin packing. Returns list of boxes [{weight_kg, items:{code:qty}}]"""
+                units = []
+                for it in items:
+                    w = it["product"].get("weight_grams", 0) / 1000
+                    code = it["product"]["id"].upper()
+                    for _ in range(int(it["qty"])):
+                        units.append((code, w))
+                units.sort(key=lambda x: -x[1])
+                boxes: list[dict] = []
+                for code, w in units:
+                    placed = False
+                    for box in boxes:
+                        if box["weight_kg"] + w <= max_kg + 1e-9:
+                            box["weight_kg"] += w
+                            box["items"][code] = box["items"].get(code, 0) + 1
+                            placed = True
+                            break
+                    if not placed:
+                        boxes.append({"weight_kg": w, "items": {code: 1}})
+                return boxes
 
-        _box_sizes = sorted({v for s in _box_str.split(",") if (v := _safe_float_box(s)) > 0})
+            _box_sizes = sorted({v for s in _box_str.split(",") if (v := _safe_float_box(s)) > 0})
 
-        # ── ดึงข้อมูลจาก calc result ──────────────────────────────────────
-        _bx_cr = st.session_state.get("_calc_result")
-        if not _bx_cr or not _bx_cr.get("items"):
-            st.info("กรุณาคำนวณยอดใน tab 🔢 คำนวณยอด ก่อน")
-        else:
-            _bx_prod_kg  = sum(int(_ci["product"].get("weight_grams",0))*int(_ci["qty"]) for _ci in _bx_cr["items"]) / 1000
-            _bx_postcode = _bx_cr.get("ship_zip", "")
-            st.markdown(f"⚖️ น้ำหนักสินค้ารวม: **{_bx_prod_kg:.3f} kg**"
-                        + (f"  |  📮 **{_bx_postcode}**" if _bx_postcode else ""))
-
-            if not _box_sizes:
-                st.warning("กรุณาตั้งค่าขนาดกล่องก่อน")
+            # ── ดึงข้อมูลจาก calc result ──────────────────────────────────────
+            _bx_cr = st.session_state.get("_calc_result")
+            if not _bx_cr or not _bx_cr.get("items"):
+                st.info("กรุณาคำนวณยอดใน tab 🔢 คำนวณยอด ก่อน")
             else:
-                # ── สรุปทุก config (เปรียบเทียบ) ──────────────────────────
-                _summary_rows = []
-                _config_data  = {}   # bmax → {boxes, carrier_totals}
-                _all_carrier_names = []
+                _bx_prod_kg  = sum(int(_ci["product"].get("weight_grams",0))*int(_ci["qty"]) for _ci in _bx_cr["items"]) / 1000
+                _bx_postcode = _bx_cr.get("ship_zip", "")
+                st.markdown(f"⚖️ น้ำหนักสินค้ารวม: **{_bx_prod_kg:.3f} kg**"
+                            + (f"  |  📮 **{_bx_postcode}**" if _bx_postcode else ""))
 
-                for _bmax in _box_sizes:
-                    _boxes = _pack_boxes(_bx_cr["items"], _bmax)
-                    _n     = len(_boxes)
-                    _total_ship_kg = _bx_prod_kg + _n * 0.5
-
-                    # ค่าส่งทุกขนส่ง — ต้องรองรับทุกกล่อง จึงจะแสดง
-                    _carrier_totals: dict[str, int] = {}
-                    _carrier_ok: dict[str, bool] = {}
-                    if _bx_postcode:
-                        for _box in _boxes:
-                            _bopts = carr.get_shipping_options(_box["weight_kg"] + 0.5, _bx_postcode)
-                            for _o in _bopts:
-                                _cn = _o["name"]
-                                if _o["exceeds_max"]:
-                                    _carrier_ok[_cn] = False
-                                else:
-                                    if _cn not in _carrier_ok:
-                                        _carrier_ok[_cn] = True
-                                    if _carrier_ok.get(_cn):
-                                        _carrier_totals[_cn] = _carrier_totals.get(_cn, 0) + _o["total"]
-                                    if _cn not in _all_carrier_names:
-                                        _all_carrier_names.append(_cn)
-                        # ลบขนส่งที่รองรับไม่ครบทุกกล่อง
-                        _carrier_totals = {k: v for k, v in _carrier_totals.items() if _carrier_ok.get(k)}
-
-                    _cheapest_cost = min(_carrier_totals.values()) if _carrier_totals else None
-                    _cheapest_name = next((k for k,v in _carrier_totals.items() if v == _cheapest_cost), "-") if _cheapest_cost else "-"
-
-                    _config_data[_bmax] = {"boxes": _boxes, "carrier_totals": _carrier_totals}
-                    _row = {"กล่อง max": f"{_bmax:.0f} kg", "จำนวนกล่อง": _n,
-                            "น้ำหนักส่งรวม (kg)": f"{_total_ship_kg:.2f}",
-                            "ขนส่งถูกสุด": _cheapest_name}
-                    if _cheapest_cost:
-                        _row["ค่าส่งรวม (฿)"] = _cheapest_cost
-                    _summary_rows.append(_row)
-
-                _sum_df = pd.DataFrame(_summary_rows)
-                if "ค่าส่งรวม (฿)" in _sum_df.columns:
-                    _ci_min = _sum_df["ค่าส่งรวม (฿)"].idxmin()
-                    _sum_df["กล่อง max"] = _sum_df.apply(
-                        lambda r: ("⭐ " if r.name == _ci_min else "") + r["กล่อง max"], axis=1)
-                    st.dataframe(_sum_df, hide_index=True, use_container_width=True,
-                                 column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
-                    st.caption("⭐ = ค่าส่งรวมถูกสุด")
+                if not _box_sizes:
+                    st.warning("กรุณาตั้งค่าขนาดกล่องก่อน")
                 else:
-                    st.dataframe(_sum_df, hide_index=True, use_container_width=True)
+                    # ── สรุปทุก config (เปรียบเทียบ) ──────────────────────────
+                    _summary_rows = []
+                    _config_data  = {}   # bmax → {boxes, carrier_totals}
+                    _all_carrier_names = []
 
-                # ── รายละเอียด config ที่เลือก ─────────────────────────────
-                st.divider()
-                _sel_label = st.selectbox(
-                    "ดูรายละเอียด — เลือก config กล่อง",
-                    [f"{b:.0f} kg" for b in _box_sizes],
-                    key="_bx_sel_config",
-                )
-                _sel_bmax  = next((b for b in _box_sizes if f"{b:.0f} kg" == _sel_label), _box_sizes[0])
-                _sel_data  = _config_data[_sel_bmax]
-                _sel_boxes = _sel_data["boxes"]
+                    for _bmax in _box_sizes:
+                        _boxes = _pack_boxes(_bx_cr["items"], _bmax)
+                        _n     = len(_boxes)
+                        _total_ship_kg = _bx_prod_kg + _n * 0.5
 
-                # ① สินค้าในแต่ละกล่อง
-                st.markdown(f"**📦 การจัดสินค้า ({len(_sel_boxes)} กล่อง)**")
-                for _bi, _box in enumerate(_sel_boxes, 1):
-                    _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
-                    _bkg = _box["weight_kg"] + 0.5
-                    st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`")
+                        # ค่าส่งทุกขนส่ง — ต้องรองรับทุกกล่อง จึงจะแสดง
+                        _carrier_totals: dict[str, int] = {}
+                        _carrier_ok: dict[str, bool] = {}
+                        if _bx_postcode:
+                            for _box in _boxes:
+                                _bopts = carr.get_shipping_options(_box["weight_kg"] + 0.5, _bx_postcode)
+                                for _o in _bopts:
+                                    _cn = _o["name"]
+                                    if _o["exceeds_max"]:
+                                        _carrier_ok[_cn] = False
+                                    else:
+                                        if _cn not in _carrier_ok:
+                                            _carrier_ok[_cn] = True
+                                        if _carrier_ok.get(_cn):
+                                            _carrier_totals[_cn] = _carrier_totals.get(_cn, 0) + _o["total"]
+                                        if _cn not in _all_carrier_names:
+                                            _all_carrier_names.append(_cn)
+                            # ลบขนส่งที่รองรับไม่ครบทุกกล่อง
+                            _carrier_totals = {k: v for k, v in _carrier_totals.items() if _carrier_ok.get(k)}
 
-                # ② ตารางเปรียบเทียบทุกขนส่ง
-                if _bx_postcode and _sel_data["carrier_totals"]:
+                        _cheapest_cost = min(_carrier_totals.values()) if _carrier_totals else None
+                        _cheapest_name = next((k for k,v in _carrier_totals.items() if v == _cheapest_cost), "-") if _cheapest_cost else "-"
+
+                        _config_data[_bmax] = {"boxes": _boxes, "carrier_totals": _carrier_totals}
+                        _row = {"กล่อง max": f"{_bmax:.0f} kg", "จำนวนกล่อง": _n,
+                                "น้ำหนักส่งรวม (kg)": f"{_total_ship_kg:.2f}",
+                                "ขนส่งถูกสุด": _cheapest_name}
+                        if _cheapest_cost:
+                            _row["ค่าส่งรวม (฿)"] = _cheapest_cost
+                        _summary_rows.append(_row)
+
+                    _sum_df = pd.DataFrame(_summary_rows)
+                    if "ค่าส่งรวม (฿)" in _sum_df.columns:
+                        _ci_min = _sum_df["ค่าส่งรวม (฿)"].idxmin()
+                        _sum_df["กล่อง max"] = _sum_df.apply(
+                            lambda r: ("⭐ " if r.name == _ci_min else "") + r["กล่อง max"], axis=1)
+                        st.dataframe(_sum_df, hide_index=True, use_container_width=True,
+                                     column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
+                        st.caption("⭐ = ค่าส่งรวมถูกสุด")
+                    else:
+                        st.dataframe(_sum_df, hide_index=True, use_container_width=True)
+
+                    # ── รายละเอียด config ที่เลือก ─────────────────────────────
                     st.divider()
-                    st.markdown("**🚚 เปรียบเทียบค่าส่งทุกขนส่ง**")
-                    _ct = _sel_data["carrier_totals"]
-                    _ct_min = min(_ct.values())
-                    _ct_rows = [{"ขนส่ง": ("🥇 " if v == _ct_min else "") + k, "ค่าส่งรวม (฿)": v}
-                                for k, v in sorted(_ct.items(), key=lambda x: x[1])]
-                    st.dataframe(pd.DataFrame(_ct_rows), hide_index=True, use_container_width=True,
-                                 column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
-                elif not _bx_postcode:
-                    st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อดูค่าส่งเปรียบเทียบ")
+                    _sel_label = st.selectbox(
+                        "ดูรายละเอียด — เลือก config กล่อง",
+                        [f"{b:.0f} kg" for b in _box_sizes],
+                        key="_bx_sel_config",
+                    )
+                    _sel_bmax  = next((b for b in _box_sizes if f"{b:.0f} kg" == _sel_label), _box_sizes[0])
+                    _sel_data  = _config_data[_sel_bmax]
+                    _sel_boxes = _sel_data["boxes"]
 
-    # ── Tab: ส่งของค้าง ──────────────────────────────────────────────────────
-    with _sub_pending:
-        _pk_av   = st.session_state.get("_pk_av", 0)
-        _pk_keys = [
-            "_pk_cust_picked",
-            f"pk_r_name_v{_pk_av}", f"pk_r_phone_v{_pk_av}", f"pk_r_al_v{_pk_av}",
-            f"pk_r_dt_v{_pk_av}", f"pk_r_am_v{_pk_av}", f"pk_r_pv_v{_pk_av}",
-            f"pk_r_pc_v{_pk_av}", "pk_carrier", "pk_mode",
-            "_pk_last_dt", "_pk_last_pc",
-        ]
+                    # ① สินค้าในแต่ละกล่อง
+                    st.markdown(f"**📦 การจัดสินค้า ({len(_sel_boxes)} กล่อง)**")
+                    for _bi, _box in enumerate(_sel_boxes, 1):
+                        _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
+                        _bkg = _box["weight_kg"] + 0.5
+                        st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`")
 
-        _pkh1, _pkh2 = st.columns([6, 1])
-        _pkh1.subheader("ส่งของค้าง / บันทึกรับจ่าย")
-        if _pkh2.button("🗑️ ล้าง", key="pk_clear"):
-            for _k in _pk_keys:
-                st.session_state.pop(_k, None)
-            st.session_state["_pk_av"] = _pk_av + 1
-            st.rerun()
-
-        if st.session_state.get("_do_clear_after_iship") == "pending":
-            st.session_state.pop("_do_clear_after_iship", None)
-            st.session_state.pop("_iship_carrier_select", None)
-            st.session_state.pop("_iship_success_info", None)
-            for _k in _pk_keys:
-                st.session_state.pop(_k, None)
-            st.session_state["_pk_av"] = _pk_av + 1
-            st.rerun()
-
-        # ── เลือกลูกค้า + วันที่ ──────────────────────────────────────────────
-        _pk_customers = db.get_customers()
-        _pk_cust_map  = {c["name"]: c for c in _pk_customers}
-        _pk_c1, _pk_c2 = st.columns([3, 1])
-        with _pk_c1:
-            _pk_picked = st.session_state.get("_pk_cust_picked", "")
-            if _pk_picked:
-                _pkx, _pky = st.columns([5, 1])
-                _pkx.success(f"👤 **{_pk_picked}**")
-                if _pky.button("✕", key="pk_cust_clear"):
-                    st.session_state.pop("_pk_cust_picked", None)
-                    st.rerun()
-                _pk_cust = _pk_picked
-            else:
-                _pk_opts = ["— เลือกลูกค้า —"] + sorted(_pk_cust_map.keys(), key=str.casefold)
-                _pk_sel  = st.selectbox("ลูกค้า", _pk_opts, key="pk_cust_search")
-                if _pk_sel != "— เลือกลูกค้า —":
-                    st.session_state["_pk_cust_picked"] = _pk_sel
-                    st.rerun()
-                _pk_cust = "— เลือกลูกค้า —"
-        pk_date = _pk_c2.date_input("วันที่", value=date.today(), key="pk_date")
-
-        if _pk_cust == "— เลือกลูกค้า —":
-            st.info("เลือกลูกค้าเพื่อดูรายการค้างรับ")
-        elif _pk_cust in _pk_cust_map:
-            _pk_cid     = _pk_cust_map[_pk_cust]["id"]
-            _pk_pending = db.get_pending_receipts_for_customer(_pk_cid)
-
-            if not _pk_pending:
-                st.success(f"✅ {_pk_cust} ไม่มีรายการค้างรับ")
-            else:
-                # ── ตารางของค้าง ──────────────────────────────────────────────
-                _pk_prods    = db.get_products()
-                _pk_prod_map = {p["id"]: p["name"] for p in _pk_prods}
-                _pk_prod_wt  = {p["id"]: float(p.get("weight_grams") or 0) for p in _pk_prods}
-                _pk_auto_key = f"_pk_auto_{_pk_cid}"
-                _pk_auto     = st.session_state.get(_pk_auto_key, {})
-
-                _pk_df = pd.DataFrame([{
-                    "สินค้า":    _pk_prod_map.get(p["product_id"], p["product_id"]),
-                    "บิล":       p.get("bill_no") or "—",
-                    "สถานะจ่าย": ("จ่ายแล้ว ✅" if p.get("outstanding_amt", 0) <= 0.01
-                                   else ("COD 💛" if p.get("pay_status") == "COD"
-                                         else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿")),
-                    "ค้างรับ":   p["ค้างรับ"],
-                    "รับวันนี้": 0,
-                    "จ่าย (฿)":  _pk_auto.get(p["id"],
-                                  int(round(p.get("outstanding_amt", 0)))
-                                  if p.get("outstanding_amt", 0) > 0.01 and p.get("pay_status") != "COD"
-                                  else 0),
-                    "_tid":      p["id"],
-                    "_max":      p["ค้างรับ"],
-                    "_owed":     p.get("outstanding_amt", 0.0),
-                } for p in _pk_pending])
-
-                _pk_edit = st.data_editor(
-                    _pk_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้","จ่าย (฿)"]],
-                    hide_index=True, use_container_width=True,
-                    column_config={
-                        "รับวันนี้": st.column_config.NumberColumn("รับวันนี้", min_value=0, step=1, width="small"),
-                        "จ่าย (฿)": st.column_config.NumberColumn("จ่าย (฿)", min_value=0, step=1, width="small"),
-                    },
-                    disabled=["สินค้า","บิล","สถานะจ่าย","ค้างรับ"],
-                    key=f"pk_recv_{_pk_cid}",
-                )
-
-                # auto-calculate จ่าย (฿) proportionally
-                _pk_qty_key  = f"_pk_qty_{_pk_cid}"
-                _pk_qty_prev = st.session_state.get(_pk_qty_key, None)
-                _pk_cur_qtys = {_pk_df.at[ri, "_tid"]: int(_pk_edit.at[ri, "รับวันนี้"] or 0) for ri in _pk_edit.index}
-                if _pk_qty_prev is None:
-                    st.session_state[_pk_qty_key] = _pk_cur_qtys
-                elif _pk_cur_qtys != _pk_qty_prev:
-                    _pk_all_tids = set(list(_pk_cur_qtys.keys()) + list(_pk_qty_prev.keys()))
-                    if any(_pk_cur_qtys.get(t, 0) != _pk_qty_prev.get(t, 0) for t in _pk_all_tids):
-                        _pk_new_auto = {}
-                        for _ri in _pk_edit.index:
-                            _q   = int(_pk_edit.at[_ri, "รับวันนี้"] or 0)
-                            _mx  = int(_pk_df.at[_ri, "_max"])
-                            _ow  = float(_pk_df.at[_ri, "_owed"])
-                            _tid = _pk_df.at[_ri, "_tid"]
-                            if _q > 0 and _ow > 0.01:
-                                _pk_new_auto[_tid] = int(round(_ow)) if _q >= _mx else int(round(_ow * _q / _mx))
-                            else:
-                                _pk_new_auto[_tid] = 0
-                        _pk_erows = st.session_state.get(f"pk_recv_{_pk_cid}", {}).get("edited_rows", {})
-                        for _ri in _pk_edit.index:
-                            _tid      = _pk_df.at[_ri, "_tid"]
-                            _prev_pay = float(_pk_auto.get(_tid, int(round(_pk_df.at[_ri, "_owed"])) if _pk_df.at[_ri, "_owed"] > 0.01 else 0))
-                            _cur_pay  = float(_pk_edit.at[_ri, "จ่าย (฿)"] or 0)
-                            if abs(_cur_pay - _prev_pay) < 0.5 and _ri in _pk_erows:
-                                _pk_erows[_ri].pop("จ่าย (฿)", None)
-                        st.session_state[_pk_qty_key]  = _pk_cur_qtys
-                        st.session_state[_pk_auto_key] = _pk_new_auto
-                        st.rerun()
-                    else:
-                        st.session_state[_pk_qty_key] = _pk_cur_qtys
-
-                # คำนวณ weight + has_action จากแถวที่กรอกแล้ว
-                _pk_has_action = False
-                _pk_weight_g   = 0.0
-                for _ri, _rrow in _pk_edit.iterrows():
-                    _q_now  = int(_rrow.get("รับวันนี้") or 0)
-                    _pay_now = float(_rrow.get("จ่าย (฿)") or 0)
-                    _ow_now  = float(_pk_df.iloc[_ri]["_owed"])
-                    if _q_now > 0:
-                        _pk_weight_g += _pk_prod_wt.get(_pk_pending[_ri]["product_id"], 0) * min(_q_now, int(_pk_df.iloc[_ri]["_max"]))
-                        _pk_has_action = True
-                    if _pay_now > 0.01 and _ow_now > 0.01:
-                        _pk_has_action = True
-
-                st.divider()
-
-                # ── วิธีรับของ ─────────────────────────────────────────────────
-                pk_mode = st.radio("วิธีรับของ", ["รับแล้ว", "ส่งพัสดุ"], horizontal=True, key="pk_mode")
-
-                # ── ที่อยู่ + ขนส่ง (เฉพาะ ส่งพัสดุ) ──────────────────────────
-                pk_r_name = pk_r_phone = pk_r_addr_line = ""
-                pk_r_district = pk_r_amphure = pk_r_province = pk_r_postcode = ""
-                pk_carrier = ""
-                _pk_ship_fee = 0.0
-
-                if pk_mode == "ส่งพัสดุ":
-                    with st.expander("📍 ที่อยู่ผู้รับ", expanded=True):
-                        # quick-select ที่อยู่เดิม
-                        _pk_addrs = db.get_customer_addresses(_pk_cid)
-                        if _pk_addrs:
-                            _pk_addr_labels = [
-                                f"{a.get('recipient_name','')} — {a.get('address_line','')} {a.get('district','')} {a.get('postal_code','')}"
-                                for a in _pk_addrs
-                            ]
-                            _pk_addr_sel = st.selectbox("ที่อยู่เดิม", ["— เลือกที่อยู่ —"] + _pk_addr_labels, key=f"pk_addr_sel_v{_pk_av}")
-                            if _pk_addr_sel != "— เลือกที่อยู่ —":
-                                _pk_ai = _pk_addr_labels.index(_pk_addr_sel)
-                                _pk_a  = _pk_addrs[_pk_ai]
-                                if st.button("✅ ใช้ที่อยู่นี้", key="pk_use_addr"):
-                                    for _fk, _v in [
-                                        (f"pk_r_name_v{_pk_av}",  _pk_a.get("recipient_name", "")),
-                                        (f"pk_r_phone_v{_pk_av}", _pk_a.get("phone", "")),
-                                        (f"pk_r_al_v{_pk_av}",    _pk_a.get("address_line", "")),
-                                        (f"pk_r_dt_v{_pk_av}",    _pk_a.get("district", "")),
-                                        (f"pk_r_am_v{_pk_av}",    _pk_a.get("amphure", "")),
-                                        (f"pk_r_pv_v{_pk_av}",    _pk_a.get("province", "")),
-                                        (f"pk_r_pc_v{_pk_av}",    _pk_a.get("postal_code", "")),
-                                    ]:
-                                        st.session_state[_fk] = _v
-                                    st.rerun()
-
-                        # staged fills (from autocomplete)
-                        for _fk, _wk in [("_fpk_rname", f"pk_r_name_v{_pk_av}"),
-                                          ("_fpk_rphone", f"pk_r_phone_v{_pk_av}"),
-                                          ("_fpk_al",     f"pk_r_al_v{_pk_av}"),
-                                          ("_fpk_dt",     f"pk_r_dt_v{_pk_av}"),
-                                          ("_fpk_am",     f"pk_r_am_v{_pk_av}"),
-                                          ("_fpk_pv",     f"pk_r_pv_v{_pk_av}"),
-                                          ("_fpk_pc",     f"pk_r_pc_v{_pk_av}")]:
-                            if _fk in st.session_state:
-                                st.session_state[_wk] = st.session_state.pop(_fk)
-
-                        _pka, _pkb   = st.columns(2)
-                        pk_r_name    = _pka.text_input("ชื่อผู้รับ",    key=f"pk_r_name_v{_pk_av}")
-                        pk_r_phone   = _pkb.text_input("เบอร์โทร",      key=f"pk_r_phone_v{_pk_av}")
-                        pk_r_addr_line = st.text_input("บ้านเลขที่/ถนน", key=f"pk_r_al_v{_pk_av}")
-                        _pkc, _pkd, _pke = st.columns(3)
-                        pk_r_district = _pkc.text_input("ตำบล/แขวง", key=f"pk_r_dt_v{_pk_av}")
-                        pk_r_amphure  = _pkd.text_input("อำเภอ/เขต",  key=f"pk_r_am_v{_pk_av}")
-                        pk_r_province = _pke.selectbox("จังหวัด", [""] + _PROVINCES, key=f"pk_r_pv_v{_pk_av}")
-
-                        # district autocomplete
-                        _pk_last_dt = st.session_state.get("_pk_last_dt", "")
-                        if len((pk_r_district or "").strip()) >= 2 and pk_r_district.strip() != _pk_last_dt:
-                            for _o in thai_address.lookup_by_tambon(pk_r_district.strip(), province=pk_r_province):
-                                _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
-                                if st.button(_lbl, key=f"pkdt_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
-                                    st.session_state.update({
-                                        "_fpk_dt": _o["tambon"], "_fpk_am": _o["amphure"],
-                                        "_fpk_pv": _o["province"], "_fpk_pc": _o["zipcode"],
-                                        "_pk_last_dt": _o["tambon"],
-                                    })
-                                    st.rerun()
-
-                        # postcode field + autocomplete
-                        if "_fpk_pc" in st.session_state:
-                            st.session_state[f"pk_r_pc_v{_pk_av}"] = st.session_state.pop("_fpk_pc")
-                        pk_r_postcode = st.text_input("รหัสไปรษณีย์", max_chars=5,
-                                                       key=f"pk_r_pc_v{_pk_av}", placeholder="เช่น 10400")
-                        _pk_last_pc = st.session_state.get("_pk_last_pc", "")
-                        if len((pk_r_postcode or "").strip()) == 5 and pk_r_postcode.strip() != _pk_last_pc:
-                            for _o in thai_address.lookup(pk_r_postcode.strip())[:8]:
-                                _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
-                                if st.button(_lbl, key=f"pkpc_{_o['tambon']}_{pk_r_postcode}", use_container_width=True):
-                                    st.session_state.update({
-                                        "_fpk_dt": _o["tambon"], "_fpk_am": _o["amphure"],
-                                        "_fpk_pv": _o["province"],
-                                        "_pk_last_dt": _o["tambon"],
-                                        "_pk_last_pc": pk_r_postcode.strip(),
-                                    })
-                                    st.rerun()
-
-                    # carrier selector
-                    if len((pk_r_postcode or "").strip()) == 5:
-                        _pk_fees     = carrier_fees(_pk_weight_g, pk_r_postcode.strip())
-                        _pk_carr_opts = sorted(_pk_fees.keys(), key=lambda k: _pk_fees[k]["total"])
-                        if _pk_carr_opts:
-                            _pk_def = st.session_state.get("pk_carrier", _pk_carr_opts[0])
-                            if _pk_def not in _pk_carr_opts:
-                                _pk_def = _pk_carr_opts[0]
-                            pk_carrier = st.selectbox(
-                                "ขนส่ง",
-                                _pk_carr_opts,
-                                index=_pk_carr_opts.index(_pk_def),
-                                format_func=lambda k: f"{k} — {_pk_fees[k]['total']:.0f} ฿",
-                                key="pk_carrier",
-                            )
-                            _pk_ship_fee = _pk_fees[pk_carrier]["total"]
-                            st.caption(f"น้ำหนักรวม: {(_pk_weight_g + 500) / 1000:.2f} kg | ค่าส่ง: {_pk_ship_fee:.0f} ฿")
-
-                # ── validation + submit ────────────────────────────────────────
-                _pk_errors = []
-                if not _pk_has_action:
-                    _pk_errors.append("⚠️ ยังไม่ได้กรอกจำนวนรับหรือยอดเงิน")
-                if pk_mode == "ส่งพัสดุ":
-                    if not pk_r_addr_line:
-                        _pk_errors.append("⚠️ กรุณากรอกที่อยู่ผู้รับ")
-                    if len((pk_r_postcode or "").strip()) != 5:
-                        _pk_errors.append("⚠️ รหัสไปรษณีย์ไม่ถูกต้อง")
-
-                if _pk_errors:
-                    st.warning("  \n".join(_pk_errors))
-
-                _pk_btn_label = "💾 บันทึก + ส่งพัสดุ" if pk_mode == "ส่งพัสดุ" else "💾 บันทึก"
-                if st.button(_pk_btn_label, type="primary", use_container_width=True,
-                              key="pk_submit", disabled=bool(_pk_errors)):
-                    # insert partial_events
-                    _pk_ship_items = []
-                    for _ri, _rrow in _pk_edit.iterrows():
-                        _delta    = int(_rrow["รับวันนี้"] or 0)
-                        _pay_in   = float(_rrow.get("จ่าย (฿)") or 0)
-                        _ow_this  = float(_pk_df.iloc[_ri]["_owed"])
-                        _app_pay  = min(_pay_in, _ow_this) if _ow_this > 0.01 else 0.0
-                        _act_qty  = min(max(_delta, 0), int(_pk_df.iloc[_ri]["_max"]))
-                        if _act_qty <= 0 and _app_pay <= 0.01:
-                            continue
-                        _etype = ("ทั้งคู่" if _act_qty > 0 and _app_pay > 0.01
-                                  else ("รับของจากบิลเก่า" if _act_qty > 0 else "จ่ายจากบิลเก่า"))
-                        db.insert_partial_event({
-                            "id":             str(uuid.uuid4()),
-                            "date":           str(pk_date),
-                            "transaction_id": _pk_df.iloc[_ri]["_tid"],
-                            "qty_received":   _act_qty,
-                            "amount_paid":    round(_app_pay, 2),
-                            "event_type":     _etype,
-                        })
-                        if _app_pay > 0.01 and _app_pay >= _ow_this - 0.01:
-                            db.update_transaction_status(_pk_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
-                        if _act_qty > 0:
-                            _pk_ship_items.append({
-                                "product_id": _pk_pending[_ri]["product_id"],
-                                "name":       str(_rrow["สินค้า"]),
-                                "qty":        _act_qty,
-                            })
-
-                    if pk_mode == "ส่งพัสดุ" and _pk_ship_items:
-                        _pk_co = _pk_cust_map[_pk_cust]
-                        st.session_state["_iship_carrier_select"] = {
-                            "tab":          "pending",
-                            "postcode":     pk_r_postcode.strip(),
-                            "weight_kg":    (_pk_weight_g + 500) / 1000,
-                            "dst_name":     pk_r_name or _pk_co["name"],
-                            "dst_phone":    pk_r_phone,
-                            "address_line": pk_r_addr_line,
-                            "district":     pk_r_district,
-                            "amphure":      pk_r_amphure,
-                            "province":     pk_r_province,
-                            "cod_amount":   0,
-                            "items":        _pk_ship_items,
-                            "customer_id":  _pk_co["id"],
-                            "customer_name": _pk_co["name"],
-                            "shipment_id":  "",
-                            "remark":       "",
-                        }
-                        st.rerun()
-                    else:
-                        st.success(f"✅ บันทึกแล้ว")
-                        st.session_state.pop(f"_pk_qty_{_pk_cid}", None)
-                        st.session_state.pop(f"_pk_auto_{_pk_cid}", None)
-                        st.rerun()
+                    # ② ตารางเปรียบเทียบทุกขนส่ง
+                    if _bx_postcode and _sel_data["carrier_totals"]:
+                        st.divider()
+                        st.markdown("**🚚 เปรียบเทียบค่าส่งทุกขนส่ง**")
+                        _ct = _sel_data["carrier_totals"]
+                        _ct_min = min(_ct.values())
+                        _ct_rows = [{"ขนส่ง": ("🥇 " if v == _ct_min else "") + k, "ค่าส่งรวม (฿)": v}
+                                    for k, v in sorted(_ct.items(), key=lambda x: x[1])]
+                        st.dataframe(pd.DataFrame(_ct_rows), hide_index=True, use_container_width=True,
+                                     column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
+                    elif not _bx_postcode:
+                        st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อดูค่าส่งเปรียบเทียบ")
 
 # Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -3828,6 +3297,9 @@ with tab4:
 # Tab 5: ประวัติทั้งหมด
 # ─────────────────────────────────────────────────────────────────────────────
 with tab5:
+    _t5_txn, _t5_ship = st.tabs(["📋 ประวัติรายการ", "🚚 ประวัติการส่ง"])
+
+with _t5_txn:
     st.subheader("ประวัติรายการทั้งหมด")
 
     customers_h = db.get_customers()
@@ -4188,6 +3660,221 @@ with tab5:
                 })
             _ship_df_h = pd.DataFrame(_ship_rows_h)
             st.dataframe(_ship_df_h, hide_index=True, use_container_width=True)
+
+with _t5_ship:
+    st.subheader("ประวัติการส่งของ")
+
+    _sh_cod_col, _sh_status_col, _sh_sync_col = st.columns([4, 2, 2])
+    if _sh_status_col.button("🚚 สถานะส่ง", key="sh_status_sync", use_container_width=True):
+        _pending_tn = db.get_pending_delivery_tracking()
+        if not _pending_tn:
+            st.info("ทุก tracking จัดส่งสำเร็จแล้ว")
+        else:
+            with st.spinner(f"ดึงสถานะ {len(_pending_tn)} tracking..."):
+                _sr = iship_api.get_shipment_statuses(days_back=90)
+            if _sr.get("error"):
+                st.error(f"❌ {_sr['error']}")
+            else:
+                _to_update = {tn: st for tn, st in _sr["statuses"].items() if tn in set(_pending_tn)}
+                if _to_update:
+                    db.update_delivery_statuses(_to_update)
+                    st.success(f"✅ อัปเดต {len(_to_update)} tracking")
+                    st.rerun()
+                else:
+                    st.info("ไม่มีสถานะใหม่")
+                    with st.expander("🔍 debug"):
+                        st.write(f"iShip คืนมา {len(_sr['statuses'])} tracking: {list(_sr['statuses'].keys())[:5]}")
+                        st.write(f"pending ในระบบ {len(_pending_tn)}: {_pending_tn[:5]}")
+                        st.write(f"debug: {_sr.get('_debug')}")
+    if _sh_sync_col.button("🔄 ตรวจสอบ COD", key="sh_cod_sync", use_container_width=True):
+        try:
+            _pending = db.get_pending_cod_tracking()
+        except Exception:
+            _pending = None  # column ยังไม่มี — ดึงทั้งหมด
+        if _pending is not None and len(_pending) == 0:
+            st.info("✅ COD ทุกรายการโอนแล้ว ไม่ต้องดึงข้อมูลใหม่")
+        else:
+            with st.spinner("กำลังดึงข้อมูลจาก iShip..."):
+                _r = iship_api.get_cod_transfers(days_back=90)
+            if _r.get("error"):
+                st.error(f"❌ {_r['error']}")
+            else:
+                _cod_transfers = _r.get("transfers", {})
+                st.session_state["_sh_cod_map"] = _cod_transfers
+                if _cod_transfers:
+                    try:
+                        db.mark_cod_transferred(list(_cod_transfers.keys()))
+                    except Exception:
+                        pass
+                    st.rerun()
+                else:
+                    st.info("ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
+    _sh_cod_map = st.session_state.get("_sh_cod_map", {})
+    # โหลดสถานะที่บันทึกใน DB ด้วย
+    try:
+        _db_transferred = set(
+            r["tracking_no"] for r in
+            db.get_supabase().table("shipments")
+                .select("tracking_no").not_.is_("cod_transferred_at","null")
+                .not_.is_("tracking_no","null").execute().data
+            if r.get("tracking_no")
+        )
+        _sh_cod_map = {**{tn: {} for tn in _db_transferred}, **_sh_cod_map}
+    except Exception:
+        pass
+    if _sh_cod_map:
+        _sh_cod_col.caption(f"✅ COD โอนแล้ว {len(_sh_cod_map)} tracking")
+
+    # ── filter ลูกค้า ─────────────────────────────────────────────────
+    _sh_customers = db.get_customers()
+    _sh_cust_map  = {c["name"]: c["id"] for c in _sh_customers}
+    _sh_cust_opts = ["— ทั้งหมด —"] + sorted(_sh_cust_map.keys(), key=str.casefold)
+    _sh_cust_sel  = st.selectbox("ลูกค้า", _sh_cust_opts, key="sh_cust_filter",
+                                 label_visibility="collapsed")
+    _sh_filter_cid = _sh_cust_map.get(_sh_cust_sel) if _sh_cust_sel != "— ทั้งหมด —" else None
+
+    try:
+        _sh_all = db.get_shipments(customer_id=_sh_filter_cid)
+    except Exception:
+        st.warning("⚙️ ยังไม่ได้สร้าง table shipments")
+        _sh_all = []
+
+    if _sh_all:
+        def _items_str(items):
+            if not items:
+                return ""
+            return ", ".join(f"{it.get('product_id','')} ×{it.get('qty',0)}" for it in items)
+
+        _sh_ids  = [r["id"] for r in _sh_all]
+        def _cod_status(r):
+            tn  = r.get("tracking_no", "") or ""
+            cod = float(r.get("cod_amount") or 0)
+            if cod <= 0:
+                return ""
+            if tn and tn in _sh_cod_map:
+                return "✅"
+            return "⏳"
+
+        def _delivery_icon(status: str) -> str:
+            if not status:
+                return ""
+            if "จัดส่งแล้ว" in status:
+                return "✅"
+            if "ตีกลับ" in status or "ยกเลิก" in status:
+                return "❌"
+            return "🚚"
+
+        def _src_icon(r):
+            s = r.get("source", "")
+            if s == "sale": return "💰"
+            if s == "ship": return "📦"
+            return "—"
+
+        _sh_df   = pd.DataFrame([{
+            "ลบ":              False,
+            "📤":              False,
+            "แหล่ง":           _src_icon(r),
+            "วันที่/เวลา":     _to_bkk(r.get("created_at") or ""),
+            "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
+            "COD":             float(r.get("cod_amount") or 0),
+            "💸":              _cod_status(r),
+            "สถานะส่ง":        (_delivery_icon(r.get("delivery_status") or "") + " " +
+                                (r.get("delivery_status") or "")).strip(),
+            "ผู้รับ":           r.get("recipient_name", ""),
+            "เบอร์":            r.get("phone", ""),
+            "รายการ":          _items_str(r.get("items")),
+            "ขนส่ง":           r.get("carrier", ""),
+            "Tracking":        r.get("tracking_no", "") or "",
+            "🔗":              (f"https://app.iship.cloud/tracking?track={r['tracking_no']}"
+                               if r.get("tracking_no") else ""),
+            "บ้านเลขที่/ถนน":  r.get("address_line", ""),
+            "ตำบล":            r.get("district", ""),
+            "อำเภอ":           r.get("amphure", ""),
+            "จังหวัด":         r.get("province", ""),
+            "รหัสปณ.":         r.get("postal_code", ""),
+            "หมายเหตุ":        r.get("notes", ""),
+        } for r in _sh_all])
+
+        _sh_edit = st.data_editor(
+            _sh_df,
+            hide_index=True, use_container_width=False, key="sh_hist_tbl",
+            disabled=["แหล่ง","วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
+                      "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
+                      "รายการ","ขนส่ง","COD","💸","สถานะส่ง","🔗","หมายเหตุ"],
+            column_config={
+                "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
+                "📤":       st.column_config.CheckboxColumn("📤", default=False, width="small",
+                                help="เลือกเพื่อส่ง iShip ใหม่"),
+                "แหล่ง":    st.column_config.TextColumn("แหล่ง", width="small",
+                                help="🛒 = บันทึกขาย  📦 = ส่งของ"),
+                "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
+                "💸":       st.column_config.TextColumn("💸", width="small"),
+                "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width="medium"),
+                "Tracking": st.column_config.TextColumn("Tracking", width="small"),
+                "🔗":       st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
+            },
+        )
+
+        # บันทึก Tracking ที่แก้ไข
+        for _si, _srow in _sh_edit.iterrows():
+            _orig_tn = _sh_df.at[_si, "Tracking"]
+            _new_tn  = (_srow["Tracking"] or "").strip()
+            if _new_tn != _orig_tn:
+                db.update_shipment_tracking(_sh_ids[_si], _new_tn)
+                st.session_state.pop("sh_hist_tbl", None)
+                st.rerun()
+
+        _sh_to_del = [_sh_ids[i] for i, v in enumerate(_sh_edit["ลบ"]) if v]
+
+        if _sh_to_del:
+            if st.button(f"🗑️ ลบที่เลือก ({len(_sh_to_del)} รายการ)", type="primary", key="sh_del_btn"):
+                for _did in _sh_to_del:
+                    try:
+                        db.delete_shipment(_did)
+                    except Exception:
+                        pass
+                st.session_state.pop("sh_hist_tbl", None)
+                st.rerun()
+
+        _sh_to_resend = [i for i, v in enumerate(_sh_edit["📤"]) if v]
+        if len(_sh_to_resend) > 1:
+            st.warning("เลือกได้ทีละ 1 รายการสำหรับส่ง iShip ใหม่")
+        elif len(_sh_to_resend) == 1:
+            _rs_i        = _sh_to_resend[0]
+            _rs_row      = _sh_all[_rs_i]
+            _rs_prod_map = {p["id"]: p for p in db.get_products()}
+            _rs_items    = _rs_row.get("items") or []
+            _rs_total_g  = sum(
+                float(_rs_prod_map.get(it.get("product_id", ""), {}).get("weight_grams") or 0) * it.get("qty", 0)
+                for it in _rs_items
+            )
+            _rs_w_def = max(0.5, round((_rs_total_g + BOX_WEIGHT_G) / 1000, 2))
+            _rs_w   = st.number_input("น้ำหนักรวมกล่อง (kg)", 0.1, 100.0, _rs_w_def, 0.1, key=f"sh_resend_w_{_rs_i}")
+            if st.button("📤 ส่ง iShip ใหม่", type="primary", key="sh_resend_btn"):
+                _old_tn = (_rs_row.get("tracking_no") or "").strip()
+                st.session_state["_iship_carrier_select"] = {
+                    "tab":           "ship",
+                    "postcode":      _rs_row.get("postal_code", ""),
+                    "weight_kg":     _rs_w,
+                    "cod_amount":    float(_rs_row.get("cod_amount") or 0),
+                    "customer_name": (_rs_row.get("customers") or {}).get("name", ""),
+                    "customer_id":   _rs_row.get("customer_id", ""),
+                    "dst_name":      _rs_row.get("recipient_name", ""),
+                    "dst_phone":     _rs_row.get("phone", ""),
+                    "address_line":  _rs_row.get("address_line", ""),
+                    "district":      _rs_row.get("district", ""),
+                    "amphure":       _rs_row.get("amphure", ""),
+                    "province":      _rs_row.get("province", ""),
+                    "items":         _rs_row.get("items") or [],
+                    "shipment_id":   _rs_row["id"],
+                    "remark":        _rs_row.get("notes", ""),
+                }
+                if _old_tn:
+                    st.session_state["_change_carrier_old_track"] = _old_tn
+                st.session_state.pop("sh_hist_tbl", None)
+                st.rerun()
+    else:
+        st.info("ยังไม่มีประวัติการส่งของ")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
