@@ -2821,6 +2821,12 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                 )
                                 event_date  = fc3.date_input("วันที่", value=date.today())
                                 event_notes = st.text_input("หมายเหตุ", key=f"enotes_{txn_id}")
+                                _also_open_bill = False
+                                if is_unbilled:
+                                    _also_open_bill = st.checkbox(
+                                        "📄 เปิดบิลด้วย", value=False,
+                                        key=f"also_open_{txn_id}",
+                                    )
                                 submit_evt  = st.form_submit_button(
                                     "💾 บันทึก", use_container_width=True, type="primary"
                                 )
@@ -2851,6 +2857,8 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                     except Exception as _pe:
                                         st.error(f"❌ DB error: {_pe}")
                                         st.stop()
+                                    if _also_open_bill:
+                                        db.update_transaction_status(txn_id, bill_status="เปิดบิลแล้ว")
                                     db.get_all_transactions_df.clear()
                                     if int(qty_received) > 0:
                                         _rp_pending = []
@@ -2879,8 +2887,6 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                         # Multi: ทำทุกอย่างพร้อมกันในตารางเดียว
                         sel_rows      = grp[grp["id"].isin(selected_ids)].copy()
                         total_owed    = float(sel_rows["ค้างจ่าย"].sum())
-                        _all_unbilled = (sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล").all()
-
                         _combo_rows = [{
                             "_id":       r["id"],
                             "สินค้า":    r["สินค้า"],
@@ -2908,10 +2914,12 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                             key=f"multi_combo_{customer_name}",
                         )
 
-                        _do_open_bill = False
-                        if _all_unbilled:
+                        _any_unbilled  = (sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล").any()
+                        _unbilled_cnt  = int((sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล").sum())
+                        _do_open_bill  = False
+                        if _any_unbilled:
                             _do_open_bill = st.checkbox(
-                                "📄 เปิดบิลด้วย (เปลี่ยนเป็น เปิดบิลแล้ว)",
+                                f"📄 เปิดบิลด้วย ({_unbilled_cnt} รายการที่ยังไม่เปิดบิล)",
                                 key=f"multi_open_chk_{customer_name}",
                             )
 
@@ -2962,8 +2970,9 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                     if _actual_amt >= _owed - 0.01:
                                         db.update_transaction_status(row["_id"], pay_status="จ่ายแล้ว")
                             if _do_open_bill:
-                                for _sid in selected_ids:
-                                    db.update_transaction_status(_sid, bill_status="เปิดบิลแล้ว")
+                                for i, row in _combo_df.iterrows():
+                                    if row["สถานะบิล"] == "ยังไม่เปิดบิล":
+                                        db.update_transaction_status(row["_id"], bill_status="เปิดบิลแล้ว")
                             # popup รับของ
                             if _mrp_received:
                                 _mrp_pending = []
