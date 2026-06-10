@@ -330,7 +330,8 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     """
     db = get_supabase()
     txns = db.table("transactions").select(
-        "id, date, bill_no, product_id, product_name, qty, total_amount, pay_status"
+        "id, date, bill_no, product_id, product_name, qty, total_amount, pay_status, "
+        "bill_status, points_per_unit, initial_qty_received"
     ).eq("customer_id", customer_id).order("date").execute().data
     txn_ids = [t["id"] for t in txns]
     txn_map = {t["id"]: t for t in txns}
@@ -354,16 +355,19 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     # order rows
     for t in txns:
         rows.append({
-            "date":         t["date"][:10],
-            "type":         "สั่งซื้อ",
-            "bill_no":      t.get("bill_no") or "",
-            "product":      t["product_name"],
-            "qty_in":       t["qty"],
-            "qty_out":      0,
-            "amount":       0.0,
-            "total_amount": float(t.get("total_amount") or 0),
-            "pay_status":   t.get("pay_status") or "",
-            "txn_id":       t["id"],
+            "date":             t["date"][:10],
+            "type":             "สั่งซื้อ",
+            "bill_no":          t.get("bill_no") or "",
+            "product":          t["product_name"],
+            "qty_in":           t["qty"],
+            "qty_out":          0,
+            "amount":           0.0,
+            "total_amount":     float(t.get("total_amount") or 0),
+            "pay_status":       t.get("pay_status") or "",
+            "bill_status":      t.get("bill_status") or "ยังไม่เปิดบิล",
+            "pv":               float(t.get("points_per_unit") or 0) * int(t.get("qty") or 0),
+            "initial_received": int(t.get("initial_qty_received") or 0),
+            "txn_id":           t["id"],
         })
     # partial event rows
     for e in all_events:

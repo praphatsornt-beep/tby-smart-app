@@ -3094,156 +3094,142 @@ with _t5_ledger:
                 # ── summary metrics ──────────────────────────────────────
                 _l_ord_qty  = sum(r["qty_in"]  for r in _l_orders)
                 _l_recv_qty = sum(r["qty_out"] for r in _l_receipts)
-                _l_paid     = sum(r["amount"]  for r in _l_payments)
+                _l_paid_tot = sum(r["amount"]  for r in _l_payments)
                 _sm1, _sm2, _sm3, _sm4 = st.columns(4)
                 _sm1.metric("สั่งซื้อ",  f"{_l_ord_qty:,} ชิ้น")
                 _sm2.metric("รับแล้ว",   f"{_l_recv_qty:,} ชิ้น")
                 _sm3.metric("ค้างรับ",   f"{max(0, _l_ord_qty - _l_recv_qty):,} ชิ้น")
-                _sm4.metric("จ่ายแล้ว",  f"{_l_paid:,.0f} ฿")
+                _sm4.metric("จ่ายแล้ว",  f"{_l_paid_tot:,.0f} ฿")
 
-                _ltab1, _ltab2, _ltab3 = st.tabs(
-                    ["📋 สั่งซื้อ", "📦 รับของ / ส่งพัสดุ", "💰 จ่ายเงิน"]
-                )
+                # ── สร้าง timeline per bill ──────────────────────────────
+                _bills_tl: dict = {}  # bill_no → {date, total, pv, qty, events[]}
 
-                # ── Tab: สั่งซื้อ (group by bill) ────────────────────────
-                with _ltab1:
-                    # aggregate per bill
-                    _bill_map: dict = {}
-                    for _r in _l_orders:
-                        _bk = _r["bill_no"] or "—"
-                        if _bk not in _bill_map:
-                            _bill_map[_bk] = {
-                                "date": _r["date"], "lines": [],
-                                "qty": 0, "total": 0.0, "pay_statuses": [],
-                            }
-                        _bill_map[_bk]["lines"].append(f"{_r['product']} ×{_r['qty_in']}")
-                        _bill_map[_bk]["qty"]   += _r["qty_in"]
-                        _bill_map[_bk]["total"] += _r.get("total_amount", 0.0)
-                        _bill_map[_bk]["pay_statuses"].append(_r.get("pay_status", ""))
+                # Phase 1: orders → bill header
+                for _r in _l_orders:
+                    _bk = _r["bill_no"] or "—"
+                    if _bk not in _bills_tl:
+                        _bills_tl[_bk] = {
+                            "date": _r["date"], "total": 0.0, "pv": 0.0,
+                            "qty": 0, "bill_status": "ยังไม่เปิดบิล", "products": [], "events": [],
+                        }
+                    _bills_tl[_bk]["products"].append(f"{_r['product']} ×{_r['qty_in']}")
+                    _bills_tl[_bk]["total"] += _r.get("total_amount", 0.0)
+                    _bills_tl[_bk]["pv"]    += _r.get("pv", 0.0)
+                    _bills_tl[_bk]["qty"]   += _r["qty_in"]
+                    if _r.get("bill_status") == "เปิดบิลแล้ว":
+                        _bills_tl[_bk]["bill_status"] = "เปิดบิลแล้ว"
 
-                    # ยอดจ่ายและวันที่ชำระ per bill
-                    _pay_total_bbl: dict = {}
-                    _pay_dates_bbl: dict = {}
-                    for _r in _l_payments:
-                        _bk = _r["bill_no"] or "—"
-                        _pay_total_bbl[_bk] = _pay_total_bbl.get(_bk, 0.0) + _r["amount"]
-                        _pay_dates_bbl.setdefault(_bk, []).append(_r["date"])
+                # delivery type heuristic per bill
+                _ship_dates_set = {_r["date"] for _r in _l_ships}
+                _recv_bill_set  = {_r["bill_no"] for _r in _l_receipts if _r["bill_no"]}
 
-                    # รับหน้าร้าน per bill: bill_no → [(date, product, qty)]
-                    _recv_bbl: dict = {}
-                    for _r in _l_receipts:
-                        _bk = _r["bill_no"] or "—"
-                        _recv_bbl.setdefault(_bk, []).append(
-                            (_r["date"], _r["product"], int(_r["qty_out"]))
-                        )
+                for _bk, _bv in _bills_tl.items():
+                    if _bv["date"] in _ship_dates_set:
+                        _dlv = "🚚 ส่งพัสดุ"
+                    elif _bk in _recv_bill_set:
+                        _dlv = "🏪 รับหน้าร้าน"
+                    else:
+                        _dlv = "📦 ฝากของ"
+                    _bv["events"].append({
+                        "date": _bv["date"], "order": 0, "type": "เปิดบิล",
+                        "detail": ",  ".join(_bv["products"]),
+                        "total": _bv["total"], "pv": _bv["pv"],
+                        "bill_status": _bv["bill_status"], "delivery": _dlv,
+                    })
 
-                    # ส่งพัสดุ per date: date → [items_str, ...]
-                    _ship_by_date: dict = {}
-                    for _r in _l_ships:
-                        _ship_by_date.setdefault(_r["date"], []).append(_r["product"])
+                # Phase 2: payment events (running balance)
+                _pay_cumul: dict = {}
+                for _r in sorted(_l_payments, key=lambda x: x["date"]):
+                    _bk = _r["bill_no"] or "—"
+                    _pay_cumul[_bk] = _pay_cumul.get(_bk, 0.0) + _r["amount"]
+                    _rem_pay = max(0.0, _bills_tl.get(_bk, {}).get("total", 0.0) - _pay_cumul[_bk])
+                    if _bk in _bills_tl:
+                        _bills_tl[_bk]["events"].append({
+                            "date": _r["date"], "order": 2, "type": "จ่ายเงิน",
+                            "amount": _r["amount"], "remaining": _rem_pay,
+                        })
 
-                    if _bill_map:
-                        _ord_rows = []
-                        for k, v in sorted(
-                            _bill_map.items(), key=lambda x: x[1]["date"], reverse=True
-                        ):
-                            _total  = v["total"]
-                            _paid   = _pay_total_bbl.get(k, 0.0)
-                            _owed   = max(0.0, _total - _paid)
-                            _pdates = ", ".join(
-                                sorted(set(_pay_dates_bbl.get(k, [])), reverse=True)
-                            )
-                            # รับของ: group receipt events by date
-                            _recv_events = _recv_bbl.get(k, [])
-                            if _recv_events:
-                                _dg: dict = {}
-                                for _rd, _rp, _rq in _recv_events:
-                                    _dg.setdefault(_rd, []).append(f"{_rp} ×{_rq}")
-                                _recv_str = "🏪 " + "  /  ".join(
-                                    f"{_d}: {', '.join(_its)}"
-                                    for _d, _its in sorted(_dg.items(), reverse=True)
-                                )
-                            elif v["date"] in _ship_by_date:
-                                _ship_items = ";  ".join(_ship_by_date[v["date"]])
-                                _recv_str = f"🚚 {v['date']}: {_ship_items}"
-                            else:
-                                _recv_str = "—"
+                # Phase 3: receipt events grouped by (bill, date)
+                _recv_groups: dict = {}
+                for _r in _l_receipts:
+                    _bk = _r["bill_no"] or "—"
+                    _recv_groups.setdefault((_bk, _r["date"]), []).append(
+                        (_r["product"], int(_r["qty_out"]))
+                    )
+                _recv_cumul: dict = {}
+                for (_bk, _rd), _items in sorted(_recv_groups.items(), key=lambda x: x[0][1]):
+                    _batch_qty = sum(q for _, q in _items)
+                    _recv_cumul[_bk] = _recv_cumul.get(_bk, 0) + _batch_qty
+                    _rem_recv = max(0, _bills_tl.get(_bk, {}).get("qty", 0) - _recv_cumul[_bk])
+                    if _bk in _bills_tl:
+                        _bills_tl[_bk]["events"].append({
+                            "date": _rd, "order": 1, "type": "รับของ",
+                            "detail": ",  ".join(f"{p} ×{q}" for p, q in _items),
+                            "remaining_qty": _rem_recv,
+                        })
 
-                            _statuses = v["pay_statuses"]
-                            if all(s == "จ่ายแล้ว" for s in _statuses):
-                                _ps = "✅ จ่ายแล้ว"
-                            elif _paid > 0.01:
-                                _ps = "⚠️ บางส่วน"
-                            else:
-                                _ps = "🔴 ค้างจ่าย"
-
-                            _ord_rows.append({
-                                "วันที่บิล":    v["date"],
-                                "บิล":          k,
-                                "สินค้า":       ",  ".join(v["lines"]),
-                                "ชิ้น":         v["qty"],
-                                "ยอดรวม (฿)":   _total,
-                                "ค้างจ่าย (฿)": _owed,
-                                "สถานะจ่าย":    _ps,
-                                "วันที่ชำระ":   _pdates or "—",
-                                "รับของ":       _recv_str,
+                # Phase 4: shipment events (match by bill date)
+                for _r in _l_ships:
+                    for _bk, _bv in _bills_tl.items():
+                        if _bv["date"] == _r["date"]:
+                            _bv["events"].append({
+                                "date": _r["date"], "order": 1, "type": "ส่งพัสดุ",
+                                "detail": _r["product"], "tracking": _r["bill_no"],
                             })
+                            break
 
-                        st.dataframe(
-                            pd.DataFrame(_ord_rows).style.format({
-                                "ยอดรวม (฿)":   "{:,.0f}",
-                                "ค้างจ่าย (฿)": "{:,.0f}",
-                            }),
-                            hide_index=True, use_container_width=True,
-                        )
-                    else:
-                        st.caption("ไม่มีรายการ")
+                # sort events within each bill
+                for _bv in _bills_tl.values():
+                    _bv["events"].sort(key=lambda e: (e["date"], e["order"]))
 
-                # ── Tab: รับของ / ส่งพัสดุ ───────────────────────────────
-                with _ltab2:
-                    _rv_rows = []
-                    for _r in _l_receipts:
-                        _rv_rows.append({
-                            "วันที่":   _r["date"],
-                            "ประเภท":   "📦 รับของ",
-                            "สินค้า":   _r["product"],
-                            "ชิ้น":     int(_r["qty_out"]),
-                            "อ้างอิง":  _r["bill_no"] or "—",
-                        })
-                    for _r in _l_ships:
-                        _rv_rows.append({
-                            "วันที่":   _r["date"],
-                            "ประเภท":   "🚚 ส่งพัสดุ",
-                            "สินค้า":   _r["product"],
-                            "ชิ้น":     "—",
-                            "อ้างอิง":  _r["bill_no"] or "—",
-                        })
-                    _rv_rows.sort(key=lambda x: x["วันที่"], reverse=True)
-                    if _rv_rows:
-                        st.dataframe(pd.DataFrame(_rv_rows),
-                                     hide_index=True, use_container_width=True)
-                    else:
-                        st.caption("ไม่มีรายการ")
-
-                # ── Tab: จ่ายเงิน ────────────────────────────────────────
-                with _ltab3:
-                    if _l_payments:
-                        _pay_rows = [
-                            {
-                                "วันที่":        _r["date"],
-                                "อ้างอิงบิล":   _r["bill_no"] or "—",
-                                "ยอดจ่าย (฿)":  _r["amount"],
-                            }
-                            for _r in reversed(_l_payments)
-                        ]
-                        st.dataframe(
-                            pd.DataFrame(_pay_rows)
-                              .style.format({"ยอดจ่าย (฿)": "{:,.0f}"}),
-                            hide_index=True, use_container_width=True,
-                        )
-                        st.info(f"💰 รวมจ่ายทั้งหมด {_l_paid:,.0f} ฿")
-                    else:
-                        st.caption("ยังไม่มีการจ่ายเงิน")
+                # ── render expanders ──────────────────────────────────────
+                for _bk, _bv in sorted(
+                    _bills_tl.items(), key=lambda x: x[1]["date"], reverse=True
+                ):
+                    _b_paid  = _pay_cumul.get(_bk, 0.0)
+                    _b_owed  = max(0.0, _bv["total"] - _b_paid)
+                    _b_recv  = _recv_cumul.get(_bk, 0)
+                    _b_pend  = max(0, _bv["qty"] - _b_recv)
+                    _pay_ico = "✅" if _b_owed <= 0.01 else "🔴"
+                    _recv_lbl = f" &nbsp;|&nbsp; 📦 ค้างรับ **{_b_pend} ชิ้น**" if _b_pend > 0 else ""
+                    _pv_lbl   = (f" &nbsp;|&nbsp; ⭐ **{_bv['pv']:.0f} PV**"
+                                 if _bv["pv"] > 0 and _bv["bill_status"] == "ยังไม่เปิดบิล" else "")
+                    _exp_hdr  = (
+                        f"📋 **{_bk}** &nbsp; {_bv['date']} &nbsp;|&nbsp; "
+                        f"{_pay_ico} ค้างจ่าย **{_b_owed:,.0f}฿**{_recv_lbl}{_pv_lbl}"
+                    )
+                    with st.expander(_exp_hdr, expanded=False):
+                        for _ei, _ev in enumerate(_bv["events"]):
+                            _ev_type = _ev["type"]
+                            if _ev_type == "เปิดบิล":
+                                _bs_ico = "✅" if _ev["bill_status"] == "เปิดบิลแล้ว" else "📋"
+                                st.markdown(
+                                    f"📅 **{_ev['date']}** &nbsp; 📄 **เปิดบิล**  \n"
+                                    f"{_ev['detail']}  \n"
+                                    f"ยอดรวม **{_ev['total']:,.0f}฿** &nbsp;·&nbsp; "
+                                    f"PV {_ev['pv']:.0f} &nbsp;·&nbsp; "
+                                    f"{_ev['delivery']} &nbsp;·&nbsp; "
+                                    f"{_bs_ico} {_ev['bill_status']}"
+                                )
+                            elif _ev_type == "จ่ายเงิน":
+                                st.markdown(
+                                    f"📅 **{_ev['date']}** &nbsp; 💰 **จ่ายเงิน {_ev['amount']:,.0f}฿**  \n"
+                                    f"คงเหลือ {_ev['remaining']:,.0f}฿"
+                                )
+                            elif _ev_type == "รับของ":
+                                st.markdown(
+                                    f"📅 **{_ev['date']}** &nbsp; 📦 **รับของ (หน้าร้าน)**  \n"
+                                    f"{_ev['detail']}  \n"
+                                    f"ค้างรับ {_ev['remaining_qty']} ชิ้น"
+                                )
+                            elif _ev_type == "ส่งพัสดุ":
+                                st.markdown(
+                                    f"📅 **{_ev['date']}** &nbsp; 🚚 **ส่งพัสดุ**  \n"
+                                    f"{_ev['detail']}  \n"
+                                    f"Tracking: {_ev['tracking']}"
+                                )
+                            if _ei < len(_bv["events"]) - 1:
+                                st.divider()
 
                 # ── ลบ partial event ──────────────────────────────────────
                 _ldel_rows = [
