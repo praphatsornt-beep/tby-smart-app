@@ -507,8 +507,8 @@ tab_dash, tab1, tab5, tab6, tab_fin, tab_ecom, tab4 = st.tabs([
 
 # sub-tabs ของ tab5 ต้องนิยามก่อนใช้ (with _t5_out: / _t5_cust: อยู่ก่อน with tab5: ในไฟล์)
 with tab5:
-    _t5_txn, _t5_ship, _t5_out, _t5_cust = st.tabs([
-        "📋 ประวัติรายการ", "🚚 ประวัติการส่ง", "💰 ยอดค้าง", "👤 บัตรลูกค้า"
+    _t5_out, _t5_ledger, _t5_cust, _t5_txn, _t5_ship = st.tabs([
+        "💰 ยอดค้าง", "👤 บัตรลูกค้า", "🖨️ รายละเอียดบิล", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"
     ])
 
 
@@ -2536,51 +2536,6 @@ with _t5_out:
                              + (f" | ⭐ PV ค้างเปิดบิล {_unbilled_pv:,.0f}" if _unbilled_pv > 0 else ""))
 
                 with st.expander(exp_label, expanded=single_cust):
-                    # ── บัตรลูกค้า (timeline) ────────────────────────────
-                    _cust_obj  = next((c for c in customers if c["name"] == customer_name), None)
-                    _cust_id_t = _cust_obj["id"] if _cust_obj else ""
-                    _ledger_key = f"_show_ledger_{customer_name}"
-                    _lc1, _lc2 = st.columns([1, 5])
-                    if _lc1.button("📋 บัตรลูกค้า", key=f"btn_ledger_{customer_name}",
-                                   use_container_width=True):
-                        st.session_state[_ledger_key] = not st.session_state.get(_ledger_key, False)
-                    if st.session_state.get(_ledger_key) and _cust_id_t:
-                        _ledger = db.get_customer_ledger(_cust_id_t)
-                        if _ledger:
-                            _ldf = pd.DataFrame(_ledger)
-                            _ldf["qty_net"] = _ldf["qty_in"] - _ldf["qty_out"]
-                            _ldf["สินค้าคง"] = _ldf.groupby("product")["qty_net"].cumsum()
-                            # ตารางแสดงผล
-                            _disp = _ldf[["date","type","bill_no","product","qty_in","qty_out","amount"]].copy()
-                            _disp.columns = ["วันที่","รายการ","บิล/Tracking","สินค้า","เข้า","ออก","จ่าย ฿"]
-                            _disp["เข้า"]   = _disp["เข้า"].replace(0, "")
-                            _disp["ออก"]    = _disp["ออก"].replace(0, "")
-                            _disp["จ่าย ฿"] = _disp["จ่าย ฿"].apply(lambda x: f"{x:,.0f}" if x else "")
-                            st.dataframe(_disp, use_container_width=True, hide_index=True,
-                                         height=min(35 * len(_disp) + 38, 320))
-                            # ปุ่มลบ — แสดงเฉพาะแถวที่มี event
-                            _del_rows = [(i, str(r.get("event_id") or "")) for i, r in enumerate(_ledger) if r.get("event_id")]
-                            if _del_rows:
-                                with st.expander("🗑️ ลบรายการ"):
-                                    for _di, _eid in _del_rows:
-                                        _lr2 = _ledger[_di]
-                                        _eid_real = _eid.removesuffix("-r").removesuffix("-p")
-                                        _amt_str = f"฿{_lr2['amount']:,.0f}" if _lr2['amount'] else ""
-                                        _label = f"{_lr2['date'][:10]}  {_lr2['type']}  {_lr2.get('product','') or ''}  {_amt_str}"
-                                        if st.button(f"🗑️ {_label}", key=f"del_ev_{_di}_{customer_name}"):
-                                            db.delete_partial_event(_eid_real)
-                                            st.rerun()
-                            st.divider()
-                            # summary
-                            _qty_sum = _ldf.groupby("product")["qty_net"].sum()
-                            _pending_prods = _qty_sum[_qty_sum > 0]
-                            _total_paid = _ldf["amount"].sum()
-                            _total_order = grp["ยอดรวม"].sum()
-                            _summ = " | ".join(f"{p}: {int(q)}" for p, q in _pending_prods.items())
-                            st.info(f"📦 คงเหลือ: {_summ or 'ครบแล้ว'}  |  💰 จ่ายแล้ว: {_total_paid:,.0f} ฿  |  ค้างจ่าย: {owed:,.0f} ฿")
-                        else:
-                            st.caption("ไม่มีประวัติ")
-                        st.divider()
                     # ── ใบรับของ popup ───────────────────────────────────
                     _rp = st.session_state.get("_recv_popup")
                     if _rp and _rp.get("customer_name") == customer_name:
@@ -2960,6 +2915,50 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Sub-tab: บัตรลูกค้า  (rendered inside tab5 → _t5_ledger)
+# ─────────────────────────────────────────────────────────────────────────────
+with _t5_ledger:
+    st.subheader("บัตรลูกค้า")
+    _l_customers = db.get_customers()
+    _l_opts = ["— เลือกลูกค้า —"] + sorted([c["name"] for c in _l_customers], key=str.casefold)
+    _lx1, _lx2 = st.columns([3, 2])
+    _l_sel = _lx1.selectbox("👤 ลูกค้า", _l_opts, key="t5_ledger_cust")
+    if _l_sel != "— เลือกลูกค้า —":
+        _l_cust = next((c for c in _l_customers if c["name"] == _l_sel), None)
+        if _l_cust:
+            _l_data = db.get_customer_ledger(_l_cust["id"])
+            if _l_data:
+                _ldf2 = pd.DataFrame(_l_data)
+                _ldf2["qty_net"] = _ldf2["qty_in"] - _ldf2["qty_out"]
+                _ldisp = _ldf2[["date","type","bill_no","product","qty_in","qty_out","amount"]].copy()
+                _ldisp.columns = ["วันที่","รายการ","บิล/Tracking","สินค้า","เข้า","ออก","จ่าย ฿"]
+                _ldisp["เข้า"]   = _ldisp["เข้า"].replace(0, "")
+                _ldisp["ออก"]    = _ldisp["ออก"].replace(0, "")
+                _ldisp["จ่าย ฿"] = _ldisp["จ่าย ฿"].apply(lambda x: f"{x:,.0f}" if x else "")
+                st.dataframe(_ldisp, use_container_width=True, hide_index=True)
+                # summary
+                _lqty_sum = _ldf2.groupby("product")["qty_net"].sum()
+                _lpend    = _lqty_sum[_lqty_sum > 0]
+                _ltotal_paid = _ldf2["amount"].sum()
+                _lsumm = " | ".join(f"{p}: {int(q)}" for p, q in _lpend.items())
+                st.info(f"📦 คงเหลือ: {_lsumm or 'ครบแล้ว'}  |  💰 จ่ายแล้ว: {_ltotal_paid:,.0f} ฿")
+                # ลบ partial event
+                _ldel_rows = [(i, str(r.get("event_id") or "")) for i, r in enumerate(_l_data) if r.get("event_id")]
+                if _ldel_rows:
+                    with st.expander("🗑️ ลบรายการ"):
+                        for _ldi, _leid in _ldel_rows:
+                            _llr = _l_data[_ldi]
+                            _leid_real = _leid.removesuffix("-r").removesuffix("-p")
+                            _lamt_str = f"฿{_llr['amount']:,.0f}" if _llr['amount'] else ""
+                            _llabel = f"{_llr['date'][:10]}  {_llr['type']}  {_llr.get('product','') or ''}  {_lamt_str}"
+                            if st.button(f"🗑️ {_llabel}", key=f"ldel_{_ldi}_{_l_sel}"):
+                                db.delete_partial_event(_leid_real)
+                                st.rerun()
+            else:
+                st.caption("ไม่มีประวัติ")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Tab 4: จัดการข้อมูลหลัก
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
@@ -3287,7 +3286,7 @@ with tab4:
 # ─────────────────────────────────────────────────────────────────────────────
 
 with _t5_txn:
-    st.subheader("ประวัติรายการทั้งหมด")
+    st.subheader("ประวัติทั้งหมด")
 
     customers_h = db.get_customers()
     h_col1, h_col2 = st.columns(2)
@@ -4006,7 +4005,7 @@ with tab6:
 # Tab 7: จัดการบิล
 # ─────────────────────────────────────────────────────────────────────────────
 with _t5_cust:
-    st.subheader("บัตรลูกค้า")
+    st.subheader("รายละเอียดบิล")
 
     customers_p = db.get_customers()
     if not customers_p:
