@@ -601,6 +601,63 @@ with tab_dash:
                 use_container_width=True, hide_index=True,
             )
 
+    # ── พัสดุเกิน 3 วัน + พัสดุมีปัญหา ──────────────────────────────────────
+    if _dash_ships:
+        _TERMINAL_S = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
+        _now_utc    = datetime.now(timezone.utc)
+        _cutoff     = _now_utc - timedelta(days=3)
+
+        def _parse_sdt(s_str):
+            try:
+                return datetime.fromisoformat(s_str.replace("Z", "+00:00"))
+            except Exception:
+                return None
+
+        _slow_ships, _problem_ships = [], []
+        for _sh in _dash_ships:
+            _cname = ((_sh.get("customers") or {}).get("name") or _sh.get("recipient_name", "—"))
+            _sdt   = _parse_sdt(_sh.get("created_at", ""))
+            _stat  = _sh.get("delivery_status") or "ไม่มีข้อมูล"
+            if _sh.get("delivery_status") in {"ตีกลับ", "ยกเลิก"}:
+                _problem_ships.append({
+                    "ลูกค้า":    _cname,
+                    "Tracking":  _sh.get("tracking_no", "—"),
+                    "ขนส่ง":     _sh.get("carrier", ""),
+                    "วันที่ส่ง": _sdt.astimezone(_BKK).strftime("%d/%m/%y") if _sdt else "—",
+                    "สถานะ":     _stat,
+                })
+            elif _sh.get("tracking_no") and _sh.get("delivery_status") not in _TERMINAL_S and _sdt and _sdt < _cutoff:
+                _problem_ships_no = (_now_utc - _sdt).days
+                _slow_ships.append({
+                    "ลูกค้า":    _cname,
+                    "Tracking":  _sh.get("tracking_no", ""),
+                    "ขนส่ง":     _sh.get("carrier", ""),
+                    "วันที่ส่ง": _sdt.astimezone(_BKK).strftime("%d/%m/%y"),
+                    "วันที่ผ่านมา": _problem_ships_no,
+                    "สถานะ":     _stat,
+                })
+
+        if _slow_ships or _problem_ships:
+            st.divider()
+            _sa, _sb = st.columns(2)
+            with _sa:
+                _slow_label = f"**⏳ พัสดุเกิน 3 วัน ยังไม่ถึง ({len(_slow_ships)} รายการ)**"
+                st.markdown(_slow_label)
+                if _slow_ships:
+                    _slow_df = pd.DataFrame(_slow_ships)
+                    st.dataframe(_slow_df, use_container_width=True, hide_index=True,
+                                 height=min(35 * len(_slow_df) + 38, 280))
+                else:
+                    st.caption("✅ ไม่มี")
+            with _sb:
+                st.markdown(f"**⚠️ พัสดุที่มีปัญหา ตีกลับ/ยกเลิก ({len(_problem_ships)} รายการ)**")
+                if _problem_ships:
+                    _prob_df = pd.DataFrame(_problem_ships)
+                    st.dataframe(_prob_df, use_container_width=True, hide_index=True,
+                                 height=min(35 * len(_prob_df) + 38, 280))
+                else:
+                    st.caption("✅ ไม่มี")
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab 1: บันทึกรายการขาย
 # ─────────────────────────────────────────────────────────────────────────────
