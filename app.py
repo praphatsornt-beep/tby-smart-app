@@ -498,7 +498,7 @@ if st.session_state.pop("_open_success_dialog", False):
 tab_dash, tab1, tab5, tab6, tab_fin, tab_ecom, tab4 = st.tabs([
     "🏠 หน้าแรก",
     "📋 บันทึกรายการ",
-    "🗂️ ประวัติทั้งหมด",
+    "🗂️ รายละเอียดบิล",
     "📦 สต๊อก",
     "💵 การเงิน",
     "🛒 E-commerce",
@@ -507,8 +507,8 @@ tab_dash, tab1, tab5, tab6, tab_fin, tab_ecom, tab4 = st.tabs([
 
 # sub-tabs ของ tab5 ต้องนิยามก่อนใช้ (with _t5_out: / _t5_cust: อยู่ก่อน with tab5: ในไฟล์)
 with tab5:
-    _t5_out, _t5_ledger, _t5_cust, _t5_txn, _t5_ship = st.tabs([
-        "💰 ยอดค้าง", "👤 บัตรลูกค้า", "🖨️ จัดการบิล", "📋 รายละเอียดบิล", "🚚 ประวัติการส่ง"
+    _t5_out, _t5_ledger, _t5_txn, _t5_cust, _t5_ship = st.tabs([
+        "💰 ยอดค้าง", "👤 บัตรลูกค้า", "📋 รายละเอียดบิล", "🖨️ จัดการบิล", "🚚 ประวัติการส่ง"
     ])
 
 
@@ -3575,11 +3575,11 @@ with tab4:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tab 5: ประวัติทั้งหมด  (sub-tabs created at top of file)
+# Tab 5: รายละเอียดบิล  (sub-tabs created at top of file)
 # ─────────────────────────────────────────────────────────────────────────────
 
 with _t5_txn:
-    st.subheader("ประวัติทั้งหมด")
+    st.subheader("รายละเอียดบิล")
 
     customers_h = db.get_customers()
     h_col1, h_col2 = st.columns(2)
