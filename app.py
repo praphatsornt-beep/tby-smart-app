@@ -3091,14 +3091,18 @@ with _t5_ledger:
                         _pay_total_bbl[_bk] = _pay_total_bbl.get(_bk, 0.0) + _r["amount"]
                         _pay_dates_bbl.setdefault(_bk, []).append(_r["date"])
 
-                    # รับหน้าร้าน per bill (from receipt events)
+                    # รับหน้าร้าน per bill: bill_no → [(date, product, qty)]
                     _recv_bbl: dict = {}
                     for _r in _l_receipts:
                         _bk = _r["bill_no"] or "—"
-                        _recv_bbl[_bk] = _recv_bbl.get(_bk, 0) + int(_r["qty_out"])
+                        _recv_bbl.setdefault(_bk, []).append(
+                            (_r["date"], _r["product"], int(_r["qty_out"]))
+                        )
 
-                    # วันที่ส่งพัสดุ (heuristic: shipment date ≈ bill date)
-                    _ship_dates: set = {_r["date"] for _r in _l_ships}
+                    # ส่งพัสดุ per date: date → [items_str, ...]
+                    _ship_by_date: dict = {}
+                    for _r in _l_ships:
+                        _ship_by_date.setdefault(_r["date"], []).append(_r["product"])
 
                     if _bill_map:
                         _ord_rows = []
@@ -3111,11 +3115,19 @@ with _t5_ledger:
                             _pdates = ", ".join(
                                 sorted(set(_pay_dates_bbl.get(k, [])), reverse=True)
                             )
-                            _recv_q = _recv_bbl.get(k, 0)
-                            if _recv_q > 0:
-                                _recv_str = f"🏪 หน้าร้าน {_recv_q} ชิ้น"
-                            elif v["date"] in _ship_dates:
-                                _recv_str = "🚚 ส่งพัสดุ"
+                            # รับของ: group receipt events by date
+                            _recv_events = _recv_bbl.get(k, [])
+                            if _recv_events:
+                                _dg: dict = {}
+                                for _rd, _rp, _rq in _recv_events:
+                                    _dg.setdefault(_rd, []).append(f"{_rp} ×{_rq}")
+                                _recv_str = "🏪 " + "  /  ".join(
+                                    f"{_d}: {', '.join(_its)}"
+                                    for _d, _its in sorted(_dg.items(), reverse=True)
+                                )
+                            elif v["date"] in _ship_by_date:
+                                _ship_items = ";  ".join(_ship_by_date[v["date"]])
+                                _recv_str = f"🚚 {v['date']}: {_ship_items}"
                             else:
                                 _recv_str = "—"
 
