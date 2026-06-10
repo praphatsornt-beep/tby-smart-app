@@ -739,8 +739,6 @@ with tab1:
                                  else f"📦 รับของจากบิลเก่า ({sum(p['ค้างรับ'] for p in _pending_rx)} ชิ้นค้างรับ)")
                     with st.expander(_rx_label, expanded=(_cur_delivery == "ส่งพัสดุ")):
                         _prod_map_rx = {p["id"]: p["name"] for p in products}
-                        _rx_auto_key = f"_rx_auto_{_recv_cid}"
-                        _rx_auto     = st.session_state.get(_rx_auto_key, {})
                         _rx_df = pd.DataFrame([{
                             "สินค้า":     _prod_map_rx.get(p["product_id"], p["product_id"]),
                             "บิล":        p.get("bill_no") or "—",
@@ -749,128 +747,67 @@ with tab1:
                                                  else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿")),
                             "ค้างรับ":    p["ค้างรับ"],
                             "รับวันนี้":  0,
-                            "จ่าย (฿)":  _rx_auto.get(p["id"],
-                                          int(round(p.get("outstanding_amt", 0)))
-                                          if p.get("outstanding_amt", 0) > 0.01 and p.get("pay_status") != "COD"
-                                          else 0),
                             "_tid":       p["id"],
                             "_max":       p["ค้างรับ"],
                             "_owed":      p.get("outstanding_amt", 0.0),
                         } for p in _pending_rx])
                         _rx_edit = st.data_editor(
-                            _rx_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้","จ่าย (฿)"]],
+                            _rx_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้"]],
                             hide_index=True, use_container_width=True,
                             column_config={
-                                "รับวันนี้":  st.column_config.NumberColumn("รับวันนี้", min_value=0, step=1, width="small"),
-                                "จ่าย (฿)": st.column_config.NumberColumn("จ่าย (฿)", min_value=0, step=1, width="small"),
+                                "รับวันนี้": st.column_config.NumberColumn("รับวันนี้", min_value=0, step=1, width="small"),
                             },
                             disabled=["สินค้า","บิล","สถานะจ่าย","ค้างรับ"],
                             key=f"sale_recv_old_{_recv_cid}",
                         )
-                        # auto-update จ่าย (฿) proportionally when รับวันนี้ changes
-                        # keyed by TXN ID (not row index) so list shrinks don't trigger false reruns
-                        _rx_qty_key  = f"_rx_qty_{_recv_cid}"
-                        _rx_qty_prev = st.session_state.get(_rx_qty_key, None)
-                        _cur_qtys    = {_rx_df.at[ri, "_tid"]: int(_rx_edit.at[ri, "รับวันนี้"] or 0) for ri in _rx_edit.index}
-                        if _rx_qty_prev is None:
-                            st.session_state[_rx_qty_key] = _cur_qtys
-                        elif _cur_qtys != _rx_qty_prev:
-                            _all_tids = set(list(_cur_qtys.keys()) + list(_rx_qty_prev.keys()))
-                            _any_changed = any(_cur_qtys.get(t, 0) != _rx_qty_prev.get(t, 0) for t in _all_tids)
-                            if _any_changed:
-                                _new_auto = {}
-                                for _ri in _rx_edit.index:
-                                    _q    = int(_rx_edit.at[_ri, "รับวันนี้"] or 0)
-                                    _mx   = int(_rx_df.at[_ri, "_max"])
-                                    _ow   = float(_rx_df.at[_ri, "_owed"])
-                                    _tid2 = _rx_df.at[_ri, "_tid"]
-                                    if _q > 0 and _ow > 0.01:
-                                        _new_auto[_tid2] = int(round(_ow)) if _q >= _mx else int(round(_ow * _q / _mx))
-                                    else:
-                                        _new_auto[_tid2] = 0
-                                # clear auto-managed จ่าย (฿) edits only if user hasn't overridden
-                                _ekey  = f"sale_recv_old_{_recv_cid}"
-                                _erows = st.session_state.get(_ekey, {}).get("edited_rows", {})
-                                for _ri in _rx_edit.index:
-                                    _tid2     = _rx_df.at[_ri, "_tid"]
-                                    _prev_pay = float(_rx_auto.get(_tid2, int(round(_rx_df.at[_ri, "_owed"])) if _rx_df.at[_ri, "_owed"] > 0.01 else 0))
-                                    _cur_pay  = float(_rx_edit.at[_ri, "จ่าย (฿)"] or 0)
-                                    if abs(_cur_pay - _prev_pay) < 0.5 and _ri in _erows:
-                                        _erows[_ri].pop("จ่าย (฿)", None)
-                                st.session_state[_rx_qty_key]  = _cur_qtys
-                                st.session_state[_rx_auto_key] = _new_auto
-                                st.rerun()
-                            else:
-                                # list size changed but no qty values changed — sync without rerun
-                                st.session_state[_rx_qty_key] = _cur_qtys
                         if _cur_delivery == "ส่งพัสดุ":
-                            st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด")
+                            st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด · ยอดค้างจะถูกปรับตามสัดส่วน")
                         elif not _cur_delivery:
                             st.caption("⬆️ เลือก การรับ/สถานะของ ด้านบนก่อน")
                         elif _cur_delivery in ("ฝากของ", "รับแล้ว"):
                             if st.button("💾 บันทึกรับของจากบิลเก่า", key="sale_recv_old_btn", type="primary"):
-                                _saved_rx = 0
-                                _saved_pay = 0
+                                _saved_rx  = 0
                                 _total_pay = 0.0
                                 for _ri, _rrow in _rx_edit.iterrows():
-                                    _delta     = int(_rrow["รับวันนี้"] or 0)
-                                    _pay_input = float(_rrow.get("จ่าย (฿)") or 0)
-                                    _owed_this = float(_rx_df.iloc[_ri]["_owed"])
-                                    _apply_pay = min(_pay_input, _owed_this) if _owed_this > 0.01 else 0.0
-                                    _cap       = int(_rx_df.iloc[_ri]["_max"])
+                                    _delta      = int(_rrow["รับวันนี้"] or 0)
+                                    _owed_this  = float(_rx_df.iloc[_ri]["_owed"])
+                                    _cap        = int(_rx_df.iloc[_ri]["_max"])
                                     _actual_qty = min(_delta, _cap)
-                                    if _actual_qty <= 0 and _apply_pay <= 0.01:
+                                    if _actual_qty <= 0:
                                         continue
-                                    _etype = (
-                                        "ทั้งคู่" if _actual_qty > 0 and _apply_pay > 0.01
-                                        else ("รับของจากบิลเก่า" if _actual_qty > 0 else "จ่ายจากบิลเก่า")
-                                    )
+                                    _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+                                    _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของจากบิลเก่า"
                                     db.insert_partial_event({
                                         "id":             str(uuid.uuid4()),
                                         "date":           str(m_date),
                                         "transaction_id": _rx_df.iloc[_ri]["_tid"],
                                         "qty_received":   _actual_qty,
-                                        "amount_paid":    round(_apply_pay, 2),
+                                        "amount_paid":    _apply_pay,
                                         "event_type":     _etype,
                                     })
-                                    if _actual_qty > 0:
-                                        _saved_rx += 1
-                                    if _apply_pay > 0.01:
-                                        _saved_pay += 1
-                                        _total_pay += _apply_pay
-                                        if _apply_pay >= _owed_this - 0.01:
-                                            db.update_transaction_status(
-                                                _rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว"
-                                            )
-                                if _saved_rx or _saved_pay:
-                                    _parts = []
-                                    if _saved_rx:
-                                        _parts.append(f"รับของ {_saved_rx} รายการ")
-                                    if _saved_pay:
-                                        _parts.append(f"จ่าย ฿{_total_pay:,.0f}")
-                                    st.success("✅ บันทึก: " + " + ".join(_parts))
-                                    st.session_state.pop(f"_rx_qty_{_recv_cid}", None)
-                                    st.session_state.pop(f"_rx_auto_{_recv_cid}", None)
+                                    _saved_rx += 1
+                                    _total_pay += _apply_pay
+                                    if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
+                                        db.update_transaction_status(
+                                            _rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว"
+                                        )
+                                if _saved_rx:
+                                    _pay_note = f" · ปรับยอดค้าง ฿{_total_pay:,.0f}" if _total_pay > 0.01 else ""
+                                    st.success(f"✅ บันทึกรับของ {_saved_rx} รายการ{_pay_note}")
                                     st.rerun()
                                 else:
-                                    st.warning("ยังไม่ได้กรอกจำนวนรับหรือยอดเงิน")
+                                    st.warning("ยังไม่ได้กรอกจำนวนรับ")
 
-            # ── น้ำหนัก/ยอดจ่ายจากของค้างที่กำลังรับ ────────────────────────
+            # ── น้ำหนักจากของค้างที่กำลังรับ ─────────────────────────────────
             _prod_weight_map   = {p["id"]: float(p.get("weight_grams") or 0) for p in products}
             _rx_extra_weight_g = 0.0
-            _rx_extra_pay      = 0.0
             _has_rx_action     = False
             if _rx_df is not None and _rx_edit is not None:
                 for _ri, _rrow in _rx_edit.iterrows():
-                    _qty_now   = int(_rrow.get("รับวันนี้") or 0)
-                    _pay_now   = float(_rrow.get("จ่าย (฿)") or 0)
-                    _owed_this = float(_rx_df.iloc[_ri]["_owed"])
+                    _qty_now = int(_rrow.get("รับวันนี้") or 0)
                     if _qty_now > 0:
                         _pid = _pending_rx[_ri]["product_id"]
                         _rx_extra_weight_g += _prod_weight_map.get(_pid, 0) * min(_qty_now, int(_rx_df.iloc[_ri]["_max"]))
-                        _has_rx_action = True
-                    if _pay_now > 0.01 and _owed_this > 0.01:
-                        _rx_extra_pay += min(_pay_now, _owed_this)
                         _has_rx_action = True
 
             # ── วางรหัสสินค้าลงตาราง ─────────────────────────────────────────
@@ -1150,13 +1087,12 @@ with tab1:
                 total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
                 total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
                 total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items) + _rx_extra_weight_g
-                _grand_pay   = total_amt + _rx_extra_pay
                 if valid_items:
                     st.success("🛒 " + "  |  ".join(f"**{p['id']}** ×{q}" for p, q, _ in valid_items))
                 if m_delivery == "ส่งพัสดุ":
                     fees_all  = carrier_fees(total_weight, m_postcode)
                     ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(total_weight, m_postcode)
-                    _base     = _grand_pay + ship_fee
+                    _base     = total_amt + ship_fee
                     cod_fee   = round(_base * COD_FEE_RATE, 2) if m_cod else 0
                     collect   = _base + cod_fee if m_cod else _base
                     net_recv  = _base
@@ -1177,14 +1113,6 @@ with tab1:
                             help="ค่า default = คำนวณอัตโนมัติ ปรับได้ถ้าต้องการเก็บยอดอื่น",
                         )
                         collect = float(_cod_custom)
-                    elif _rx_extra_pay > 0.01:
-                        vm1, vm2, vm3, vm4, vm5, vm6 = st.columns(6)
-                        vm1.metric("ยอดสินค้าใหม่",   f"{total_amt:,.0f} ฿")
-                        vm2.metric("💸 ค้างชำระเก่า",  f"{_rx_extra_pay:,.0f} ฿")
-                        vm3.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
-                        vm4.metric("💰 ยอดรวม",        f"{collect:,.0f} ฿")
-                        vm5.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
-                        vm6.metric("PV รวม",           f"{total_pv:.0f}")
                     else:
                         vm1, vm2, vm3, vm4, vm5 = st.columns(5)
                         vm1.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
@@ -1204,8 +1132,7 @@ with tab1:
 
             m_errors = []
             if m_customer == "— เลือกลูกค้า —": m_errors.append("⚠️ ยังไม่ได้เลือกลูกค้า")
-            if not valid_items and not (_has_rx_action and m_delivery == "ส่งพัสดุ"):
-                m_errors.append("⚠️ ยังไม่ได้กรอกสินค้า")
+            if not valid_items: m_errors.append("⚠️ ยังไม่ได้กรอกสินค้า")
             if m_delivery is None: m_errors.append("⚠️ ยังไม่ได้เลือก การรับ/สถานะของ")
             if valid_items:
                 if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก สถานะจ่าย")
@@ -1213,7 +1140,7 @@ with tab1:
             if m_errors:
                 st.warning("  \n".join(m_errors))
 
-            if not m_errors and (valid_items or _has_rx_action):
+            if not m_errors and valid_items:
                 _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡"}.get(m_pay or "", "⚪")
                 _deliv_color = {"ส่งพัสดุ": "🚚", "ฝากของ": "📦", "รับแล้ว": "✅"}.get(m_delivery or "", "⚪")
                 _bill_color  = "🟠" if m_bill == "ยังไม่เปิดบิล" else "🟢"
@@ -1292,31 +1219,28 @@ with tab1:
                     if _rx_df is not None and _rx_edit is not None:
                         for _ri, _rrow in _rx_edit.iterrows():
                             _delta     = int(_rrow["รับวันนี้"] or 0)
-                            _pay_inp   = float(_rrow.get("จ่าย (฿)") or 0)
                             _owed_this = float(_rx_df.iloc[_ri]["_owed"])
                             _cap       = int(_rx_df.iloc[_ri]["_max"])
                             _recv      = min(max(_delta, 0), _cap)
-                            _apply_pay = min(_pay_inp, _owed_this) if _owed_this > 0.01 else 0.0
-                            if _recv <= 0 and _apply_pay <= 0.01:
+                            _apply_pay = round(_owed_this * _recv / _cap, 2) if _owed_this > 0.01 and _cap > 0 and _recv > 0 else 0.0
+                            if _recv <= 0:
                                 continue
-                            _etype = ("ทั้งคู่" if _recv > 0 and _apply_pay > 0.01
-                                     else ("รับของ" if _recv > 0 else "จ่ายจากบิลเก่า"))
+                            _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
                             db.insert_partial_event({
                                 "id":             str(uuid.uuid4()),
                                 "date":           str(m_date),
                                 "transaction_id": _rx_df.iloc[_ri]["_tid"],
                                 "qty_received":   _recv,
-                                "amount_paid":    round(_apply_pay, 2),
+                                "amount_paid":    _apply_pay,
                                 "event_type":     _etype,
                             })
                             if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
                                 db.update_transaction_status(_rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
-                            if _recv > 0:
-                                _old_ship_items.append({
-                                    "product_id": _pending_rx[_ri]["product_id"],
-                                    "name":       str(_rrow["สินค้า"]),
-                                    "qty":        _recv,
-                                })
+                            _old_ship_items.append({
+                                "product_id": _pending_rx[_ri]["product_id"],
+                                "name":       str(_rrow["สินค้า"]),
+                                "qty":        _recv,
+                            })
                     _new_items = [{"product_id": p["id"], "name": p["name"], "qty": qty}
                                   for p, qty, _ in valid_items]
                     _all_items = _new_items + _old_ship_items
@@ -1361,23 +1285,22 @@ with tab1:
                         }
                         pass  # _iship_carrier_select set above — dialog triggers automatically
                 elif not is_shipping and _rx_df is not None and _rx_edit is not None:
-                    # บันทึกรับของเก่า/จ่ายเงิน สำหรับ รับแล้ว / ฝากของ
+                    # บันทึกรับของเก่า สำหรับ รับแล้ว / ฝากของ (จ่ายอัตโนมัติตามสัดส่วน)
                     for _ri, _rrow in _rx_edit.iterrows():
                         _delta      = int(_rrow["รับวันนี้"] or 0)
-                        _pay_input  = float(_rrow.get("จ่าย (฿)") or 0)
                         _owed_this  = float(_rx_df.iloc[_ri]["_owed"])
-                        _apply_pay  = min(_pay_input, _owed_this) if _owed_this > 0.01 else 0.0
-                        _actual_qty = min(max(_delta, 0), int(_rx_df.iloc[_ri]["_max"]))
-                        if _actual_qty <= 0 and _apply_pay <= 0.01:
+                        _cap        = int(_rx_df.iloc[_ri]["_max"])
+                        _actual_qty = min(max(_delta, 0), _cap)
+                        if _actual_qty <= 0:
                             continue
-                        _etype = ("ทั้งคู่" if _actual_qty > 0 and _apply_pay > 0.01
-                                  else ("รับของจากบิลเก่า" if _actual_qty > 0 else "จ่ายจากบิลเก่า"))
+                        _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+                        _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของจากบิลเก่า"
                         db.insert_partial_event({
                             "id":             str(uuid.uuid4()),
                             "date":           str(m_date),
                             "transaction_id": _rx_df.iloc[_ri]["_tid"],
                             "qty_received":   _actual_qty,
-                            "amount_paid":    round(_apply_pay, 2),
+                            "amount_paid":    _apply_pay,
                             "event_type":     _etype,
                         })
                         if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
@@ -1412,6 +1335,68 @@ with tab1:
                 st.rerun()
             elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
                 st.caption("⚠️ " + " | ".join(m_errors))
+
+            # ── ปุ่มรับแต่ของเก่า (เฉพาะ ส่งพัสดุ + ไม่มีสินค้าใหม่) ────────
+            if (m_delivery == "ส่งพัสดุ" and not valid_items and _has_rx_action
+                    and m_customer != "— เลือกลูกค้า —"):
+                st.divider()
+                _rxo_errors = []
+                if not r_addr_line: _rxo_errors.append("⚠️ ยังไม่ได้กรอกที่อยู่")
+                if not m_postcode:  _rxo_errors.append("⚠️ ยังไม่ได้กรอกรหัสไปรษณีย์")
+                if _rxo_errors:
+                    st.warning("  \n".join(_rxo_errors))
+                if st.button("🚚 รับแต่ของเก่า", type="primary", use_container_width=True,
+                             key="m_rxonly_submit", disabled=bool(_rxo_errors)):
+                    _rxo_customer   = customer_map[m_customer]
+                    _rxo_weight_g   = _rx_extra_weight_g
+                    _rxo_fees       = carrier_fees(_rxo_weight_g, m_postcode)
+                    _rxo_ship_fee   = _rxo_fees[m_carrier]["total"]
+                    _rxo_zone       = _rxo_fees[m_carrier]["zone"]
+                    _rxo_zone_tag   = f"|{_rxo_zone}" if _rxo_zone else ""
+                    _rxo_items      = []
+                    for _ri, _rrow in _rx_edit.iterrows():
+                        _delta     = int(_rrow["รับวันนี้"] or 0)
+                        _owed_this = float(_rx_df.iloc[_ri]["_owed"])
+                        _cap       = int(_rx_df.iloc[_ri]["_max"])
+                        _recv      = min(max(_delta, 0), _cap)
+                        if _recv <= 0:
+                            continue
+                        _apply_pay = round(_owed_this * _recv / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+                        _etype     = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
+                        db.insert_partial_event({
+                            "id":             str(uuid.uuid4()),
+                            "date":           str(m_date),
+                            "transaction_id": _rx_df.iloc[_ri]["_tid"],
+                            "qty_received":   _recv,
+                            "amount_paid":    _apply_pay,
+                            "event_type":     _etype,
+                        })
+                        if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
+                            db.update_transaction_status(_rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
+                        _rxo_items.append({
+                            "product_id": _pending_rx[_ri]["product_id"],
+                            "name":       str(_rrow["สินค้า"]),
+                            "qty":        _recv,
+                        })
+                    if iship_api.is_configured() and _rxo_items:
+                        st.session_state["_iship_carrier_select"] = {
+                            "tab":          "sale",
+                            "postcode":     m_postcode,
+                            "weight_kg":    (_rxo_weight_g + 500) / 1000,
+                            "dst_name":     r_name or _rxo_customer["name"],
+                            "dst_phone":    r_phone,
+                            "address_line": r_addr_line,
+                            "district":     r_district,
+                            "amphure":      r_amphure,
+                            "province":     r_province,
+                            "cod_amount":   0,
+                            "items":        _rxo_items,
+                            "customer_id":  _rxo_customer["id"],
+                            "customer_name":_rxo_customer["name"],
+                            "shipment_id":  "",
+                            "remark":       f"[ส่งพัสดุ|{m_carrier}|{m_postcode}|น้ำหนัก={_rxo_weight_g/1000:.2f}kg|ค่าส่ง={_rxo_ship_fee:.0f}{_rxo_zone_tag}]",
+                        }
+                    st.rerun()
 
             # ── ผลลัพธ์หลังบันทึก (popup + iShip) ─────────────────────────
             if st.session_state.get("_print_popup"):
