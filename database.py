@@ -424,27 +424,37 @@ def delete_partial_event(event_id: str) -> None:
 
 def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
     """คืน transactions ที่ยังค้างรับของ สำหรับลูกค้านี้ เรียงจากเก่าสุด
-    [{id, product_id, ค้างรับ}]"""
+    [{id, product_id, ค้างรับ, bill_no, outstanding_amt, pay_status}]"""
     db = get_supabase()
     txns = (db.table("transactions")
-            .select("id, product_id, qty, initial_qty_received, date")
+            .select("id, product_id, qty, initial_qty_received, date, total_amount, pay_status, bill_no")
             .eq("customer_id", customer_id)
             .order("date")
             .execute().data)
     if not txns:
         return []
     txn_ids = [t["id"] for t in txns]
-    events_by_txn: dict[str, int] = defaultdict(int)
+    qty_by_txn: dict[str, int] = defaultdict(int)
+    paid_by_txn: dict[str, float] = defaultdict(float)
     for i in range(0, len(txn_ids), 50):
         chunk = txn_ids[i:i+50]
-        evts = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", chunk).execute().data
+        evts = db.table("partial_events").select("transaction_id, qty_received, amount_paid").in_("transaction_id", chunk).execute().data
         for e in evts:
-            events_by_txn[e["transaction_id"]] += e["qty_received"]
+            qty_by_txn[e["transaction_id"]] += int(e.get("qty_received") or 0)
+            paid_by_txn[e["transaction_id"]] += float(e.get("amount_paid") or 0)
     result = []
     for t in txns:
-        outstanding = t["qty"] - (t["initial_qty_received"] + events_by_txn[t["id"]])
-        if outstanding > 0:
-            result.append({"id": t["id"], "product_id": t["product_id"], "ค้างรับ": outstanding})
+        outstanding_qty = t["qty"] - (t["initial_qty_received"] + qty_by_txn[t["id"]])
+        if outstanding_qty > 0:
+            outstanding_amt = max(0.0, float(t["total_amount"]) - paid_by_txn[t["id"]])
+            result.append({
+                "id":             t["id"],
+                "product_id":     t["product_id"],
+                "ค้างรับ":        outstanding_qty,
+                "bill_no":        t.get("bill_no") or "",
+                "outstanding_amt": outstanding_amt,
+                "pay_status":     t["pay_status"],
+            })
     return result
 
 

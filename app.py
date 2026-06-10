@@ -742,7 +742,7 @@ with tab1:
                         _rx_df = pd.DataFrame([{
                             "สินค้า":     _prod_map_rx.get(p["product_id"], p["product_id"]),
                             "บิล":        p.get("bill_no") or "—",
-                            "สถานะจ่าย":  "จ่ายแล้ว ✅" if p.get("pay_status") == "จ่ายแล้ว" or p.get("outstanding_amt", 0) <= 0.01
+                            "สถานะจ่าย":  "จ่ายแล้ว ✅" if p.get("outstanding_amt", 0) <= 0.01
                                           else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿",
                             "ค้างรับ":    p["ค้างรับ"],
                             "รับวันนี้":  0,
