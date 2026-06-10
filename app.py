@@ -759,7 +759,7 @@ with tab1:
                                 "จ่าย (฿)": st.column_config.NumberColumn("จ่าย (฿)", min_value=0, step=1, width="small"),
                             },
                             disabled=["สินค้า","บิล","สถานะจ่าย","ค้างรับ"],
-                            key="sale_recv_old",
+                            key=f"sale_recv_old_{_recv_cid}",
                         )
                         if _cur_delivery == "ส่งพัสดุ":
                             st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด")
