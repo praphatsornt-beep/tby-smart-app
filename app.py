@@ -3975,6 +3975,33 @@ with _t5_ship:
     else:
         st.info("ยังไม่มีประวัติการส่งของ")
 
+    # ── เคลียร์ประวัติ ──────────────────────────────────────────────────────
+    st.divider()
+    with st.expander("🗑️ เคลียร์ประวัติจัดส่งสำเร็จ"):
+        st.caption("ลบรายการที่ **จัดส่งสำเร็จ** ทั้งหมดในช่วงวันที่ที่เลือก (ไม่กระทบข้อมูลบิล/ยอดค้าง)")
+        _cl_c1, _cl_c2 = st.columns(2)
+        _cl_from = _cl_c1.date_input("ตั้งแต่วันที่", value=date(2026, 1, 1), key="sh_clear_from")
+        _cl_to   = _cl_c2.date_input("ถึงวันที่",     value=date.today(),      key="sh_clear_to")
+
+        if _cl_from and _cl_to:
+            if _cl_from > _cl_to:
+                st.warning("วันเริ่มต้นต้องไม่เกินวันสิ้นสุด")
+            else:
+                _cl_count = db.count_shipped_by_date_range(str(_cl_from), str(_cl_to))
+                if _cl_count == 0:
+                    st.info("ไม่มีรายการจัดส่งสำเร็จในช่วงนี้")
+                else:
+                    st.warning(
+                        f"⚠️ จะลบ **{_cl_count} รายการ** ที่จัดส่งสำเร็จแล้วระหว่าง "
+                        f"{_cl_from.strftime('%d/%m/%Y')} – {_cl_to.strftime('%d/%m/%Y')}"
+                    )
+                    if st.button(f"🗑️ ลบ {_cl_count} รายการ", type="primary",
+                                 key="sh_clear_btn"):
+                        _deleted = db.delete_shipped_by_date_range(str(_cl_from), str(_cl_to))
+                        st.success(f"✅ ลบแล้ว {_deleted} รายการ")
+                        st.session_state.pop("sh_hist_tbl", None)
+                        st.rerun()
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab 6: สต๊อก

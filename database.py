@@ -847,6 +847,30 @@ def delete_shipment(shipment_id: str) -> None:
     get_customer_ledger.clear()
 
 
+def count_shipped_by_date_range(date_from: str, date_to: str) -> int:
+    """นับ shipments ที่จัดส่งสำเร็จในช่วง date_from..date_to (YYYY-MM-DD, Bangkok time)"""
+    res = (get_supabase().table("shipments")
+           .select("id")
+           .eq("delivery_status", "จัดส่งแล้ว")
+           .gte("created_at", f"{date_from}T00:00:00+07:00")
+           .lte("created_at", f"{date_to}T23:59:59+07:00")
+           .execute())
+    return len(res.data) if res.data else 0
+
+
+def delete_shipped_by_date_range(date_from: str, date_to: str) -> int:
+    """ลบ shipments ที่จัดส่งสำเร็จในช่วงวันที่กำหนด คืนจำนวนแถวที่ลบ"""
+    res = (get_supabase().table("shipments")
+           .delete()
+           .eq("delivery_status", "จัดส่งแล้ว")
+           .gte("created_at", f"{date_from}T00:00:00+07:00")
+           .lte("created_at", f"{date_to}T23:59:59+07:00")
+           .execute())
+    get_shipments.clear()
+    get_customer_ledger.clear()
+    return len(res.data) if res.data else 0
+
+
 def mark_cod_transferred(tracking_nos: list[str]) -> None:
     """บันทึกวันที่ COD โอนแล้วสำหรับ tracking numbers ที่ระบุ"""
     if not tracking_nos:
