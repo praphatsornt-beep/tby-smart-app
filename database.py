@@ -446,7 +446,11 @@ def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
     for t in txns:
         outstanding_qty = t["qty"] - (t["initial_qty_received"] + qty_by_txn[t["id"]])
         if outstanding_qty > 0:
-            outstanding_amt = max(0.0, float(t["total_amount"]) - paid_by_txn[t["id"]])
+            if t["pay_status"] == "จ่ายแล้ว" and paid_by_txn[t["id"]] < 0.01:
+                # paid at time of entry with no partial_events → fully paid
+                outstanding_amt = 0.0
+            else:
+                outstanding_amt = max(0.0, float(t["total_amount"]) - paid_by_txn[t["id"]])
             result.append({
                 "id":             t["id"],
                 "product_id":     t["product_id"],
