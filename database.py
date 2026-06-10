@@ -354,14 +354,16 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     # order rows
     for t in txns:
         rows.append({
-            "date":     t["date"][:10],
-            "type":     "สั่งซื้อ",
-            "bill_no":  t.get("bill_no") or "",
-            "product":  t["product_name"],
-            "qty_in":   t["qty"],
-            "qty_out":  0,
-            "amount":   0.0,
-            "txn_id":   t["id"],
+            "date":         t["date"][:10],
+            "type":         "สั่งซื้อ",
+            "bill_no":      t.get("bill_no") or "",
+            "product":      t["product_name"],
+            "qty_in":       t["qty"],
+            "qty_out":      0,
+            "amount":       0.0,
+            "total_amount": float(t.get("total_amount") or 0),
+            "pay_status":   t.get("pay_status") or "",
+            "txn_id":       t["id"],
         })
     # partial event rows
     for e in all_events:

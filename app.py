@@ -3069,25 +3069,83 @@ with _t5_ledger:
 
                 # ── Tab: สั่งซื้อ (group by bill) ────────────────────────
                 with _ltab1:
+                    # aggregate per bill
                     _bill_map: dict = {}
                     for _r in _l_orders:
                         _bk = _r["bill_no"] or "—"
                         if _bk not in _bill_map:
-                            _bill_map[_bk] = {"date": _r["date"], "lines": [], "qty": 0}
-                        _bill_map[_bk]["lines"].append(f"{_r['product']} ×{_r['qty_in']}")
-                        _bill_map[_bk]["qty"] += _r["qty_in"]
-                    if _bill_map:
-                        _ord_rows = [
-                            {
-                                "วันที่":  v["date"],
-                                "บิล":     k,
-                                "สินค้า":  ",  ".join(v["lines"]),
-                                "ชิ้น":    v["qty"],
+                            _bill_map[_bk] = {
+                                "date": _r["date"], "lines": [],
+                                "qty": 0, "total": 0.0, "pay_statuses": [],
                             }
-                            for k, v in sorted(_bill_map.items(), key=lambda x: x[1]["date"], reverse=True)
-                        ]
-                        st.dataframe(pd.DataFrame(_ord_rows),
-                                     hide_index=True, use_container_width=True)
+                        _bill_map[_bk]["lines"].append(f"{_r['product']} ×{_r['qty_in']}")
+                        _bill_map[_bk]["qty"]   += _r["qty_in"]
+                        _bill_map[_bk]["total"] += _r.get("total_amount", 0.0)
+                        _bill_map[_bk]["pay_statuses"].append(_r.get("pay_status", ""))
+
+                    # ยอดจ่ายและวันที่ชำระ per bill
+                    _pay_total_bbl: dict = {}
+                    _pay_dates_bbl: dict = {}
+                    for _r in _l_payments:
+                        _bk = _r["bill_no"] or "—"
+                        _pay_total_bbl[_bk] = _pay_total_bbl.get(_bk, 0.0) + _r["amount"]
+                        _pay_dates_bbl.setdefault(_bk, []).append(_r["date"])
+
+                    # รับหน้าร้าน per bill (from receipt events)
+                    _recv_bbl: dict = {}
+                    for _r in _l_receipts:
+                        _bk = _r["bill_no"] or "—"
+                        _recv_bbl[_bk] = _recv_bbl.get(_bk, 0) + int(_r["qty_out"])
+
+                    # วันที่ส่งพัสดุ (heuristic: shipment date ≈ bill date)
+                    _ship_dates: set = {_r["date"] for _r in _l_ships}
+
+                    if _bill_map:
+                        _ord_rows = []
+                        for k, v in sorted(
+                            _bill_map.items(), key=lambda x: x[1]["date"], reverse=True
+                        ):
+                            _total  = v["total"]
+                            _paid   = _pay_total_bbl.get(k, 0.0)
+                            _owed   = max(0.0, _total - _paid)
+                            _pdates = ", ".join(
+                                sorted(set(_pay_dates_bbl.get(k, [])), reverse=True)
+                            )
+                            _recv_q = _recv_bbl.get(k, 0)
+                            if _recv_q > 0:
+                                _recv_str = f"🏪 หน้าร้าน {_recv_q} ชิ้น"
+                            elif v["date"] in _ship_dates:
+                                _recv_str = "🚚 ส่งพัสดุ"
+                            else:
+                                _recv_str = "—"
+
+                            _statuses = v["pay_statuses"]
+                            if all(s == "จ่ายแล้ว" for s in _statuses):
+                                _ps = "✅ จ่ายแล้ว"
+                            elif _paid > 0.01:
+                                _ps = "⚠️ บางส่วน"
+                            else:
+                                _ps = "🔴 ค้างจ่าย"
+
+                            _ord_rows.append({
+                                "วันที่บิล":    v["date"],
+                                "บิล":          k,
+                                "สินค้า":       ",  ".join(v["lines"]),
+                                "ชิ้น":         v["qty"],
+                                "ยอดรวม (฿)":   _total,
+                                "ค้างจ่าย (฿)": _owed,
+                                "สถานะจ่าย":    _ps,
+                                "วันที่ชำระ":   _pdates or "—",
+                                "รับของ":       _recv_str,
+                            })
+
+                        st.dataframe(
+                            pd.DataFrame(_ord_rows).style.format({
+                                "ยอดรวม (฿)":   "{:,.0f}",
+                                "ค้างจ่าย (฿)": "{:,.0f}",
+                            }),
+                            hide_index=True, use_container_width=True,
+                        )
                     else:
                         st.caption("ไม่มีรายการ")
 
