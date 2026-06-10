@@ -601,60 +601,116 @@ with tab_dash:
                 use_container_width=True, hide_index=True,
             )
 
-    # ── พัสดุเกิน 3 วัน + พัสดุมีปัญหา ──────────────────────────────────────
+    # ── helper ───────────────────────────────────────────────────────────────
+    def _parse_sdt(s_str):
+        try:
+            return datetime.fromisoformat(s_str.replace("Z", "+00:00"))
+        except Exception:
+            return None
+
+    def _items_str(sh):
+        its = sh.get("items") or []
+        return ", ".join(
+            f"{it.get('name') or it.get('product_id','')} ×{it.get('qty',1)}"
+            for it in its
+        ) if its else "—"
+
     if _dash_ships:
-        _TERMINAL_S = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
-        _now_utc    = datetime.now(timezone.utc)
-        _cutoff     = _now_utc - timedelta(days=3)
+        _TERMINAL_S  = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
+        _now_utc     = datetime.now(timezone.utc)
+        _cutoff      = _now_utc - timedelta(days=3)
 
-        def _parse_sdt(s_str):
-            try:
-                return datetime.fromisoformat(s_str.replace("Z", "+00:00"))
-            except Exception:
-                return None
+        # ลูกค้าที่มี COD + ยังไม่เปิดบิล
+        _cod_unbilled_custs = set()
+        if not _dash_txn.empty and "สถานะจ่าย" in _dash_txn.columns and "สถานะบิล" in _dash_txn.columns:
+            _cmask = (_dash_txn["สถานะจ่าย"] == "COD") & (_dash_txn["สถานะบิล"] == "ยังไม่เปิดบิล")
+            _cod_unbilled_custs = set(_dash_txn.loc[_cmask, "ลูกค้า"].unique())
 
-        _slow_ships, _problem_ships = [], []
+        _slow_ships, _problem_ships, _cod_rows = [], [], []
+
         for _sh in _dash_ships:
             _cname = ((_sh.get("customers") or {}).get("name") or _sh.get("recipient_name", "—"))
             _sdt   = _parse_sdt(_sh.get("created_at", ""))
             _stat  = _sh.get("delivery_status") or "ไม่มีข้อมูล"
+            _its   = _items_str(_sh)
+            _date_str = _sdt.astimezone(_BKK).strftime("%d/%m/%y") if _sdt else "—"
+
+            # ── COD ──────────────────────────────────────────────────────
+            if float(_sh.get("cod_amount") or 0) > 0:
+                _paid = bool(_sh.get("cod_transferred_at"))
+                if not _paid:
+                    _cod_rows.append({
+                        "ลูกค้า":    _cname,
+                        "สินค้า":    _its,
+                        "COD (฿)":   int(_sh.get("cod_amount") or 0),
+                        "Tracking":  _sh.get("tracking_no", "—"),
+                        "ขนส่ง":     _sh.get("carrier", ""),
+                        "วันที่ส่ง": _date_str,
+                        "สถานะ":     "💛 รอรับ COD",
+                    })
+                elif _cname in _cod_unbilled_custs:
+                    _cod_rows.append({
+                        "ลูกค้า":    _cname,
+                        "สินค้า":    _its,
+                        "COD (฿)":   int(_sh.get("cod_amount") or 0),
+                        "Tracking":  _sh.get("tracking_no", "—"),
+                        "ขนส่ง":     _sh.get("carrier", ""),
+                        "วันที่ส่ง": _date_str,
+                        "สถานะ":     "✅ รับแล้ว — ยังไม่เปิดบิล",
+                    })
+                # else: COD รับแล้ว + เปิดบิลแล้ว → ไม่แสดง
+
+            # ── พัสดุมีปัญหา ────────────────────────────────────────────
             if _sh.get("delivery_status") in {"ตีกลับ", "ยกเลิก"}:
                 _problem_ships.append({
                     "ลูกค้า":    _cname,
+                    "สินค้า":    _its,
                     "Tracking":  _sh.get("tracking_no", "—"),
                     "ขนส่ง":     _sh.get("carrier", ""),
-                    "วันที่ส่ง": _sdt.astimezone(_BKK).strftime("%d/%m/%y") if _sdt else "—",
-                    "สถานะ":     _stat,
-                })
-            elif _sh.get("tracking_no") and _sh.get("delivery_status") not in _TERMINAL_S and _sdt and _sdt < _cutoff:
-                _problem_ships_no = (_now_utc - _sdt).days
-                _slow_ships.append({
-                    "ลูกค้า":    _cname,
-                    "Tracking":  _sh.get("tracking_no", ""),
-                    "ขนส่ง":     _sh.get("carrier", ""),
-                    "วันที่ส่ง": _sdt.astimezone(_BKK).strftime("%d/%m/%y"),
-                    "วันที่ผ่านมา": _problem_ships_no,
+                    "วันที่ส่ง": _date_str,
                     "สถานะ":     _stat,
                 })
 
+            # ── พัสดุเกิน 3 วัน ─────────────────────────────────────────
+            elif (_sh.get("tracking_no") and _sh.get("delivery_status") not in _TERMINAL_S
+                    and _sdt and _sdt < _cutoff):
+                _slow_ships.append({
+                    "ลูกค้า":       _cname,
+                    "สินค้า":       _its,
+                    "Tracking":     _sh.get("tracking_no", ""),
+                    "ขนส่ง":        _sh.get("carrier", ""),
+                    "วันที่ส่ง":    _date_str,
+                    "วัน":          (_now_utc - _sdt).days,
+                    "สถานะ":        _stat,
+                })
+
+        # ── แสดง COD ─────────────────────────────────────────────────────
+        if _cod_rows:
+            st.divider()
+            st.markdown(f"**💛 COD — ติดตามสถานะ ({len(_cod_rows)} รายการ)**")
+            _cod_df = pd.DataFrame(_cod_rows)
+            st.dataframe(_cod_df.style.format({"COD (฿)": "{:,.0f}"}),
+                         use_container_width=True, hide_index=True,
+                         height=min(35 * len(_cod_df) + 38, 280))
+
+        # ── แสดงพัสดุล่าช้า + มีปัญหา ───────────────────────────────────
         if _slow_ships or _problem_ships:
             st.divider()
             _sa, _sb = st.columns(2)
             with _sa:
-                _slow_label = f"**⏳ พัสดุเกิน 3 วัน ยังไม่ถึง ({len(_slow_ships)} รายการ)**"
-                st.markdown(_slow_label)
+                st.markdown(f"**⏳ พัสดุเกิน 3 วัน ยังไม่ถึง ({len(_slow_ships)} รายการ)**")
                 if _slow_ships:
-                    _slow_df = pd.DataFrame(_slow_ships)
-                    st.dataframe(_slow_df, use_container_width=True, hide_index=True,
-                                 height=min(35 * len(_slow_df) + 38, 280))
+                    st.dataframe(pd.DataFrame(_slow_ships),
+                                 use_container_width=True, hide_index=True,
+                                 height=min(35 * len(_slow_ships) + 38, 280))
                 else:
                     st.caption("✅ ไม่มี")
             with _sb:
                 st.markdown(f"**⚠️ พัสดุที่มีปัญหา ตีกลับ/ยกเลิก ({len(_problem_ships)} รายการ)**")
                 if _problem_ships:
-                    _prob_df = pd.DataFrame(_problem_ships)
-                    st.dataframe(_prob_df, use_container_width=True, hide_index=True,
-                                 height=min(35 * len(_prob_df) + 38, 280))
+                    st.dataframe(pd.DataFrame(_problem_ships),
+                                 use_container_width=True, hide_index=True,
+                                 height=min(35 * len(_problem_ships) + 38, 280))
                 else:
                     st.caption("✅ ไม่มี")
 
