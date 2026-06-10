@@ -382,7 +382,7 @@ def _show_carrier_select():
                                or _cs_resp.get("tracking_code") or _cs_resp.get("tracking_number") or "")
                 if tab == "ship" and info.get("shipment_id") and _cs_track:
                     db.update_shipment_tracking(info["shipment_id"], _cs_track)
-                if tab == "sale":
+                if tab in ("sale", "pending"):
                     try:
                         db.create_shipment({
                             "customer_id":    info.get("customer_id") or None,
@@ -624,7 +624,7 @@ def _pick_carrier(pc: str, kg: float = 0) -> str:
 
 
 with tab1:
-    _sub_calc, _sub_ship, _sub_sale, _sub_shiphist, _sub_boxcalc = st.tabs(["🔢 คำนวณยอด", "📦 ส่งของ", "📝 บันทึกขาย", "📋 ประวัติการส่ง", "📦 แบ่งกล่อง"])
+    _sub_calc, _sub_ship, _sub_sale, _sub_shiphist, _sub_boxcalc, _sub_pending = st.tabs(["🔢 คำนวณยอด", "📦 ส่งของ", "📝 บันทึกขาย", "📋 ประวัติการส่ง", "📦 แบ่งกล่อง", "📬 ส่งของค้าง"])
 
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
@@ -2681,6 +2681,318 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                  column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
                 elif not _bx_postcode:
                     st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อดูค่าส่งเปรียบเทียบ")
+
+    # ── Tab: ส่งของค้าง ──────────────────────────────────────────────────────
+    with _sub_pending:
+        _pk_av   = st.session_state.get("_pk_av", 0)
+        _pk_keys = [
+            "_pk_cust_picked",
+            f"pk_r_name_v{_pk_av}", f"pk_r_phone_v{_pk_av}", f"pk_r_al_v{_pk_av}",
+            f"pk_r_dt_v{_pk_av}", f"pk_r_am_v{_pk_av}", f"pk_r_pv_v{_pk_av}",
+            f"pk_r_pc_v{_pk_av}", "pk_carrier", "pk_mode",
+            "_pk_last_dt", "_pk_last_pc",
+        ]
+
+        _pkh1, _pkh2 = st.columns([6, 1])
+        _pkh1.subheader("ส่งของค้าง / บันทึกรับจ่าย")
+        if _pkh2.button("🗑️ ล้าง", key="pk_clear"):
+            for _k in _pk_keys:
+                st.session_state.pop(_k, None)
+            st.session_state["_pk_av"] = _pk_av + 1
+            st.rerun()
+
+        if st.session_state.get("_do_clear_after_iship") == "pending":
+            st.session_state.pop("_do_clear_after_iship", None)
+            st.session_state.pop("_iship_carrier_select", None)
+            st.session_state.pop("_iship_success_info", None)
+            for _k in _pk_keys:
+                st.session_state.pop(_k, None)
+            st.session_state["_pk_av"] = _pk_av + 1
+            st.rerun()
+
+        # ── เลือกลูกค้า + วันที่ ──────────────────────────────────────────────
+        _pk_customers = db.get_customers()
+        _pk_cust_map  = {c["name"]: c for c in _pk_customers}
+        _pk_c1, _pk_c2 = st.columns([3, 1])
+        with _pk_c1:
+            _pk_picked = st.session_state.get("_pk_cust_picked", "")
+            if _pk_picked:
+                _pkx, _pky = st.columns([5, 1])
+                _pkx.success(f"👤 **{_pk_picked}**")
+                if _pky.button("✕", key="pk_cust_clear"):
+                    st.session_state.pop("_pk_cust_picked", None)
+                    st.rerun()
+                _pk_cust = _pk_picked
+            else:
+                _pk_opts = ["— เลือกลูกค้า —"] + sorted(_pk_cust_map.keys(), key=str.casefold)
+                _pk_sel  = st.selectbox("ลูกค้า", _pk_opts, key="pk_cust_search")
+                if _pk_sel != "— เลือกลูกค้า —":
+                    st.session_state["_pk_cust_picked"] = _pk_sel
+                    st.rerun()
+                _pk_cust = "— เลือกลูกค้า —"
+        pk_date = _pk_c2.date_input("วันที่", value=date.today(), key="pk_date")
+
+        if _pk_cust == "— เลือกลูกค้า —":
+            st.info("เลือกลูกค้าเพื่อดูรายการค้างรับ")
+        elif _pk_cust in _pk_cust_map:
+            _pk_cid     = _pk_cust_map[_pk_cust]["id"]
+            _pk_pending = db.get_pending_receipts_for_customer(_pk_cid)
+
+            if not _pk_pending:
+                st.success(f"✅ {_pk_cust} ไม่มีรายการค้างรับ")
+            else:
+                # ── ตารางของค้าง ──────────────────────────────────────────────
+                _pk_prods    = db.get_products()
+                _pk_prod_map = {p["id"]: p["name"] for p in _pk_prods}
+                _pk_prod_wt  = {p["id"]: float(p.get("weight_grams") or 0) for p in _pk_prods}
+                _pk_auto_key = f"_pk_auto_{_pk_cid}"
+                _pk_auto     = st.session_state.get(_pk_auto_key, {})
+
+                _pk_df = pd.DataFrame([{
+                    "สินค้า":    _pk_prod_map.get(p["product_id"], p["product_id"]),
+                    "บิล":       p.get("bill_no") or "—",
+                    "สถานะจ่าย": "จ่ายแล้ว ✅" if p.get("outstanding_amt", 0) <= 0.01
+                                  else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿",
+                    "ค้างรับ":   p["ค้างรับ"],
+                    "รับวันนี้": 0,
+                    "จ่าย (฿)":  _pk_auto.get(p["id"], int(round(p.get("outstanding_amt", 0)))) if p.get("outstanding_amt", 0) > 0.01 else 0,
+                    "_tid":      p["id"],
+                    "_max":      p["ค้างรับ"],
+                    "_owed":     p.get("outstanding_amt", 0.0),
+                } for p in _pk_pending])
+
+                _pk_edit = st.data_editor(
+                    _pk_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้","จ่าย (฿)"]],
+                    hide_index=True, use_container_width=True,
+                    column_config={
+                        "รับวันนี้": st.column_config.NumberColumn("รับวันนี้", min_value=0, step=1, width="small"),
+                        "จ่าย (฿)": st.column_config.NumberColumn("จ่าย (฿)", min_value=0, step=1, width="small"),
+                    },
+                    disabled=["สินค้า","บิล","สถานะจ่าย","ค้างรับ"],
+                    key=f"pk_recv_{_pk_cid}",
+                )
+
+                # auto-calculate จ่าย (฿) proportionally
+                _pk_qty_key  = f"_pk_qty_{_pk_cid}"
+                _pk_qty_prev = st.session_state.get(_pk_qty_key, None)
+                _pk_cur_qtys = {_pk_df.at[ri, "_tid"]: int(_pk_edit.at[ri, "รับวันนี้"] or 0) for ri in _pk_edit.index}
+                if _pk_qty_prev is None:
+                    st.session_state[_pk_qty_key] = _pk_cur_qtys
+                elif _pk_cur_qtys != _pk_qty_prev:
+                    _pk_all_tids = set(list(_pk_cur_qtys.keys()) + list(_pk_qty_prev.keys()))
+                    if any(_pk_cur_qtys.get(t, 0) != _pk_qty_prev.get(t, 0) for t in _pk_all_tids):
+                        _pk_new_auto = {}
+                        for _ri in _pk_edit.index:
+                            _q   = int(_pk_edit.at[_ri, "รับวันนี้"] or 0)
+                            _mx  = int(_pk_df.at[_ri, "_max"])
+                            _ow  = float(_pk_df.at[_ri, "_owed"])
+                            _tid = _pk_df.at[_ri, "_tid"]
+                            if _q > 0 and _ow > 0.01:
+                                _pk_new_auto[_tid] = int(round(_ow)) if _q >= _mx else int(round(_ow * _q / _mx))
+                            else:
+                                _pk_new_auto[_tid] = 0
+                        _pk_erows = st.session_state.get(f"pk_recv_{_pk_cid}", {}).get("edited_rows", {})
+                        for _ri in _pk_edit.index:
+                            _tid      = _pk_df.at[_ri, "_tid"]
+                            _prev_pay = float(_pk_auto.get(_tid, int(round(_pk_df.at[_ri, "_owed"])) if _pk_df.at[_ri, "_owed"] > 0.01 else 0))
+                            _cur_pay  = float(_pk_edit.at[_ri, "จ่าย (฿)"] or 0)
+                            if abs(_cur_pay - _prev_pay) < 0.5 and _ri in _pk_erows:
+                                _pk_erows[_ri].pop("จ่าย (฿)", None)
+                        st.session_state[_pk_qty_key]  = _pk_cur_qtys
+                        st.session_state[_pk_auto_key] = _pk_new_auto
+                        st.rerun()
+                    else:
+                        st.session_state[_pk_qty_key] = _pk_cur_qtys
+
+                # คำนวณ weight + has_action จากแถวที่กรอกแล้ว
+                _pk_has_action = False
+                _pk_weight_g   = 0.0
+                for _ri, _rrow in _pk_edit.iterrows():
+                    _q_now  = int(_rrow.get("รับวันนี้") or 0)
+                    _pay_now = float(_rrow.get("จ่าย (฿)") or 0)
+                    _ow_now  = float(_pk_df.iloc[_ri]["_owed"])
+                    if _q_now > 0:
+                        _pk_weight_g += _pk_prod_wt.get(_pk_pending[_ri]["product_id"], 0) * min(_q_now, int(_pk_df.iloc[_ri]["_max"]))
+                        _pk_has_action = True
+                    if _pay_now > 0.01 and _ow_now > 0.01:
+                        _pk_has_action = True
+
+                st.divider()
+
+                # ── วิธีรับของ ─────────────────────────────────────────────────
+                pk_mode = st.radio("วิธีรับของ", ["รับแล้ว", "ส่งพัสดุ"], horizontal=True, key="pk_mode")
+
+                # ── ที่อยู่ + ขนส่ง (เฉพาะ ส่งพัสดุ) ──────────────────────────
+                pk_r_name = pk_r_phone = pk_r_addr_line = ""
+                pk_r_district = pk_r_amphure = pk_r_province = pk_r_postcode = ""
+                pk_carrier = ""
+                _pk_ship_fee = 0.0
+
+                if pk_mode == "ส่งพัสดุ":
+                    with st.expander("📍 ที่อยู่ผู้รับ", expanded=True):
+                        # quick-select ที่อยู่เดิม
+                        _pk_addrs = db.get_customer_addresses(_pk_cid)
+                        if _pk_addrs:
+                            _pk_addr_labels = [
+                                f"{a.get('recipient_name','')} — {a.get('address_line','')} {a.get('district','')} {a.get('postal_code','')}"
+                                for a in _pk_addrs
+                            ]
+                            _pk_addr_sel = st.selectbox("ที่อยู่เดิม", ["— เลือกที่อยู่ —"] + _pk_addr_labels, key=f"pk_addr_sel_v{_pk_av}")
+                            if _pk_addr_sel != "— เลือกที่อยู่ —":
+                                _pk_ai = _pk_addr_labels.index(_pk_addr_sel)
+                                _pk_a  = _pk_addrs[_pk_ai]
+                                if st.button("✅ ใช้ที่อยู่นี้", key="pk_use_addr"):
+                                    for _fk, _v in [
+                                        (f"pk_r_name_v{_pk_av}",  _pk_a.get("recipient_name", "")),
+                                        (f"pk_r_phone_v{_pk_av}", _pk_a.get("phone", "")),
+                                        (f"pk_r_al_v{_pk_av}",    _pk_a.get("address_line", "")),
+                                        (f"pk_r_dt_v{_pk_av}",    _pk_a.get("district", "")),
+                                        (f"pk_r_am_v{_pk_av}",    _pk_a.get("amphure", "")),
+                                        (f"pk_r_pv_v{_pk_av}",    _pk_a.get("province", "")),
+                                        (f"pk_r_pc_v{_pk_av}",    _pk_a.get("postal_code", "")),
+                                    ]:
+                                        st.session_state[_fk] = _v
+                                    st.rerun()
+
+                        # staged fills (from autocomplete)
+                        for _fk, _wk in [("_fpk_rname", f"pk_r_name_v{_pk_av}"),
+                                          ("_fpk_rphone", f"pk_r_phone_v{_pk_av}"),
+                                          ("_fpk_al",     f"pk_r_al_v{_pk_av}"),
+                                          ("_fpk_dt",     f"pk_r_dt_v{_pk_av}"),
+                                          ("_fpk_am",     f"pk_r_am_v{_pk_av}"),
+                                          ("_fpk_pv",     f"pk_r_pv_v{_pk_av}"),
+                                          ("_fpk_pc",     f"pk_r_pc_v{_pk_av}")]:
+                            if _fk in st.session_state:
+                                st.session_state[_wk] = st.session_state.pop(_fk)
+
+                        _pka, _pkb   = st.columns(2)
+                        pk_r_name    = _pka.text_input("ชื่อผู้รับ",    key=f"pk_r_name_v{_pk_av}")
+                        pk_r_phone   = _pkb.text_input("เบอร์โทร",      key=f"pk_r_phone_v{_pk_av}")
+                        pk_r_addr_line = st.text_input("บ้านเลขที่/ถนน", key=f"pk_r_al_v{_pk_av}")
+                        _pkc, _pkd, _pke = st.columns(3)
+                        pk_r_district = _pkc.text_input("ตำบล/แขวง", key=f"pk_r_dt_v{_pk_av}")
+                        pk_r_amphure  = _pkd.text_input("อำเภอ/เขต",  key=f"pk_r_am_v{_pk_av}")
+                        pk_r_province = _pke.selectbox("จังหวัด", [""] + _PROVINCES, key=f"pk_r_pv_v{_pk_av}")
+
+                        # district autocomplete
+                        _pk_last_dt = st.session_state.get("_pk_last_dt", "")
+                        if len((pk_r_district or "").strip()) >= 2 and pk_r_district.strip() != _pk_last_dt:
+                            for _o in thai_address.lookup_by_tambon(pk_r_district.strip(), province=pk_r_province):
+                                _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
+                                if st.button(_lbl, key=f"pkdt_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
+                                    st.session_state.update({
+                                        "_fpk_dt": _o["tambon"], "_fpk_am": _o["amphure"],
+                                        "_fpk_pv": _o["province"], "_fpk_pc": _o["zipcode"],
+                                        "_pk_last_dt": _o["tambon"],
+                                    })
+                                    st.rerun()
+
+                        # postcode field + autocomplete
+                        if "_fpk_pc" in st.session_state:
+                            st.session_state[f"pk_r_pc_v{_pk_av}"] = st.session_state.pop("_fpk_pc")
+                        pk_r_postcode = st.text_input("รหัสไปรษณีย์", max_chars=5,
+                                                       key=f"pk_r_pc_v{_pk_av}", placeholder="เช่น 10400")
+                        _pk_last_pc = st.session_state.get("_pk_last_pc", "")
+                        if len((pk_r_postcode or "").strip()) == 5 and pk_r_postcode.strip() != _pk_last_pc:
+                            for _o in thai_address.lookup(pk_r_postcode.strip())[:8]:
+                                _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
+                                if st.button(_lbl, key=f"pkpc_{_o['tambon']}_{pk_r_postcode}", use_container_width=True):
+                                    st.session_state.update({
+                                        "_fpk_dt": _o["tambon"], "_fpk_am": _o["amphure"],
+                                        "_fpk_pv": _o["province"],
+                                        "_pk_last_dt": _o["tambon"],
+                                        "_pk_last_pc": pk_r_postcode.strip(),
+                                    })
+                                    st.rerun()
+
+                    # carrier selector
+                    if len((pk_r_postcode or "").strip()) == 5:
+                        _pk_fees     = carrier_fees(_pk_weight_g, pk_r_postcode.strip())
+                        _pk_carr_opts = sorted(_pk_fees.keys(), key=lambda k: _pk_fees[k]["total"])
+                        if _pk_carr_opts:
+                            _pk_def = st.session_state.get("pk_carrier", _pk_carr_opts[0])
+                            if _pk_def not in _pk_carr_opts:
+                                _pk_def = _pk_carr_opts[0]
+                            pk_carrier = st.selectbox(
+                                "ขนส่ง",
+                                _pk_carr_opts,
+                                index=_pk_carr_opts.index(_pk_def),
+                                format_func=lambda k: f"{k} — {_pk_fees[k]['total']:.0f} ฿",
+                                key="pk_carrier",
+                            )
+                            _pk_ship_fee = _pk_fees[pk_carrier]["total"]
+                            st.caption(f"น้ำหนักรวม: {(_pk_weight_g + 500) / 1000:.2f} kg | ค่าส่ง: {_pk_ship_fee:.0f} ฿")
+
+                # ── validation + submit ────────────────────────────────────────
+                _pk_errors = []
+                if not _pk_has_action:
+                    _pk_errors.append("⚠️ ยังไม่ได้กรอกจำนวนรับหรือยอดเงิน")
+                if pk_mode == "ส่งพัสดุ":
+                    if not pk_r_addr_line:
+                        _pk_errors.append("⚠️ กรุณากรอกที่อยู่ผู้รับ")
+                    if len((pk_r_postcode or "").strip()) != 5:
+                        _pk_errors.append("⚠️ รหัสไปรษณีย์ไม่ถูกต้อง")
+
+                if _pk_errors:
+                    st.warning("  \n".join(_pk_errors))
+
+                _pk_btn_label = "💾 บันทึก + ส่งพัสดุ" if pk_mode == "ส่งพัสดุ" else "💾 บันทึก"
+                if st.button(_pk_btn_label, type="primary", use_container_width=True,
+                              key="pk_submit", disabled=bool(_pk_errors)):
+                    # insert partial_events
+                    _pk_ship_items = []
+                    for _ri, _rrow in _pk_edit.iterrows():
+                        _delta    = int(_rrow["รับวันนี้"] or 0)
+                        _pay_in   = float(_rrow.get("จ่าย (฿)") or 0)
+                        _ow_this  = float(_pk_df.iloc[_ri]["_owed"])
+                        _app_pay  = min(_pay_in, _ow_this) if _ow_this > 0.01 else 0.0
+                        _act_qty  = min(max(_delta, 0), int(_pk_df.iloc[_ri]["_max"]))
+                        if _act_qty <= 0 and _app_pay <= 0.01:
+                            continue
+                        _etype = ("ทั้งคู่" if _act_qty > 0 and _app_pay > 0.01
+                                  else ("รับของจากบิลเก่า" if _act_qty > 0 else "จ่ายจากบิลเก่า"))
+                        db.insert_partial_event({
+                            "id":             str(uuid.uuid4()),
+                            "date":           str(pk_date),
+                            "transaction_id": _pk_df.iloc[_ri]["_tid"],
+                            "qty_received":   _act_qty,
+                            "amount_paid":    round(_app_pay, 2),
+                            "event_type":     _etype,
+                        })
+                        if _app_pay > 0.01 and _app_pay >= _ow_this - 0.01:
+                            db.update_transaction_status(_pk_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
+                        if _act_qty > 0:
+                            _pk_ship_items.append({
+                                "product_id": _pk_pending[_ri]["product_id"],
+                                "name":       str(_rrow["สินค้า"]),
+                                "qty":        _act_qty,
+                            })
+
+                    if pk_mode == "ส่งพัสดุ" and _pk_ship_items:
+                        _pk_co = _pk_cust_map[_pk_cust]
+                        st.session_state["_iship_carrier_select"] = {
+                            "tab":          "pending",
+                            "postcode":     pk_r_postcode.strip(),
+                            "weight_kg":    (_pk_weight_g + 500) / 1000,
+                            "dst_name":     pk_r_name or _pk_co["name"],
+                            "dst_phone":    pk_r_phone,
+                            "address_line": pk_r_addr_line,
+                            "district":     pk_r_district,
+                            "amphure":      pk_r_amphure,
+                            "province":     pk_r_province,
+                            "cod_amount":   0,
+                            "items":        _pk_ship_items,
+                            "customer_id":  _pk_co["id"],
+                            "customer_name": _pk_co["name"],
+                            "shipment_id":  "",
+                            "remark":       "",
+                        }
+                        st.rerun()
+                    else:
+                        st.success(f"✅ บันทึกแล้ว")
+                        st.session_state.pop(f"_pk_qty_{_pk_cid}", None)
+                        st.session_state.pop(f"_pk_auto_{_pk_cid}", None)
+                        st.rerun()
 
 # Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
 # ─────────────────────────────────────────────────────────────────────────────
