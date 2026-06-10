@@ -4222,7 +4222,8 @@ with _t5_cust:
                         _bills = (all_df_p.groupby("เลขที่บิล", dropna=False)
                                   .agg(วันที่=("วันที่", "max"),
                                        ยอดรวม=("ยอดรวม", "sum"),
-                                       ค้างจ่าย=("ค้างจ่าย", "sum"))
+                                       ค้างจ่าย=("ค้างจ่าย", "sum"),
+                                       ค้างรับ=("ค้างรับ", "sum"))
                                   .reset_index()
                                   .sort_values("วันที่", ascending=False))
                         # PV ยังไม่เปิดบิล แยกต่างหาก (แสดงเฉพาะ unbilled)
@@ -4239,22 +4240,28 @@ with _t5_cust:
                             st.session_state["_print_bill_picked"] = _bills.iloc[0]["เลขที่บิล"] or "—"
                             st.rerun()
                         st.caption("เลือกบิลที่ต้องการพิมพ์")
-                        _total_owed = _bills["ค้างจ่าย"].sum()
+                        _total_owed    = _bills["ค้างจ่าย"].sum()
+                        _total_pending = int(_bills["ค้างรับ"].sum())
                         _total_pv_unbilled = sum(_pv_unbilled_map.values())
-                        _all_color = "🔴" if _total_owed > 0.01 else "✅"
-                        _all_pv_str = f" &nbsp; ⭐ {_total_pv_unbilled:,.0f} PV" if _total_pv_unbilled > 0 else ""
-                        if st.button(f"📋 **รวมทุกบิล** &nbsp; {_all_color} ค้างจ่ายรวม {_total_owed:,.0f} บาท{_all_pv_str}",
-                                     key="pbill_ALL", use_container_width=True):
+                        _all_color    = "🔴" if _total_owed > 0.01 else "✅"
+                        _all_pv_str   = f" &nbsp; ⭐ {_total_pv_unbilled:,.0f} PV" if _total_pv_unbilled > 0 else ""
+                        _all_recv_str = f" &nbsp; 📦 ยังไม่รับของ {_total_pending} ชิ้น" if _total_pending > 0 else ""
+                        if st.button(
+                            f"📋 **รวมทุกบิล** &nbsp; {_all_color} ค้างจ่ายรวม {_total_owed:,.0f} บาท{_all_recv_str}{_all_pv_str}",
+                            key="pbill_ALL", use_container_width=True):
                             st.session_state["_print_bill_picked"] = "__ALL__"
                             st.rerun()
                         st.divider()
                         for _, _br in _bills.iterrows():
-                            _bno = _br["เลขที่บิล"] or "—"
-                            _owing = _br["ค้างจ่าย"]
-                            _color = "🔴" if _owing > 0.01 else "✅"
-                            _pv_un = _pv_unbilled_map.get(_bno, 0)
-                            _pv_str = f" &nbsp; ⭐ {_pv_un:,.0f} PV" if _pv_un > 0 else ""
-                            _lbl = f"📄 **{_bno}** &nbsp; {_br['วันที่']} &nbsp; {_color} ค้างจ่าย {_owing:,.0f} บาท{_pv_str}"
+                            _bno      = _br["เลขที่บิล"] or "—"
+                            _owing    = _br["ค้างจ่าย"]
+                            _pending  = int(_br["ค้างรับ"])
+                            _color    = "🔴" if _owing > 0.01 else "✅"
+                            _pv_un    = _pv_unbilled_map.get(_bno, 0)
+                            _pv_str   = f" &nbsp; ⭐ {_pv_un:,.0f} PV" if _pv_un > 0 else ""
+                            _recv_str = f" &nbsp; 📦 ยังไม่รับของ {_pending} ชิ้น" if _pending > 0 else ""
+                            _lbl = (f"📄 **{_bno}** &nbsp; {_br['วันที่']} &nbsp; "
+                                    f"{_color} ค้างจ่าย {_owing:,.0f} บาท{_recv_str}{_pv_str}")
                             if st.button(_lbl, key=f"pbill_{_bno}", use_container_width=True):
                                 st.session_state["_print_bill_picked"] = _bno
                                 st.rerun()
