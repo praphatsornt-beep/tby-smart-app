@@ -3047,29 +3047,109 @@ with _t5_ledger:
         if _l_cust:
             _l_data = db.get_customer_ledger(_l_cust["id"])
             if _l_data:
-                _ldf2 = pd.DataFrame(_l_data)
-                _ldf2["qty_net"] = _ldf2["qty_in"] - _ldf2["qty_out"]
-                _ldisp = _ldf2[["date","type","bill_no","product","qty_in","qty_out","amount"]].copy()
-                _ldisp.columns = ["วันที่","รายการ","บิล/Tracking","สินค้า","เข้า","ออก","จ่าย ฿"]
-                _ldisp["เข้า"]   = _ldisp["เข้า"].replace(0, "")
-                _ldisp["ออก"]    = _ldisp["ออก"].replace(0, "")
-                _ldisp["จ่าย ฿"] = _ldisp["จ่าย ฿"].apply(lambda x: f"{x:,.0f}" if x else "")
-                st.dataframe(_ldisp, use_container_width=True, hide_index=True)
-                # summary
-                _lqty_sum = _ldf2.groupby("product")["qty_net"].sum()
-                _lpend    = _lqty_sum[_lqty_sum > 0]
-                _ltotal_paid = _ldf2["amount"].sum()
-                _lsumm = " | ".join(f"{p}: {int(q)}" for p, q in _lpend.items())
-                st.info(f"📦 คงเหลือ: {_lsumm or 'ครบแล้ว'}  |  💰 จ่ายแล้ว: {_ltotal_paid:,.0f} ฿")
-                # ลบ partial event
-                _ldel_rows = [(i, str(r.get("event_id") or "")) for i, r in enumerate(_l_data) if r.get("event_id")]
+                # ── แยกประเภท ────────────────────────────────────────────
+                _l_orders   = [r for r in _l_data if r["type"] == "สั่งซื้อ"]
+                _l_payments = [r for r in _l_data if r["type"] == "จ่ายเงิน"]
+                _l_receipts = [r for r in _l_data if r["type"] in ("รับของ", "แก้ไขรับ")]
+                _l_ships    = [r for r in _l_data if "ส่งของ" in r["type"]]
+
+                # ── summary metrics ──────────────────────────────────────
+                _l_ord_qty  = sum(r["qty_in"]  for r in _l_orders)
+                _l_recv_qty = sum(r["qty_out"] for r in _l_receipts)
+                _l_paid     = sum(r["amount"]  for r in _l_payments)
+                _sm1, _sm2, _sm3, _sm4 = st.columns(4)
+                _sm1.metric("สั่งซื้อ",  f"{_l_ord_qty:,} ชิ้น")
+                _sm2.metric("รับแล้ว",   f"{_l_recv_qty:,} ชิ้น")
+                _sm3.metric("ค้างรับ",   f"{max(0, _l_ord_qty - _l_recv_qty):,} ชิ้น")
+                _sm4.metric("จ่ายแล้ว",  f"{_l_paid:,.0f} ฿")
+
+                _ltab1, _ltab2, _ltab3 = st.tabs(
+                    ["📋 สั่งซื้อ", "📦 รับของ / ส่งพัสดุ", "💰 จ่ายเงิน"]
+                )
+
+                # ── Tab: สั่งซื้อ (group by bill) ────────────────────────
+                with _ltab1:
+                    _bill_map: dict = {}
+                    for _r in _l_orders:
+                        _bk = _r["bill_no"] or "—"
+                        if _bk not in _bill_map:
+                            _bill_map[_bk] = {"date": _r["date"], "lines": [], "qty": 0}
+                        _bill_map[_bk]["lines"].append(f"{_r['product']} ×{_r['qty_in']}")
+                        _bill_map[_bk]["qty"] += _r["qty_in"]
+                    if _bill_map:
+                        _ord_rows = [
+                            {
+                                "วันที่":  v["date"],
+                                "บิล":     k,
+                                "สินค้า":  ",  ".join(v["lines"]),
+                                "ชิ้น":    v["qty"],
+                            }
+                            for k, v in sorted(_bill_map.items(), key=lambda x: x[1]["date"], reverse=True)
+                        ]
+                        st.dataframe(pd.DataFrame(_ord_rows),
+                                     hide_index=True, use_container_width=True)
+                    else:
+                        st.caption("ไม่มีรายการ")
+
+                # ── Tab: รับของ / ส่งพัสดุ ───────────────────────────────
+                with _ltab2:
+                    _rv_rows = []
+                    for _r in _l_receipts:
+                        _rv_rows.append({
+                            "วันที่":   _r["date"],
+                            "ประเภท":   "📦 รับของ",
+                            "สินค้า":   _r["product"],
+                            "ชิ้น":     int(_r["qty_out"]),
+                            "อ้างอิง":  _r["bill_no"] or "—",
+                        })
+                    for _r in _l_ships:
+                        _rv_rows.append({
+                            "วันที่":   _r["date"],
+                            "ประเภท":   "🚚 ส่งพัสดุ",
+                            "สินค้า":   _r["product"],
+                            "ชิ้น":     "—",
+                            "อ้างอิง":  _r["bill_no"] or "—",
+                        })
+                    _rv_rows.sort(key=lambda x: x["วันที่"], reverse=True)
+                    if _rv_rows:
+                        st.dataframe(pd.DataFrame(_rv_rows),
+                                     hide_index=True, use_container_width=True)
+                    else:
+                        st.caption("ไม่มีรายการ")
+
+                # ── Tab: จ่ายเงิน ────────────────────────────────────────
+                with _ltab3:
+                    if _l_payments:
+                        _pay_rows = [
+                            {
+                                "วันที่":        _r["date"],
+                                "อ้างอิงบิล":   _r["bill_no"] or "—",
+                                "ยอดจ่าย (฿)":  _r["amount"],
+                            }
+                            for _r in reversed(_l_payments)
+                        ]
+                        st.dataframe(
+                            pd.DataFrame(_pay_rows)
+                              .style.format({"ยอดจ่าย (฿)": "{:,.0f}"}),
+                            hide_index=True, use_container_width=True,
+                        )
+                        st.info(f"💰 รวมจ่ายทั้งหมด {_l_paid:,.0f} ฿")
+                    else:
+                        st.caption("ยังไม่มีการจ่ายเงิน")
+
+                # ── ลบ partial event ──────────────────────────────────────
+                _ldel_rows = [
+                    (i, str(r.get("event_id") or ""))
+                    for i, r in enumerate(_l_data) if r.get("event_id")
+                ]
                 if _ldel_rows:
                     with st.expander("🗑️ ลบรายการ"):
                         for _ldi, _leid in _ldel_rows:
                             _llr = _l_data[_ldi]
                             _leid_real = _leid.removesuffix("-r").removesuffix("-p")
                             _lamt_str = f"฿{_llr['amount']:,.0f}" if _llr['amount'] else ""
-                            _llabel = f"{_llr['date'][:10]}  {_llr['type']}  {_llr.get('product','') or ''}  {_lamt_str}"
+                            _llabel = (f"{_llr['date'][:10]}  {_llr['type']}  "
+                                       f"{_llr.get('product','') or ''}  {_lamt_str}")
                             if st.button(f"🗑️ {_llabel}", key=f"ldel_{_ldi}_{_l_sel}"):
                                 db.delete_partial_event(_leid_real)
                                 st.rerun()
