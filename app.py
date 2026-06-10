@@ -508,7 +508,7 @@ tab_dash, tab1, tab5, tab6, tab_fin, tab_ecom, tab4 = st.tabs([
 # sub-tabs ของ tab5 ต้องนิยามก่อนใช้ (with _t5_out: / _t5_cust: อยู่ก่อน with tab5: ในไฟล์)
 with tab5:
     _t5_out, _t5_ledger, _t5_cust, _t5_txn, _t5_ship = st.tabs([
-        "💰 ยอดค้าง", "👤 บัตรลูกค้า", "🖨️ จัดการบิล", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"
+        "💰 ยอดค้าง", "👤 บัตรลูกค้า", "🖨️ จัดการบิล", "📋 รายละเอียดบิล", "🚚 ประวัติการส่ง"
     ])
 
 
@@ -2883,6 +2883,24 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                 db.update_transaction_status(txn_id, bill_status="ยังไม่เปิดบิล")
                                 st.rerun()
 
+                        # ── ลบบิล ─────────────────────────────────────────
+                        _del_bno_vals = grp.loc[grp["id"] == txn_id, "เลขที่บิล"].values
+                        _del_bno = str(_del_bno_vals[0]) if len(_del_bno_vals) > 0 and _del_bno_vals[0] else ""
+                        if _del_bno and _del_bno not in ("—", ""):
+                            st.divider()
+                            _del_chk = st.checkbox(
+                                f"🗑️ ลบบิล **{_del_bno}** และทุกรายการในบิลนี้",
+                                key=f"del_bill_chk_{txn_id}",
+                            )
+                            if _del_chk:
+                                if st.button(
+                                    f"🗑️ ยืนยันลบบิล {_del_bno}", type="primary",
+                                    key=f"del_bill_now_{txn_id}",
+                                ):
+                                    db.delete_bill(_del_bno)
+                                    st.success(f"✅ ลบบิล {_del_bno} แล้ว")
+                                    st.rerun()
+
                     else:
                         # Multi: ทำทุกอย่างพร้อมกันในตารางเดียว
                         sel_rows      = grp[grp["id"].isin(selected_ids)].copy()
@@ -3002,6 +3020,26 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                 st.rerun()
                             else:
                                 st.warning("ไม่มีรายการที่ต้องบันทึก (ทุกช่องเป็น 0)")
+
+                        # ── ลบบิล (multi) ────────────────────────────────
+                        _del_bnos = sorted({
+                            str(b) for b in sel_rows["เลขที่บิล"].dropna()
+                            if b and str(b) not in ("—", "")
+                        })
+                        if _del_bnos:
+                            st.divider()
+                            _del_chk_m = st.checkbox(
+                                f"🗑️ ลบบิล **{', '.join(_del_bnos)}** และทุกรายการในบิลเหล่านี้",
+                                key=f"del_bill_chk_multi_{customer_name}",
+                            )
+                            if _del_chk_m:
+                                if st.button(
+                                    f"🗑️ ยืนยันลบ {len(_del_bnos)} บิล", type="primary",
+                                    key=f"del_bill_now_multi_{customer_name}",
+                                ):
+                                    _total_del = sum(db.delete_bill(b) for b in _del_bnos)
+                                    st.success(f"✅ ลบแล้ว {len(_del_bnos)} บิล ({_total_del} รายการ)")
+                                    st.rerun()
 
     st.divider()
     with st.expander("🗑️ ลบบิล", expanded=False):
