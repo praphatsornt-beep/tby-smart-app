@@ -495,17 +495,21 @@ if st.session_state.pop("_open_success_dialog", False):
     _show_iship_success_dialog()
 
 
-tab_dash, tab1, tab2, tab5, tab6, tab7, tab_fin, tab_ecom, tab4 = st.tabs([
+tab_dash, tab1, tab5, tab6, tab_fin, tab_ecom, tab4 = st.tabs([
     "🏠 หน้าแรก",
     "📋 บันทึกรายการ",
-    "💰 ยอดค้าง",
     "🗂️ ประวัติทั้งหมด",
     "📦 สต๊อก",
-    "🖨️ จัดการบิล",
     "💵 การเงิน",
     "🛒 E-commerce",
     "⚙️ จัดการข้อมูล",
 ])
+
+# sub-tabs ของ tab5 ต้องนิยามก่อนใช้ (with _t5_out: / _t5_cust: อยู่ก่อน with tab5: ในไฟล์)
+with tab5:
+    _t5_txn, _t5_ship, _t5_out, _t5_cust = st.tabs([
+        "📋 ประวัติรายการ", "🚚 ประวัติการส่ง", "💰 ยอดค้าง", "👤 บัตรลูกค้า"
+    ])
 
 
 
@@ -2456,9 +2460,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     elif not _bx_postcode:
                         st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อดูค่าส่งเปรียบเทียบ")
 
-# Tab 2: ยอดค้าง + จัดการออเดอร์ (รวม Tab 2+3 เดิม)
+# Sub-tab: ยอดค้างลูกค้า  (rendered inside tab5 → _t5_out)
 # ─────────────────────────────────────────────────────────────────────────────
-with tab2:
+with _t5_out:
     st.subheader("ยอดค้างลูกค้า")
 
     customers = db.get_customers()
@@ -2925,6 +2929,35 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                             else:
                                 st.warning("ไม่มีรายการที่ต้องบันทึก (ทุกช่องเป็น 0)")
 
+    st.divider()
+    with st.expander("🗑️ ลบบิล", expanded=False):
+        st.caption("เลือกเลขที่บิลที่ต้องการลบ — จะลบทุกรายการในบิลนั้น")
+        _bill_list = db.get_bill_list()
+        if _bill_list:
+            _sel_bill = st.selectbox("เลขที่บิล", _bill_list, key="del_bill_sel")
+            _bill_rows = db.get_bill_details(_sel_bill)
+            if _bill_rows:
+                _bill_date = (_bill_rows[0].get("date") or "")[:10]
+                _bill_cust = (_bill_rows[0].get("customers") or {}).get("name", "—")
+                _bill_status = _bill_rows[0].get("bill_status", "")
+                st.markdown(f"**วันที่:** {_bill_date} &nbsp;|&nbsp; **ลูกค้า:** {_bill_cust} &nbsp;|&nbsp; **สถานะ:** {_bill_status}")
+                _preview_df = pd.DataFrame([{
+                    "สินค้า":      r.get("product_name", ""),
+                    "จำนวน":      r.get("qty", 0),
+                    "ราคา/หน่วย": r.get("price_per_unit", 0),
+                    "ยอดรวม":     r.get("total_amount", 0),
+                } for r in _bill_rows])
+                st.dataframe(_preview_df, use_container_width=True, hide_index=True)
+                _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
+                st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
+            st.divider()
+            if st.button("🗑️ ลบบิลนี้", type="primary", key="del_bill_btn"):
+                _n = db.delete_bill(_sel_bill)
+                st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")
+                st.rerun()
+        else:
+            st.info("ไม่มีบิลในระบบ")
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab 4: จัดการข้อมูลหลัก
@@ -2996,7 +3029,7 @@ with tab4:
                     )
     st.divider()
 
-    sub1, sub2, sub3, sub4 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "🗑️ ลบบิล"])
+    sub1, sub2, sub3 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่"])
 
 
     with sub1:
@@ -3247,42 +3280,11 @@ with tab4:
                     st.success("✅ บันทึกแล้ว")
                     st.rerun()
 
-    with sub4:
-        st.caption("เลือกเลขที่บิลที่ต้องการลบ — จะลบทุกรายการในบิลนั้น")
-        _bill_list = db.get_bill_list()
-        if _bill_list:
-            _sel_bill = st.selectbox("เลขที่บิล", _bill_list, key="del_bill_sel")
-
-            _bill_rows = db.get_bill_details(_sel_bill)
-            if _bill_rows:
-                _bill_date = (_bill_rows[0].get("date") or "")[:10]
-                _bill_cust = (_bill_rows[0].get("customers") or {}).get("name", "—")
-                _bill_status = _bill_rows[0].get("bill_status", "")
-                st.markdown(f"**วันที่:** {_bill_date} &nbsp;|&nbsp; **ลูกค้า:** {_bill_cust} &nbsp;|&nbsp; **สถานะ:** {_bill_status}")
-                _preview_df = pd.DataFrame([{
-                    "สินค้า":      r.get("product_name", ""),
-                    "จำนวน":      r.get("qty", 0),
-                    "ราคา/หน่วย": r.get("price_per_unit", 0),
-                    "ยอดรวม":     r.get("total_amount", 0),
-                } for r in _bill_rows])
-                st.dataframe(_preview_df, use_container_width=True, hide_index=True)
-                _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
-                st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
-
-            st.divider()
-            if st.button("🗑️ ลบบิลนี้", type="primary", key="del_bill_btn"):
-                _n = db.delete_bill(_sel_bill)
-                st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")
-                st.rerun()
-        else:
-            st.info("ไม่มีบิลในระบบ")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Tab 5: ประวัติทั้งหมด
+# Tab 5: ประวัติทั้งหมด  (sub-tabs created at top of file)
 # ─────────────────────────────────────────────────────────────────────────────
-with tab5:
-    _t5_txn, _t5_ship = st.tabs(["📋 ประวัติรายการ", "🚚 ประวัติการส่ง"])
 
 with _t5_txn:
     st.subheader("ประวัติรายการทั้งหมด")
@@ -4003,8 +4005,8 @@ with tab6:
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab 7: จัดการบิล
 # ─────────────────────────────────────────────────────────────────────────────
-with tab7:
-    st.subheader("จัดการบิล")
+with _t5_cust:
+    st.subheader("บัตรลูกค้า")
 
     customers_p = db.get_customers()
     if not customers_p:
