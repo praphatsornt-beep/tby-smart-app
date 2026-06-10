@@ -671,8 +671,10 @@ with tab_dash:
                     "สถานะ":     _stat,
                 })
 
-            # ── พัสดุเกิน 3 วัน ─────────────────────────────────────────
-            elif (_sh.get("tracking_no") and _sh.get("delivery_status") not in _TERMINAL_S
+            # ── พัสดุเกิน 3 วัน (ไม่รวม COD — ติดตามใน section COD แล้ว) ──
+            elif (float(_sh.get("cod_amount") or 0) == 0
+                    and _sh.get("tracking_no")
+                    and _sh.get("delivery_status") not in _TERMINAL_S
                     and _sdt and _sdt < _cutoff):
                 _slow_ships.append({
                     "ลูกค้า":       _cname,
@@ -693,26 +695,21 @@ with tab_dash:
                          use_container_width=True, hide_index=True,
                          height=min(35 * len(_cod_df) + 38, 280))
 
-        # ── แสดงพัสดุล่าช้า + มีปัญหา ───────────────────────────────────
-        if _slow_ships or _problem_ships:
+        # ── แสดงพัสดุล่าช้า ──────────────────────────────────────────────
+        if _slow_ships:
             st.divider()
-            _sa, _sb = st.columns(2)
-            with _sa:
-                st.markdown(f"**⏳ พัสดุเกิน 3 วัน ยังไม่ถึง ({len(_slow_ships)} รายการ)**")
-                if _slow_ships:
-                    st.dataframe(pd.DataFrame(_slow_ships),
-                                 use_container_width=True, hide_index=True,
-                                 height=min(35 * len(_slow_ships) + 38, 280))
-                else:
-                    st.caption("✅ ไม่มี")
-            with _sb:
-                st.markdown(f"**⚠️ พัสดุที่มีปัญหา ตีกลับ/ยกเลิก ({len(_problem_ships)} รายการ)**")
-                if _problem_ships:
-                    st.dataframe(pd.DataFrame(_problem_ships),
-                                 use_container_width=True, hide_index=True,
-                                 height=min(35 * len(_problem_ships) + 38, 280))
-                else:
-                    st.caption("✅ ไม่มี")
+            st.markdown(f"**⏳ พัสดุเกิน 3 วัน ยังไม่ถึง ({len(_slow_ships)} รายการ)**")
+            st.dataframe(pd.DataFrame(_slow_ships),
+                         use_container_width=True, hide_index=True,
+                         height=min(35 * len(_slow_ships) + 38, 300))
+
+        # ── แสดงพัสดุมีปัญหา ─────────────────────────────────────────────
+        if _problem_ships:
+            st.divider()
+            st.markdown(f"**⚠️ พัสดุที่มีปัญหา ตีกลับ/ยกเลิก ({len(_problem_ships)} รายการ)**")
+            st.dataframe(pd.DataFrame(_problem_ships),
+                         use_container_width=True, hide_index=True,
+                         height=min(35 * len(_problem_ships) + 38, 300))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Tab 1: บันทึกรายการขาย
