@@ -624,7 +624,7 @@ def _pick_carrier(pc: str, kg: float = 0) -> str:
 
 
 with tab1:
-    _sub_calc, _sub_ship, _sub_sale, _sub_shiphist, _sub_boxcalc, _sub_pending = st.tabs(["🔢 คำนวณยอด", "📦 ส่งของ", "📝 บันทึกขาย", "📋 ประวัติการส่ง", "📦 แบ่งกล่อง", "📬 ส่งของค้าง"])
+    _sub_calc, _sub_ship, _sub_pending, _sub_sale, _sub_shiphist, _sub_boxcalc = st.tabs(["🔢 คำนวณยอด", "📦 ส่งของ", "📬 ส่งของค้าง", "📝 บันทึกขาย", "📋 ประวัติการส่ง", "📦 แบ่งกล่อง"])
 
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
@@ -744,11 +744,15 @@ with tab1:
                         _rx_df = pd.DataFrame([{
                             "สินค้า":     _prod_map_rx.get(p["product_id"], p["product_id"]),
                             "บิล":        p.get("bill_no") or "—",
-                            "สถานะจ่าย":  "จ่ายแล้ว ✅" if p.get("outstanding_amt", 0) <= 0.01
-                                          else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿",
+                            "สถานะจ่าย":  ("จ่ายแล้ว ✅" if p.get("outstanding_amt", 0) <= 0.01
+                                           else ("COD 💛" if p.get("pay_status") == "COD"
+                                                 else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿")),
                             "ค้างรับ":    p["ค้างรับ"],
                             "รับวันนี้":  0,
-                            "จ่าย (฿)":  _rx_auto.get(p["id"], int(round(p.get("outstanding_amt", 0)))) if p.get("outstanding_amt", 0) > 0.01 else 0,
+                            "จ่าย (฿)":  _rx_auto.get(p["id"],
+                                          int(round(p.get("outstanding_amt", 0)))
+                                          if p.get("outstanding_amt", 0) > 0.01 and p.get("pay_status") != "COD"
+                                          else 0),
                             "_tid":       p["id"],
                             "_max":       p["ค้างรับ"],
                             "_owed":      p.get("outstanding_amt", 0.0),
@@ -2751,11 +2755,15 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 _pk_df = pd.DataFrame([{
                     "สินค้า":    _pk_prod_map.get(p["product_id"], p["product_id"]),
                     "บิล":       p.get("bill_no") or "—",
-                    "สถานะจ่าย": "จ่ายแล้ว ✅" if p.get("outstanding_amt", 0) <= 0.01
-                                  else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿",
+                    "สถานะจ่าย": ("จ่ายแล้ว ✅" if p.get("outstanding_amt", 0) <= 0.01
+                                   else ("COD 💛" if p.get("pay_status") == "COD"
+                                         else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿")),
                     "ค้างรับ":   p["ค้างรับ"],
                     "รับวันนี้": 0,
-                    "จ่าย (฿)":  _pk_auto.get(p["id"], int(round(p.get("outstanding_amt", 0)))) if p.get("outstanding_amt", 0) > 0.01 else 0,
+                    "จ่าย (฿)":  _pk_auto.get(p["id"],
+                                  int(round(p.get("outstanding_amt", 0)))
+                                  if p.get("outstanding_amt", 0) > 0.01 and p.get("pay_status") != "COD"
+                                  else 0),
                     "_tid":      p["id"],
                     "_max":      p["ค้างรับ"],
                     "_owed":     p.get("outstanding_amt", 0.0),
