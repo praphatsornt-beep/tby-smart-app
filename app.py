@@ -1356,6 +1356,28 @@ with tab1:
                             "remark":       "",
                         }
                         pass  # _iship_carrier_select set above — dialog triggers automatically
+                elif not is_shipping and _rx_df is not None and _rx_edit is not None:
+                    # บันทึกรับของเก่า/จ่ายเงิน สำหรับ รับแล้ว / ฝากของ
+                    for _ri, _rrow in _rx_edit.iterrows():
+                        _delta      = int(_rrow["รับวันนี้"] or 0)
+                        _pay_input  = float(_rrow.get("จ่าย (฿)") or 0)
+                        _owed_this  = float(_rx_df.iloc[_ri]["_owed"])
+                        _apply_pay  = min(_pay_input, _owed_this) if _owed_this > 0.01 else 0.0
+                        _actual_qty = min(max(_delta, 0), int(_rx_df.iloc[_ri]["_max"]))
+                        if _actual_qty <= 0 and _apply_pay <= 0.01:
+                            continue
+                        _etype = ("ทั้งคู่" if _actual_qty > 0 and _apply_pay > 0.01
+                                  else ("รับของจากบิลเก่า" if _actual_qty > 0 else "จ่ายจากบิลเก่า"))
+                        db.insert_partial_event({
+                            "id":             str(uuid.uuid4()),
+                            "date":           str(m_date),
+                            "transaction_id": _rx_df.iloc[_ri]["_tid"],
+                            "qty_received":   _actual_qty,
+                            "amount_paid":    round(_apply_pay, 2),
+                            "event_type":     _etype,
+                        })
+                        if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
+                            db.update_transaction_status(_rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
                 # ── print popup (เฉพาะเมื่อมีสินค้าใหม่) ──────────────────────
                 if valid_items:
                     st.session_state["_print_popup"] = {
