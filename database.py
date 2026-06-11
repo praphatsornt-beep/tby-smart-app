@@ -302,10 +302,10 @@ def get_bill_list() -> list[str]:
 @st.cache_data(ttl=120)
 def get_bill_summaries() -> list[dict]:
     """คืน [{bill_no, customer_name, total, date}] ต่อบิล เรียง desc"""
-    rows = (get_supabase().table("transactions")
-            .select("bill_no, total_amount, date, customers(name)")
-            .not_.is_("bill_no", "null")
-            .order("bill_no", desc=True).execute().data)
+    rows = _retry(lambda: get_supabase().table("transactions")
+                  .select("bill_no, total_amount, date, customers(name)")
+                  .not_.is_("bill_no", "null")
+                  .order("bill_no", desc=True).execute().data)
     seen: dict[str, dict] = {}
     for r in rows:
         bn = r.get("bill_no")
@@ -329,10 +329,10 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     type: สั่งซื้อ | รับของ | จ่ายเงิน
     """
     db = get_supabase()
-    txns = db.table("transactions").select(
+    txns = _retry(lambda: db.table("transactions").select(
         "id, date, bill_no, product_id, product_name, qty, total_amount, pay_status, "
         "bill_status, points_per_unit, initial_qty_received"
-    ).eq("customer_id", customer_id).order("date").execute().data
+    ).eq("customer_id", customer_id).order("date").execute().data)
     txn_ids = [t["id"] for t in txns]
     txn_map = {t["id"]: t for t in txns}
 
@@ -341,15 +341,15 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     _batch = 50
     for _i in range(0, len(txn_ids), _batch):
         _chunk = txn_ids[_i:_i + _batch]
-        _evts = db.table("partial_events").select(
+        _evts = _retry(lambda: db.table("partial_events").select(
             "id, date, transaction_id, qty_received, amount_paid, event_type"
-        ).in_("transaction_id", _chunk).order("date").execute().data
+        ).in_("transaction_id", _chunk).order("date").execute().data)
         all_events.extend(_evts)
 
     # shipments
-    ships = db.table("shipments").select(
+    ships = _retry(lambda: db.table("shipments").select(
         "id, created_at, carrier, tracking_no, items, source"
-    ).eq("customer_id", customer_id).order("created_at").execute().data
+    ).eq("customer_id", customer_id).order("created_at").execute().data)
 
     rows = []
     # order rows
@@ -501,7 +501,7 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
         q = q.eq("customer_id", customer_id)
     if bill_no:
         q = q.eq("bill_no", bill_no)
-    txns = q.order("bill_no", desc=True, nullsfirst=False).order("date", desc=True).execute().data
+    txns = _retry(lambda: q.order("bill_no", desc=True, nullsfirst=False).order("date", desc=True).execute().data)
 
     if not txns:
         return pd.DataFrame()
@@ -509,7 +509,8 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
     txn_ids = [t["id"] for t in txns]
     all_events: list = []
     for _i in range(0, len(txn_ids), 50):
-        all_events += db.table("partial_events").select("*").in_("transaction_id", txn_ids[_i:_i+50]).execute().data
+        _chunk = txn_ids[_i:_i+50]
+        all_events += _retry(lambda: db.table("partial_events").select("*").in_("transaction_id", _chunk).execute().data)
 
     events_by_txn: dict[str, list] = defaultdict(list)
     for e in all_events:
@@ -711,7 +712,7 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
     q = db.table("transactions").select("*, customers(name)")
     if customer_id:
         q = q.eq("customer_id", customer_id)
-    txns = q.order("date", desc=True).execute().data
+    txns = _retry(lambda: q.order("date", desc=True).execute().data)
 
     if not txns:
         return pd.DataFrame()
@@ -719,7 +720,8 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
     txn_ids = [t["id"] for t in txns]
     all_events: list = []
     for _i in range(0, len(txn_ids), 50):
-        all_events += db.table("partial_events").select("*").in_("transaction_id", txn_ids[_i:_i+50]).execute().data
+        _chunk = txn_ids[_i:_i+50]
+        all_events += _retry(lambda: db.table("partial_events").select("*").in_("transaction_id", _chunk).execute().data)
 
     events_by_txn: dict[str, list] = defaultdict(list)
     for e in all_events:
