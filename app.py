@@ -916,19 +916,41 @@ with tab1:
                                                  else f"ค้างจ่าย {p['outstanding_amt']:,.0f} ฿")),
                             "ค้างรับ":    p["ค้างรับ"],
                             "รับวันนี้":  0,
+                            "จ่ายมา":     0.0,
                             "_tid":       p["id"],
                             "_max":       p["ค้างรับ"],
                             "_owed":      p.get("outstanding_amt", 0.0),
                         } for p in _pending_rx])
                         _rx_edit = st.data_editor(
-                            _rx_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้"]],
+                            _rx_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้","จ่ายมา"]],
                             hide_index=True, use_container_width=True,
                             column_config={
                                 "รับวันนี้": st.column_config.NumberColumn("รับวันนี้", min_value=0, step=1, width="small"),
+                                "จ่ายมา": st.column_config.NumberColumn(
+                                    "จ่ายมา (฿)", min_value=0.0, step=1.0, width="small",
+                                    help="ถ้าไม่กรอก ระบบจะคำนวณให้อัตโนมัติตามสัดส่วนที่รับ",
+                                ),
                             },
                             disabled=["สินค้า","บิล","สถานะจ่าย","ค้างรับ"],
                             key=f"sale_recv_old_{_recv_cid}",
                         )
+                        _rx_total_qty = 0
+                        _rx_total_pay = 0.0
+                        for _ri, _rrow in _rx_edit.iterrows():
+                            _qty = min(int(_rrow["รับวันนี้"] or 0), int(_rx_df.iloc[_ri]["_max"]))
+                            if _qty <= 0:
+                                continue
+                            _owed_this  = float(_rx_df.iloc[_ri]["_owed"])
+                            _cap        = int(_rx_df.iloc[_ri]["_max"])
+                            _custom_pay = float(_rrow.get("จ่ายมา", 0) or 0)
+                            if _custom_pay > 0:
+                                _pay = round(min(_custom_pay, _owed_this), 2)
+                            else:
+                                _pay = round(_owed_this * _qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+                            _rx_total_qty += _qty
+                            _rx_total_pay += _pay
+                        if _rx_total_qty > 0:
+                            st.caption(f"📥 รับของเก่าวันนี้: {_rx_total_qty} ชิ้น · ยอดที่จะบันทึกว่าจ่าย {_rx_total_pay:,.0f} ฿")
                         if _cur_delivery == "ส่งพัสดุ":
                             st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด · ยอดค้างจะถูกปรับตามสัดส่วน")
                         elif not _cur_delivery:
@@ -944,7 +966,11 @@ with tab1:
                                     _actual_qty = min(_delta, _cap)
                                     if _actual_qty <= 0:
                                         continue
-                                    _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+                                    _custom_pay = float(_rrow.get("จ่ายมา", 0) or 0)
+                                    if _custom_pay > 0:
+                                        _apply_pay = round(min(_custom_pay, _owed_this), 2)
+                                    else:
+                                        _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
                                     _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของจากบิลเก่า"
                                     db.insert_partial_event({
                                         "id":             str(uuid.uuid4()),
@@ -1076,6 +1102,9 @@ with tab1:
             m_pay  = ms2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], horizontal=True, key="m_pay", index=None)
             m_bill = ms3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
 
+            if not valid_items and _has_rx_action:
+                st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
+
             m_partial_amount = 0.0
             if m_pay == "จ่ายบางส่วน" and valid_items:
                 _partial_base_amt = sum(float(p["price"]) * q for p, q, _ in valid_items)
@@ -1091,6 +1120,8 @@ with tab1:
             m_postcode = ""
             m_zone     = "normal"
             m_carrier  = "Flash Express"
+            f_sur = s_sur = 0
+            f_zone = s_zone = ""
 
             if m_delivery == "ส่งพัสดุ":
                 if "_staged_pc" in st.session_state:
@@ -1110,9 +1141,6 @@ with tab1:
                 if "_staged_carrier" in st.session_state:
                     st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
                 m_carrier = st.session_state.get("m_carrier", "Flash Express")
-                if f_zone or s_zone:
-                    _zone_label = f_zone or s_zone
-                    st.warning(f"📍 {_zone_label} — มีค่าส่งเพิ่ม Flash Express +{f_sur}฿ / SPX Express +{s_sur}฿")
                 m_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key="m_iship_note")
 
                 # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
@@ -1236,6 +1264,10 @@ with tab1:
                     st.rerun()
 
             COD_FEE_RATE = 0.0321  # 3.21%
+
+            if m_delivery == "ส่งพัสดุ" and (f_zone or s_zone):
+                _zone_label = f_zone or s_zone
+                st.warning(f"📍 {_zone_label} — มีค่าส่งเพิ่ม Flash Express +{f_sur}฿ / SPX Express +{s_sur}฿")
 
             total_amt = 0.0; total_pv = 0.0; ship_fee = 0.0; cod_fee = 0.0; collect = 0.0
             if valid_items or (_has_rx_action and m_delivery == "ส่งพัสดุ"):
@@ -1398,7 +1430,11 @@ with tab1:
                             _owed_this = float(_rx_df.iloc[_ri]["_owed"])
                             _cap       = int(_rx_df.iloc[_ri]["_max"])
                             _recv      = min(max(_delta, 0), _cap)
-                            _apply_pay = round(_owed_this * _recv / _cap, 2) if _owed_this > 0.01 and _cap > 0 and _recv > 0 else 0.0
+                            _custom_pay = float(_rrow.get("จ่ายมา", 0) or 0)
+                            if _custom_pay > 0:
+                                _apply_pay = round(min(_custom_pay, _owed_this), 2)
+                            else:
+                                _apply_pay = round(_owed_this * _recv / _cap, 2) if _owed_this > 0.01 and _cap > 0 and _recv > 0 else 0.0
                             if _recv <= 0:
                                 continue
                             _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
@@ -1469,7 +1505,11 @@ with tab1:
                         _actual_qty = min(max(_delta, 0), _cap)
                         if _actual_qty <= 0:
                             continue
-                        _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+                        _custom_pay = float(_rrow.get("จ่ายมา", 0) or 0)
+                        if _custom_pay > 0:
+                            _apply_pay = round(min(_custom_pay, _owed_this), 2)
+                        else:
+                            _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
                         _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของจากบิลเก่า"
                         db.insert_partial_event({
                             "id":             str(uuid.uuid4()),
@@ -1537,7 +1577,11 @@ with tab1:
                         _recv      = min(max(_delta, 0), _cap)
                         if _recv <= 0:
                             continue
-                        _apply_pay = round(_owed_this * _recv / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+                        _custom_pay = float(_rrow.get("จ่ายมา", 0) or 0)
+                        if _custom_pay > 0:
+                            _apply_pay = round(min(_custom_pay, _owed_this), 2)
+                        else:
+                            _apply_pay = round(_owed_this * _recv / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
                         _etype     = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
                         db.insert_partial_event({
                             "id":             str(uuid.uuid4()),
