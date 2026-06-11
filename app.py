@@ -1075,6 +1075,17 @@ with tab1:
             m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery", index=None)
             m_pay  = ms2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], horizontal=True, key="m_pay", index=None)
             m_bill = ms3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
+
+            m_partial_amount = 0.0
+            if m_pay == "จ่ายบางส่วน" and valid_items:
+                _partial_base_amt = sum(float(p["price"]) * q for p, q, _ in valid_items)
+                m_partial_amount = st.number_input(
+                    "💵 จำนวนเงินที่ลูกค้าจ่ายมาแล้ว (บาท)",
+                    min_value=0.0, max_value=float(_partial_base_amt), step=1.0,
+                    key="m_partial_amount",
+                    help=f"ยอดสินค้ารวม {_partial_base_amt:,.0f} ฿",
+                )
+
             m_cod     = (m_pay == "COD")
             m_receipt = "ฝากของ" if m_delivery == "ฝากของ" else "รับของแล้ว"
             m_postcode = ""
@@ -1091,17 +1102,17 @@ with tab1:
                 fees = carrier_fees(0, m_postcode.strip()) if len(m_postcode.strip()) == 5 else None
                 f_sur  = fees["Flash Express"]["surcharge"] if fees else 0
                 s_sur  = fees["SPX Express"]["surcharge"]   if fees else 0
-                f_zone = fees["Flash Express"]["zone"]      if fees else "—"
-                s_zone = fees["SPX Express"]["zone"]        if fees else "—"
-                fc_col, sc_col, car_col = st.columns(3)
-                fc_col.caption(f"Flash Express: {f_zone or 'ปกติ'} | +{f_sur} ฿")
-                sc_col.caption(f"SPX Express: {s_zone or 'ปกติ'} | +{s_sur} ฿")
+                f_zone = fees["Flash Express"]["zone"]      if fees else ""
+                s_zone = fees["SPX Express"]["zone"]        if fees else ""
                 if fees and m_postcode != st.session_state.get("_prev_pc", ""):
                     st.session_state["m_carrier"] = _pick_carrier(m_postcode)
                     st.session_state["_prev_pc"]  = m_postcode
                 if "_staged_carrier" in st.session_state:
                     st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
-                m_carrier = car_col.radio("เลือกขนส่ง", ["Flash Express", "SPX Express"], key="m_carrier")
+                m_carrier = st.session_state.get("m_carrier", "Flash Express")
+                if f_zone or s_zone:
+                    _zone_label = f_zone or s_zone
+                    st.warning(f"📍 {_zone_label} — มีค่าส่งเพิ่ม Flash Express +{f_sur}฿ / SPX Express +{s_sur}฿")
                 m_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key="m_iship_note")
 
                 # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
@@ -1273,15 +1284,6 @@ with tab1:
                         vm1.metric("ยอดรวม",   f"{total_amt:,.0f} ฿")
                         vm2.metric("PV รวม",   f"{total_pv:.0f}")
                         vm3.metric("รายการ",   f"{len(valid_items)} สินค้า")
-
-            m_partial_amount = 0.0
-            if m_pay == "จ่ายบางส่วน" and valid_items:
-                m_partial_amount = st.number_input(
-                    "💵 จำนวนเงินที่ลูกค้าจ่ายมาแล้ว (บาท)",
-                    min_value=0.0, max_value=float(total_amt), step=1.0,
-                    key="m_partial_amount",
-                    help=f"ยอดสินค้ารวม {total_amt:,.0f} ฿",
-                )
 
             m_errors = []
             if m_customer == "— เลือกลูกค้า —": m_errors.append("⚠️ ยังไม่ได้เลือกลูกค้า")
