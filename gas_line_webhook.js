@@ -1,0 +1,695 @@
+var CHANNEL_ACCESS_TOKEN = 'OIh78V9+ndk5UfBUdOdSLY1jCVFLKQ4cRzBToKI0IJRlZ/zDrNhCliun3WN45m9g8WQZ1yMlOUyXGl5bYFnLEB1cztMgM2NxwG/yVZTWEEwGbSzuakH/Yn/qn4uheph2DvO3jpKWUeNTCFDEkNg4PQdB04t89/1O/w1cDnyilFU=';
+var QR_IMAGE_URL = 'https://i.postimg.cc/x1QKRxsh/E2A8A0F2-2BEA-40A8-805C-49273D6A23D9.jpg';
+
+var SUPABASE_URL = 'https://vpvpcdtpysfbatkugfzs.supabase.co';
+var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwdnBjZHRweXNmYmF0a3VnZnpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NzY3MTAsImV4cCI6MjA5MjM1MjcxMH0.PndMvCduruClArolKh56vS5fMkMPt8zWbgnYEex5Qk8';
+
+// ─── Supabase REST helpers ────────────────────────────────────────────────────
+
+function _sbReadHdrs() {
+  return { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
+}
+function _sbWriteHdrs() {
+  return { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY,
+           'Content-Type': 'application/json', 'Prefer': 'return=minimal' };
+}
+function _sbGet(path) {
+  return JSON.parse(UrlFetchApp.fetch(SUPABASE_URL + path,
+    { headers: _sbReadHdrs(), muteHttpExceptions: true }).getContentText());
+}
+function _sbPost(table, data) {
+  UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/' + table,
+    { method: 'POST', headers: _sbWriteHdrs(), payload: JSON.stringify(data), muteHttpExceptions: true });
+}
+function _sbPatch(path, data) {
+  UrlFetchApp.fetch(SUPABASE_URL + path,
+    { method: 'PATCH', headers: _sbWriteHdrs(), payload: JSON.stringify(data), muteHttpExceptions: true });
+}
+
+// ─── doPost ──────────────────────────────────────────────────────────────────
+
+function doPost(e) {
+  var contents = JSON.parse(e.postData.contents);
+  var event = contents.events[0];
+
+  // ── กันประมวลผลซ้ำ: LINE จะส่ง event เดิมซ้ำถ้า GAS ตอบกลับช้า ──────────────
+  var eventId = event.webhookEventId || (event.message && event.message.id);
+  if (eventId) {
+    var cache = CacheService.getScriptCache();
+    if (cache.get('evt_' + eventId)) return; // เคยประมวลผลแล้ว ข้ามรอบนี้
+    cache.put('evt_' + eventId, '1', 600); // จำไว้ 10 นาที
+  }
+
+  if (event.type !== 'message' || event.message.type !== 'text') return;
+  var replyToken = event.replyToken;
+  var rawMsg = event.message.text.trim();
+
+  // ── ลงทะเบียน ──────────────────────────────────────────────────────────────
+  if (/^สมัคร\s+\d{9,10}/.test(rawMsg)) {
+    var phone = rawMsg.replace(/^สมัคร\s+/, '').trim();
+    registerLineUser(event.source.userId, phone, replyToken);
+    return;
+  }
+
+  // ── ยอดส่วนตัว (ลูกค้าพิมพ์เอง) ──────────────────────────────────────────
+  if (rawMsg === 'ยอด' || rawMsg === 'สรุปยอด') {
+    sendCustomerSummary(event.source.userId, replyToken);
+    return;
+  }
+
+  // ── คำสั่งสำหรับเจ้าของร้าน ───────────────────────────────────────────────
+  // check [name]
+  var _chk = rawMsg.match(/^check\s+(.+)$/i);
+  // [name] เก่า CODE-QTY (จ่าย[bill] amount)?
+  var _old = rawMsg.match(/^([฀-๿a-zA-Z]+(?:\s[฀-๿a-zA-Z]+)?)\s+เก่า\s+([A-Za-z0-9]+)-(\d+)(?:\s+จ่าย(\S+)\s+(\d+(?:\.\d+)?))?$/);
+  // [name] เบิก CODE-QTY [CODE-QTY ...] — บันทึกรับของ ไม่จ่ายเงิน (หลายรายการได้)
+  var _withdraw = rawMsg.match(/^([฀-๿a-zA-Z]+(?:\s[฀-๿a-zA-Z]+)?)\s+เบิก\s+([A-Za-z0-9]+-\d+(?:\s+[A-Za-z0-9]+-\d+)*)$/);
+  // [name] เบิกจ่าย CODE-QTY [CODE-QTY ...] — บันทึกรับของ + จ่ายเงินแล้ว ยังไม่เปิดบิล (หลายรายการได้)
+  var _withdrawPaid = rawMsg.match(/^([฀-๿a-zA-Z]+(?:\s[฀-๿a-zA-Z]+)?)\s+เบิกจ่าย\s+([A-Za-z0-9]+-\d+(?:\s+[A-Za-z0-9]+-\d+)*)$/);
+  // [name] จ่าย[bill] amount
+  var _pay = rawMsg.match(/^([฀-๿a-zA-Z]+(?:\s[฀-๿a-zA-Z]+)?)\s+จ่าย(\S+)\s+(\d+(?:\.\d+)?)$/);
+
+  if (rawMsg.toLowerCase() === 'check') { handleCheckMenu(replyToken); return; }
+  if (_chk) { handleCustomerByName(_chk[1].trim(), replyToken); return; }
+  if (_old) {
+    handleOldGoods(
+      _old[1].trim(), _old[2].toUpperCase(), parseInt(_old[3]),
+      _old[5] ? parseFloat(_old[5]) : 0, _old[4] || null, replyToken
+    );
+    return;
+  }
+  if (_withdraw) {
+    var _items = _withdraw[2].trim().split(/\s+/).map(function(tok) {
+      var p = tok.split('-');
+      return { code: p[0].toUpperCase(), qty: parseInt(p[1]) };
+    });
+    handleWithdraw(_withdraw[1].trim(), _items, replyToken);
+    return;
+  }
+  if (_withdrawPaid) {
+    var _itemsPaid = _withdrawPaid[2].trim().split(/\s+/).map(function(tok) {
+      var p = tok.split('-');
+      return { code: p[0].toUpperCase(), qty: parseInt(p[1]) };
+    });
+    handleWithdrawPaid(_withdrawPaid[1].trim(), _itemsPaid, replyToken);
+    return;
+  }
+  if (_pay) { handlePayment(_pay[1].trim(), _pay[2], parseFloat(_pay[3]), replyToken); return; }
+
+  // ── แปลพม่า ────────────────────────────────────────────────────────────────
+  var translatedNote = '';
+  if (/[က-အ]/.test(rawMsg)) {
+    try { var det = LanguageApp.translate(rawMsg, 'my', 'th'); translatedNote = '\n\n🔍 [แปลไทย]: ' + det; } catch(err) {}
+  }
+
+  if (rawMsg.toLowerCase() === 'qr') {
+    sendReply(replyToken, '🏦 รายละเอียดการชำระเงิน\nSCB 165-2716485\nZhulian Sathupradit New Agency', QR_IMAGE_URL);
+    return;
+  }
+
+  // ── คำนวณออเดอร์ ────────────────────────────────────────────────────────────
+  var bothRemote = ["63150","50160","50240","50250","50260","50310","50350","55130","58110","58120","58130","58140","58150","63170","67260","94000","94110","94120","94130","94140","94150","94160","94170","94180","94220","94230","95000","95110","95120","95130","95140","95150","96000","96110","96120","96130","96140","96150","96160","96170","96180","96190","96210","96220"];
+  var flashOnlyRemote = ["71180","71240","82150","94190","95160","95170"];
+  var spxOnlyRemote = ["51160","52160","52180","52230","56160","57170","57180","57260","57310","57340","58000"];
+  var specialZips = ["20120","20150","20260","21160","23000","23170","81000","81120","81130","81150","81180","81210","82000","82110","82130","82140","82160","82190","82220","83000","83100","83110","83120","83130","83150","84140","84220","84280","84310","84320","84330","84360","85000","91000","92110","92120"];
+
+  var lang = 'none', isCOD = rawMsg.toLowerCase().includes('cod'), userMsg = rawMsg.toLowerCase();
+  if (userMsg.startsWith('th ')) { lang = 'th'; userMsg = userMsg.replace('th ', '').trim(); }
+  else if (userMsg.startsWith('mm ')) { lang = 'mm'; userMsg = userMsg.replace('mm ', '').trim(); }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet(), productSheet = ss.getSheetByName('ProductData');
+  var pData = productSheet.getDataRange().getValues(), tokens = userMsg.split(/[\s\n]+/);
+
+  var orderMap = {}, manualShipPrice = -1, isAutoShip = false, targetZip = '';
+  tokens.forEach(function(token) {
+    if (token.includes('-')) {
+      var parts = token.split('-'), code = parts[0].trim().toUpperCase(), val = parts[1].trim();
+      if (code === 'SH') {
+        if (val.startsWith('kg')) { isAutoShip = true; var z = val.replace('kg', ''); if (z.length === 5) targetZip = z; }
+        else { manualShipPrice = parseFloat(val) || 0; }
+      } else { orderMap[code] = (orderMap[code] || 0) + (parseFloat(val) || 0); }
+    }
+  });
+
+  var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '';
+  Object.keys(orderMap).forEach(function(code) {
+    for (var i = 1; i < pData.length; i++) {
+      if (pData[i][0].toString().toUpperCase() == code) {
+        var qty = orderMap[code], pPrice = pData[i][3], pPV = pData[i][4], pW = pData[i][5];
+        totalPrice += pPrice * qty; totalPV += pPV * qty; productWeight += pW * qty;
+        if (lang === 'th')
+          detailText += '📦 [' + code + '] ' + pData[i][1] + '\n      ' + qty + ' ชิ้น x ฿' + pPrice.toLocaleString() + ' = ฿' + (pPrice * qty).toLocaleString() + '\n';
+        else if (lang === 'mm')
+          detailText += '📦 [' + code + '] ' + pData[i][2] + '\n      ' + qty + ' ခု x ฿' + pPrice.toLocaleString() + ' = ฿' + (pPrice * qty).toLocaleString() + '\n';
+        else
+          detailText += '📦 [' + code + '] - ' + qty + ' * ' + pPrice.toLocaleString() + ' = ' + (pPrice * qty).toLocaleString() + '\n';
+        for (var n = 0; n < qty; n++) { stockPool.push({ code: code, pv: pPV }); }
+        break;
+      }
+    }
+  });
+
+  if (detailText === '' && translatedNote !== '') { sendReply(replyToken, '🇲🇲 Message:\n' + rawMsg + translatedNote); return; }
+  else if (detailText === '') return;
+
+  var totalWeightKg = productWeight + 0.5;
+  var summaryHeader = lang === 'th' ? '📜 สรุปยอดคำสั่งซื้อ\n\n' : (lang === 'mm' ? '📜 အော်ဒါအကျဉ်းချုပ်\n\n' : '📝 รายการสินค้า\n\n');
+  var summaryText = summaryHeader + detailText + '\n';
+
+  var planMatches = rawMsg.toLowerCase().match(/plan\s+([\d\*\s]+)/);
+  if (planMatches && lang === 'none') {
+    var planList = [];
+    planMatches[1].trim().split(/\s+/).forEach(function(p) {
+      var bits = p.split('*'); var targetPv = parseInt(bits[0]), count = parseInt(bits[1] || 1);
+      for (var c = 0; c < count; c++) planList.push(targetPv);
+    });
+    planList.sort(function(a, b) { return b - a; });
+    summaryText += '📋 แผนจัดบิลผสม:\n';
+    planList.forEach(function(target, idx) {
+      if (stockPool.length === 0) return;
+      var bestSum = 0, bestIndices = [], minDiff = 9999;
+      for (var t = 0; t < 1000; t++) {
+        var tempSum = 0, tempIndices = [], shuffled = stockPool.map(function(v, i) { return {v: v, i: i}; }).sort(function() { return Math.random() - 0.5; });
+        for (var s = 0; s < shuffled.length; s++) {
+          if (tempSum + shuffled[s].v.pv <= target + 25) {
+            tempSum += shuffled[s].v.pv; tempIndices.push(shuffled[s].i);
+            var d = Math.abs(target - tempSum);
+            if (d < minDiff) { minDiff = d; bestSum = tempSum; bestIndices = tempIndices.slice(); }
+            if (tempSum >= target) break;
+          }
+        }
+      }
+      if (bestIndices.length > 0) {
+        var billGroup = {};
+        bestIndices.sort(function(a, b) { return b - a; }).forEach(function(ii) { var itm = stockPool.splice(ii, 1)[0]; billGroup[itm.code] = (billGroup[itm.code] || 0) + 1; });
+        summaryText += '🎯 บิล ' + (idx + 1) + ' (PLAN ' + target + '): ' + Object.keys(billGroup).map(function(k) { return k + '-' + billGroup[k]; }).join(', ') + ' (' + bestSum + ' PV)\n';
+      }
+    });
+    if (stockPool.length > 0) {
+      var remainGroup = {}, remainTotalPv = 0;
+      stockPool.forEach(function(itm) { remainGroup[itm.code] = (remainGroup[itm.code] || 0) + 1; remainTotalPv += itm.pv; });
+      summaryText += '♻️ สินค้าที่ยังไม่เปิดบิล: ' + Object.keys(remainGroup).map(function(k) { return k + '-' + remainGroup[k]; }).join(', ') + ' (รวม ' + remainTotalPv.toLocaleString() + ' PV)\n';
+    }
+    summaryText += '\n';
+  }
+
+  var shipFinal = 0, feeNote = '', hasShipping = false;
+  if (isAutoShip) {
+    hasShipping = true;
+    var shipBase = 39 + (totalWeightKg > 5 ? Math.ceil(totalWeightKg - 5) * 10 : 0);
+    var extra = 0;
+    if (targetZip !== '') {
+      if (bothRemote.includes(targetZip)) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [Flash+SPX] +50)'; }
+      else if (flashOnlyRemote.includes(targetZip)) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [Flash] +50)'; }
+      else if (spxOnlyRemote.includes(targetZip)) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [SPX] +50)'; }
+      else if (specialZips.includes(targetZip)) { extra = totalWeightKg <= 7 ? 30 : (totalWeightKg <= 20 ? 100 : 200); feeNote = ' (ท่องเที่ยว ' + targetZip + ' [SPX] +' + extra + ')'; }
+    }
+    shipFinal = shipBase + extra;
+  } else if (manualShipPrice !== -1) { hasShipping = true; shipFinal = manualShipPrice; feeNote = ' (ระบุเอง)'; }
+
+  var codFee = isCOD ? Math.ceil((totalPrice + shipFinal) * 0.0321) : 0;
+  var finalPay = totalPrice + shipFinal + codFee;
+
+  summaryText += '✨ ' + totalPV.toLocaleString() + ' PV | ⚖️ ' + totalWeightKg.toFixed(2) + ' kg (รวมกล่อง)\n\n';
+  summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး: ฿' : '💵 สินค้า: ฿') + totalPrice.toLocaleString() + '\n';
+  if (hasShipping) summaryText += (lang === 'mm' ? '🚚 ပို့ခ: ฿' : '🚚 ค่าส่ง: ฿') + shipFinal.toLocaleString() + feeNote + '\n';
+  if (isCOD) summaryText += '➕ COD (3%): ฿' + codFee.toLocaleString() + '\n';
+
+  var calcFormula = totalPrice.toString();
+  if (shipFinal > 0) calcFormula += ' + ' + shipFinal;
+  if (codFee > 0) calcFormula += ' + ' + codFee;
+  summaryText += '\n' + calcFormula + ' = ' + finalPay.toLocaleString() + '\n';
+  summaryText += '💰 ' + (isCOD ? (lang === 'mm' ? 'ပစ္စည်းရောက်ငွေချေ: ' : 'ยอดปลายทาง: ') : (lang === 'mm' ? 'စုစုပေါင်းကျသင့်ငွေ: ' : 'ยอดโอนสุทธิ: ')) + '฿' + finalPay.toLocaleString() + '\n';
+
+  if (!hasShipping) summaryText += '\nပို့ဆောင်ခ သီးသန့်ဖြစ်သည်။\nราคานี้ยังไม่รวมค่าจัดส่ง';
+  else if (!isCOD && lang !== 'none') summaryText += '\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
+
+  sendReply(replyToken, summaryText + translatedNote);
+}
+
+// ─── sendReply ────────────────────────────────────────────────────────────────
+
+function sendReply(token, text, imageUrl) {
+  var messages = [{ type: 'text', text: text }];
+  if (imageUrl) messages.push({ type: 'image', originalContentUrl: imageUrl, previewImageUrl: imageUrl });
+  UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + CHANNEL_ACCESS_TOKEN },
+    method: 'post',
+    payload: JSON.stringify({ replyToken: token, messages: messages })
+  });
+}
+
+// ─── Number formatter ─────────────────────────────────────────────────────────
+
+function numFmt(n) {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+// ─── Today's date (Bangkok) ───────────────────────────────────────────────────
+
+function _today() {
+  return Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd');
+}
+
+// ─── ลงทะเบียน LINE ──────────────────────────────────────────────────────────
+
+function registerLineUser(userId, phone, replyToken) {
+  phone = phone.replace(/\D/g, '');
+  var rows = _sbGet('/rest/v1/customers?phone=eq.' + phone + '&select=id,name');
+  if (!rows || rows.length === 0) {
+    sendReply(replyToken, '❌ ไม่พบเบอร์ ' + phone + ' ในระบบ\nกรุณาติดต่อร้านค้า');
+    return;
+  }
+  var cust = rows[0];
+  _sbPatch('/rest/v1/customers?id=eq.' + cust.id, { line_user_id: userId });
+  sendReply(replyToken,
+    '✅ ลงทะเบียนสำเร็จค่ะ!\nสวัสดี ' + cust.name + ' 🙏\n' +
+    'ตอนนี้รับการแจ้งเตือนสถานะพัสดุผ่าน LINE ได้แล้วนะคะ');
+}
+
+// ─── สรุปยอด (ลูกค้าพิมพ์ "ยอด") ─────────────────────────────────────────────
+
+function sendCustomerSummary(userId, replyToken) {
+  var custs = _sbGet('/rest/v1/customers?line_user_id=eq.' + userId + '&select=id,name');
+  if (!custs || custs.length === 0) {
+    sendReply(replyToken, '❌ ยังไม่ได้ลงทะเบียน LINE\nพิมพ์: สมัคร [เบอร์โทร] เพื่อเชื่อมบัญชี');
+    return;
+  }
+  buildAndSendSummary(custs[0].id, custs[0].name, replyToken);
+}
+
+// ─── buildAndSendSummary (ใช้ร่วมกัน) ────────────────────────────────────────
+
+function buildAndSendSummary(custId, custName, replyToken) {
+  // คะแนนที่ยังไม่เปิดบิล
+  var unbilledTxns = _sbGet(
+    '/rest/v1/transactions?customer_id=eq.' + custId
+    + '&bill_status=eq.' + encodeURIComponent('ยังไม่เปิดบิล')
+    + '&select=id,qty,points_per_unit'
+  ) || [];
+  var unbilledPV = unbilledTxns.reduce(function(s, t) {
+    return s + parseFloat(t.points_per_unit || 0) * t.qty;
+  }, 0);
+
+  // ดึง 6 เดือนล่าสุดโดยไม่กรอง pay_status
+  // (จ่ายครบแล้วแต่ยังไม่รับของก็ต้องโชว์)
+  var cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 6);
+  var cutoffStr = Utilities.formatDate(cutoff, 'Asia/Bangkok', 'yyyy-MM-dd');
+  var txns = _sbGet(
+    '/rest/v1/transactions?customer_id=eq.' + custId
+    + '&date=gte.' + cutoffStr
+    + '&select=id,product_id,product_name,qty,total_amount,pay_status,points_per_unit,initial_qty_received,bill_no'
+    + '&order=bill_no.desc&limit=50'
+  ) || [];
+
+  var txnIds = txns.map(function(t) { return t.id; });
+  var events = txnIds.length > 0 ? (_sbGet(
+    '/rest/v1/partial_events?transaction_id=in.(' + txnIds.join(',') + ')&select=transaction_id,amount_paid,qty_received'
+  ) || []) : [];
+
+  var paidMap = {}, receivedMap = {};
+  events.forEach(function(e) {
+    paidMap[e.transaction_id] = (paidMap[e.transaction_id] || 0) + parseFloat(e.amount_paid || 0);
+    receivedMap[e.transaction_id] = (receivedMap[e.transaction_id] || 0) + parseInt(e.qty_received || 0);
+  });
+
+  var totalOutstanding = 0, hasAny = false;
+  var billMap = {}, billOrder = [];
+  txns.forEach(function(t) {
+    var paid = paidMap[t.id] || 0;
+    var outstanding = t.pay_status === 'จ่ายแล้ว' ? 0 : Math.max(0, parseFloat(t.total_amount) - paid);
+    var received = (t.initial_qty_received || 0) + (receivedMap[t.id] || 0);
+    var remaining = t.qty - received;
+    if (outstanding <= 0.01 && remaining <= 0) return;
+    hasAny = true;
+    if (outstanding > 0.01) totalOutstanding += outstanding;
+    var bill = t.bill_no || '(ไม่มีเลขบิล)';
+    if (!billMap[bill]) { billMap[bill] = { outstanding: 0, items: [] }; billOrder.push(bill); }
+    if (outstanding > 0.01) billMap[bill].outstanding += outstanding;
+    if (remaining > 0) billMap[bill].items.push({ t: t, remaining: remaining });
+  });
+
+  if (!hasAny && unbilledPV === 0) {
+    sendReply(replyToken, '✅ สวัสดีค่ะ คุณ' + custName + '\nไม่มียอดค้างชำระค่ะ 🙏');
+    return;
+  }
+
+  var msg = '📊 สรุปยอด คุณ' + custName + '\n─────────────────\n';
+
+  billOrder.forEach(function(bill) {
+    var grp = billMap[bill];
+    msg += '📋 บิล ' + bill + '\n';
+    grp.items.forEach(function(item) {
+      var t = item.t;
+      msg += '  ▫️ [' + (t.product_id || '') + '] ' + t.product_name + ' — ค้างรับ ' + item.remaining + '/' + t.qty + ' ชิ้น\n';
+    });
+    if (grp.outstanding > 0.01) {
+      msg += '  💰 ค้างจ่าย: ฿' + numFmt(grp.outstanding) + '\n';
+    }
+  });
+
+  if (billOrder.length > 0) msg += '─────────────────\n';
+  msg += totalOutstanding > 0
+    ? '💰 ยอดค้างจ่ายรวม: ฿' + numFmt(totalOutstanding) + '\n'
+    : '💰 ไม่มียอดค้างจ่าย\n';
+  if (unbilledPV > 0) {
+    msg += '✨ คะแนนรอเปิดบิล: ' + numFmt(unbilledPV) + ' PV\n';
+  }
+
+  sendReply(replyToken, msg);
+}
+
+// ─── findOneCustomer — ค้นหาลูกค้า 1 คนจากชื่อ ────────────────────────────────
+
+function findOneCustomer(name, replyToken) {
+  var enc = encodeURIComponent('%' + name + '%');
+  var rows = _sbGet('/rest/v1/customers?name=ilike.' + enc + '&select=id,name');
+  if (!rows || rows.length === 0) return null;
+  if (rows.length > 1) {
+    var names = rows.slice(0, 5).map(function(c) { return c.name; }).join(', ');
+    sendReply(replyToken, '🔍 พบ ' + rows.length + ' คน: ' + names + '\nพิมพ์ชื่อให้ชัดขึ้นค่ะ');
+    return null;
+  }
+  return rows[0];
+}
+
+// ─── check (ไม่มีชื่อ) — แสดง Quick Reply ให้เลือกลูกค้า ────────────────────
+
+function handleCheckMenu(replyToken) {
+  var customers = _sbGet('/rest/v1/customers?select=id,name&order=name.asc') || [];
+  if (customers.length === 0) {
+    sendReply(replyToken, '❌ ไม่พบข้อมูลลูกค้าในระบบ');
+    return;
+  }
+  if (customers.length <= 13) {
+    var items = customers.map(function(c) {
+      return {
+        type: 'action',
+        action: { type: 'message', label: c.name.substring(0, 20), text: 'check ' + c.name }
+      };
+    });
+    sendQuickReply(replyToken, '🔍 เลือกลูกค้าที่ต้องการดูยอด:', items);
+  } else {
+    var names = customers.map(function(c) { return c.name; }).join(', ');
+    sendReply(replyToken, '🔍 ลูกค้าทั้งหมด:\n' + names + '\n\nพิมพ์: check [ชื่อ] เพื่อดูยอดค่ะ');
+  }
+}
+
+function sendQuickReply(token, text, items) {
+  UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + CHANNEL_ACCESS_TOKEN },
+    method: 'post',
+    payload: JSON.stringify({
+      replyToken: token,
+      messages: [{ type: 'text', text: text, quickReply: { items: items } }]
+    })
+  });
+}
+
+// ─── check [name] — เจ้าของร้านดูยอดค้าง ────────────────────────────────────
+
+function handleCustomerByName(name, replyToken) {
+  var cust = findOneCustomer(name, replyToken);
+  if (!cust) return;
+  buildAndSendSummary(cust.id, cust.name, replyToken);
+}
+
+// ─── [name] จ่าย[bill] amount — บันทึกรับเงิน ────────────────────────────────
+
+function handlePayment(name, billNo, payAmount, replyToken) {
+  var cust = findOneCustomer(name, replyToken);
+  if (!cust) return;
+
+  var txns = _sbGet(
+    '/rest/v1/transactions?customer_id=eq.' + cust.id
+    + '&bill_no=eq.' + encodeURIComponent(billNo)
+    + '&pay_status=neq.จ่ายแล้ว'
+    + '&select=id,product_id,product_name,qty,total_amount,initial_qty_received'
+    + '&order=date.asc'
+  ) || [];
+
+  if (txns.length === 0) {
+    sendReply(replyToken, '❌ ไม่พบยอดค้างในบิล ' + billNo + ' ของคุณ' + cust.name);
+    return;
+  }
+
+  var txnIds = txns.map(function(t) { return t.id; });
+  var events = _sbGet(
+    '/rest/v1/partial_events?transaction_id=in.(' + txnIds.join(',') + ')&select=transaction_id,amount_paid'
+  ) || [];
+
+  var paidMap = {};
+  events.forEach(function(e) {
+    paidMap[e.transaction_id] = (paidMap[e.transaction_id] || 0) + parseFloat(e.amount_paid || 0);
+  });
+
+  var outList = txns.map(function(t) {
+    return { txn: t, outstanding: parseFloat(t.total_amount) - (paidMap[t.id] || 0) };
+  }).filter(function(x) { return x.outstanding > 0.01; });
+
+  var totalOwed = outList.reduce(function(s, x) { return s + x.outstanding; }, 0);
+
+  var overNote = '';
+  var actualPay = payAmount;
+  if (payAmount > totalOwed + 0.01) {
+    overNote = '⚠️ ยอดค้างมีเพียง ฿' + numFmt(totalOwed) + ' บันทึกเฉพาะส่วนที่ค้างนะคะ\n';
+    actualPay = totalOwed;
+  }
+
+  var remaining = actualPay, confirmLines = '', today = _today();
+  outList.forEach(function(x) {
+    if (remaining < 0.01) return;
+    var applyAmt = Math.min(remaining, x.outstanding);
+    remaining -= applyAmt;
+    var newPaid = (paidMap[x.txn.id] || 0) + applyAmt;
+    var fullyPaid = newPaid >= parseFloat(x.txn.total_amount) - 0.01;
+
+    _sbPost('partial_events', {
+      id: Utilities.getUuid(), date: today,
+      transaction_id: x.txn.id,
+      amount_paid: applyAmt, qty_received: 0, event_type: 'จ่ายเงิน'
+    });
+    if (fullyPaid) _sbPatch('/rest/v1/transactions?id=eq.' + x.txn.id, { pay_status: 'จ่ายแล้ว' });
+
+    var status = fullyPaid ? '(ชำระครบ ✓)' : '(ยังค้าง ฿' + numFmt(x.outstanding - applyAmt) + ')';
+    confirmLines += '💰 [' + (x.txn.product_id || '') + '] ' + x.txn.product_name + ': ฿' + numFmt(applyAmt) + ' ' + status + '\n';
+  });
+
+  var msg = overNote;
+  msg += '✅ บันทึกรับเงิน ฿' + numFmt(actualPay) + ' จากคุณ' + cust.name + ' (บิล ' + billNo + ')\n';
+  msg += '─────────────────\n' + confirmLines + '─────────────────\n';
+  msg += '💰 ยอดค้างหลังจ่าย: ฿' + numFmt(Math.max(0, totalOwed - actualPay)) + '\n';
+  sendReply(replyToken, msg);
+}
+
+// ─── [name] เบิก CODE-QTY [CODE-QTY ...] — รับของ ค้างจ่าย ยังไม่เปิดบิล ──
+
+function handleWithdraw(name, items, replyToken) {
+  var cust = findOneCustomer(name, replyToken);
+  if (!cust) return;
+
+  var pData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProductData').getDataRange().getValues();
+  var today = _today();
+
+  var rows = [], lines = '', notFound = '';
+  items.forEach(function(item) {
+    var prod = null;
+    for (var i = 1; i < pData.length; i++) {
+      if (pData[i][0].toString().toUpperCase() === item.code) {
+        prod = { name: pData[i][1], price: pData[i][3], pv: pData[i][4] };
+        break;
+      }
+    }
+    if (!prod) { notFound += '❌ ไม่พบสินค้า [' + item.code + ']\n'; return; }
+
+    var totalAmt = prod.price * item.qty;
+    rows.push({
+      id: Utilities.getUuid(),
+      date: today,
+      customer_id: cust.id,
+      product_id: item.code,
+      product_name: prod.name,
+      qty: item.qty,
+      price_per_unit: prod.price,
+      points_per_unit: prod.pv,
+      total_amount: totalAmt,
+      initial_qty_received: item.qty,
+      transaction_type: 'เบิกของก่อน',
+      bill_status: 'ยังไม่เปิดบิล',
+      pay_status: 'ค้างจ่าย',
+      notes: '',
+      bill_no: null
+    });
+    lines += '📦 [' + item.code + '] ' + prod.name + '\n      ' + item.qty + ' ชิ้น x ฿' + numFmt(prod.price) + ' = ฿' + numFmt(totalAmt) + '\n';
+  });
+
+  if (rows.length === 0) {
+    sendReply(replyToken, notFound || '❌ ไม่พบสินค้าที่ระบุ');
+    return;
+  }
+
+  rows.forEach(function(r) { _sbPost('transactions', r); });
+
+  var totalAll = rows.reduce(function(s, r) { return s + r.total_amount; }, 0);
+  var totalPV = rows.reduce(function(s, r) { return s + parseFloat(r.points_per_unit || 0) * r.qty; }, 0);
+
+  var msg = notFound;
+  msg += '✅ บันทึกรับของ คุณ' + cust.name + ' (ค้างจ่าย / ยังไม่เปิดบิล)\n';
+  msg += '─────────────────\n' + lines + '─────────────────\n';
+  msg += '💰 ค้างจ่ายรวม: ฿' + numFmt(totalAll) + '\n';
+  msg += '✨ คะแนนรอเปิดบิล: ' + numFmt(totalPV) + ' PV\n';
+  sendReply(replyToken, msg);
+}
+
+// ─── [name] เบิกจ่าย CODE-QTY [CODE-QTY ...] — รับของ + จ่ายเงินแล้ว ยังไม่เปิดบิล ──
+
+function handleWithdrawPaid(name, items, replyToken) {
+  var cust = findOneCustomer(name, replyToken);
+  if (!cust) return;
+
+  var pData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProductData').getDataRange().getValues();
+  var today = _today();
+
+  var rows = [], lines = '', notFound = '';
+  items.forEach(function(item) {
+    var prod = null;
+    for (var i = 1; i < pData.length; i++) {
+      if (pData[i][0].toString().toUpperCase() === item.code) {
+        prod = { name: pData[i][1], price: pData[i][3], pv: pData[i][4] };
+        break;
+      }
+    }
+    if (!prod) { notFound += '❌ ไม่พบสินค้า [' + item.code + ']\n'; return; }
+
+    var totalAmt = prod.price * item.qty;
+    rows.push({
+      id: Utilities.getUuid(),
+      date: today,
+      customer_id: cust.id,
+      product_id: item.code,
+      product_name: prod.name,
+      qty: item.qty,
+      price_per_unit: prod.price,
+      points_per_unit: prod.pv,
+      total_amount: totalAmt,
+      initial_qty_received: item.qty,
+      transaction_type: 'เบิกของก่อน',
+      bill_status: 'ยังไม่เปิดบิล',
+      pay_status: 'จ่ายแล้ว',
+      notes: '',
+      bill_no: null
+    });
+    lines += '📦 [' + item.code + '] ' + prod.name + '\n      ' + item.qty + ' ชิ้น x ฿' + numFmt(prod.price) + ' = ฿' + numFmt(totalAmt) + '\n';
+  });
+
+  if (rows.length === 0) {
+    sendReply(replyToken, notFound || '❌ ไม่พบสินค้าที่ระบุ');
+    return;
+  }
+
+  rows.forEach(function(r) { _sbPost('transactions', r); });
+
+  var totalAll = rows.reduce(function(s, r) { return s + r.total_amount; }, 0);
+  var totalPV = rows.reduce(function(s, r) { return s + parseFloat(r.points_per_unit || 0) * r.qty; }, 0);
+
+  var msg = notFound;
+  msg += '✅ บันทึกรับของ + จ่ายเงินแล้ว คุณ' + cust.name + ' (ยังไม่เปิดบิล)\n';
+  msg += '─────────────────\n' + lines + '─────────────────\n';
+  msg += '💵 รับเงินแล้ว: ฿' + numFmt(totalAll) + '\n';
+  msg += '✨ คะแนนรอเปิดบิล: ' + numFmt(totalPV) + ' PV\n';
+  sendReply(replyToken, msg);
+}
+
+// ─── [name] เก่า CODE-QTY (จ่าย[bill] amount)? — บันทึกรับของ(+จ่าย) ────────
+
+function handleOldGoods(name, productCode, qty, payAmount, billNo, replyToken) {
+  var cust = findOneCustomer(name, replyToken);
+  if (!cust) return;
+
+  var txnUrl = '/rest/v1/transactions?customer_id=eq.' + cust.id
+    + '&product_id=eq.' + encodeURIComponent(productCode)
+    + '&select=id,product_name,qty,total_amount,pay_status,initial_qty_received,bill_no'
+    + '&order=date.asc';
+  if (billNo) txnUrl += '&bill_no=eq.' + encodeURIComponent(billNo);
+  var txns = _sbGet(txnUrl) || [];
+
+  if (txns.length === 0) {
+    sendReply(replyToken, '❌ ไม่พบรายการ [' + productCode + '] ของคุณ' + cust.name);
+    return;
+  }
+
+  var txnIds = txns.map(function(t) { return t.id; });
+  var events = _sbGet(
+    '/rest/v1/partial_events?transaction_id=in.(' + txnIds.join(',') + ')&select=transaction_id,amount_paid,qty_received'
+  ) || [];
+
+  var paidMap = {}, receivedMap = {};
+  events.forEach(function(e) {
+    paidMap[e.transaction_id] = (paidMap[e.transaction_id] || 0) + parseFloat(e.amount_paid || 0);
+    receivedMap[e.transaction_id] = (receivedMap[e.transaction_id] || 0) + parseInt(e.qty_received || 0);
+  });
+
+  // หา transaction แรกที่ยังมีของค้างรับ
+  var target = null;
+  for (var i = 0; i < txns.length; i++) {
+    var t = txns[i];
+    var totalReceived = (t.initial_qty_received || 0) + (receivedMap[t.id] || 0);
+    var pendingQty = t.qty - totalReceived;
+    if (pendingQty > 0) { target = { txn: t, pendingQty: pendingQty }; break; }
+  }
+
+  if (!target) {
+    sendReply(replyToken, '❌ ไม่มีของค้างส่ง [' + productCode + '] ของคุณ' + cust.name + ' แล้วค่ะ');
+    return;
+  }
+
+  var actualQty = Math.min(qty, target.pendingQty);
+  var qtyNote = actualQty < qty ? '⚠️ ค้างรับมีเพียง ' + target.pendingQty + ' ชิ้น บันทึก ' + actualQty + ' ชิ้น\n' : '';
+
+  var t = target.txn;
+  var existingPaid = paidMap[t.id] || 0;
+  var maxPay = parseFloat(t.total_amount) - existingPaid;
+  var applyPay = payAmount > 0 ? Math.min(payAmount, maxPay) : 0;
+  var payNote = (payAmount > 0 && applyPay < payAmount)
+    ? '⚠️ ยอดค้างในรายการนี้มีเพียง ฿' + numFmt(maxPay) + ' บันทึกเฉพาะส่วนที่ค้างนะคะ\n' : '';
+  var eventType = applyPay > 0 ? 'ทั้งคู่' : 'รับของ';
+
+  _sbPost('partial_events', {
+    id: Utilities.getUuid(), date: _today(),
+    transaction_id: t.id,
+    qty_received: actualQty, amount_paid: applyPay, event_type: eventType
+  });
+
+  var newPaid = existingPaid + applyPay;
+  var fullyPaid = newPaid >= parseFloat(t.total_amount) - 0.01;
+  if (fullyPaid) _sbPatch('/rest/v1/transactions?id=eq.' + t.id, { pay_status: 'จ่ายแล้ว' });
+
+  var newReceived = (t.initial_qty_received || 0) + (receivedMap[t.id] || 0) + actualQty;
+  var pendingAfter = t.qty - newReceived;
+  var billInfo = t.bill_no ? ' (บิล ' + t.bill_no + ')' : '';
+
+  var msg = qtyNote + payNote;
+  msg += '✅ บันทึกรับของ คุณ' + cust.name + billInfo + '\n';
+  msg += '─────────────────\n';
+  msg += '📦 [' + productCode + '] ' + t.product_name + '\n';
+  msg += '   รับ ' + actualQty + ' ชิ้น | ค้างรับเหลือ ' + pendingAfter + ' ชิ้น\n';
+  if (applyPay > 0) {
+    var payStatus = fullyPaid ? '(ชำระครบ ✓)' : '(ยังค้าง ฿' + numFmt(parseFloat(t.total_amount) - newPaid) + ')';
+    msg += '   💰 รับเงิน ฿' + numFmt(applyPay) + ' ' + payStatus + '\n';
+  }
+  msg += '─────────────────\n';
+  sendReply(replyToken, msg);
+}
+
+// ─── doGet — product list ─────────────────────────────────────────────────────
+
+function doGet(e) {
+  var pData = SpreadsheetApp.getActiveSpreadsheet()
+    .getSheetByName('ProductData').getDataRange().getValues();
+  var products = pData.slice(1).filter(function(r) { return r[0]; }).map(function(r) {
+    return { code: r[0].toString().toUpperCase(), nameTH: r[1], nameMM: r[2], price: r[3], pv: r[4] };
+  });
+  return ContentService.createTextOutput(JSON.stringify(products))
+    .setMimeType(ContentService.MimeType.JSON);
+}
