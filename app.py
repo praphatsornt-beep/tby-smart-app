@@ -55,27 +55,20 @@ def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
     return buf.getvalue()
 
 
-_TAMBON_CUSTOM = "__custom__"
-
-
 @st.cache_data
 def _tambon_select_options() -> list:
-    """["__custom__", {tambon, amphure, province, zipcode}, ...] เรียงตามชื่อตำบล"""
-    rows = sorted(thai_address._load_tambon_index(), key=lambda r: r["tambon"])
-    return [_TAMBON_CUSTOM] + rows
+    """[{tambon, amphure, province, zipcode}, ...] เรียงตามชื่อตำบล"""
+    return sorted(thai_address._load_tambon_index(), key=lambda r: r["tambon"])
 
 
 def _tambon_option_label(opt) -> str:
-    if opt == _TAMBON_CUSTOM:
-        return "— พิมพ์เอง / ไม่อยู่ในลิสต์ —"
     return f"{opt['tambon']} » {opt['amphure']} » {opt['province']} ({opt['zipcode']})"
 
 
 def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
                        selectbox_key: str, label: str = "ตำบล/แขวง"):
     """ช่อง ตำบล/แขวง แบบ dropdown ค้นหา (st.selectbox มาตรฐาน — พิมพ์กรองรายการได้ทันที)
-    เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย ถ้าเลือก "พิมพ์เอง" จะมีช่อง free text แทน
-    ถ้ายังไม่มีค่าใดๆ เลย จะแสดงเป็นช่องว่างพร้อม placeholder (ไม่ auto-select)
+    เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย ถ้ายังไม่เลือก จะแสดงเป็นช่องว่างพร้อม placeholder
     """
     options = _tambon_select_options()
 
@@ -84,11 +77,10 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
     cur_pv  = st.session_state.get(pv_key, "")
     cur_pc  = st.session_state.get(pc_key, "")
     cur_sig = (cur_val, cur_am, cur_pv, cur_pc)
-    is_empty = cur_sig == ("", "", "", "")
 
-    match_idx = 0
+    match_idx = None
     for i, opt in enumerate(options):
-        if opt != _TAMBON_CUSTOM and (opt["tambon"], opt["amphure"], opt["province"], opt["zipcode"]) == cur_sig:
+        if (opt["tambon"], opt["amphure"], opt["province"], opt["zipcode"]) == cur_sig:
             match_idx = i
             break
 
@@ -97,39 +89,24 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
         st.session_state.pop(selectbox_key, None)
         st.session_state[_sig_key] = cur_sig
 
-    if is_empty:
-        sel = st.selectbox(
-            label, options, index=None, placeholder="พิมพ์คำค้นหา",
-            format_func=_tambon_option_label,
-            key=selectbox_key,
-        )
-    else:
-        sel = st.selectbox(
-            label, options, index=match_idx,
-            format_func=_tambon_option_label,
-            key=selectbox_key,
-        )
+    sel = st.selectbox(
+        label, options, index=match_idx, placeholder="พิมพ์คำค้นหา",
+        format_func=_tambon_option_label,
+        key=selectbox_key,
+    )
 
     if sel is None:
         return cur_val
 
-    if sel != _TAMBON_CUSTOM:
-        sel_sig = (sel["tambon"], sel["amphure"], sel["province"], sel["zipcode"])
-        if sel_sig != cur_sig:
-            st.session_state[value_key] = sel["tambon"]
-            st.session_state[am_key] = sel["amphure"]
-            st.session_state[pv_key] = sel["province"]
-            st.session_state[pc_key] = sel["zipcode"]
-            st.session_state[_sig_key] = sel_sig
-            st.rerun()
-        return sel["tambon"]
-
-    _ft_key = f"_{selectbox_key}_freetext"
-    if st.session_state.get(_ft_key) != cur_val:
-        st.session_state[_ft_key] = cur_val
-    txt = st.text_input("ตำบล/แขวง (พิมพ์เอง)", key=_ft_key, placeholder="พิมพ์ชื่อตำบล/แขวง")
-    st.session_state[value_key] = txt
-    return txt
+    sel_sig = (sel["tambon"], sel["amphure"], sel["province"], sel["zipcode"])
+    if sel_sig != cur_sig:
+        st.session_state[value_key] = sel["tambon"]
+        st.session_state[am_key] = sel["amphure"]
+        st.session_state[pv_key] = sel["province"]
+        st.session_state[pc_key] = sel["zipcode"]
+        st.session_state[_sig_key] = sel_sig
+        st.rerun()
+    return sel["tambon"]
 
 
 def calc_shipping(weight_grams: float, postcode: str = "") -> float:
@@ -825,7 +802,7 @@ with tab1:
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
                       "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv",
                       "_fr_rname","_fr_rphone","_fr_al",
-                      "r_dt_searchbox","_r_dt_searchbox_sig","_r_dt_searchbox_freetext",
+                      "r_dt_searchbox","_r_dt_searchbox_sig",
                       "_prev_cust_search"]
         _cart_ver = st.session_state.get("_cart_version", 0)
         _cart_key = f"m_cart_{_cart_ver}"
@@ -1737,7 +1714,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         _sp_av   = st.session_state.get("_sp_addr_ver", 0)
         _sp_keys = [f"sp_rname_v{_sp_av}",f"sp_rphone_v{_sp_av}",f"sp_al_v{_sp_av}",
                     f"sp_dt_v{_sp_av}",f"sp_am_v{_sp_av}",f"sp_pv_v{_sp_av}",
-                    f"sp_dt_searchbox_v{_sp_av}",f"_sp_dt_searchbox_v{_sp_av}_sig",f"_sp_dt_searchbox_v{_sp_av}_freetext",
+                    f"sp_dt_searchbox_v{_sp_av}",f"_sp_dt_searchbox_v{_sp_av}_sig",
                     f"sp_pc_v{_sp_av}",f"sp_track_v{_sp_av}",f"sp_notes_v{_sp_av}",
                     "_sp_cust_picked",f"sp_cust_search_v{_sp_av}",
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
