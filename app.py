@@ -796,7 +796,7 @@ with tab1:
 
     with _sub_sale:
         _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
-                      "m_bill","m_pay","m_delivery","m_cod",
+                      "m_bill","m_pay","m_delivery","m_cod","m_partial_amount",
                       "_cart_base","m_postcode","m_carrier","m_zone","m_iship_note",
                       "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
@@ -1073,7 +1073,7 @@ with tab1:
             ms1, ms2, ms3 = st.columns(3)
             _delivery_opts = ["ส่งพัสดุ", "ฝากของ", "รับแล้ว"]
             m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery", index=None)
-            m_pay  = ms2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD"], horizontal=True, key="m_pay", index=None)
+            m_pay  = ms2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], horizontal=True, key="m_pay", index=None)
             m_bill = ms3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
             m_cod     = (m_pay == "COD")
             m_receipt = "ฝากของ" if m_delivery == "ฝากของ" else "รับของแล้ว"
@@ -1274,9 +1274,20 @@ with tab1:
                         vm2.metric("PV รวม",   f"{total_pv:.0f}")
                         vm3.metric("รายการ",   f"{len(valid_items)} สินค้า")
 
+            m_partial_amount = 0.0
+            if m_pay == "จ่ายบางส่วน" and valid_items:
+                m_partial_amount = st.number_input(
+                    "💵 จำนวนเงินที่ลูกค้าจ่ายมาแล้ว (บาท)",
+                    min_value=0.0, max_value=float(total_amt), step=1.0,
+                    key="m_partial_amount",
+                    help=f"ยอดสินค้ารวม {total_amt:,.0f} ฿",
+                )
+
             m_errors = []
             if m_customer == "— เลือกลูกค้า —": m_errors.append("⚠️ ยังไม่ได้เลือกลูกค้า")
             if not valid_items: m_errors.append("⚠️ ยังไม่ได้กรอกสินค้า")
+            if m_pay == "จ่ายบางส่วน" and valid_items and m_partial_amount <= 0:
+                m_errors.append("⚠️ กรุณาระบุจำนวนเงินที่จ่ายมา (ต้องมากกว่า 0)")
             if m_delivery is None: m_errors.append("⚠️ ยังไม่ได้เลือก การรับ/สถานะของ")
             if valid_items:
                 if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก สถานะจ่าย")
@@ -1285,7 +1296,7 @@ with tab1:
                 st.warning("  \n".join(m_errors))
 
             if not m_errors and valid_items:
-                _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡"}.get(m_pay or "", "⚪")
+                _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡", "จ่ายบางส่วน": "🟣"}.get(m_pay or "", "⚪")
                 _deliv_color = {"ส่งพัสดุ": "🚚", "ฝากของ": "📦", "รับแล้ว": "✅"}.get(m_delivery or "", "⚪")
                 _bill_color  = "🟠" if m_bill == "ยังไม่เปิดบิล" else "🟢"
                 _carrier_tag = f" · {m_carrier}" if m_delivery == "ส่งพัสดุ" else ""
@@ -1309,7 +1320,7 @@ with tab1:
                     delivery_tag = ""
                 # ── บันทึกสินค้าใหม่ (ถ้ามี) ──────────────────────────────────
                 if valid_items:
-                    actual_pay  = "COD" if m_cod else m_pay
+                    actual_pay  = "COD" if m_cod else ("ค้างจ่าย" if m_pay == "จ่ายบางส่วน" else m_pay)
                     receive_now = m_receipt == "รับของแล้ว"
                     if m_cod:
                         _base_cod  = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
@@ -1347,9 +1358,28 @@ with tab1:
                         st.error(f"❌ Error: {_e}")
                         st.json(_m_batch)
                         st.stop()
+                    if m_pay == "จ่ายบางส่วน" and m_partial_amount > 0:
+                        _alloc_left = m_partial_amount
+                        for _i, _row in enumerate(_m_batch):
+                            if _i == len(_m_batch) - 1:
+                                _alloc = round(_alloc_left, 2)
+                            else:
+                                _alloc = round(m_partial_amount * _row["total_amount"] / total_amt, 2)
+                                _alloc_left -= _alloc
+                            if _alloc > 0:
+                                db.insert_partial_event({
+                                    "id": str(uuid.uuid4()),
+                                    "date": str(m_date),
+                                    "transaction_id": _row["id"],
+                                    "qty_received": 0,
+                                    "amount_paid": _alloc,
+                                    "event_type": "จ่ายเงิน",
+                                })
                     msg = f"✅ บันทึก {len(valid_items)} รายการ"
                     if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
                     if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
+                    if m_pay == "จ่ายบางส่วน" and m_partial_amount > 0:
+                        msg += f" | 💵 จ่ายมาแล้ว {m_partial_amount:,.0f} ฿ (ค้าง {total_amt - m_partial_amount:,.0f} ฿)"
                 else:
                     actual_pay = None
                     bill_no    = None
