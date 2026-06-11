@@ -55,15 +55,18 @@ def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
     return buf.getvalue()
 
 
+_TAMBON_CUSTOM = "__custom__"
+
+
 @st.cache_data
 def _tambon_select_options() -> list:
-    """[None, {tambon, amphure, province, zipcode}, ...] เรียงตามชื่อตำบล — None = พิมพ์เอง"""
+    """["__custom__", {tambon, amphure, province, zipcode}, ...] เรียงตามชื่อตำบล"""
     rows = sorted(thai_address._load_tambon_index(), key=lambda r: r["tambon"])
-    return [None] + rows
+    return [_TAMBON_CUSTOM] + rows
 
 
 def _tambon_option_label(opt) -> str:
-    if opt is None:
+    if opt == _TAMBON_CUSTOM:
         return "— พิมพ์เอง / ไม่อยู่ในลิสต์ —"
     return f"{opt['tambon']} » {opt['amphure']} » {opt['province']} ({opt['zipcode']})"
 
@@ -72,6 +75,7 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
                        selectbox_key: str, label: str = "ตำบล/แขวง"):
     """ช่อง ตำบล/แขวง แบบ dropdown ค้นหา (st.selectbox มาตรฐาน — พิมพ์กรองรายการได้ทันที)
     เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย ถ้าเลือก "พิมพ์เอง" จะมีช่อง free text แทน
+    ถ้ายังไม่มีค่าใดๆ เลย จะแสดงเป็นช่องว่างพร้อม placeholder (ไม่ auto-select)
     """
     options = _tambon_select_options()
 
@@ -80,10 +84,11 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
     cur_pv  = st.session_state.get(pv_key, "")
     cur_pc  = st.session_state.get(pc_key, "")
     cur_sig = (cur_val, cur_am, cur_pv, cur_pc)
+    is_empty = cur_sig == ("", "", "", "")
 
     match_idx = 0
     for i, opt in enumerate(options):
-        if opt and (opt["tambon"], opt["amphure"], opt["province"], opt["zipcode"]) == cur_sig:
+        if opt != _TAMBON_CUSTOM and (opt["tambon"], opt["amphure"], opt["province"], opt["zipcode"]) == cur_sig:
             match_idx = i
             break
 
@@ -92,13 +97,23 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
         st.session_state.pop(selectbox_key, None)
         st.session_state[_sig_key] = cur_sig
 
-    sel = st.selectbox(
-        label, options, index=match_idx,
-        format_func=_tambon_option_label,
-        key=selectbox_key,
-    )
+    if is_empty:
+        sel = st.selectbox(
+            label, options, index=None, placeholder="พิมพ์คำค้นหา",
+            format_func=_tambon_option_label,
+            key=selectbox_key,
+        )
+    else:
+        sel = st.selectbox(
+            label, options, index=match_idx,
+            format_func=_tambon_option_label,
+            key=selectbox_key,
+        )
 
-    if sel is not None:
+    if sel is None:
+        return cur_val
+
+    if sel != _TAMBON_CUSTOM:
         sel_sig = (sel["tambon"], sel["amphure"], sel["province"], sel["zipcode"])
         if sel_sig != cur_sig:
             st.session_state[value_key] = sel["tambon"]
