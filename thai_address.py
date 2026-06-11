@@ -39,6 +39,26 @@ def lookup(zipcode: str) -> list[dict]:
         return []
 
 
+def search_address(text: str, limit: int = 10) -> list[dict]:
+    """ค้นหา [{tambon, amphure, province, zipcode}] จากข้อความที่พิมพ์
+    ถ้าเป็นตัวเลขล้วน → ค้นจากรหัสไปรษณีย์ (ขึ้นต้นตรงกับ prefix)
+    ถ้าไม่ใช่ → ค้นจากชื่อตำบล
+    """
+    text = (text or "").strip()
+    if len(text) < 2:
+        return []
+    try:
+        rows = _load_tambon_index()
+    except Exception:
+        return []
+    if text.isdigit():
+        matched = [r for r in rows if r["zipcode"].startswith(text)]
+    else:
+        text_lower = text.lower()
+        matched = [r for r in rows if text_lower in r["tambon"].lower()]
+    return matched[:limit]
+
+
 def lookup_by_tambon(text: str, limit: int = 10, province: str = "") -> list[dict]:
     """คืน [{tambon, amphure, province, zipcode}] ที่ชื่อตำบลมี text นั้น
     ถ้าระบุ province จะ filter เฉพาะจังหวัดนั้นก่อน (แสดงครบกว่าเมื่อพิมพ์ชื่อซ้ำ)

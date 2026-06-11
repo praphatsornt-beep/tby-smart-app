@@ -55,6 +55,68 @@ def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
     return buf.getvalue()
 
 
+@st.cache_data
+def _tambon_select_options() -> list:
+    """[None, {tambon, amphure, province, zipcode}, ...] เรียงตามชื่อตำบล — None = พิมพ์เอง"""
+    rows = sorted(thai_address._load_tambon_index(), key=lambda r: r["tambon"])
+    return [None] + rows
+
+
+def _tambon_option_label(opt) -> str:
+    if opt is None:
+        return "— พิมพ์เอง / ไม่อยู่ในลิสต์ —"
+    return f"{opt['tambon']} » {opt['amphure']} » {opt['province']} ({opt['zipcode']})"
+
+
+def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
+                       selectbox_key: str, label: str = "ตำบล/แขวง"):
+    """ช่อง ตำบล/แขวง แบบ dropdown ค้นหา (st.selectbox มาตรฐาน — พิมพ์กรองรายการได้ทันที)
+    เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย ถ้าเลือก "พิมพ์เอง" จะมีช่อง free text แทน
+    """
+    options = _tambon_select_options()
+
+    cur_val = st.session_state.get(value_key, "")
+    cur_am  = st.session_state.get(am_key, "")
+    cur_pv  = st.session_state.get(pv_key, "")
+    cur_pc  = st.session_state.get(pc_key, "")
+    cur_sig = (cur_val, cur_am, cur_pv, cur_pc)
+
+    match_idx = 0
+    for i, opt in enumerate(options):
+        if opt and (opt["tambon"], opt["amphure"], opt["province"], opt["zipcode"]) == cur_sig:
+            match_idx = i
+            break
+
+    _sig_key = f"_{selectbox_key}_sig"
+    if st.session_state.get(_sig_key) != cur_sig:
+        st.session_state.pop(selectbox_key, None)
+        st.session_state[_sig_key] = cur_sig
+
+    sel = st.selectbox(
+        label, options, index=match_idx,
+        format_func=_tambon_option_label,
+        key=selectbox_key,
+    )
+
+    if sel is not None:
+        sel_sig = (sel["tambon"], sel["amphure"], sel["province"], sel["zipcode"])
+        if sel_sig != cur_sig:
+            st.session_state[value_key] = sel["tambon"]
+            st.session_state[am_key] = sel["amphure"]
+            st.session_state[pv_key] = sel["province"]
+            st.session_state[pc_key] = sel["zipcode"]
+            st.session_state[_sig_key] = sel_sig
+            st.rerun()
+        return sel["tambon"]
+
+    _ft_key = f"_{selectbox_key}_freetext"
+    if st.session_state.get(_ft_key) != cur_val:
+        st.session_state[_ft_key] = cur_val
+    txt = st.text_input("ตำบล/แขวง (พิมพ์เอง)", key=_ft_key, placeholder="พิมพ์ชื่อตำบล/แขวง")
+    st.session_state[value_key] = txt
+    return txt
+
+
 def calc_shipping(weight_grams: float, postcode: str = "") -> float:
     """ค่าส่ง Flash Express: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท + ค่าพื้นที่"""
     kg  = (weight_grams + BOX_WEIGHT_G) / 1000
@@ -748,6 +810,7 @@ with tab1:
                       "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
                       "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv",
                       "_fr_rname","_fr_rphone","_fr_al",
+                      "r_dt_searchbox","_r_dt_searchbox_sig","_r_dt_searchbox_freetext",
                       "_prev_cust_search"]
         _cart_ver = st.session_state.get("_cart_version", 0)
         _cart_key = f"m_cart_{_cart_ver}"
@@ -1133,39 +1196,14 @@ with tab1:
                         r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone")
                         r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                         col_c, col_d, col_e = st.columns(3)
-                        r_district  = col_c.text_input("ตำบล/แขวง",   key="r_dt")
+                        with col_c:
+                            r_district = _tambon_selectbox("r_dt", "r_am", "r_pv", "_staged_pc", "r_dt_searchbox")
                         r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
                         r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
-                        _r_last_dt = st.session_state.get("_r_last_dt", "")
-                        if len((r_district or "").strip()) >= 2 and r_district.strip() != _r_last_dt:
-                            _rdt_opts = thai_address.lookup_by_tambon(r_district.strip(), province=r_province)
-                            for _o in _rdt_opts:
-                                _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
-                                if st.button(_lbl, key=f"rdt_fill_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
-                                    st.session_state["_fr_dt"] = _o["tambon"]
-                                    st.session_state["_fr_am"] = _o["amphure"]
-                                    st.session_state["_fr_pv"] = _o["province"]
-                                    st.session_state["_staged_pc"] = _o["zipcode"]
-                                    st.session_state["_r_last_dt"] = _o["tambon"]
-                                    st.session_state["_r_last_pc"] = _o["zipcode"]
-                                    st.rerun()
                         if "_staged_pc" in st.session_state:
                             st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
                         m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
                                                     key="m_postcode", placeholder="เช่น 10400")
-                        _r_last_pc = st.session_state.get("_r_last_pc", "")
-                        if len((m_postcode or "").strip()) == 5 and m_postcode.strip() != _r_last_pc:
-                            _pc_opts = thai_address.lookup(m_postcode.strip())
-                            if _pc_opts:
-                                for _o in _pc_opts[:8]:
-                                    _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
-                                    if st.button(_lbl, key=f"pc_fill_{_o['tambon']}_{m_postcode}", use_container_width=True):
-                                        st.session_state["_fr_dt"] = _o["tambon"]
-                                        st.session_state["_fr_am"] = _o["amphure"]
-                                        st.session_state["_fr_pv"] = _o["province"]
-                                        st.session_state["_r_last_dt"] = _o["tambon"]
-                                        st.session_state["_r_last_pc"] = m_postcode.strip()
-                                        st.rerun()
                         if m_customer != "— เลือกลูกค้า —":
                             if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                 db.upsert_customer_address({
@@ -1684,6 +1722,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         _sp_av   = st.session_state.get("_sp_addr_ver", 0)
         _sp_keys = [f"sp_rname_v{_sp_av}",f"sp_rphone_v{_sp_av}",f"sp_al_v{_sp_av}",
                     f"sp_dt_v{_sp_av}",f"sp_am_v{_sp_av}",f"sp_pv_v{_sp_av}",
+                    f"sp_dt_searchbox_v{_sp_av}",f"_sp_dt_searchbox_v{_sp_av}_sig",f"_sp_dt_searchbox_v{_sp_av}_freetext",
                     f"sp_pc_v{_sp_av}",f"sp_track_v{_sp_av}",f"sp_notes_v{_sp_av}",
                     "_sp_cust_picked",f"sp_cust_search_v{_sp_av}",
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
@@ -1918,36 +1957,12 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}")
             _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key=f"sp_al_v{_sp_av}")
             _sb1, _sb2, _sb3 = st.columns(3)
-            _sp_dt = _sb1.text_input("ตำบล/แขวง",  key=f"sp_dt_v{_sp_av}")
+            with _sb1:
+                _sp_dt = _tambon_selectbox(f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
+                                            "_fsp_pc", f"sp_dt_searchbox_v{_sp_av}")
             _sp_am = _sb2.text_input("อำเภอ/เขต",   key=f"sp_am_v{_sp_av}")
             _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
-            _sp_last_dt = st.session_state.get("_sp_last_dt", "")
-            if len((_sp_dt or "").strip()) >= 2 and _sp_dt.strip() != _sp_last_dt:
-                _dt_opts = thai_address.lookup_by_tambon(_sp_dt.strip(), province=_sp_pv)
-                for _o in _dt_opts:
-                    _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']} ({_o['zipcode']})"
-                    if st.button(_lbl, key=f"sp_dt_fill_{_o['tambon']}_{_o['zipcode']}", use_container_width=True):
-                        st.session_state["_fsp_dt"] = _o["tambon"]
-                        st.session_state["_fsp_am"] = _o["amphure"]
-                        st.session_state["_fsp_pv"] = _o["province"]
-                        st.session_state["_fsp_pc"] = _o["zipcode"]
-                        st.session_state["_sp_last_dt"] = _o["tambon"]
-                        st.session_state["_sp_last_pc"] = _o["zipcode"]
-                        st.rerun()
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key=f"sp_pc_v{_sp_av}", placeholder="เช่น 10400")
-            _sp_last_pc = st.session_state.get("_sp_last_pc", "")
-            if len((_sp_pc or "").strip()) == 5 and _sp_pc.strip() != _sp_last_pc:
-                _sp_pc_opts = thai_address.lookup(_sp_pc.strip())
-                if _sp_pc_opts:
-                    for _o in _sp_pc_opts[:8]:
-                        _lbl = f"{_o['tambon']} » {_o['amphure']} » {_o['province']}"
-                        if st.button(_lbl, key=f"sp_pc_fill_{_o['tambon']}_{_sp_pc}", use_container_width=True):
-                            st.session_state["_fsp_dt"] = _o["tambon"]
-                            st.session_state["_fsp_am"] = _o["amphure"]
-                            st.session_state["_fsp_pv"] = _o["province"]
-                            st.session_state["_sp_last_dt"] = _o["tambon"]
-                            st.session_state["_sp_last_pc"] = _sp_pc.strip()
-                            st.rerun()
             if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                 db.upsert_customer_address({
                     "id":             str(uuid.uuid4()),
