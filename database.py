@@ -657,13 +657,14 @@ def return_stock_deposit(deposit_id: str) -> None:
 @st.cache_data(ttl=60)
 def get_unbilled_received_qty_by_product() -> dict:
     db = get_supabase()
-    txns = db.table("transactions").select("id, product_id, initial_qty_received").eq("bill_status", "ยังไม่เปิดบิล").execute().data
+    txns = _retry(lambda: db.table("transactions").select("id, product_id, initial_qty_received").eq("bill_status", "ยังไม่เปิดบิล").execute().data)
     if not txns:
         return {}
     txn_ids = [t["id"] for t in txns]
     events_by_txn = defaultdict(int)
     for _i in range(0, len(txn_ids), 50):
-        for e in db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", txn_ids[_i:_i+50]).execute().data:
+        _chunk = txn_ids[_i:_i+50]
+        for e in _retry(lambda: db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", _chunk).execute().data):
             events_by_txn[e["transaction_id"]] += e["qty_received"]
     result = defaultdict(int)
     for t in txns:
@@ -684,14 +685,14 @@ def get_deposit_qty_by_product() -> dict:
 def get_billed_not_received_qty_by_product() -> dict:
     """qty ที่เปิดบิลแล้วแต่ลูกค้ายังไม่รับของ (ของยังอยู่ที่สาขา)"""
     db = get_supabase()
-    txns = db.table("transactions").select("id, product_id, qty, initial_qty_received").eq("bill_status", "เปิดบิลแล้ว").execute().data
+    txns = _retry(lambda: db.table("transactions").select("id, product_id, qty, initial_qty_received").eq("bill_status", "เปิดบิลแล้ว").execute().data)
     if not txns:
         return {}
     txn_ids = [t["id"] for t in txns]
     events_by_txn: dict[str, int] = defaultdict(int)
     for _i in range(0, len(txn_ids), 50):
         _chunk = txn_ids[_i:_i + 50]
-        _evts = db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", _chunk).execute().data
+        _evts = _retry(lambda: db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", _chunk).execute().data)
         for e in _evts:
             events_by_txn[e["transaction_id"]] += e["qty_received"]
     result = defaultdict(int)

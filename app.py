@@ -3330,6 +3330,9 @@ with _t5_ledger:
                 _l_all_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
                 _l_table_cols = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
                                  "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
+                _l_table_cols_disp = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
+                                       "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "สถานะจ่าย",
+                                       "สถานะรับของ", "หมายเหตุ"]
                 for _bk, _bv in sorted(
                     _bills_tl.items(), key=lambda x: x[1]["date"], reverse=True
                 ):
@@ -3345,7 +3348,7 @@ with _t5_ledger:
                         f"📋 **{_bk}** &nbsp; {_bv['date']} &nbsp;|&nbsp; "
                         f"{_pay_ico} ค้างจ่าย **{_b_owed:,.0f}฿**{_recv_lbl}{_pv_lbl}"
                     )
-                    with st.expander(_exp_hdr, expanded=False):
+                    with st.expander(_exp_hdr, expanded=True):
                         _pv_unbilled = _bv["pv"] if _bv["bill_status"] == "ยังไม่เปิดบิล" else 0.0
                         st.caption(
                             f"📦 ค้างรับ {_b_pend} ชิ้น  |  "
@@ -3361,6 +3364,8 @@ with _t5_ledger:
                             _bill_rows = _bill_rows.sort_values("_dt")
                             _disp = _bill_rows[_l_table_cols].reset_index(drop=True)
                             _disp["หมายเหตุ"] = _disp["หมายเหตุ"].fillna("").apply(_fmt_note)
+                            _disp["สถานะรับของ"] = _bv["events"][0]["delivery"].split(" ", 1)[1]
+                            _disp = _disp[_l_table_cols_disp]
                             st.dataframe(
                                 _disp, hide_index=True, use_container_width=True,
                                 column_config={
@@ -3369,9 +3374,29 @@ with _t5_ledger:
                                     "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
                                 },
                             )
-                            for _r in _bv["events"]:
-                                if _r["type"] == "ส่งพัสดุ":
-                                    st.caption(f"🚚 {_r['date']}  Tracking: {_r['tracking']}")
+
+                        # ── ประวัติเหตุการณ์ของบิลนี้ เรียงตามวันที่ ──────────
+                        st.markdown("**📜 ประวัติ**")
+                        for _r in _bv["events"]:
+                            if _r["type"] == "เปิดบิล":
+                                st.caption(
+                                    f"📋 {_r['date']}  เปิดบิล — {_r['detail']}  "
+                                    f"(รวม {_r['total']:,.0f}฿"
+                                    + (f", {_r['pv']:.0f} PV" if _r['pv'] > 0 else "")
+                                    + ")"
+                                )
+                            elif _r["type"] == "จ่ายเงิน":
+                                st.caption(
+                                    f"💰 {_r['date']}  จ่ายเงิน {_r['amount']:,.0f}฿ "
+                                    f"(คงค้าง {_r['remaining']:,.0f}฿)"
+                                )
+                            elif _r["type"] == "รับของ":
+                                st.caption(
+                                    f"📦 {_r['date']}  รับของ {_r['detail']} "
+                                    f"(ค้างรับเหลือ {_r['remaining_qty']} ชิ้น)"
+                                )
+                            elif _r["type"] == "ส่งพัสดุ":
+                                st.caption(f"🚚 {_r['date']}  ส่งพัสดุ {_r['detail']}  Tracking: {_r['tracking']}")
 
                 # ── ลบ partial event ──────────────────────────────────────
                 _ldel_rows = [
