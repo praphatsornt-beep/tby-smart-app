@@ -68,7 +68,7 @@ def _tambon_by_postcode(pc: str) -> list:
 
 
 def _tambon_option_label(opt) -> str:
-    return f"{opt['tambon']} ({opt['province']})"
+    return f"{opt['tambon']} ({opt['zipcode']})"
 
 
 def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
