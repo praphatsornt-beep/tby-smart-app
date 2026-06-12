@@ -94,9 +94,12 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
                 match_idx = i
                 break
 
+    idx_options = list(range(len(options)))
+
     def _on_change():
-        sel = st.session_state.get(selectbox_key)
-        if sel:
+        i = st.session_state.get(selectbox_key)
+        if i is not None:
+            sel = options[i]
             st.session_state[value_key] = sel["tambon"]
             st.session_state[am_key]    = sel["amphure"]
             st.session_state[pv_key]    = sel["province"]
@@ -104,8 +107,8 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
             st.session_state[_sig_key]  = (sel["tambon"], sel["province"])
 
     st.selectbox(
-        label, options, index=match_idx, placeholder="พิมพ์ค้นหาตำบล",
-        format_func=_tambon_option_label,
+        label, idx_options, index=match_idx, placeholder="พิมพ์ค้นหาตำบล",
+        format_func=lambda i: _tambon_option_label(options[i]),
         key=selectbox_key, on_change=_on_change,
     )
 
@@ -126,9 +129,12 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
     if cur in [(o["tambon"], o["amphure"], o["province"]) for o in opts]:
         return
 
+    idx_options = list(range(len(opts)))
+
     def _on_pick():
-        sel = st.session_state.get(suggest_key)
-        if sel:
+        i = st.session_state.get(suggest_key)
+        if i is not None:
+            sel = opts[i]
             st.session_state[value_key] = sel["tambon"]
             st.session_state[am_key]    = sel["amphure"]
             st.session_state[pv_key]    = sel["province"]
@@ -136,9 +142,9 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
             st.session_state.pop(f"_{searchbox_key}_sig", None)
 
     st.selectbox(
-        f"📍 ตำบล/อำเภอ/จังหวัด สำหรับรหัส {pc}", opts, index=None,
+        f"📍 ตำบล/อำเภอ/จังหวัด สำหรับรหัส {pc}", idx_options, index=None,
         placeholder="เลือกที่อยู่ตามรหัสไปรษณีย์",
-        format_func=lambda o: f"{o['tambon']} / {o['amphure']} / {o['province']}",
+        format_func=lambda i: f"{opts[i]['tambon']} / {opts[i]['amphure']} / {opts[i]['province']}",
         key=suggest_key, on_change=_on_pick,
     )
 
