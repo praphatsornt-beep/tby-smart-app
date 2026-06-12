@@ -96,21 +96,10 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
     cur_pc  = st.session_state.get(pc_key, "")
     cur_sig = (cur_val, cur_pv)
 
-    _sig_key  = f"_{selectbox_key}_sig"
-    _edit_key = f"_{selectbox_key}_edit"
+    _sig_key = f"_{selectbox_key}_sig"
     if st.session_state.get(_sig_key) != cur_sig:
         st.session_state.pop(selectbox_key, None)
         st.session_state[_sig_key] = cur_sig
-        st.session_state[_edit_key] = False
-
-    # มีค่าอยู่แล้วและไม่ได้กดแก้ไข → แสดงแค่ชื่อตำบลสั้นๆ พร้อมปุ่มเปลี่ยน
-    if cur_val and not st.session_state.get(_edit_key, False):
-        _c1, _c2 = st.columns([5, 1])
-        _c1.text_input(label, value=cur_val, disabled=True)
-        if _c2.button("🔍", key=f"{selectbox_key}_editbtn", help="ค้นหา/เปลี่ยนตำบล"):
-            st.session_state[_edit_key] = True
-            st.rerun()
-        return cur_val
 
     _norm_val = _strip_admin_prefix(cur_val, _TAMBON_PREFIXES)
     _norm_pv  = _strip_admin_prefix(cur_pv, _PROVINCE_PREFIXES)
@@ -129,7 +118,7 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
         match_idx = 0
 
     idx_options = list(range(len(options)))
-    label_map = {_tambon_option_label(opt): i for i, opt in enumerate(options)}
+    label_map = {opt["tambon"]: i for i, opt in enumerate(options)}
 
     def _on_change():
         raw = st.session_state.get(selectbox_key)
@@ -141,18 +130,12 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
             st.session_state[pv_key]    = sel["province"]
             st.session_state[pc_key]    = sel["zipcode"]
             st.session_state[_sig_key]  = (sel["tambon"], sel["province"])
-            st.session_state[_edit_key] = False
 
-    _e1, _e2 = st.columns([5, 1])
-    with _e1:
-        st.selectbox(
-            label, idx_options, index=match_idx, placeholder="พิมพ์ค้นหาตำบล",
-            format_func=lambda i: _tambon_option_label(options[i]),
-            key=selectbox_key, on_change=_on_change,
-        )
-    if cur_val and _e2.button("✕", key=f"{selectbox_key}_canceledit", help="ยกเลิก"):
-        st.session_state[_edit_key] = False
-        st.rerun()
+    st.selectbox(
+        label, idx_options, index=match_idx, placeholder="พิมพ์ค้นหาตำบล",
+        format_func=lambda i: options[i]["tambon"],
+        key=selectbox_key, on_change=_on_change,
+    )
 
     return st.session_state.get(value_key, cur_val)
 
