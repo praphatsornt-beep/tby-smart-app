@@ -71,6 +71,18 @@ def _tambon_option_label(opt) -> str:
     return f"{opt['tambon']} / {opt['amphure']} / {opt['province']} ({opt['zipcode']})"
 
 
+_TAMBON_PREFIXES   = ["ตำบล", "ต.", "แขวง"]
+_PROVINCE_PREFIXES = ["จังหวัด", "จ."]
+
+
+def _strip_admin_prefix(s: str, prefixes: list) -> str:
+    s = (s or "").strip()
+    for p in prefixes:
+        if s.startswith(p):
+            return s[len(p):].strip()
+    return s
+
+
 def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
                        selectbox_key: str, label: str = "ตำบล/แขวง"):
     """ช่อง ตำบล/แขวง แบบ dropdown ค้นหา (st.selectbox มาตรฐาน — พิมพ์กรองรายการได้ทันที)
@@ -79,7 +91,9 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
     options = _tambon_select_options()
 
     cur_val = st.session_state.get(value_key, "")
+    cur_am  = st.session_state.get(am_key, "")
     cur_pv  = st.session_state.get(pv_key, "")
+    cur_pc  = st.session_state.get(pc_key, "")
     cur_sig = (cur_val, cur_pv)
 
     _sig_key = f"_{selectbox_key}_sig"
@@ -87,12 +101,21 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
         st.session_state.pop(selectbox_key, None)
         st.session_state[_sig_key] = cur_sig
 
+    _norm_val = _strip_admin_prefix(cur_val, _TAMBON_PREFIXES)
+    _norm_pv  = _strip_admin_prefix(cur_pv, _PROVINCE_PREFIXES)
+
     match_idx = None
-    if cur_val:
+    if _norm_val:
         for i, opt in enumerate(options):
-            if opt["tambon"] == cur_val and (not cur_pv or opt["province"] == cur_pv):
+            if opt["tambon"] == _norm_val and (not _norm_pv or opt["province"] == _norm_pv):
                 match_idx = i
                 break
+
+    # ถ้าค่าที่บันทึกไว้ไม่ตรงกับรายชื่อตำบลในฐานข้อมูล (เช่น สะกดต่างกัน)
+    # ให้แสดงค่าเดิมเป็นตัวเลือกแรกไว้ก่อน เพื่อไม่ให้ช่องว่างเปล่า
+    if cur_val and match_idx is None:
+        options = [{"tambon": cur_val, "amphure": cur_am, "province": cur_pv, "zipcode": cur_pc}] + options
+        match_idx = 0
 
     idx_options = list(range(len(options)))
     label_map = {_tambon_option_label(opt): i for i, opt in enumerate(options)}
