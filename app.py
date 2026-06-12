@@ -118,7 +118,7 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
         match_idx = 0
 
     idx_options = list(range(len(options)))
-    _short_label = lambda opt: f"{opt['tambon']} ({opt['province']})"
+    _short_label = lambda opt: f"{opt['tambon']} ({opt['zipcode']})"
     label_map = {_short_label(opt): i for i, opt in enumerate(options)}
 
     def _on_change():
