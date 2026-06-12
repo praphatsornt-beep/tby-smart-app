@@ -22,7 +22,7 @@ Credentials live in `.streamlit/secrets.toml` (local) and Streamlit Cloud Secret
 
 ## Architecture
 
-Single-file app (`app.py`, ~2000 lines) with supporting modules:
+Single-file app (`app.py`, ~5300 lines) with supporting modules:
 
 | File | Role |
 |---|---|
@@ -32,25 +32,30 @@ Single-file app (`app.py`, ~2000 lines) with supporting modules:
 | `line_api.py` | LINE OA push notifications: `push_tracking()`, `push_outstanding()`, `push_bill_summary()`. Reads `LINE_CHANNEL_ACCESS_TOKEN` from `st.secrets`. Requires `line_user_id` stored on the customer row. |
 | `thai_address.py` | Postcode → tambon/amphure/province lookup using local `thai_postcodes.json` (7,498 tambons). Cached indefinitely with `@st.cache_data`. |
 | `bangkok_addresses.py` | Bangkok-specific lookups: `lookup_khet(แขวง, zipcode)→เขต` and `ZIPCODE_TO_AMPHURE` dict for nearby-province zipcodes (นนทบุรี, ปทุมธานี, สมุทรปราการ). Used as fallback when `thai_postcodes.json` returns ambiguous results. |
-| `flash_zones.py` | Flash Express zone surcharges by postcode. |
+| `flash_zones.py` | Flash Express zone surcharges and SPX surcharges by postcode/weight. |
+| `carriers.py` | Multi-carrier shipping rate cards (Flash Thunder, etc.) and rate comparison, built on top of `flash_zones.py`. |
 | `shopee_api.py` | Shopee Open Platform OAuth + order sync (integration not yet fully wired into the UI). |
 
 ## Tab Layout (`app.py`)
 
 ```
-tab1: บันทึกรายการ
-  ├── _sub_sale:     บันทึกขาย (main sale form)
-  ├── _sub_ship:     ส่งของ (shipping-only form)
-  └── _sub_shiphist: ประวัติการส่ง
-tab2: ยอดค้าง       — outstanding balances, per-transaction actions
-tab5: ประวัติทั้งหมด
-tab6: สต๊อก
-  ├── t6a: 📦 สต๊อก    — stock counts per product
-  └── t6b: 📋 ของฝาก  — deposited items: products awaiting shipment grouped by customer
-tab7: พิมพ์บิล      — bill printing with 1/2-copy layout
-tab_fin: การเงิน
-tab_ecom: E-commerce (Shopee)
-tab4: จัดการข้อมูล  — products, customers, addresses, bill deletion
+tab_dash: 🏠 หน้าแรก       — dashboard
+tab1: 📋 บันทึกรายการ
+  ├── _sub_calc: 🔢 คำนวณยอด  — shipping/price calculator
+  ├── _sub_ship: 📦 ส่งของ    — shipping-only form
+  └── _sub_sale: 📝 บันทึกขาย — main sale form
+tab5: 🗂️ รายละเอียดบิล
+  ├── _t5_out:    💰 ยอดค้าง   — outstanding balances, per-transaction actions
+  ├── _t5_ledger: 👤 บัตรลูกค้า — per-customer ledger, one table per bill
+  ├── _t5_txn:    📋 ประวัติทั้งหมด — bill detail / print view (1/2-copy layout)
+  ├── _t5_cust:   🖨️ จัดการบิล — bill management, deletion
+  └── _t5_ship:   🚚 ประวัติการส่ง — shipment history
+tab6: 📦 สต๊อก
+  ├── t6a: สรุปสต๊อก — stock counts per product
+  └── t6b: ของฝาก   — deposited items: products awaiting shipment grouped by customer
+tab_fin: 💵 การเงิน
+tab_ecom: 🛒 E-commerce (Shopee)
+tab4: ⚙️ จัดการข้อมูล — products, customers, addresses, bill deletion
 ```
 
 ## database.py Patterns

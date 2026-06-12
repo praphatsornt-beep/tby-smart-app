@@ -61,8 +61,14 @@ def _tambon_select_options() -> list:
     return sorted(thai_address._load_tambon_index(), key=lambda r: r["tambon"])
 
 
+@st.cache_data
+def _tambon_by_postcode(pc: str) -> list:
+    """[{tambon, amphure, province, zipcode}, ...] ที่ตรงกับรหัสไปรษณีย์นี้"""
+    return [o for o in _tambon_select_options() if o["zipcode"] == pc]
+
+
 def _tambon_option_label(opt) -> str:
-    return f"{opt['tambon']} » {opt['amphure']} » {opt['province']} ({opt['zipcode']})"
+    return f"{opt['tambon']} ({opt['province']})"
 
 
 def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
@@ -73,40 +79,68 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
     options = _tambon_select_options()
 
     cur_val = st.session_state.get(value_key, "")
-    cur_am  = st.session_state.get(am_key, "")
     cur_pv  = st.session_state.get(pv_key, "")
-    cur_pc  = st.session_state.get(pc_key, "")
-    cur_sig = (cur_val, cur_am, cur_pv, cur_pc)
-
-    match_idx = None
-    for i, opt in enumerate(options):
-        if (opt["tambon"], opt["amphure"], opt["province"], opt["zipcode"]) == cur_sig:
-            match_idx = i
-            break
+    cur_sig = (cur_val, cur_pv)
 
     _sig_key = f"_{selectbox_key}_sig"
     if st.session_state.get(_sig_key) != cur_sig:
         st.session_state.pop(selectbox_key, None)
         st.session_state[_sig_key] = cur_sig
 
-    sel = st.selectbox(
-        label, options, index=match_idx, placeholder="พิมพ์คำค้นหา",
+    match_idx = None
+    if cur_val:
+        for i, opt in enumerate(options):
+            if opt["tambon"] == cur_val and (not cur_pv or opt["province"] == cur_pv):
+                match_idx = i
+                break
+
+    def _on_change():
+        sel = st.session_state.get(selectbox_key)
+        if sel:
+            st.session_state[value_key] = sel["tambon"]
+            st.session_state[am_key]    = sel["amphure"]
+            st.session_state[pv_key]    = sel["province"]
+            st.session_state[pc_key]    = sel["zipcode"]
+            st.session_state[_sig_key]  = (sel["tambon"], sel["province"])
+
+    st.selectbox(
+        label, options, index=match_idx, placeholder="พิมพ์ค้นหาตำบล",
         format_func=_tambon_option_label,
-        key=selectbox_key,
+        key=selectbox_key, on_change=_on_change,
     )
 
-    if sel is None:
-        return cur_val
+    return st.session_state.get(value_key, cur_val)
 
-    sel_sig = (sel["tambon"], sel["amphure"], sel["province"], sel["zipcode"])
-    if sel_sig != cur_sig:
-        st.session_state[value_key] = sel["tambon"]
-        st.session_state[am_key] = sel["amphure"]
-        st.session_state[pv_key] = sel["province"]
-        st.session_state[pc_key] = sel["zipcode"]
-        st.session_state[_sig_key] = sel_sig
-        st.rerun()
-    return sel["tambon"]
+
+def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
+                       searchbox_key: str, suggest_key: str):
+    """ถ้ารหัสไปรษณีย์ตรงกับ ต./อ./จ. มากกว่า 1 รายการ และค่าปัจจุบันยังไม่ตรง
+    ให้แสดง selectbox ให้เลือก ต./อ./จ. ตามรหัสไปรษณีย์นั้น"""
+    pc = (pc or "").strip()
+    if len(pc) != 5:
+        return
+    opts = _tambon_by_postcode(pc)
+    if not opts:
+        return
+    cur = (st.session_state.get(value_key, ""), st.session_state.get(am_key, ""), st.session_state.get(pv_key, ""))
+    if cur in [(o["tambon"], o["amphure"], o["province"]) for o in opts]:
+        return
+
+    def _on_pick():
+        sel = st.session_state.get(suggest_key)
+        if sel:
+            st.session_state[value_key] = sel["tambon"]
+            st.session_state[am_key]    = sel["amphure"]
+            st.session_state[pv_key]    = sel["province"]
+            st.session_state.pop(searchbox_key, None)
+            st.session_state.pop(f"_{searchbox_key}_sig", None)
+
+    st.selectbox(
+        f"📍 ตำบล/อำเภอ/จังหวัด สำหรับรหัส {pc}", opts, index=None,
+        placeholder="เลือกที่อยู่ตามรหัสไปรษณีย์",
+        format_func=lambda o: f"{o['tambon']} / {o['amphure']} / {o['province']}",
+        key=suggest_key, on_change=_on_pick,
+    )
 
 
 def calc_shipping(weight_grams: float, postcode: str = "") -> float:
@@ -1260,13 +1294,13 @@ with tab1:
                         r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                         col_c, col_d, col_e = st.columns(3)
                         with col_c:
-                            r_district = _tambon_selectbox("r_dt", "r_am", "r_pv", "_staged_pc", "r_dt_searchbox")
+                            r_district = _tambon_selectbox("r_dt", "r_am", "r_pv", "m_postcode", "r_dt_searchbox")
                         r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
                         r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
-                        if "_staged_pc" in st.session_state:
-                            st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
                         m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
                                                     key="m_postcode", placeholder="เช่น 10400")
+                        _postcode_suggest(m_postcode, "r_dt", "r_am", "r_pv",
+                                          "r_dt_searchbox", "r_pc_suggest")
                         if m_customer != "— เลือกลูกค้า —":
                             if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                 db.upsert_customer_address({
@@ -1995,6 +2029,11 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             for _, r in _sp_cart_edit.iterrows()
             if str(r.get("สินค้า","")) in _sp_prod_map
         )
+        _sp_total_amt = sum(
+            float(_sp_prod_map.get(r["สินค้า"], {}).get("price") or 0) * int(r["จำนวน"] or 0)
+            for _, r in _sp_cart_edit.iterrows()
+            if str(r.get("สินค้า","")) in _sp_prod_map
+        )
 
         # ── ที่อยู่เดิม (collapsed) ───────────────────────────────────────
         if _sp_cid:
@@ -2088,10 +2127,12 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sb1, _sb2, _sb3 = st.columns(3)
             with _sb1:
                 _sp_dt = _tambon_selectbox(f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
-                                            "_fsp_pc", f"sp_dt_searchbox_v{_sp_av}")
+                                            f"sp_pc_v{_sp_av}", f"sp_dt_searchbox_v{_sp_av}")
             _sp_am = _sb2.text_input("อำเภอ/เขต",   key=f"sp_am_v{_sp_av}")
             _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key=f"sp_pc_v{_sp_av}", placeholder="เช่น 10400")
+            _postcode_suggest(_sp_pc, f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
+                              f"sp_dt_searchbox_v{_sp_av}", f"sp_pc_suggest_v{_sp_av}")
             if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                 db.upsert_customer_address({
                     "id":             str(uuid.uuid4()),
@@ -2134,6 +2175,10 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sm1.metric(f"🚚 {_sp_carrier}", f"{_sp_cost} ฿")
             _sm2.metric("⚖️ น้ำหนัก", f"{(_sp_total_weight/1000):.2f} kg")
             _sm3.metric("📦 รายการ", f"{len(_sp_items)} สินค้า")
+            if _sp_total_amt > 0:
+                _sm4, _sm5 = st.columns(2)
+                _sm4.metric("💵 ยอดสินค้า", f"{_sp_total_amt:,.0f} ฿")
+                _sm5.metric("💰 ยอดรวม (รวมค่าส่ง)", f"{(_sp_total_amt + _sp_cost):,.0f} ฿")
 
         # ── tracking + หมายเหตุ ───────────────────────────────────────────
         _sp_track = st.text_input("เลข tracking (กรอกทีหลังได้)", key=f"sp_track_v{_sp_av}", placeholder="TH123456789")
