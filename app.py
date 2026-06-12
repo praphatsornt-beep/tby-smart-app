@@ -3585,6 +3585,21 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                     st.success(f"✅ ลบบิล {_del_bno} แล้ว")
                                     st.rerun()
 
+                        # ── ลบรายการนี้ (เฉพาะแถวนี้) ─────────────────────
+                        st.divider()
+                        _del_row_chk = st.checkbox(
+                            f"🗑️ ลบเฉพาะรายการ **{sel_row['สินค้า']}** แถวนี้ (ไม่กระทบรายการอื่นในบิล)",
+                            key=f"del_row_chk_{txn_id}",
+                        )
+                        if _del_row_chk:
+                            if st.button(
+                                f"🗑️ ยืนยันลบรายการ {sel_row['สินค้า']}", type="primary",
+                                key=f"del_row_now_{txn_id}",
+                            ):
+                                db.delete_transaction(txn_id)
+                                st.success("✅ ลบรายการแล้ว")
+                                st.rerun()
+
                     else:
                         # Multi: ทำทุกอย่างพร้อมกันในตารางเดียว
                         sel_rows      = grp[grp["id"].isin(selected_ids)].copy()
