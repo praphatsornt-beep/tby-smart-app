@@ -118,7 +118,8 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
         match_idx = 0
 
     idx_options = list(range(len(options)))
-    label_map = {opt["tambon"]: i for i, opt in enumerate(options)}
+    _short_label = lambda opt: f"{opt['tambon']} ({opt['province']})"
+    label_map = {_short_label(opt): i for i, opt in enumerate(options)}
 
     def _on_change():
         raw = st.session_state.get(selectbox_key)
@@ -133,7 +134,7 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
 
     st.selectbox(
         label, idx_options, index=match_idx, placeholder="พิมพ์ค้นหาตำบล",
-        format_func=lambda i: options[i]["tambon"],
+        format_func=lambda i: _short_label(options[i]),
         key=selectbox_key, on_change=_on_change,
     )
 
