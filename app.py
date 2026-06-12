@@ -95,9 +95,11 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
                 break
 
     idx_options = list(range(len(options)))
+    label_map = {_tambon_option_label(opt): i for i, opt in enumerate(options)}
 
     def _on_change():
-        i = st.session_state.get(selectbox_key)
+        raw = st.session_state.get(selectbox_key)
+        i = raw if isinstance(raw, int) else label_map.get(raw)
         if i is not None:
             sel = options[i]
             st.session_state[value_key] = sel["tambon"]
@@ -130,9 +132,12 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
         return
 
     idx_options = list(range(len(opts)))
+    _suggest_label = lambda i: f"{opts[i]['tambon']} / {opts[i]['amphure']} / {opts[i]['province']}"
+    label_map = {_suggest_label(i): i for i in idx_options}
 
     def _on_pick():
-        i = st.session_state.get(suggest_key)
+        raw = st.session_state.get(suggest_key)
+        i = raw if isinstance(raw, int) else label_map.get(raw)
         if i is not None:
             sel = opts[i]
             st.session_state[value_key] = sel["tambon"]
@@ -144,7 +149,7 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
     st.selectbox(
         f"📍 ตำบล/อำเภอ/จังหวัด สำหรับรหัส {pc}", idx_options, index=None,
         placeholder="เลือกที่อยู่ตามรหัสไปรษณีย์",
-        format_func=lambda i: f"{opts[i]['tambon']} / {opts[i]['amphure']} / {opts[i]['province']}",
+        format_func=_suggest_label,
         key=suggest_key, on_change=_on_pick,
     )
 
