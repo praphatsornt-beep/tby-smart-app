@@ -4,7 +4,7 @@
 
 - [ ] **รวม logic คำนวณยอดต่อบิล** (บัตรลูกค้า vs จัดการบิล) ให้เป็น helper เดียว `_bills_from_df()`
 - [ ] **tab พิมพ์บิล — breakdown เก่า/ใหม่/รวม** (ต้อง ALTER TABLE `partial_events` ก่อน)
-- [ ] **Bug: แยกที่อยู่อัตโนมัติ** (postcode → ตำบล/อำเภอ) บางเคสไม่เติมให้ (`thai_address.py`, `bangkok_addresses.py`)
+- [x] ~~Bug: ช่องตำบลไม่แสดงค่าตอนเลือก "ที่อยู่เดิม"~~ (commit `8b15520` — บังคับ session_state ของ selectbox ตรงๆ)
 - [ ] **iShip COD** — ยังต้องสร้าง manual ใน dashboard (ตัดสินใจว่าจะ integrate หรือแจ้ง user)
 - [x] ~~GAS: tourist_island weight tiers + remote postcodes 50270, 55220 ตกหล่น~~ (commit `38a470c`)
 
