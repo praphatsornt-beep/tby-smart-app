@@ -675,19 +675,23 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                 st.rerun()
 
     with st.expander("🗑️ ลบรายการ"):
-        st.caption("เลือกรายการสินค้าที่ต้องการลบออก (ไม่ลบทั้งบิล)")
+        st.caption("เลือกรายการสินค้าที่ต้องการลบออก (ไม่ลบทั้งบิล) — เลือกได้หลายรายการ")
         _t7_item_opts = {
             f"{r['สินค้า']} — บิล {r['เลขที่บิล'] or '—'} (฿{r['ยอดรวม']:,.0f})": r["id"]
             for _, r in show_p.iterrows()
         }
-        _t7_del_item_label = st.selectbox(
+        _t7_del_item_labels = st.multiselect(
             "รายการ", list(_t7_item_opts.keys()), key=f"{key_prefix}_del_item_sel"
         )
-        _t7_del_item_chk = st.checkbox("ยืนยันการลบรายการนี้", key=f"{key_prefix}_del_item_confirm")
-        if st.button("🗑️ ลบรายการ", disabled=not _t7_del_item_chk,
+        _t7_del_item_chk = st.checkbox(
+            f"ยืนยันการลบ {len(_t7_del_item_labels)} รายการนี้",
+            key=f"{key_prefix}_del_item_confirm", disabled=not _t7_del_item_labels,
+        )
+        if st.button("🗑️ ลบรายการ", disabled=not (_t7_del_item_chk and _t7_del_item_labels),
                      type="secondary", key=f"{key_prefix}_del_item_btn"):
-            db.delete_transaction(_t7_item_opts[_t7_del_item_label])
-            st.success("✅ ลบรายการแล้ว")
+            for _lbl in _t7_del_item_labels:
+                db.delete_transaction(_t7_item_opts[_lbl])
+            st.success(f"✅ ลบ {len(_t7_del_item_labels)} รายการแล้ว")
             if not preselected_bill:
                 st.session_state.pop(_pk, None)
             st.rerun()
@@ -3822,6 +3826,22 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                     _total_del = sum(db.delete_bill(b) for b in _del_bnos)
                                     st.success(f"✅ ลบแล้ว {len(_del_bnos)} บิล ({_total_del} รายการ)")
                                     st.rerun()
+
+                        # ── ลบเฉพาะรายการที่เลือก (multi, ไม่ลบทั้งบิล) ────
+                        st.divider()
+                        _del_items_chk = st.checkbox(
+                            f"🗑️ ลบเฉพาะ {len(selected_ids)} รายการที่เลือก (ไม่กระทบรายการอื่นในบิล)",
+                            key=f"del_items_chk_multi_{customer_name}",
+                        )
+                        if _del_items_chk:
+                            if st.button(
+                                f"🗑️ ยืนยันลบ {len(selected_ids)} รายการ", type="primary",
+                                key=f"del_items_now_multi_{customer_name}",
+                            ):
+                                for _tid in selected_ids:
+                                    db.delete_transaction(_tid)
+                                st.success(f"✅ ลบแล้ว {len(selected_ids)} รายการ")
+                                st.rerun()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
