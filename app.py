@@ -640,6 +640,24 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                     st.session_state.pop(_pk, None)
                 st.rerun()
 
+    with st.expander("🗑️ ลบรายการ"):
+        st.caption("เลือกรายการสินค้าที่ต้องการลบออก (ไม่ลบทั้งบิล)")
+        _t7_item_opts = {
+            f"{r['สินค้า']} — บิล {r['เลขที่บิล'] or '—'} (฿{r['ยอดรวม']:,.0f})": r["id"]
+            for _, r in show_p.iterrows()
+        }
+        _t7_del_item_label = st.selectbox(
+            "รายการ", list(_t7_item_opts.keys()), key=f"{key_prefix}_del_item_sel"
+        )
+        _t7_del_item_chk = st.checkbox("ยืนยันการลบรายการนี้", key=f"{key_prefix}_del_item_confirm")
+        if st.button("🗑️ ลบรายการ", disabled=not _t7_del_item_chk,
+                     type="secondary", key=f"{key_prefix}_del_item_btn"):
+            db.delete_transaction(_t7_item_opts[_t7_del_item_label])
+            st.success("✅ ลบรายการแล้ว")
+            if not preselected_bill:
+                st.session_state.pop(_pk, None)
+            st.rerun()
+
     # ── เคลียร์บิลหลายใบ ──────────────────────────────────────
     _t7_all_cust_df = all_txn_cache[all_txn_cache["ลูกค้า"] == _t7_cust_name]
     if not _t7_all_cust_df.empty:
@@ -3245,6 +3263,35 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 with _t5_out:
     st.subheader("ยอดค้างลูกค้า")
 
+    with st.expander("🗑️ ลบบิล", expanded=False):
+        st.caption("เลือกเลขที่บิลที่ต้องการลบ — จะลบทุกรายการในบิลนั้น")
+        _bill_list = db.get_bill_list()
+        if _bill_list:
+            _sel_bill = st.selectbox("เลขที่บิล", _bill_list, key="del_bill_sel")
+            _bill_rows = db.get_bill_details(_sel_bill)
+            if _bill_rows:
+                _bill_date = (_bill_rows[0].get("date") or "")[:10]
+                _bill_cust = (_bill_rows[0].get("customers") or {}).get("name", "—")
+                _bill_status = _bill_rows[0].get("bill_status", "")
+                st.markdown(f"**วันที่:** {_bill_date} &nbsp;|&nbsp; **ลูกค้า:** {_bill_cust} &nbsp;|&nbsp; **สถานะ:** {_bill_status}")
+                _preview_df = pd.DataFrame([{
+                    "สินค้า":      r.get("product_name", ""),
+                    "จำนวน":      r.get("qty", 0),
+                    "ราคา/หน่วย": r.get("price_per_unit", 0),
+                    "ยอดรวม":     r.get("total_amount", 0),
+                } for r in _bill_rows])
+                st.dataframe(_preview_df, use_container_width=True, hide_index=True)
+                _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
+                st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
+            st.divider()
+            if st.button("🗑️ ลบบิลนี้", type="primary", key="del_bill_btn"):
+                _n = db.delete_bill(_sel_bill)
+                st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")
+                st.rerun()
+        else:
+            st.info("ไม่มีบิลในระบบ")
+    st.divider()
+
     customers = db.get_customers()
     if not customers:
         st.info("ยังไม่มีข้อมูล")
@@ -3749,35 +3796,6 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                             customer_name, _cust_map_all, _all_txn_cache, customers,
                             key_prefix=f"bp_{_bp_id}",
                         )
-
-    st.divider()
-    with st.expander("🗑️ ลบบิล", expanded=False):
-        st.caption("เลือกเลขที่บิลที่ต้องการลบ — จะลบทุกรายการในบิลนั้น")
-        _bill_list = db.get_bill_list()
-        if _bill_list:
-            _sel_bill = st.selectbox("เลขที่บิล", _bill_list, key="del_bill_sel")
-            _bill_rows = db.get_bill_details(_sel_bill)
-            if _bill_rows:
-                _bill_date = (_bill_rows[0].get("date") or "")[:10]
-                _bill_cust = (_bill_rows[0].get("customers") or {}).get("name", "—")
-                _bill_status = _bill_rows[0].get("bill_status", "")
-                st.markdown(f"**วันที่:** {_bill_date} &nbsp;|&nbsp; **ลูกค้า:** {_bill_cust} &nbsp;|&nbsp; **สถานะ:** {_bill_status}")
-                _preview_df = pd.DataFrame([{
-                    "สินค้า":      r.get("product_name", ""),
-                    "จำนวน":      r.get("qty", 0),
-                    "ราคา/หน่วย": r.get("price_per_unit", 0),
-                    "ยอดรวม":     r.get("total_amount", 0),
-                } for r in _bill_rows])
-                st.dataframe(_preview_df, use_container_width=True, hide_index=True)
-                _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
-                st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
-            st.divider()
-            if st.button("🗑️ ลบบิลนี้", type="primary", key="del_bill_btn"):
-                _n = db.delete_bill(_sel_bill)
-                st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")
-                st.rerun()
-        else:
-            st.info("ไม่มีบิลในระบบ")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
