@@ -22,12 +22,15 @@ Credentials live in `.streamlit/secrets.toml` (local) and Streamlit Cloud Secret
 
 ## Architecture
 
-Single-file app (`app.py`, ~5440 lines) with supporting modules:
+Main app (`app.py`, ~5160 lines) with supporting modules:
 
 | File | Role |
 |---|---|
-| `app.py` | All UI — Streamlit tabs, forms, session state |
+| `app.py` | Most UI — Streamlit tabs, forms, session state (tab_ecom/tab_fin extracted, see below) |
+| `ecom_ui.py` | UI for tab_ecom (🛒 E-commerce/Shopee) — `render()` called from `app.py`. Self-contained, no shared session state with other tabs. |
+| `fin_ui.py` | UI for tab_fin (💵 การเงิน) — `render()` called from `app.py`. Self-contained, no shared session state with other tabs. |
 | `database.py` | All Supabase queries. Cached functions: `get_products()` (5 min), `get_customers()` (5 min), `get_customer_addresses()` (2 min). Mutations call `.clear()` on the relevant cache. |
+| `calc_logic.py` | Pure calculation helpers shared by the คำนวณยอด tab and LINE OA order parsing: `parse_calc_order()`, `cod_fee()`, `pack_boxes()`. Covered by `tests/`. |
 | `iship_api.py` | iShip shipping integration. Non-COD: Bearer token to `/api/create_order`. COD must be created manually in the iShip dashboard — API support is unreliable. |
 | `line_api.py` | LINE OA push notifications: `push_tracking()`, `push_outstanding()`, `push_bill_summary()`. Reads `LINE_CHANNEL_ACCESS_TOKEN` from `st.secrets`. Requires `line_user_id` stored on the customer row. |
 | `thai_address.py` | Postcode → tambon/amphure/province lookup using local `thai_postcodes.json` (7,498 tambons). Cached indefinitely with `@st.cache_data`. |
@@ -35,6 +38,10 @@ Single-file app (`app.py`, ~5440 lines) with supporting modules:
 | `flash_zones.py` | Flash Express zone surcharges and SPX surcharges by postcode/weight. |
 | `carriers.py` | Multi-carrier shipping rate cards (Flash Thunder, etc.) and rate comparison, built on top of `flash_zones.py`. |
 | `shopee_api.py` | Shopee Open Platform OAuth + order sync (integration not yet fully wired into the UI). |
+
+## Tests
+
+`tests/` — unittest suite for `calc_logic.py`, `flash_zones.py`, `carriers.py`. Run: `py -m unittest discover -s tests -v` (pytest not installed, use stdlib unittest).
 
 ## Tab Layout (`app.py`)
 
