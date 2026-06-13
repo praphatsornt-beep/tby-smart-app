@@ -3377,6 +3377,16 @@ with _t5_out:
                              + (f" | ⭐ PV ค้างเปิดบิล {_unbilled_pv:,.0f}" if _unbilled_pv > 0 else ""))
 
                 with st.expander(exp_label, expanded=single_cust):
+                    # ── 🖨️ พิมพ์ / จัดการบิล ───────────────────────────────
+                    with st.expander("🖨️ พิมพ์ / จัดการบิล"):
+                        _cust_obj_bp = _cust_map_all.get(customer_name)
+                        _bp_id = _cust_obj_bp["id"] if _cust_obj_bp else customer_name
+                        _render_bill_panel(
+                            customer_name, _cust_map_all, _all_txn_cache, customers,
+                            key_prefix=f"bp_{_bp_id}",
+                        )
+                    st.divider()
+
                     # ── ใบรับของ popup ───────────────────────────────────
                     _rp = st.session_state.get("_recv_popup")
                     if _rp and _rp.get("customer_name") == customer_name:
@@ -3786,16 +3796,6 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                     _total_del = sum(db.delete_bill(b) for b in _del_bnos)
                                     st.success(f"✅ ลบแล้ว {len(_del_bnos)} บิล ({_total_del} รายการ)")
                                     st.rerun()
-
-                    # ── 🖨️ พิมพ์ / จัดการบิล ───────────────────────────────
-                    st.divider()
-                    with st.expander("🖨️ พิมพ์ / จัดการบิล"):
-                        _cust_obj_bp = _cust_map_all.get(customer_name)
-                        _bp_id = _cust_obj_bp["id"] if _cust_obj_bp else customer_name
-                        _render_bill_panel(
-                            customer_name, _cust_map_all, _all_txn_cache, customers,
-                            key_prefix=f"bp_{_bp_id}",
-                        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
