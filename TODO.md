@@ -19,7 +19,7 @@
 
 ## 🔧 โครงสร้าง/Maintenance
 
-- [ ] app.py ใหญ่กว่าที่ CLAUDE.md ระบุ (5,340 บรรทัด) — ควรอัปเดตเอกสาร/แยกโมดูล
+- [x] ~~app.py ใหญ่กว่าที่ CLAUDE.md ระบุ~~ — อัปเดตจำนวนบรรทัดใน CLAUDE.md แล้ว (แยกโมดูลยังไม่ทำ)
 - [ ] `except Exception:` เงียบ ~17 จุด — ควร log/แจ้ง user
 - [ ] shopee_api.py/tab_ecom ยังไม่ wired ครบ — ตัดสินใจทำต่อหรือลบ
 - [ ] mutation functions ยังไม่มี `_retry`

@@ -22,7 +22,7 @@ Credentials live in `.streamlit/secrets.toml` (local) and Streamlit Cloud Secret
 
 ## Architecture
 
-Single-file app (`app.py`, ~5300 lines) with supporting modules:
+Single-file app (`app.py`, ~5440 lines) with supporting modules:
 
 | File | Role |
 |---|---|
