@@ -3630,6 +3630,10 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                         st.stop()
                                     if _also_open_bill:
                                         db.update_transaction_status(txn_id, bill_status="เปิดบิลแล้ว")
+                                    if amount_paid > 0:
+                                        _new_total_paid = balance["total_paid"] + amount_paid
+                                        if _new_total_paid >= float(txn["total_amount"]) - 0.01:
+                                            db.update_transaction_status(txn_id, pay_status="จ่ายแล้ว")
                                     db.get_all_transactions_df.clear()
                                     if int(qty_received) > 0:
                                         _rp_pending = []
