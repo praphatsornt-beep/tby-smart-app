@@ -590,8 +590,9 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                 else:
                     st.warning("ไม่มีรายการที่เปลี่ยนแปลง")
 
-    # ── เปลี่ยนลูกค้าในบิล ──────────────────────────────────
-    with st.expander("✏️ เปลี่ยนลูกค้าในบิลนี้"):
+    # ── แก้ไขเพิ่มเติม (เปลี่ยนลูกค้า / ลบบิล) ─────────────────
+    with st.expander("⚙️ แก้ไขเพิ่มเติม"):
+        st.markdown("**✏️ เปลี่ยนลูกค้าในบิลนี้**")
         st.caption(f"บิลปัจจุบัน: {bill_nos_str} | ลูกค้า: {_t7_cust_name}")
         if bill_nos_str and db.bill_has_partial_events(bill_nos_str):
             st.warning("⚠️ บิลนี้มีการจ่าย/รับของแล้ว — เปลี่ยนได้แต่ยอดค้างอาจเปลี่ยน")
@@ -608,8 +609,9 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             st.success(f"✅ เปลี่ยนเป็น {_new_cust_name} แล้ว")
             st.rerun()
 
-    if _t7_single:
-        with st.expander("🗑️ ลบบิล"):
+        if _t7_single:
+            st.divider()
+            st.markdown("**🗑️ ลบบิล**")
             st.warning(f"ลบบิล **{bill_nos[0]}** และรายการทั้งหมด ({len(show_p)} รายการ) — กู้คืนไม่ได้")
             _t7_del_chk = st.checkbox("ยืนยันการลบ", key=f"{key_prefix}_del_confirm")
             if st.button("🗑️ ลบบิล", disabled=not _t7_del_chk,
