@@ -117,6 +117,11 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
         options = [{"tambon": cur_val, "amphure": cur_am, "province": cur_pv, "zipcode": cur_pc}] + options
         match_idx = 0
 
+    # บังคับค่า widget ให้ตรงกับ match_idx ตรงๆ — ไม่พึ่ง `index=` ของ st.selectbox อย่างเดียว
+    # (กรณี rerun ซ้อน rerun เช่นกดเลือก "ที่อยู่เดิม" แล้ว auto-fill จากเบอร์โทรต่อ)
+    if match_idx is not None and selectbox_key not in st.session_state:
+        st.session_state[selectbox_key] = match_idx
+
     idx_options = list(range(len(options)))
     _short_label = lambda opt: f"{opt['tambon']} ({opt['zipcode']})"
     label_map = {_short_label(opt): i for i, opt in enumerate(options)}
