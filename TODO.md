@@ -21,7 +21,7 @@
 - [x] ~~app.py ใหญ่กว่าที่ CLAUDE.md ระบุ~~ — อัปเดตจำนวนบรรทัดใน CLAUDE.md แล้ว (แยกโมดูลยังไม่ทำ)
 - [x] ~~`except Exception:` เงียบ ~17 จุด~~ — ตรวจครบแล้ว: ส่วนใหญ่เป็น fallback ที่ตั้งใจ (parse/lookup ที่อยู่, ตาราง DB ที่ยังไม่มี) ปล่อยไว้ตามเดิม ส่วนที่เสี่ยงข้อมูลไม่ตรง (สร้าง shipment record หลังส่ง iShip สำเร็จ ×2, mark_cod_transferred/mark_cod_paid, delete_shipment) เพิ่ม st.warning/st.error ให้ผู้ใช้เห็นแล้ว
 - [ ] shopee_api.py/tab_ecom ยังไม่ wired ครบ — ตัดสินใจทำต่อหรือลบ
-- [ ] mutation functions ยังไม่มี `_retry`
+- [x] ~~mutation functions ยังไม่มี `_retry`~~ — ตัดออก: ความเสี่ยงน้อย (เน็ตหลุดตอนบันทึกแค่ error ให้กดซ้ำ ไม่ทำข้อมูลเพี้ยน) เทียบกับความเสี่ยง insert ซ้ำถ้าใส่ retry ผิดจุด — รอจนกว่าจะเจอปัญหาเน็ตหลุดบ่อยจริงค่อยทำเฉพาะจุดที่ปลอดภัย (update/delete)
 - [x] ~~ไม่มี automated test~~ — เพิ่ม `tests/` (unittest, รัน `py -m unittest discover -s tests`) ครอบคลุม parse คำสั่งคำนวณ, ค่าธรรมเนียม COD, bin packing แบ่งกล่อง, ตารางค่าส่ง/โซนพื้นที่พิเศษ — แยก logic ส่วนนี้ไป `calc_logic.py` เพื่อให้ test ได้โดยไม่ต้องรัน Streamlit
 
 ## ⏳ รอ Deploy
