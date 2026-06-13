@@ -61,6 +61,20 @@ function doPost(e) {
     return;
   }
 
+  // ── พิมพ์ตัวเลขอย่างเดียว หลังกดปุ่ม "✏️ จ่ายบางส่วน" — ใช้เป็นยอดที่จะจ่าย ──
+  var _bareAmt = rawMsg.match(/^(\d+(?:\.\d+)?)$/);
+  if (_bareAmt) {
+    var _ppCache = CacheService.getScriptCache();
+    var _ppKey = 'pp_' + event.source.userId;
+    var _ppRaw = _ppCache.get(_ppKey);
+    if (_ppRaw) {
+      var _pp = JSON.parse(_ppRaw);
+      _ppCache.remove(_ppKey);
+      handlePayment(_pp.name, _pp.billNo, parseFloat(_bareAmt[1]), replyToken, false, _pp.staffTag);
+      return;
+    }
+  }
+
   // ── คำสั่งบันทึกข้อมูล (เก่า/เบิก/เบิกจ่าย/จ่าย/check) ───────────────────────
   // ต้องมี #milk หรือ #max ในประโยคก่อนจึงจะทำงาน ถ้าไม่มี ปล่อยข้อความไว้เฉยๆ
   var _msg = rawMsg;
@@ -129,7 +143,7 @@ function doPost(e) {
     }
     if (_pay) { handlePayment(_pay[1].trim(), _pay[2], parseFloat(_pay[3]), replyToken, _confirmed, _staffTag); return; }
     if (_payMenu) { handlePaymentMenu(_payMenu[1].trim(), replyToken, _staffTag); return; }
-    if (_payPartial) { handlePayPartialPrompt(_payPartial[1].trim(), _payPartial[2], replyToken, _staffTag); return; }
+    if (_payPartial) { handlePayPartialPrompt(_payPartial[1].trim(), _payPartial[2], replyToken, _staffTag, event.source.userId); return; }
     if (_payBillMenu) { handlePayBillMenu(_payBillMenu[1].trim(), _payBillMenu[2], replyToken, _staffTag); return; }
   }
 
@@ -622,14 +636,20 @@ function handlePayBillMenu(name, billNo, replyToken, staffTag) {
 
 // ─── [name] จ่ายบางส่วน[bill] — ปุ่มจากเมนู แจ้งวิธีพิมพ์จ่ายบางส่วน ──────────
 
-function handlePayPartialPrompt(name, billNo, replyToken, staffTag) {
+function handlePayPartialPrompt(name, billNo, replyToken, staffTag, userId) {
   var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} จ่ายบางส่วน' + billNo);
   if (!cust) return;
 
   var openBills = _getOpenBills(cust.id);
   var bill = openBills.filter(function(b) { return b.bill_no === billNo; })[0];
-  var hint = bill ? ' (ยอดค้าง ฿' + numFmt(bill.outstanding) + ')' : '';
-  sendReply(replyToken, '✏️ พิมพ์ #' + staffTag + ' ' + cust.name + ' จ่าย' + billNo + ' [จำนวนเงิน] เพื่อบันทึกจ่ายบางส่วนค่ะ' + hint);
+  if (!bill) {
+    sendReply(replyToken, '⚠️ ไม่พบยอดค้างของบิล ' + billNo + ' หรือจ่ายครบแล้วค่ะ');
+    return;
+  }
+
+  CacheService.getScriptCache().put('pp_' + userId,
+    JSON.stringify({ name: cust.name, billNo: billNo, staffTag: staffTag }), 300);
+  sendReply(replyToken, '✏️ พิมพ์จำนวนเงินที่จะจ่ายค่ะ (ยอดค้างบิล ' + billNo + ' ฿' + numFmt(bill.outstanding) + ')');
 }
 
 // ─── [name] จ่าย[bill] amount — บันทึกรับเงิน ────────────────────────────────
