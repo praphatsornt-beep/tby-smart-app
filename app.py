@@ -2957,12 +2957,14 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if _cbtn1.button("🔢 คำนวณ", type="primary", key="calc_btn", use_container_width=True):
             if not _calc_text.strip():
                 st.warning("กรุณากรอกรหัสสินค้าก่อน")
-            elif _calc_ship_chk and len(_calc_zip) != 5:
-                st.warning("กรุณากรอกรหัสไปรษณีย์ให้ครบ 5 หลัก")
             else:
                 _cr = _parse_calc_order(_calc_text, _calc_products)
-                if _calc_ship_chk and len(_calc_zip) == 5:
-                    _cr["ship_zip"] = _calc_zip
+                if _calc_ship_chk:
+                    if len(_calc_zip) == 5:
+                        _cr["ship_zip"] = _calc_zip
+                    else:
+                        _cr["ship_zip"] = ""
+                        _cr["manual_ship"] = -2  # จัดส่งแต่ไม่ระบุรหัสไปรษณีย์ → คิดตามน้ำหนักล้วน
                 if _calc_cod_chk:
                     _cr["is_cod"] = True
                 st.session_state["_calc_result"] = _cr
@@ -3018,6 +3020,11 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     _cust_ship_fee = _cr["manual_ship"]
                     _c_ship_fee    = _cr["manual_ship"]
                     _c_ship_label  = "ระบุเอง"
+                elif _cr["manual_ship"] == -2:
+                    # จัดส่งแต่ไม่ระบุรหัสไปรษณีย์ → คิดค่าส่งตามน้ำหนักล้วน (ไม่รวมค่าพื้นที่)
+                    _cust_ship_fee = calc_shipping(_c_total_w, "")
+                    _c_ship_fee    = _cust_ship_fee
+                    _c_ship_label  = "ประมาณการตามน้ำหนัก (ยังไม่ระบุพื้นที่)"
 
                 _c_cod_fee   = ceil((_c_total_amt + _cust_ship_fee) * 0.0321) if _cr["is_cod"] else 0
                 _c_grand     = _c_total_amt + _cust_ship_fee + _c_cod_fee
