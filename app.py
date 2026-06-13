@@ -665,7 +665,8 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
         if _t7_single:
             st.divider()
             st.markdown("**🗑️ ลบบิล**")
-            st.warning(f"ลบบิล **{bill_nos[0]}** และรายการทั้งหมด ({len(show_p)} รายการ) — กู้คืนไม่ได้")
+            st.dataframe(show_p[["สินค้า", "สั่ง", "ยอดรวม"]], use_container_width=True, hide_index=True)
+            st.warning(f"⚠️ จะลบบิล **{bill_nos[0]}** ({_t7_total_amt:,.0f} ฿) และรายการทั้งหมดข้างต้น ({len(show_p)} รายการ) — กู้คืนไม่ได้")
             _t7_del_chk = st.checkbox("ยืนยันการลบ", key=f"{key_prefix}_del_confirm")
             if st.button("🗑️ ลบบิล", disabled=not _t7_del_chk,
                          type="secondary", key=f"{key_prefix}_del_bill"):
@@ -3283,8 +3284,10 @@ with _t5_out:
                 st.dataframe(_preview_df, use_container_width=True, hide_index=True)
                 _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
                 st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
+                st.warning(f"⚠️ จะลบบิล **{_sel_bill}** ({_bill_cust}) และทุกรายการข้างต้น — กู้คืนไม่ได้")
             st.divider()
-            if st.button("🗑️ ลบบิลนี้", type="primary", key="del_bill_btn"):
+            _del_chk_main = st.checkbox("ยืนยันการลบ", key="del_bill_confirm")
+            if st.button("🗑️ ลบบิลนี้", type="primary", disabled=not _del_chk_main, key="del_bill_btn"):
                 _n = db.delete_bill(_sel_bill)
                 st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")
                 st.rerun()
@@ -3639,13 +3642,16 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                         _del_bno = str(_del_bno_vals[0]) if len(_del_bno_vals) > 0 and _del_bno_vals[0] else ""
                         if _del_bno and _del_bno not in ("—", ""):
                             st.divider()
+                            _del_bill_rows = grp.loc[grp["เลขที่บิล"] == _del_bno]
+                            st.dataframe(_del_bill_rows[["สินค้า", "สั่ง", "ยอดรวม"]], use_container_width=True, hide_index=True)
+                            st.warning(f"⚠️ จะลบบิล **{_del_bno}** ({_del_bill_rows['ยอดรวม'].sum():,.0f} ฿) และทุกรายการข้างต้น — กู้คืนไม่ได้")
                             _del_chk = st.checkbox(
-                                f"🗑️ ลบบิล **{_del_bno}** และทุกรายการในบิลนี้",
+                                f"ยืนยันลบบิล {_del_bno}",
                                 key=f"del_bill_chk_{txn_id}",
                             )
                             if _del_chk:
                                 if st.button(
-                                    f"🗑️ ยืนยันลบบิล {_del_bno}", type="primary",
+                                    f"🗑️ ลบบิล {_del_bno}", type="primary",
                                     key=f"del_bill_now_{txn_id}",
                                 ):
                                     db.delete_bill(_del_bno)
@@ -3794,13 +3800,16 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                         })
                         if _del_bnos:
                             st.divider()
+                            _del_bills_rows = grp.loc[grp["เลขที่บิล"].isin(_del_bnos)]
+                            st.dataframe(_del_bills_rows[["เลขที่บิล", "สินค้า", "สั่ง", "ยอดรวม"]], use_container_width=True, hide_index=True)
+                            st.warning(f"⚠️ จะลบบิล **{', '.join(_del_bnos)}** ({_del_bills_rows['ยอดรวม'].sum():,.0f} ฿) และทุกรายการข้างต้น — กู้คืนไม่ได้")
                             _del_chk_m = st.checkbox(
-                                f"🗑️ ลบบิล **{', '.join(_del_bnos)}** และทุกรายการในบิลเหล่านี้",
+                                f"ยืนยันลบ {len(_del_bnos)} บิล",
                                 key=f"del_bill_chk_multi_{customer_name}",
                             )
                             if _del_chk_m:
                                 if st.button(
-                                    f"🗑️ ยืนยันลบ {len(_del_bnos)} บิล", type="primary",
+                                    f"🗑️ ลบ {len(_del_bnos)} บิล", type="primary",
                                     key=f"del_bill_now_multi_{customer_name}",
                                 ):
                                     _total_del = sum(db.delete_bill(b) for b in _del_bnos)
@@ -4019,7 +4028,11 @@ with _t5_ledger:
                         # ── ลบบิลนี้ ────────────────────────────────────────
                         if _bk != "—":
                             with st.expander("🗑️ ลบบิลนี้"):
-                                st.warning(f"ลบบิล **{_bk}** และทุกรายการในบิลนี้ — กู้คืนไม่ได้")
+                                _ldel_total = float(_bill_rows["ยอดรวม"].sum())
+                                st.warning(
+                                    f"⚠️ จะลบบิล **{_bk}** ({_l_sel}, {_ldel_total:,.0f}฿, "
+                                    f"{len(_bill_rows)} รายการ — ดูรายละเอียดในตารางด้านบน) — กู้คืนไม่ได้"
+                                )
                                 _ldel_bill_chk = st.checkbox(
                                     "ยืนยันการลบ", key=f"ldel_bill_confirm_{_bk}_{_l_sel}"
                                 )
