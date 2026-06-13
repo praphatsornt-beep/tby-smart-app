@@ -218,6 +218,7 @@ def _style_status(val):
         "ยังไม่เปิดบิล": "background-color:#7c4a00;color:white",
         "จ่ายแล้ว":      "background-color:#1a5c2e;color:white",
         "ค้างจ่าย":      "background-color:#6b1a1a;color:white",
+        "COD":          "background-color:#7a5c00;color:white",
     }
     return colors.get(val, "")
 
@@ -3368,12 +3369,16 @@ with _t5_out:
                 _ship_by_cust.setdefault(_s.get("customer_id", ""), []).append(_s)
 
             for customer_name, grp in outstanding_df.groupby("ลูกค้า"):
-                owed    = grp["ค้างจ่าย"].sum()
+                _is_cod = grp["สถานะจ่าย"] == "COD"
+                owed     = grp.loc[~_is_cod, "ค้างจ่าย"].sum()
+                owed_cod = grp.loc[_is_cod, "ค้างจ่าย"].sum()
                 pending = int(grp["ค้างรับ"].sum())
                 txn_ids = grp["id"].tolist()
                 _luid   = _cust_line_map.get(customer_name, "")
                 _unbilled_pv = grp.loc[grp["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in grp.columns else 0
-                exp_label = (f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿ | ค้างรับ {pending} ชิ้น"
+                exp_label = (f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿"
+                             + (f" | 🟡 COD {owed_cod:,.0f}฿" if owed_cod > 0 else "")
+                             + f" | ค้างรับ {pending} ชิ้น"
                              + (f" | ⭐ PV ค้างเปิดบิล {_unbilled_pv:,.0f}" if _unbilled_pv > 0 else ""))
 
                 with st.expander(exp_label, expanded=single_cust):
@@ -3432,7 +3437,8 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                     if line_api.is_configured():
                         _line_items = [
                             {"bill_no": r["เลขที่บิล"], "product": r["สินค้า"],
-                             "amount": float(r["ค้างจ่าย"]), "qty": int(r["ค้างรับ"])}
+                             "amount": 0.0 if r["สถานะจ่าย"] == "COD" else float(r["ค้างจ่าย"]),
+                             "qty": int(r["ค้างรับ"])}
                             for _, r in grp.iterrows()
                             if float(r["ค้างจ่าย"]) > 0 or int(r["ค้างรับ"]) > 0
                         ]
@@ -3461,13 +3467,13 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                 st.error(f"❌ {_r.get('error')}")
                     # ── Styled table + row selection ──────────────────────
                     _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
-                               "ยอดรวม", "ค้างจ่าย", "สถานะบิล"]
+                               "ยอดรวม", "ค้างจ่าย", "สถานะจ่าย", "สถานะบิล"]
                     _id_map = grp["id"].reset_index(drop=True)
                     st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
                     _evt = st.dataframe(
                         grp[_dcols].reset_index(drop=True).style
                             .format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
-                            .map(_style_status, subset=["สถานะบิล"])
+                            .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"])
                             .map(lambda v: "background-color:#6b1a1a;color:white"
                                  if isinstance(v, (int, float)) and v > 0 else "",
                                  subset=["ค้างรับ", "ค้างจ่าย"]),
@@ -3500,12 +3506,13 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                         txn     = balance["transaction"]
                         sel_row = grp[grp["id"] == txn_id].iloc[0]
 
+                        _owed_label = "🟡 COD" if txn["pay_status"] == "COD" else "ค้างจ่าย"
                         st.caption(
                             f"📅 {sel_row['วันที่']}  ·  "
                             f"ราคา {float(txn['price_per_unit']):,.0f} ฿/ชิ้น  ·  "
                             f"รวม {float(txn['total_amount']):,.0f} ฿  ·  "
                             f"จ่ายแล้ว {balance['total_paid']:,.0f} ฿  ·  "
-                            f"ค้างจ่าย **{balance['outstanding_amount']:,.0f} ฿**  ·  "
+                            f"{_owed_label} **{balance['outstanding_amount']:,.0f} ฿**  ·  "
                             f"รับแล้ว {balance['total_received']} ชิ้น  ·  "
                             f"ค้างรับ {balance['outstanding_qty']} ชิ้น"
                         )

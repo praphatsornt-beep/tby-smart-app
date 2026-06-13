@@ -757,6 +757,7 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
                 "PV รวม": float(t["points_per_unit"]) * t["qty"],
                 "ประเภท": t["transaction_type"],
                 "สถานะบิล": t["bill_status"],
+                "สถานะจ่าย": t["pay_status"],
                 "เลขที่บิล": t.get("bill_no") or "",
             })
 
