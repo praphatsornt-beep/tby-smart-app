@@ -2926,8 +2926,17 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 "รหัสสินค้า",
                 key=f"_calc_text_v{_calc_ver}",
                 height=100,
-                placeholder="TF2581-2 RB2306-1 SH-kg12170 COD",
+                placeholder="TF2581-2 RB2306-1",
             )
+            _ccb1, _ccb2, _ccb3 = st.columns([1, 2, 1])
+            _calc_ship_chk = _ccb1.checkbox("📦 จัดส่ง", key=f"_calc_ship_chk_v{_calc_ver}")
+            _calc_zip = ""
+            if _calc_ship_chk:
+                _calc_zip = _ccb2.text_input(
+                    "รหัสไปรษณีย์", key=f"_calc_zip_v{_calc_ver}", max_chars=5,
+                    placeholder="12170",
+                )
+            _calc_cod_chk = _ccb3.checkbox("COD", key=f"_calc_cod_chk_v{_calc_ver}")
         with _calc_col2:
             _calc_cust_opts = ["— ไม่ระบุ —"] + sorted(_calc_cust_map.keys(), key=str.casefold)
             _calc_cust_sel  = st.selectbox("ลูกค้า (ถ้าจะส่ง LINE)", _calc_cust_opts,
@@ -2938,8 +2947,14 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         if _cbtn1.button("🔢 คำนวณ", type="primary", key="calc_btn", use_container_width=True):
             if not _calc_text.strip():
                 st.warning("กรุณากรอกรหัสสินค้าก่อน")
+            elif _calc_ship_chk and len(_calc_zip) != 5:
+                st.warning("กรุณากรอกรหัสไปรษณีย์ให้ครบ 5 หลัก")
             else:
                 _cr = _parse_calc_order(_calc_text, _calc_products)
+                if _calc_ship_chk and len(_calc_zip) == 5:
+                    _cr["ship_zip"] = _calc_zip
+                if _calc_cod_chk:
+                    _cr["is_cod"] = True
                 st.session_state["_calc_result"] = _cr
         if _cbtn2.button("🗑️ ล้าง", key="calc_clear_btn", use_container_width=True):
             st.session_state.pop("_calc_result", None)
