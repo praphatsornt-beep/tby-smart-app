@@ -3850,10 +3850,12 @@ with _t5_ledger:
                 _l_receipts = [r for r in _l_data if r["type"] in ("รับของ", "แก้ไขรับ")]
                 _l_ships    = [r for r in _l_data if "ส่งของ" in r["type"]]
 
+                _l_all_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
+
                 # ── summary metrics ──────────────────────────────────────
                 _l_ord_qty  = sum(r["qty_in"]  for r in _l_orders)
                 _l_recv_qty = sum(r["qty_out"] for r in _l_receipts)
-                _l_paid_tot = sum(r["amount"]  for r in _l_payments)
+                _l_paid_tot = _l_all_df["จ่ายแล้ว"].sum() if not _l_all_df.empty else 0.0
                 _sm1, _sm2, _sm3, _sm4 = st.columns(4)
                 _sm1.metric("สั่งซื้อ",  f"{_l_ord_qty:,} ชิ้น")
                 _sm2.metric("รับแล้ว",   f"{_l_recv_qty:,} ชิ้น")
@@ -3942,7 +3944,6 @@ with _t5_ledger:
                     _bv["events"].sort(key=lambda e: (e["date"], e["order"]))
 
                 # ── render expanders ──────────────────────────────────────
-                _l_all_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
                 _l_table_cols = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
                                  "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
                 _l_table_cols_disp = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
