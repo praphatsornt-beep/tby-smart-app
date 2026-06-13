@@ -2883,17 +2883,26 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             product_map = {p["id"].upper(): p for p in products}
             tokens = text.strip().upper().split()
             items, ship_zip, manual_ship, is_cod, errors = [], "", -1, False, []
-            for token in tokens:
+            n = len(tokens)
+            i = 0
+            while i < n:
+                token = tokens[i]
                 if token == "COD":
                     is_cod = True
+                    i += 1
                     continue
                 if "-" not in token:
+                    i += 1
                     continue
                 parts = token.split("-", 1)
                 code, val = parts[0], parts[1]
                 if code == "SH":
                     if val.startswith("KG"):
                         z = val[2:]
+                        if len(z) != 5 and i + 1 < n and tokens[i + 1].isdigit() and len(tokens[i + 1]) == 5:
+                            # รองรับ "SH-KG 12170" (เว้นวรรค) เช่นเดียวกับ "SH-KG12170"
+                            z = tokens[i + 1]
+                            i += 1
                         if len(z) == 5:
                             ship_zip = z
                     else:
@@ -2911,6 +2920,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 errors.append(f"ไม่พบรหัส {code}")
                     except Exception:
                         pass
+                i += 1
             return {"items": items, "ship_zip": ship_zip,
                     "manual_ship": manual_ship, "is_cod": is_cod, "errors": errors}
 

@@ -191,15 +191,25 @@ function doPost(e) {
   var pData = productSheet.getDataRange().getValues(), tokens = userMsg.split(/[\s\n]+/);
 
   var orderMap = {}, manualShipPrice = -1, isAutoShip = false, targetZip = '';
-  tokens.forEach(function(token) {
+  for (var ti = 0; ti < tokens.length; ti++) {
+    var token = tokens[ti];
     if (token.includes('-')) {
       var parts = token.split('-'), code = parts[0].trim().toUpperCase(), val = parts[1].trim();
       if (code === 'SH') {
-        if (val.startsWith('kg')) { isAutoShip = true; var z = val.replace('kg', ''); if (z.length === 5) targetZip = z; }
+        if (val.startsWith('kg')) {
+          isAutoShip = true;
+          var z = val.replace('kg', '');
+          if (z.length !== 5 && ti + 1 < tokens.length && /^\d{5}$/.test(tokens[ti + 1])) {
+            // รองรับ "SH-kg 12170" (เว้นวรรค) เช่นเดียวกับ "SH-kg12170"
+            z = tokens[ti + 1];
+            ti++;
+          }
+          if (z.length === 5) targetZip = z;
+        }
         else { manualShipPrice = parseFloat(val) || 0; }
       } else { orderMap[code] = (orderMap[code] || 0) + (parseFloat(val) || 0); }
     }
-  });
+  }
 
   var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '';
   Object.keys(orderMap).forEach(function(code) {
