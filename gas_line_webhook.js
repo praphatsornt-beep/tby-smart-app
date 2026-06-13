@@ -104,6 +104,8 @@ function doPost(e) {
     var _withdraw = _msg.match(/^(.+?)\s+เบิก\s+([A-Za-z0-9]+-\d+(?:\s+[A-Za-z0-9]+-\d+)*)$/);
     // [name] เบิกจ่าย CODE-QTY [CODE-QTY ...] — บันทึกรับของ + จ่ายเงินแล้ว ยังไม่เปิดบิล (หลายรายการได้)
     var _withdrawPaid = _msg.match(/^(.+?)\s+เบิกจ่าย\s+([A-Za-z0-9]+-\d+(?:\s+[A-Za-z0-9]+-\d+)*)$/);
+    // [name] เบิกจ่าย CODE-QTY [CODE-QTY ...] จ่าย AMOUNT — บันทึกรับของ + จ่ายเงินบางส่วน (ไม่ครบยอด)
+    var _withdrawPartialPay = _msg.match(/^(.+?)\s+เบิกจ่าย\s+([A-Za-z0-9]+-\d+(?:\s+[A-Za-z0-9]+-\d+)*)\s+จ่าย\s+(\d+(?:\.\d+)?)$/);
     // [name] จ่าย[bill] amount  (bill ไม่ระบุได้ — ระบบจะให้เลือกจากบิลค้างจ่ายของลูกค้า)
     var _pay = _msg.match(/^(.+?)\s+จ่าย(\S*)\s+(\d+(?:\.\d+)?)$/);
     // [name] จ่าย  (ไม่ระบุยอด/บิล — แสดงบิลค้างจ่ายทั้งหมดให้เลือก)
@@ -131,6 +133,14 @@ function doPost(e) {
         return { code: p[0].toUpperCase(), qty: parseInt(p[1]) };
       });
       handleWithdraw(_withdraw[1].trim(), _items, replyToken, _confirmed, _staffTag);
+      return;
+    }
+    if (_withdrawPartialPay) {
+      var _itemsPartial = _withdrawPartialPay[2].trim().split(/\s+/).map(function(tok) {
+        var p = tok.split('-');
+        return { code: p[0].toUpperCase(), qty: parseInt(p[1]) };
+      });
+      handleWithdrawPartialPay(_withdrawPartialPay[1].trim(), _itemsPartial, parseFloat(_withdrawPartialPay[3]), replyToken, _confirmed, _staffTag);
       return;
     }
     if (_withdrawPaid) {
@@ -489,7 +499,8 @@ function handleManual(replyToken, staffTag) {
 
   msg += '🆕 รับของใหม่ (ยังไม่เปิดบิล)\n';
   msg += '  • ' + tag + ' [ชื่อ] เบิก CODE-จำนวน CODE-จำนวน ...  — รับของ ค้างจ่าย\n';
-  msg += '  • ' + tag + ' [ชื่อ] เบิกจ่าย CODE-จำนวน CODE-จำนวน ...  — รับของ + จ่ายเงินแล้ว\n\n';
+  msg += '  • ' + tag + ' [ชื่อ] เบิกจ่าย CODE-จำนวน CODE-จำนวน ...  — รับของ + จ่ายเงินแล้ว\n';
+  msg += '  • ' + tag + ' [ชื่อ] เบิกจ่าย CODE-จำนวน CODE-จำนวน ... จ่าย จำนวนเงิน  — รับของ + จ่ายบางส่วน\n\n';
 
   msg += '✅ ทุกคำสั่งบันทึกจริง จะมีปุ่ม "ยืนยันบันทึก" ให้กดก่อนเสมอ\n';
   msg += '─────────────────\n';
@@ -913,6 +924,116 @@ function handleWithdrawPaid(name, items, replyToken, confirmed, staffTag) {
   msg += '✅ บันทึกรับของ + จ่ายเงินแล้ว คุณ' + cust.name + ' (ยังไม่เปิดบิล)\n';
   msg += '─────────────────\n' + lines + '─────────────────\n';
   msg += '💵 รับเงินแล้ว: ฿' + numFmt(totalAll) + '\n';
+  msg += '✨ คะแนนรอเปิดบิล: ' + numFmt(totalPV) + ' PV\n';
+  msg += '🧾 เลขที่บิล: ' + billNo + '\n';
+  sendReply(replyToken, msg);
+}
+
+// ─── [name] เบิกจ่าย CODE-QTY ... จ่าย AMOUNT — บันทึกรับของ + จ่ายเงินบางส่วน ──
+
+function handleWithdrawPartialPay(name, items, payAmount, replyToken, confirmed, staffTag) {
+  var _resendItems = items.map(function(i) { return i.code + '-' + i.qty; }).join(' ');
+  var _resendSuffix = 'เบิกจ่าย ' + _resendItems + ' จ่าย ' + payAmount;
+  var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} ' + _resendSuffix);
+  if (!cust) return;
+
+  var pData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProductData').getDataRange().getValues();
+  var today = _today();
+
+  var rows = [], lines = '', notFound = '';
+  items.forEach(function(item) {
+    var prod = null;
+    for (var i = 1; i < pData.length; i++) {
+      if (pData[i][0].toString().toUpperCase() === item.code) {
+        prod = { name: pData[i][1], price: pData[i][3], pv: pData[i][4] };
+        break;
+      }
+    }
+    if (!prod) { notFound += '❌ ไม่พบสินค้า [' + item.code + ']\n'; return; }
+
+    var totalAmt = prod.price * item.qty;
+    rows.push({
+      id: Utilities.getUuid(),
+      date: today,
+      customer_id: cust.id,
+      product_id: item.code,
+      product_name: prod.name,
+      qty: item.qty,
+      price_per_unit: prod.price,
+      points_per_unit: prod.pv,
+      total_amount: totalAmt,
+      initial_qty_received: item.qty,
+      transaction_type: 'เบิกของก่อน',
+      bill_status: 'ยังไม่เปิดบิล',
+      pay_status: 'ค้างจ่าย',
+      notes: '#' + staffTag,
+      bill_no: null
+    });
+    lines += '📦 [' + item.code + '] ' + prod.name + '\n      ' + item.qty + ' ชิ้น x ฿' + numFmt(prod.price) + ' = ฿' + numFmt(totalAmt) + '\n';
+  });
+
+  if (rows.length === 0) {
+    sendReply(replyToken, notFound || '❌ ไม่พบสินค้าที่ระบุ');
+    return;
+  }
+
+  var totalAll = rows.reduce(function(s, r) { return s + r.total_amount; }, 0);
+  var totalPV = rows.reduce(function(s, r) { return s + parseFloat(r.points_per_unit || 0) * r.qty; }, 0);
+  var applyPay = Math.min(payAmount, totalAll);
+  var payNote = (payAmount > totalAll)
+    ? '⚠️ ยอดรวมมีเพียง ฿' + numFmt(totalAll) + ' บันทึกรับเงิน ฿' + numFmt(applyPay) + ' (ส่วนเกินไม่บันทึก)\n' : '';
+
+  // กระจายยอดจ่ายตามสัดส่วนยอดรวมของแต่ละรายการ
+  var remaining = applyPay;
+  rows.forEach(function(r, idx) {
+    var share;
+    if (idx === rows.length - 1) {
+      share = remaining;
+    } else {
+      share = Math.min(Math.round((r.total_amount / totalAll) * applyPay * 100) / 100, remaining);
+    }
+    remaining -= share;
+    r._pay_share = share;
+    if (share >= r.total_amount - 0.01) r.pay_status = 'จ่ายแล้ว';
+  });
+
+  if (!confirmed) {
+    var preview = notFound + payNote;
+    preview += '📋 ตรวจสอบก่อนบันทึก: คุณ' + cust.name + ' (เบิกของ + จ่ายบางส่วน)\n';
+    preview += '─────────────────\n' + lines + '─────────────────\n';
+    preview += '💰 ยอดรวม: ฿' + numFmt(totalAll) + '\n';
+    preview += '💵 รับเงิน: ฿' + numFmt(applyPay) + '\n';
+    preview += '🔴 ค้างจ่าย: ฿' + numFmt(totalAll - applyPay) + '\n';
+    preview += '✨ คะแนนรอเปิดบิล: ' + numFmt(totalPV) + ' PV\n';
+    sendQuickReply(replyToken, preview, [{
+      type: 'action',
+      action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน #' + staffTag + ' ' + cust.name + ' ' + _resendSuffix }
+    }]);
+    return;
+  }
+
+  var billNo = _getNextBillNo(today);
+  rows.forEach(function(r) {
+    r.bill_no = billNo;
+    var share = r._pay_share;
+    delete r._pay_share;
+    _sbPost('transactions', r);
+    if (share > 0 && r.pay_status !== 'จ่ายแล้ว') {
+      _sbPost('partial_events', {
+        id: Utilities.getUuid(), date: today,
+        transaction_id: r.id,
+        qty_received: 0, amount_paid: share, event_type: 'จ่ายเงิน',
+        notes: '#' + staffTag
+      });
+    }
+  });
+
+  var msg = notFound + payNote;
+  msg += '✅ บันทึกเบิกของ + รับเงินบางส่วน คุณ' + cust.name + ' (ยังไม่เปิดบิล)\n';
+  msg += '─────────────────\n' + lines + '─────────────────\n';
+  msg += '💰 ยอดรวม: ฿' + numFmt(totalAll) + '\n';
+  msg += '💵 รับเงินแล้ว: ฿' + numFmt(applyPay) + '\n';
+  msg += '🔴 ค้างจ่าย: ฿' + numFmt(totalAll - applyPay) + '\n';
   msg += '✨ คะแนนรอเปิดบิล: ' + numFmt(totalPV) + ' PV\n';
   msg += '🧾 เลขที่บิล: ' + billNo + '\n';
   sendReply(replyToken, msg);
