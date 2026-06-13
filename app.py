@@ -1190,8 +1190,6 @@ with tab1:
                 st.session_state.pop(_k, None)
             for _k in ["r_name","r_phone","r_al","r_dt","r_am","r_pv","m_postcode","m_iship_note"]:
                 st.session_state[_k] = ""
-            st.session_state.pop("_print_popup", None)
-            st.session_state.pop("_popup_show_print", None)
             st.session_state.pop("_sale_last_tracking", None)
             st.session_state.pop(_cart_key, None)
             st.session_state["_cart_version"] = _cart_ver + 1
