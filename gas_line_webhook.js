@@ -61,6 +61,14 @@ function doPost(e) {
     return;
   }
 
+  // ── "ยกเลิก" — จากปุ่ม "❌ ยกเลิก" หลังเมนูยืนยันต่างๆ ────────────────────
+  if (rawMsg === 'ยกเลิก') {
+    var _ppCacheCancel = CacheService.getScriptCache();
+    _ppCacheCancel.remove('pp_' + event.source.userId);
+    sendReply(replyToken, '❌ ยกเลิกแล้วค่ะ ยังไม่มีการบันทึกข้อมูล');
+    return;
+  }
+
   // ── พิมพ์ตัวเลขอย่างเดียว หลังกดปุ่ม "✏️ จ่ายบางส่วน" — ใช้เป็นยอดที่จะจ่าย ──
   var _bareAmt = rawMsg.match(/^(\d+(?:\.\d+)?)$/);
   if (_bareAmt) {
@@ -758,6 +766,9 @@ function handlePayment(name, billNo, payAmount, replyToken, confirmed, staffTag)
     sendQuickReply(replyToken, preview, [{
       type: 'action',
       action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน #' + staffTag + ' ' + cust.name + ' จ่าย' + billNo + ' ' + payAmount }
+    }, {
+      type: 'action',
+      action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' }
     }]);
     return;
   }
@@ -838,6 +849,9 @@ function handleWithdraw(name, items, replyToken, confirmed, staffTag) {
     sendQuickReply(replyToken, preview, [{
       type: 'action',
       action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน #' + staffTag + ' ' + cust.name + ' เบิก ' + _resendItems }
+    }, {
+      type: 'action',
+      action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' }
     }]);
     return;
   }
@@ -913,6 +927,9 @@ function handleWithdrawPaid(name, items, replyToken, confirmed, staffTag) {
     sendQuickReply(replyToken, preview, [{
       type: 'action',
       action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน #' + staffTag + ' ' + cust.name + ' เบิกจ่าย ' + _resendItems }
+    }, {
+      type: 'action',
+      action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' }
     }]);
     return;
   }
@@ -1008,6 +1025,9 @@ function handleWithdrawPartialPay(name, items, payAmount, replyToken, confirmed,
     sendQuickReply(replyToken, preview, [{
       type: 'action',
       action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน #' + staffTag + ' ' + cust.name + ' ' + _resendSuffix }
+    }, {
+      type: 'action',
+      action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' }
     }]);
     return;
   }
@@ -1179,6 +1199,9 @@ function handleOldGoods(name, productCode, qty, payAmount, billNo, replyToken, c
     sendQuickReply(replyToken, preview, [{
       type: 'action',
       action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน #' + staffTag + ' ' + cust.name + ' ' + _resendSuffix }
+    }, {
+      type: 'action',
+      action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' }
     }]);
     return;
   }
