@@ -282,10 +282,10 @@ def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
                    ยอดรวม=("ยอดรวม", "sum"),
                    ค้างจ่าย=("ค้างจ่าย", "sum"),
                    ค้างรับ=("ค้างรับ", "sum"),
-                   is_paid=("สถานะจ่าย", lambda x: (x == "จ่ายแล้ว").all()),
                    is_billed=("สถานะบิล", lambda x: (x == "เปิดบิลแล้ว").all()))
               .reset_index()
               .sort_values("วันที่", ascending=False))
+    _bills["is_paid"] = _bills["ค้างจ่าย"] <= 0.01
 
     _pv_col = "PV รวม" if "PV รวม" in df.columns else None
     if _pv_col:
@@ -2009,6 +2009,8 @@ with tab1:
                                     "amount_paid": _alloc,
                                     "event_type": "จ่ายเงิน",
                                 })
+                                if _alloc >= _row["total_amount"] - 0.01:
+                                    db.update_transaction_status(_row["id"], pay_status="จ่ายแล้ว")
                     msg = f"✅ บันทึก {len(valid_items)} รายการ"
                     if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
                     if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
