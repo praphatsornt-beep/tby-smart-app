@@ -3989,6 +3989,19 @@ with _t5_ledger:
                             elif _r["type"] == "ส่งพัสดุ":
                                 st.caption(f"🚚 {_r['date']}  ส่งพัสดุ {_r['detail']}  Tracking: {_r['tracking']}")
 
+                        # ── ลบบิลนี้ ────────────────────────────────────────
+                        if _bk != "—":
+                            with st.expander("🗑️ ลบบิลนี้"):
+                                st.warning(f"ลบบิล **{_bk}** และทุกรายการในบิลนี้ — กู้คืนไม่ได้")
+                                _ldel_bill_chk = st.checkbox(
+                                    "ยืนยันการลบ", key=f"ldel_bill_confirm_{_bk}_{_l_sel}"
+                                )
+                                if st.button("🗑️ ลบบิล", disabled=not _ldel_bill_chk,
+                                              type="secondary", key=f"ldel_bill_btn_{_bk}_{_l_sel}"):
+                                    _n = db.delete_bill(_bk)
+                                    st.success(f"✅ ลบบิล {_bk} แล้ว ({_n} รายการ)")
+                                    st.rerun()
+
                 # ── ลบ partial event ──────────────────────────────────────
                 _ldel_rows = [
                     (i, str(r.get("event_id") or ""))
