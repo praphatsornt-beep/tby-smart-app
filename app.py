@@ -597,7 +597,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                         "transaction_id": _tid_p,
                         "qty_received":   0,
                         "amount_paid":    _share,
-                        "event_type":     "จ่าย",
+                        "event_type":     "จ่ายเงิน",
                     })
                     _remaining -= _share
                 if float(_t7_pay_amt) >= _t7_owed - 0.01:
@@ -1565,7 +1565,7 @@ with tab1:
                                         _apply_pay = round(min(_custom_pay, _owed_this), 2)
                                     else:
                                         _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
-                                    _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของจากบิลเก่า"
+                                    _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
                                     db.insert_partial_event({
                                         "id":             str(uuid.uuid4()),
                                         "date":           str(m_date),
@@ -2113,7 +2113,7 @@ with tab1:
                             _apply_pay = round(min(_custom_pay, _owed_this), 2)
                         else:
                             _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
-                        _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของจากบิลเก่า"
+                        _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
                         db.insert_partial_event({
                             "id":             str(uuid.uuid4()),
                             "date":           str(m_date),
@@ -3257,7 +3257,11 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 # Sub-tab: ยอดค้างลูกค้า  (rendered inside tab5 → _t5_out)
 # ─────────────────────────────────────────────────────────────────────────────
 with _t5_out:
-    st.subheader("ยอดค้างลูกค้า")
+    _out_h1, _out_h2 = st.columns([5, 1])
+    _out_h1.subheader("ยอดค้างลูกค้า")
+    if _out_h2.button("🔄 รีเฟรชยอด", key="t5_out_refresh", help="กดก่อนบันทึกรับเงิน/รับของ เผื่อลูกค้าจ่าย/รับของผ่าน LINE มาแล้ว"):
+        db._clear_transaction_caches()
+        st.rerun()
 
     with st.expander("🗑️ ลบบิล", expanded=False):
         st.caption("เลือกเลขที่บิลที่ต้องการลบ — จะลบทุกรายการในบิลนั้น")
@@ -3824,7 +3828,11 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
 # Sub-tab: บัตรลูกค้า  (rendered inside tab5 → _t5_ledger)
 # ─────────────────────────────────────────────────────────────────────────────
 with _t5_ledger:
-    st.subheader("บัตรลูกค้า")
+    _led_h1, _led_h2 = st.columns([5, 1])
+    _led_h1.subheader("บัตรลูกค้า")
+    if _led_h2.button("🔄 รีเฟรชยอด", key="t5_ledger_refresh", help="กดก่อนบันทึกรับเงิน/รับของ เผื่อลูกค้าจ่าย/รับของผ่าน LINE มาแล้ว"):
+        db._clear_transaction_caches()
+        st.rerun()
     _l_customers = db.get_customers()
     _l_opts = ["— เลือกลูกค้า —"] + sorted([c["name"] for c in _l_customers], key=str.casefold)
     _lx1, _lx2 = st.columns([3, 2])
@@ -4585,7 +4593,7 @@ with _t5_txn:
                                 "transaction_id": _tid,
                                 "qty_received":   0,
                                 "amount_paid":    _delta_p,
-                                "event_type":     "จ่าย",
+                                "event_type":     "จ่ายเงิน",
                             })
                     _txn_upd = {}
                     if "qty"         in _ch: _txn_upd["qty"]          = _ch["qty"]

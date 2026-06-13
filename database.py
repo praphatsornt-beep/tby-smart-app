@@ -322,7 +322,7 @@ def get_bill_summaries() -> list[dict]:
     return list(seen.values())
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=20)
 def get_customer_ledger(customer_id: str) -> list[dict]:
     """คืน timeline ของลูกค้า 1 คน เรียงตามวันที่
     แต่ละ row: {date, type, bill_no, product, qty_in, qty_out, amount, txn_id}
@@ -704,7 +704,7 @@ def get_billed_not_received_qty_by_product() -> dict:
     return dict(result)
 
 
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=20)
 def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
     """รายการที่ยังค้างชำระหรือค้างรับของ"""
     db = get_supabase()
