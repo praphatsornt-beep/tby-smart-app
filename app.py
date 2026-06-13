@@ -178,6 +178,21 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
     )
 
 
+def _warn_duplicate_phone(phone: str, current_cid: str):
+    """ถ้าเบอร์นี้มีที่อยู่ของลูกค้าคนอื่นอยู่แล้ว ให้เตือน (บันทึกที่อยู่จะลบของเดิมทิ้ง)"""
+    phone = (phone or "").strip()
+    if len(phone) != 10:
+        return
+    try:
+        addr = db.get_address_by_phone(phone)
+    except Exception:
+        addr = None
+    if addr and addr.get("customer_id") and addr.get("customer_id") != current_cid:
+        other_name = (addr.get("customers") or {}).get("name", "")
+        other_addr = f"{addr.get('address_line','')} {addr.get('district','')} {addr.get('amphure','')} {addr.get('province','')}".strip()
+        st.warning(f"⚠️ เบอร์นี้มีที่อยู่ของคุณ{other_name} อยู่แล้ว ({other_addr}) — ถ้าบันทึกที่อยู่นี้ จะลบที่อยู่เดิมของคุณ{other_name}")
+
+
 def calc_shipping(weight_grams: float, postcode: str = "") -> float:
     """ค่าส่ง Flash Express: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท + ค่าพื้นที่"""
     kg  = (weight_grams + BOX_WEIGHT_G) / 1000
@@ -1789,6 +1804,7 @@ with tab1:
                         col_a, col_b = st.columns(2)
                         r_name      = col_a.text_input("ชื่อผู้รับ",   key="r_name")
                         r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone")
+                        _warn_duplicate_phone(r_phone, _cid)
                         r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                         col_c, col_d, col_e = st.columns(3)
                         with col_c:
@@ -2621,6 +2637,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sa1, _sa2 = st.columns(2)
             _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key=f"sp_rname_v{_sp_av}")
             _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}")
+            _warn_duplicate_phone(_sp_rphone, _sp_cid)
             _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key=f"sp_al_v{_sp_av}")
             _sb1, _sb2, _sb3 = st.columns(3)
             with _sb1:
