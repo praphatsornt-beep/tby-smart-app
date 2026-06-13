@@ -94,6 +94,10 @@ function doPost(e) {
     var _pay = _msg.match(/^(.+?)\s+จ่าย(\S*)\s+(\d+(?:\.\d+)?)$/);
     // [name] จ่าย  (ไม่ระบุยอด/บิล — แสดงบิลค้างจ่ายทั้งหมดให้เลือก)
     var _payMenu = _msg.match(/^(.+?)\s+จ่าย$/);
+    // [name] จ่ายบางส่วน[bill] — ปุ่มจากเมนู แจ้งวิธีพิมพ์จ่ายบางส่วน
+    var _payPartial = _msg.match(/^(.+?)\s+จ่ายบางส่วน([A-Za-z0-9\-]+)$/);
+    // [name] จ่าย[bill]  (เลือกบิลแล้ว ยังไม่ระบุยอด — เลือกจ่ายเต็ม/บางส่วน)
+    var _payBillMenu = _msg.match(/^(.+?)\s+จ่าย([A-Za-z0-9\-]+)$/);
 
     if (_msg.toLowerCase() === 'คู่มือ' || _msg.toLowerCase() === 'help') { handleManual(replyToken, _staffTag); return; }
     if (_msg.toLowerCase() === 'check') { handleCheckMenu(replyToken); return; }
@@ -125,6 +129,8 @@ function doPost(e) {
     }
     if (_pay) { handlePayment(_pay[1].trim(), _pay[2], parseFloat(_pay[3]), replyToken, _confirmed, _staffTag); return; }
     if (_payMenu) { handlePaymentMenu(_payMenu[1].trim(), replyToken, _staffTag); return; }
+    if (_payPartial) { handlePayPartialPrompt(_payPartial[1].trim(), _payPartial[2], replyToken, _staffTag); return; }
+    if (_payBillMenu) { handlePayBillMenu(_payBillMenu[1].trim(), _payBillMenu[2], replyToken, _staffTag); return; }
   }
 
   // ── แปลพม่า ────────────────────────────────────────────────────────────────
@@ -564,21 +570,66 @@ function handlePaymentMenu(name, replyToken, staffTag) {
 
   if (openBills.length <= 13) {
     var billItems = openBills.map(function(b) {
-      var amt = Math.round(b.outstanding);
       return {
         type: 'action',
         action: {
           type: 'message',
           label: (b.bill_no + ' ฿' + numFmt(b.outstanding)).substring(0, 20),
-          text: '#' + staffTag + ' ' + cust.name + ' จ่าย' + b.bill_no + ' ' + amt
+          text: '#' + staffTag + ' ' + cust.name + ' จ่าย' + b.bill_no
         }
       };
     });
-    sendQuickReply(replyToken, '🧾 คุณ' + cust.name + ' มียอดค้างจ่าย เลือกบิล (กดเพื่อจ่ายเต็มจำนวน หรือพิมพ์ #' + staffTag + ' ' + cust.name + ' จ่าย[เลขบิล] [จำนวนเงิน] เพื่อจ่ายบางส่วน):', billItems);
+    sendQuickReply(replyToken, '🧾 คุณ' + cust.name + ' มียอดค้างจ่าย เลือกบิลที่จะจ่ายค่ะ:', billItems);
   } else {
     var billNames = openBills.slice(0, 13).map(function(b) { return b.bill_no + ' (฿' + numFmt(b.outstanding) + ')'; }).join(', ');
     sendReply(replyToken, '🧾 คุณ' + cust.name + ' มีบิลค้างจ่าย: ' + billNames + ' ...\nพิมพ์ #' + staffTag + ' ' + cust.name + ' จ่าย[เลขบิล] [จำนวนเงิน] ค่ะ');
   }
+}
+
+// ─── [name] จ่าย[bill] (เลือกบิลแล้ว ไม่ระบุยอด) — เลือกจ่ายเต็ม/บางส่วน ──────
+
+function handlePayBillMenu(name, billNo, replyToken, staffTag) {
+  var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} จ่าย' + billNo);
+  if (!cust) return;
+
+  var openBills = _getOpenBills(cust.id);
+  var bill = openBills.filter(function(b) { return b.bill_no === billNo; })[0];
+  if (!bill) {
+    sendReply(replyToken, '⚠️ ไม่พบยอดค้างของบิล ' + billNo + ' หรือจ่ายครบแล้วค่ะ');
+    return;
+  }
+
+  var amt = Math.round(bill.outstanding);
+  sendQuickReply(replyToken, '🧾 บิล ' + billNo + ' ค้างจ่าย ฿' + numFmt(bill.outstanding) + ' ของคุณ' + cust.name + ' — จ่ายเต็มหรือบางส่วนคะ:', [
+    {
+      type: 'action',
+      action: {
+        type: 'message',
+        label: ('✅ จ่ายเต็ม ฿' + numFmt(bill.outstanding)).substring(0, 20),
+        text: '#' + staffTag + ' ' + cust.name + ' จ่าย' + billNo + ' ' + amt
+      }
+    },
+    {
+      type: 'action',
+      action: {
+        type: 'message',
+        label: '✏️ จ่ายบางส่วน',
+        text: '#' + staffTag + ' ' + cust.name + ' จ่ายบางส่วน' + billNo
+      }
+    }
+  ]);
+}
+
+// ─── [name] จ่ายบางส่วน[bill] — ปุ่มจากเมนู แจ้งวิธีพิมพ์จ่ายบางส่วน ──────────
+
+function handlePayPartialPrompt(name, billNo, replyToken, staffTag) {
+  var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} จ่ายบางส่วน' + billNo);
+  if (!cust) return;
+
+  var openBills = _getOpenBills(cust.id);
+  var bill = openBills.filter(function(b) { return b.bill_no === billNo; })[0];
+  var hint = bill ? ' (ยอดค้าง ฿' + numFmt(bill.outstanding) + ')' : '';
+  sendReply(replyToken, '✏️ พิมพ์ #' + staffTag + ' ' + cust.name + ' จ่าย' + billNo + ' [จำนวนเงิน] เพื่อบันทึกจ่ายบางส่วนค่ะ' + hint);
 }
 
 // ─── [name] จ่าย[bill] amount — บันทึกรับเงิน ────────────────────────────────
