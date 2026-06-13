@@ -22,13 +22,16 @@ Credentials live in `.streamlit/secrets.toml` (local) and Streamlit Cloud Secret
 
 ## Architecture
 
-Main app (`app.py`, ~5160 lines) with supporting modules:
+Main app (`app.py`, ~4520 lines) with supporting modules:
 
 | File | Role |
 |---|---|
-| `app.py` | Most UI — Streamlit tabs, forms, session state (tab_ecom/tab_fin extracted, see below) |
+| `app.py` | Most UI — Streamlit tabs, forms, session state (tab_ecom/tab_fin/tab_dash/tab6/tab4 extracted, see below) |
 | `ecom_ui.py` | UI for tab_ecom (🛒 E-commerce/Shopee) — `render()` called from `app.py`. Self-contained, no shared session state with other tabs. |
 | `fin_ui.py` | UI for tab_fin (💵 การเงิน) — `render()` called from `app.py`. Self-contained, no shared session state with other tabs. |
+| `dashboard_ui.py` | UI for tab_dash (🏠 หน้าแรก) — `render()` called from `app.py`. Self-contained. |
+| `stock_ui.py` | UI for tab6 (📦 สต๊อก) — `render()` called from `app.py`. Self-contained. |
+| `master_data_ui.py` | UI for tab4 (⚙️ จัดการข้อมูล) — `render()` called from `app.py`. Self-contained. |
 | `database.py` | All Supabase queries. Cached functions: `get_products()` (5 min), `get_customers()` (5 min), `get_customer_addresses()` (2 min). Mutations call `.clear()` on the relevant cache. |
 | `calc_logic.py` | Pure calculation helpers shared by the คำนวณยอด tab and LINE OA order parsing: `parse_calc_order()`, `cod_fee()`, `pack_boxes()`. Covered by `tests/`. |
 | `iship_api.py` | iShip shipping integration. Non-COD: Bearer token to `/api/create_order`. COD must be created manually in the iShip dashboard — API support is unreliable. |
