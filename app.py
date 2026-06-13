@@ -506,28 +506,6 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     _t7_tids = show_p["id"].tolist()
     _t7_single = len(bill_nos) == 1 and bill_nos[0]
 
-    with st.expander("📋 สถานะบิล"):
-        _cur_bstat = show_p["สถานะบิล"].iloc[0]
-        _t7_bstat = st.radio("สถานะ", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"],
-                              index=0 if _cur_bstat == "เปิดบิลแล้ว" else 1,
-                              horizontal=True, key=f"{key_prefix}_bstat")
-        if st.button("💾 บันทึกสถานะบิล", key=f"{key_prefix}_save_bstat"):
-            for _tid in _t7_tids:
-                db.update_transaction_status(_tid, bill_status=_t7_bstat)
-            st.success(f"✅ อัพเดต {len(_t7_tids)} รายการ → {_t7_bstat}")
-            st.rerun()
-
-    with st.expander("💳 สถานะการจ่าย"):
-        _cur_pstat = show_p["สถานะจ่าย"].iloc[0]
-        _t7_pstat = st.radio("สถานะ", ["จ่ายแล้ว", "ค้างจ่าย"],
-                              index=0 if _cur_pstat == "จ่ายแล้ว" else 1,
-                              horizontal=True, key=f"{key_prefix}_pstat")
-        if st.button("💾 บันทึกสถานะจ่าย", key=f"{key_prefix}_save_pstat"):
-            for _tid in _t7_tids:
-                db.update_transaction_status(_tid, pay_status=_t7_pstat)
-            st.success(f"✅ อัพเดต {len(_t7_tids)} รายการ → {_t7_pstat}")
-            st.rerun()
-
     with st.expander("💰 บันทึกรับเงิน"):
         _t7_owed = float(show_p["ค้างจ่าย"].sum())
         _t7_paid_so_far = float(show_p["จ่ายแล้ว"].sum())
