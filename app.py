@@ -21,6 +21,7 @@ import zipfile
 
 import database as db
 import carriers as carr
+import calc_logic
 import thai_address
 
 thai_address._load_db()  # pre-warm cache ตอน app โหลด
@@ -2879,50 +2880,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
         st.subheader("คำนวณยอด")
         st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ เช่น `TF2581-2 RB2306-1 SH-kg12170 COD`")
 
-        def _parse_calc_order(text: str, products: list) -> dict:
-            product_map = {p["id"].upper(): p for p in products}
-            tokens = text.strip().upper().split()
-            items, ship_zip, manual_ship, is_cod, errors = [], "", -1, False, []
-            n = len(tokens)
-            i = 0
-            while i < n:
-                token = tokens[i]
-                if token == "COD":
-                    is_cod = True
-                    i += 1
-                    continue
-                if "-" not in token:
-                    i += 1
-                    continue
-                parts = token.split("-", 1)
-                code, val = parts[0], parts[1]
-                if code == "SH":
-                    if val.startswith("KG"):
-                        z = val[2:]
-                        if len(z) != 5 and i + 1 < n and tokens[i + 1].isdigit() and len(tokens[i + 1]) == 5:
-                            # รองรับ "SH-KG 12170" (เว้นวรรค) เช่นเดียวกับ "SH-KG12170"
-                            z = tokens[i + 1]
-                            i += 1
-                        if len(z) == 5:
-                            ship_zip = z
-                    else:
-                        try:
-                            manual_ship = float(val)
-                        except Exception:
-                            pass
-                else:
-                    try:
-                        qty = float(val)
-                        if qty > 0:
-                            if code in product_map:
-                                items.append({"product": product_map[code], "qty": qty})
-                            else:
-                                errors.append(f"ไม่พบรหัส {code}")
-                    except Exception:
-                        pass
-                i += 1
-            return {"items": items, "ship_zip": ship_zip,
-                    "manual_ship": manual_ship, "is_cod": is_cod, "errors": errors}
+        _parse_calc_order = calc_logic.parse_calc_order
 
         _calc_products  = db.get_products()
         _calc_customers = db.get_customers()
@@ -3026,7 +2984,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     _c_ship_fee    = _cust_ship_fee
                     _c_ship_label  = "ประมาณการตามน้ำหนัก (ยังไม่ระบุพื้นที่)"
 
-                _c_cod_fee   = ceil((_c_total_amt + _cust_ship_fee) * 0.0321) if _cr["is_cod"] else 0
+                _c_cod_fee   = calc_logic.cod_fee(_c_total_amt + _cust_ship_fee) if _cr["is_cod"] else 0
                 _c_grand     = _c_total_amt + _cust_ship_fee + _c_cod_fee
 
                 # ─── ส่วนลูกค้า (copy / ส่ง LINE) ────────────────────────
@@ -3196,27 +3154,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 try: return float(s.strip())
                 except: return 0.0
 
-            def _pack_boxes(items: list, max_kg: float) -> list:
-                """First-Fit Decreasing bin packing. Returns list of boxes [{weight_kg, items:{code:qty}}]"""
-                units = []
-                for it in items:
-                    w = it["product"].get("weight_grams", 0) / 1000
-                    code = it["product"]["id"].upper()
-                    for _ in range(int(it["qty"])):
-                        units.append((code, w))
-                units.sort(key=lambda x: -x[1])
-                boxes: list[dict] = []
-                for code, w in units:
-                    placed = False
-                    for box in boxes:
-                        if box["weight_kg"] + w <= max_kg + 1e-9:
-                            box["weight_kg"] += w
-                            box["items"][code] = box["items"].get(code, 0) + 1
-                            placed = True
-                            break
-                    if not placed:
-                        boxes.append({"weight_kg": w, "items": {code: 1}})
-                return boxes
+            _pack_boxes = calc_logic.pack_boxes
 
             _box_sizes = sorted({v for s in _box_str.split(",") if (v := _safe_float_box(s)) > 0})
 
