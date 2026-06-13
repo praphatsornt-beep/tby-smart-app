@@ -614,6 +614,39 @@ def get_finance_summary() -> dict:
     }
 
 
+# ─── Commission / ใบหัก ณ ที่จ่าย (50 ทวิ) / เคลม VAT ────────────────────────
+
+@st.cache_data(ttl=60)
+def get_commission_records() -> pd.DataFrame:
+    rows = (get_supabase().table("commission_records")
+            .select("*").order("period", desc=True).execute().data)
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def get_commission_record(period: str) -> dict | None:
+    rows = get_supabase().table("commission_records").select("*").eq("period", period).execute().data
+    return rows[0] if rows else None
+
+
+def upsert_commission_record(data: dict) -> None:
+    db = get_supabase()
+    db.table("commission_records").delete().eq("period", data["period"]).execute()
+    db.table("commission_records").insert(data).execute()
+    get_commission_records.clear()
+
+
+@st.cache_data(ttl=300)
+def get_company_info() -> dict:
+    rows = get_supabase().table("company_info").select("*").eq("id", 1).execute().data
+    return rows[0] if rows else {}
+
+
+def upsert_company_info(data: dict) -> None:
+    data["id"] = 1
+    get_supabase().table("company_info").upsert(data).execute()
+    get_company_info.clear()
+
+
 # ─── Stock ───────────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=120)

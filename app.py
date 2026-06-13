@@ -1724,9 +1724,11 @@ with tab1:
                         vm3.metric("รายการ",   f"{len(valid_items)} สินค้า")
 
             if _rx_total_pay > 0:
+                _new_total_disp = total_amt + (ship_fee if m_delivery == "ส่งพัสดุ" else 0)
+                _ship_note = f" (รวมค่าส่ง {ship_fee:,.0f} ฿)" if (m_delivery == "ส่งพัสดุ" and ship_fee > 0) else ""
                 st.caption(
                     f"💰 ยอดรวมทั้งหมด (ส่งบิลลูกค้า): เก่า {_rx_total_pay:,.0f} ฿ "
-                    f"+ ใหม่ {total_amt:,.0f} ฿ = **{(total_amt + _rx_total_pay):,.0f} ฿**"
+                    f"+ ใหม่ {_new_total_disp:,.0f} ฿{_ship_note} = **{(_new_total_disp + _rx_total_pay):,.0f} ฿**"
                 )
 
             m_errors = []
