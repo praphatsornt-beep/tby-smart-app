@@ -2414,9 +2414,9 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     "_sp_cust_picked",f"sp_cust_search_v{_sp_av}",
                     "_sp_last_dt","_sp_last_pc","_fsp_dt","_fsp_am","_fsp_pv","_fsp_pc",
                     "_fsp_rname","_fsp_rphone","_fsp_al",
-                    "sp_carrier","_sp_prev_pc","_sp_staged_carrier","sp_date",
+                    "_sp_prev_pc","sp_date",
                     "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
-                    "_sp_last_rph_fill","_sp_parse_open","_sp_carrier_sig",
+                    "_sp_last_rph_fill","_sp_parse_open",
                     "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search",
                     "_sp_adding_cust","_sp_prev_cust_search"]
         _sp_cart_ver_now = st.session_state.get("_sp_cart_ver", 0)
@@ -2672,8 +2672,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 })
                 st.success("✅ บันทึกที่อยู่แล้ว")
 
-        # ── ขนส่ง + ค่าส่ง + metrics ─────────────────────────────────────
-        _sp_fc1, _sp_fc2, _sp_fc3 = st.columns(3)
+        # ── ค่าส่ง + metrics ─────────────────────────────────────────────
+        _sp_fc1, _sp_fc2 = st.columns(2)
         _sp_fees = carrier_fees(_sp_total_weight, _sp_pc.strip()) if len((_sp_pc or "").strip()) == 5 else None
         if _sp_fees:
             _sp_fc1.caption(f"Flash: {_sp_fees['Flash Express']['zone'] or 'ปกติ'} | +{_sp_fees['Flash Express']['surcharge']} ฿")
@@ -2681,19 +2681,13 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sp_f_tot = _sp_fees["Flash Express"]["total"]
             _sp_s_tot = _sp_fees["SPX Express"]["total"]
             if _sp_f_tot < _sp_s_tot:
-                _sp_auto = "Flash Express"
+                _sp_carrier = "Flash Express"
             elif _sp_s_tot < _sp_f_tot:
-                _sp_auto = "SPX Express"
+                _sp_carrier = "SPX Express"
             else:
-                _sp_auto = _pick_carrier(_sp_pc.strip(), round(_sp_total_weight / 1000, 2))
-            _sp_sig = (_sp_pc.strip(), round(_sp_total_weight / 1000, 2))
-            if _sp_sig != st.session_state.get("_sp_carrier_sig"):
-                st.session_state["_sp_carrier_sig"]    = _sp_sig
-                st.session_state["_sp_staged_carrier"] = _sp_auto
-                st.rerun()
-        if "_sp_staged_carrier" in st.session_state:
-            st.session_state["sp_carrier"] = st.session_state.pop("_sp_staged_carrier")
-        _sp_carrier = _sp_fc3.radio("ขนส่ง", ["Flash Express", "SPX Express"], key="sp_carrier")
+                _sp_carrier = _pick_carrier(_sp_pc.strip(), round(_sp_total_weight / 1000, 2))
+        else:
+            _sp_carrier = "Flash Express"
         _sp_cost = _sp_fees[_sp_carrier]["total"] if _sp_fees else 0
         if _sp_items:
             _sm1, _sm2, _sm3 = st.columns(3)

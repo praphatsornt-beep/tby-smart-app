@@ -3,7 +3,6 @@
 ## 🟡 ยังค้างอยู่ (refactor/bug)
 
 - [x] ~~รวม logic คำนวณยอดต่อบิล (บัตรลูกค้า vs จัดการบิล) ให้เป็น helper เดียว `_bills_from_df()`~~
-- [ ] **tab พิมพ์บิล — breakdown เก่า/ใหม่/รวม** (ต้อง ALTER TABLE `partial_events` ก่อน)
 - [x] ~~Bug: ช่องตำบลไม่แสดงค่าตอนเลือก "ที่อยู่เดิม"~~ (commit `8b15520` — บังคับ session_state ของ selectbox ตรงๆ)
 - [ ] **iShip COD** — ยังต้องสร้าง manual ใน dashboard (ตัดสินใจว่าจะ integrate หรือแจ้ง user)
 - [x] ~~GAS: tourist_island weight tiers + remote postcodes 50270, 55220 ตกหล่น~~ (commit `38a470c`)
@@ -14,7 +13,6 @@
 - [ ] เบิกของเก่าค้างรับ/ค้างจ่าย ผ่าน LINE (ส่วน "เก่า"/"จ่าย" ทำไปแล้ว — เหลือดูว่าครบไหม)
 - [ ] bulk actions ในจัดการบิล/ยอดค้าง
 - [x] ~~เตือนเบอร์ซ้ำตอนส่งของ~~
-- [ ] ส่งของเก่า+ใหม่พร้อมกัน แยกยอด
 - [ ] ปรับ UI ส่วนคำนวณยอด
 
 ## 🔧 โครงสร้าง/Maintenance
@@ -27,4 +25,4 @@
 
 ## ⏳ รอ Deploy
 
-- [ ] `gas_line_webhook.js` — มีการเปลี่ยนแปลงหลายอย่างในไฟล์ local แล้ว (คู่มือ, จ่ายบางส่วน, เก่าเมนู, tourist_island fix ฯลฯ) ยังไม่ได้ copy ไป Apps Script editor + deploy
+- [x] ~~`gas_line_webhook.js` — มีการเปลี่ยนแปลงหลายอย่างในไฟล์ local (คู่มือ, จ่ายบางส่วน, เก่าเมนู, เบิกจ่าย+จ่ายบางส่วน, ปุ่มยกเลิก, tourist_island fix ฯลฯ)~~ — copy ไป Apps Script editor + deploy แล้ว
