@@ -3948,11 +3948,15 @@ with _t5_ledger:
                 _l_table_cols_disp = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
                                        "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "สถานะจ่าย",
                                        "สถานะรับของ", "หมายเหตุ"]
+                _l_bills_owed = _bills_from_df(_l_all_df)
+                _owed_map = dict(zip(
+                    _l_bills_owed["เลขที่บิล"].replace("", "—"),
+                    _l_bills_owed["ค้างจ่าย"],
+                ))
                 for _bk, _bv in sorted(
                     _bills_tl.items(), key=lambda x: x[1]["date"], reverse=True
                 ):
-                    _b_paid  = _pay_cumul.get(_bk, 0.0)
-                    _b_owed  = max(0.0, _bv["total"] - _b_paid)
+                    _b_owed  = _owed_map.get(_bk, 0.0)
                     _b_recv  = _recv_cumul.get(_bk, 0)
                     _b_pend  = max(0, _bv["qty"] - _b_recv)
                     _pay_ico = "✅" if _b_owed <= 0.01 else "🔴"
