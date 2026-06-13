@@ -4,7 +4,7 @@
 
 - [x] ~~รวม logic คำนวณยอดต่อบิล (บัตรลูกค้า vs จัดการบิล) ให้เป็น helper เดียว `_bills_from_df()`~~
 - [x] ~~Bug: ช่องตำบลไม่แสดงค่าตอนเลือก "ที่อยู่เดิม"~~ (commit `8b15520` — บังคับ session_state ของ selectbox ตรงๆ)
-- [ ] **iShip COD** — ยังต้องสร้าง manual ใน dashboard (ตัดสินใจว่าจะ integrate หรือแจ้ง user)
+- [x] ~~**iShip COD**~~ — ตัดสินใจแล้ว: ยอมรับความเสี่ยง scraping (`_web_session` ใน `iship_api.py`) ต่อไป ไม่ต้องเปลี่ยนเป็น manual
 - [x] ~~GAS: tourist_island weight tiers + remote postcodes 50270, 55220 ตกหล่น~~ (commit `38a470c`)
 
 ## 📋 Wishlist (ยังไม่ตัดสินใจ priority)
