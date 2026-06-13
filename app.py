@@ -233,9 +233,20 @@ def _fmt_note(note: str) -> str:
     if "[COD|" in note:
         labels.append("COD")
     free = _re.sub(r"\[[^\]]+\]", "", note).strip()
+    free = _re.sub(r"#\w+", "", free).strip()
     if free:
         labels.append(free)
     return " ".join(labels)
+
+
+def _extract_staff_tag(notes: list) -> str:
+    """หา #tag (เช่น #milk) จาก notes ของรายการในบิล คืนชื่อไม่มี # หรือ '' ถ้าไม่เจอ"""
+    import re as _re
+    for note in notes:
+        _m = _re.search(r"#(\w+)", str(note or ""))
+        if _m:
+            return _m.group(1)
+    return ""
 
 
 def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix, preselected_bill=None):
@@ -361,6 +372,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     filter_label      = "รายการทั้งหมด"
     bill_nos          = show_p["เลขที่บิล"].dropna().unique().tolist() if "เลขที่บิล" in show_p.columns else []
     bill_nos_str      = ", ".join(b for b in bill_nos if b) or ""
+    staff_tag         = _extract_staff_tag(show_p.get("หมายเหตุ", pd.Series(dtype=str)).tolist())
     _last_paid_raw    = show_p["last_payment_date"].replace("", None).max() if "last_payment_date" in show_p.columns else None
     try:
         _paid_date_str = pd.to_datetime(_last_paid_raw).strftime("%d/%m/%Y") if _last_paid_raw else "—"
@@ -393,6 +405,10 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
         f"<tr><td>⚖️ น้ำหนัก {ship_weight_str} kg &nbsp; 🚚 ค่าส่ง</td>"
         f"<td><b style='color:#1a5c8e'>{ship_fee_str} บาท</b></td></tr>"
     ) if is_ship_bill and ship_fee_str else ""
+
+    _staff_row_html = (
+        f"<tr><td>ผู้บันทึก</td><td>{staff_tag}</td></tr>"
+    ) if staff_tag else ""
 
     def _bill_body(label: str) -> str:
         _lbl = f"<div style='font-size:11px;color:#888;margin-bottom:4px'>{label}</div>" if label else ""
@@ -427,6 +443,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
     <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
     <tr><td>⭐ PV รวม (ยังไม่เปิดบิล)</td><td><b style="color:#b8860b">{unbilled_pv:.0f}</b></td></tr>
+    {_staff_row_html}
   </table>
 </div>"""
 
