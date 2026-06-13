@@ -219,6 +219,7 @@ def _style_status(val):
         "จ่ายแล้ว":      "background-color:#1a5c2e;color:white",
         "ค้างจ่าย":      "background-color:#6b1a1a;color:white",
         "COD":          "background-color:#7a5c00;color:white",
+        "COD จ่ายแล้ว":  "background-color:#1a5c2e;color:white",
     }
     return colors.get(val, "")
 
@@ -4740,6 +4741,16 @@ with _t5_ship:
                 if _cod_transfers:
                     try:
                         db.mark_cod_transferred(list(_cod_transfers.keys()))
+                    except Exception:
+                        pass
+                    try:
+                        _pending_set = set(_pending or [])
+                        _newly = {tn: info.get("date", "")
+                                  for tn, info in _cod_transfers.items()
+                                  if tn in _pending_set}
+                        _n_marked = db.mark_cod_paid(_newly)
+                        if _n_marked:
+                            st.success(f"✅ บันทึก COD จ่ายแล้ว {_n_marked} รายการ")
                     except Exception:
                         pass
                     st.rerun()

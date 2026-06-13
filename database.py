@@ -894,6 +894,49 @@ def mark_cod_transferred(tracking_nos: list[str]) -> None:
      .execute())
 
 
+def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
+    """เมื่อ COD ของ tracking ใน tracking_no_to_date ถูกโอนเข้าระบบแล้ว
+    ให้ mark ทุก transaction ที่ pay_status='COD' ของลูกค้าเจ้าของ shipment นั้น
+    เป็น 'COD จ่ายแล้ว' พร้อมบันทึก partial_event วันที่โอน คืนจำนวน transaction ที่ mark"""
+    if not tracking_no_to_date:
+        return 0
+    db = get_supabase()
+    ships = (db.table("shipments")
+             .select("customer_id, tracking_no")
+             .in_("tracking_no", list(tracking_no_to_date.keys()))
+             .execute().data) or []
+    count = 0
+    for s in ships:
+        cust_id = s.get("customer_id")
+        tn      = s.get("tracking_no")
+        if not cust_id:
+            continue
+        transfer_date = (tracking_no_to_date.get(tn) or "")[:10]
+        if not transfer_date:
+            from datetime import datetime, timezone
+            transfer_date = datetime.now(timezone.utc).date().isoformat()
+        txns = (db.table("transactions")
+                .select("id, total_amount")
+                .eq("customer_id", cust_id)
+                .eq("pay_status", "COD")
+                .execute().data) or []
+        for t in txns:
+            db.table("partial_events").insert({
+                "id":             str(uuid.uuid4()),
+                "date":           transfer_date,
+                "transaction_id": t["id"],
+                "qty_received":   0,
+                "amount_paid":    float(t["total_amount"]),
+                "event_type":     "จ่ายเงิน",
+                "notes":          f"COD โอนจาก iShip ({tn})",
+            }).execute()
+            db.table("transactions").update({"pay_status": "COD จ่ายแล้ว"}).eq("id", t["id"]).execute()
+            count += 1
+    if count:
+        _clear_transaction_caches()
+    return count
+
+
 def get_pending_cod_tracking() -> list[str]:
     """คืน tracking_no ที่ยังไม่ได้รับโอน COD"""
     rows = (get_supabase().table("shipments")
