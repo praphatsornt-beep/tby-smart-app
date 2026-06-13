@@ -2095,11 +2095,22 @@ with tab1:
                     _old_rows_html = "".join(
                         f"<tr><td style='font-size:11px;color:#666'>{it['product_id']}</td>"
                         f"<td>{it['name']} (เก่า)</td><td style='text-align:center'>{it['qty']}</td>"
-                        f"<td></td><td style='text-align:right'>{float(it['amount']):,.0f}</td></tr>"
+                        f"<td style='text-align:right'>{(float(it['amount'])/it['qty'] if it['qty'] else 0):,.0f}</td>"
+                        f"<td style='text-align:right'>{float(it['amount']):,.0f}</td></tr>"
                         for it in _old_items
                     )
                     _ship_row = f"<tr><td></td><td>ค่าส่ง ({_pd.get('carrier','')})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
                     _cod_row  = f"<tr><td></td><td>COD (3%)</td><td></td><td></td><td style='text-align:right'>{_pd['cod_fee']:,.0f}</td></tr>" if _pd.get("is_cod") else ""
+                    _new_bill_total = _pd.get("collect", _pd["total_amt"])
+                    if _old_total:
+                        _total_html = (
+                            f"<div class='subtotal'>ยอดบิลนี้ (ใหม่): {_new_bill_total:,.0f} ฿ "
+                            f"&nbsp;|&nbsp; ยอดเก่า: {_old_total:,.0f} ฿</div>"
+                            f"<div class='total'>ยอดรวมทั้งหมด: {_grand:,.0f} ฿</div>"
+                            f"<div class='subtotal'>PV: {_pd['total_pv']:.0f}</div>"
+                        )
+                    else:
+                        _total_html = f"<div class='total'>ยอดรวม: {_grand:,.0f} ฿ &nbsp;|&nbsp; PV: {_pd['total_pv']:.0f}</div>"
                     _bill_html_popup = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 html,body{{background:#fff!important;color:#000!important;margin:0;padding:0}}
@@ -2109,7 +2120,8 @@ h3{{margin:0 0 4px;font-size:15px}}
 table{{width:100%;border-collapse:collapse;margin:6px 0;font-size:12px}}
 th{{background:#333;color:#fff;padding:4px 6px;text-align:left}}
 td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
-.total{{font-weight:bold;font-size:14px;text-align:right;margin-top:6px}}
+.subtotal{{font-size:11px;color:#666;text-align:right;margin-top:4px}}
+.total{{font-weight:bold;font-size:20px;text-align:right;margin-top:2px}}
 .btn{{display:inline-block;margin:0 0 10px;padding:5px 16px;background:#333;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
 @media print{{.btn{{display:none}}@page{{size:A5;margin:8mm}}}}
 </style></head><body style="background:#fff;color:#000">
@@ -2120,7 +2132,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
 <table><tr><th>รหัส</th><th>สินค้า</th><th>จำนวน</th><th>ราคา/ชิ้น</th><th>รวม</th></tr>
 {_rows_html}{_old_rows_html}{_ship_row}{_cod_row}
 </table>
-<div class='total'>ยอดรวม: {_grand:,.0f} ฿ &nbsp;|&nbsp; PV: {_pd['total_pv']:.0f}</div>
+{_total_html}
 </body></html>"""
                     components.html(_bill_html_popup, height=420, scrolling=True)
 
