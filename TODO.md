@@ -2,7 +2,7 @@
 
 ## 🟡 ยังค้างอยู่ (refactor/bug)
 
-- [ ] **รวม logic คำนวณยอดต่อบิล** (บัตรลูกค้า vs จัดการบิล) ให้เป็น helper เดียว `_bills_from_df()`
+- [x] ~~รวม logic คำนวณยอดต่อบิล (บัตรลูกค้า vs จัดการบิล) ให้เป็น helper เดียว `_bills_from_df()`~~
 - [ ] **tab พิมพ์บิล — breakdown เก่า/ใหม่/รวม** (ต้อง ALTER TABLE `partial_events` ก่อน)
 - [x] ~~Bug: ช่องตำบลไม่แสดงค่าตอนเลือก "ที่อยู่เดิม"~~ (commit `8b15520` — บังคับ session_state ของ selectbox ตรงๆ)
 - [ ] **iShip COD** — ยังต้องสร้าง manual ใน dashboard (ตัดสินใจว่าจะ integrate หรือแจ้ง user)

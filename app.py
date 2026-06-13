@@ -269,6 +269,35 @@ def _extract_staff_tag(notes: list) -> str:
     return ""
 
 
+def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
+    """รวมรายการในแต่ละบิล (groupby เลขที่บิล) คืน DataFrame หนึ่งแถวต่อบิล:
+    เลขที่บิล, วันที่, ยอดรวม, ค้างจ่าย, ค้างรับ, is_paid, is_billed, pv_unbilled
+    """
+    _cols = ["เลขที่บิล", "วันที่", "ยอดรวม", "ค้างจ่าย", "ค้างรับ", "is_paid", "is_billed", "pv_unbilled"]
+    if df.empty:
+        return pd.DataFrame(columns=_cols)
+
+    _bills = (df.groupby("เลขที่บิล", dropna=False)
+              .agg(วันที่=("วันที่", "max"),
+                   ยอดรวม=("ยอดรวม", "sum"),
+                   ค้างจ่าย=("ค้างจ่าย", "sum"),
+                   ค้างรับ=("ค้างรับ", "sum"),
+                   is_paid=("สถานะจ่าย", lambda x: (x == "จ่ายแล้ว").all()),
+                   is_billed=("สถานะบิล", lambda x: (x == "เปิดบิลแล้ว").all()))
+              .reset_index()
+              .sort_values("วันที่", ascending=False))
+
+    _pv_col = "PV รวม" if "PV รวม" in df.columns else None
+    if _pv_col:
+        _pv_map = (df[df.get("สถานะบิล", pd.Series(dtype=str)) == "ยังไม่เปิดบิล"]
+                   .groupby("เลขที่บิล")[_pv_col].sum())
+        _bills["pv_unbilled"] = _bills["เลขที่บิล"].map(_pv_map).fillna(0)
+    else:
+        _bills["pv_unbilled"] = 0
+
+    return _bills
+
+
 def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix, preselected_bill=None):
     """แสดงส่วนเลือกบิล / พิมพ์บิล / จัดการบิล สำหรับลูกค้า sel_p
     preselected_bill: ถ้าระบุ ข้ามตัวเลือกบิล แสดงบิลนี้ตรง ๆ (ใช้กับค้นด้วยเลขที่บิล)
@@ -297,21 +326,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                 st.info("ไม่มีรายการ")
                 return
 
-            _bills = (all_df_p.groupby("เลขที่บิล", dropna=False)
-                      .agg(วันที่=("วันที่", "max"),
-                           ยอดรวม=("ยอดรวม", "sum"),
-                           ค้างจ่าย=("ค้างจ่าย", "sum"),
-                           ค้างรับ=("ค้างรับ", "sum"))
-                      .reset_index()
-                      .sort_values("วันที่", ascending=False))
-            _pv_col = "PV รวม" if "PV รวม" in all_df_p.columns else None
-            _pv_unbilled_map = {}
-            if _pv_col:
-                _pv_unbilled_map = (
-                    all_df_p[all_df_p.get("สถานะบิล", pd.Series(dtype=str)) == "ยังไม่เปิดบิล"]
-                    .groupby("เลขที่บิล")[_pv_col].sum()
-                    .to_dict()
-                )
+            _bills = _bills_from_df(all_df_p)
 
             if len(_bills) == 1:
                 st.session_state[_pk] = _bills.iloc[0]["เลขที่บิล"] or "—"
@@ -319,7 +334,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             st.caption("เลือกบิลที่ต้องการพิมพ์")
             _total_owed    = _bills["ค้างจ่าย"].sum()
             _total_pending = int(_bills["ค้างรับ"].sum())
-            _total_pv_unbilled = sum(_pv_unbilled_map.values())
+            _total_pv_unbilled = _bills["pv_unbilled"].sum()
             _all_color    = "🔴" if _total_owed > 0.01 else "✅"
             _all_pv_str   = f" &nbsp; ⭐ {_total_pv_unbilled:,.0f} PV" if _total_pv_unbilled > 0 else ""
             _all_recv_str = f" &nbsp; 📦 ยังไม่รับของ {_total_pending} ชิ้น" if _total_pending > 0 else ""
@@ -334,7 +349,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                 _owing    = _br["ค้างจ่าย"]
                 _pending  = int(_br["ค้างรับ"])
                 _color    = "🔴" if _owing > 0.01 else "✅"
-                _pv_un    = _pv_unbilled_map.get(_bno, 0)
+                _pv_un    = _br["pv_unbilled"]
                 _pv_str   = f" &nbsp; ⭐ {_pv_un:,.0f} PV" if _pv_un > 0 else ""
                 _recv_str = f" &nbsp; 📦 ยังไม่รับของ {_pending} ชิ้น" if _pending > 0 else ""
                 _lbl = (f"📄 **{_bno}** &nbsp; {_br['วันที่']} &nbsp; "
@@ -680,17 +695,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     # ── เคลียร์บิลหลายใบ ──────────────────────────────────────
     _t7_all_cust_df = all_txn_cache[all_txn_cache["ลูกค้า"] == _t7_cust_name]
     if not _t7_all_cust_df.empty:
-        _t7_bill_grp = (
-            _t7_all_cust_df.groupby("เลขที่บิล", dropna=False)
-            .agg(
-                วันที่=("วันที่", "max"),
-                ค้างจ่าย=("ค้างจ่าย", "sum"),
-                is_paid=("สถานะจ่าย", lambda x: (x == "จ่ายแล้ว").all()),
-                is_billed=("สถานะบิล", lambda x: (x == "เปิดบิลแล้ว").all()),
-            )
-            .reset_index()
-            .sort_values("วันที่", ascending=False)
-        )
+        _t7_bill_grp = _bills_from_df(_t7_all_cust_df)
         with st.expander("✅ เคลียร์บิล"):
             st.caption("ติ๊กบิลที่ต้องการ → เปลี่ยนเป็น จ่ายแล้ว + เปิดบิลแล้ว พร้อมกัน")
             _clr_sel = []
