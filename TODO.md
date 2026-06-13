@@ -18,7 +18,7 @@
 ## 🔧 โครงสร้าง/Maintenance
 
 - [x] ~~app.py ใหญ่กว่าที่ CLAUDE.md ระบุ~~ — อัปเดตจำนวนบรรทัดใน CLAUDE.md แล้ว (แยกโมดูลยังไม่ทำ)
-- [ ] `except Exception:` เงียบ ~17 จุด — ควร log/แจ้ง user
+- [x] ~~`except Exception:` เงียบ ~17 จุด~~ — ตรวจครบแล้ว: ส่วนใหญ่เป็น fallback ที่ตั้งใจ (parse/lookup ที่อยู่, ตาราง DB ที่ยังไม่มี) ปล่อยไว้ตามเดิม ส่วนที่เสี่ยงข้อมูลไม่ตรง (สร้าง shipment record หลังส่ง iShip สำเร็จ ×2, mark_cod_transferred/mark_cod_paid, delete_shipment) เพิ่ม st.warning/st.error ให้ผู้ใช้เห็นแล้ว
 - [ ] shopee_api.py/tab_ecom ยังไม่ wired ครบ — ตัดสินใจทำต่อหรือลบ
 - [ ] mutation functions ยังไม่มี `_retry`
 - [ ] ไม่มี automated test
@@ -26,3 +26,4 @@
 ## ⏳ รอ Deploy
 
 - [x] ~~`gas_line_webhook.js` — มีการเปลี่ยนแปลงหลายอย่างในไฟล์ local (คู่มือ, จ่ายบางส่วน, เก่าเมนู, เบิกจ่าย+จ่ายบางส่วน, ปุ่มยกเลิก, tourist_island fix ฯลฯ)~~ — copy ไป Apps Script editor + deploy แล้ว
+- [ ] `gas_line_webhook.js` — แก้ `SH-kg รหัสไปรษณีย์` ให้รองรับเว้นวรรค (commit `ee90e22`) — ยังไม่ deploy

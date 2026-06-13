@@ -1015,8 +1015,8 @@ def _show_carrier_select():
                             "notes":          "",
                             "source":         "sale",
                         })
-                    except Exception:
-                        pass
+                    except Exception as _cs_e:
+                        st.warning(f"⚠️ ส่ง iShip สำเร็จ (tracking {_cs_track}) แต่บันทึกประวัติการส่งไม่สำเร็จ: {_cs_e}")
                 _cs_luid = db.get_customer_line_user_id(info.get("customer_id","")) if info.get("customer_id") else ""
                 st.session_state["_iship_success_info"] = {
                     "tracking":             _cs_track,
@@ -2366,8 +2366,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                     "notes":          "",
                                     "source":         "sale",
                                 })
-                            except Exception:
-                                pass
+                            except Exception as _cs2_e:
+                                st.warning(f"⚠️ ส่ง iShip สำเร็จ (tracking {tracking}) แต่บันทึกประวัติการส่งไม่สำเร็จ: {_cs2_e}")
                             _cid_s2 = _p.get("_customer_id", "")
                             _luid_s2 = db.get_customer_line_user_id(_cid_s2) if (tracking and _cid_s2) else ""
                             del st.session_state["_iship_pending"]
@@ -4835,8 +4835,8 @@ with _t5_ship:
                 if _cod_transfers:
                     try:
                         db.mark_cod_transferred(list(_cod_transfers.keys()))
-                    except Exception:
-                        pass
+                    except Exception as _mct_e:
+                        st.warning(f"⚠️ บันทึกสถานะ COD โอนแล้วไม่สำเร็จ: {_mct_e}")
                     try:
                         _pending_set = set(_pending or [])
                         _newly = {tn: info.get("date", "")
@@ -4845,8 +4845,8 @@ with _t5_ship:
                         _n_marked = db.mark_cod_paid(_newly)
                         if _n_marked:
                             st.success(f"✅ บันทึก COD จ่ายแล้ว {_n_marked} รายการ")
-                    except Exception:
-                        pass
+                    except Exception as _mcp_e:
+                        st.error(f"❌ อัปเดตสถานะจ่าย COD ไม่สำเร็จ: {_mcp_e}")
                     st.rerun()
                 else:
                     st.info("ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
@@ -4969,13 +4969,17 @@ with _t5_ship:
 
         if _sh_to_del:
             if st.button(f"🗑️ ลบที่เลือก ({len(_sh_to_del)} รายการ)", type="primary", key="sh_del_btn"):
+                _sh_del_errs = []
                 for _did in _sh_to_del:
                     try:
                         db.delete_shipment(_did)
-                    except Exception:
-                        pass
+                    except Exception as _sd_e:
+                        _sh_del_errs.append(str(_sd_e))
                 st.session_state.pop("sh_hist_tbl", None)
-                st.rerun()
+                if _sh_del_errs:
+                    st.error(f"❌ ลบไม่สำเร็จ {len(_sh_del_errs)} รายการ: {_sh_del_errs[0]}")
+                else:
+                    st.rerun()
 
         _sh_to_resend = [i for i, v in enumerate(_sh_edit["📤"]) if v]
         if len(_sh_to_resend) > 1:
