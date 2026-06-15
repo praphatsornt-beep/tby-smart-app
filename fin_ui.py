@@ -122,8 +122,8 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden}
   .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
   .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px}
-  .words{font-size:12px;font-style:italic;text-align:center;color:#444;margin-bottom:36px}
-  .signatures{display:flex;justify-content:space-around;text-align:center;font-size:12px}
+  .words{font-size:12px;font-style:italic;text-align:center;color:#444;margin-bottom:24px}
+  .signatures{display:flex;justify-content:space-around;text-align:center;font-size:12px;margin-top:60px}
   .signatures .line{margin-bottom:8px;border-top:1px dotted #999;padding-top:36px;min-width:200px}
   .btn{display:block;margin:0 auto 14px;padding:8px 32px;background:#1a5fb4;color:#fff;
        border:none;border-radius:6px;font-size:13px;cursor:pointer}
