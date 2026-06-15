@@ -722,6 +722,7 @@ def get_deposit_qty_by_product() -> dict:
     return dict(result)
 
 
+@st.cache_data(ttl=60)
 def get_billed_not_received_qty_by_product() -> dict:
     """qty ที่เปิดบิลแล้วแต่ลูกค้ายังไม่รับของ (ของยังอยู่ที่สาขา)"""
     db = get_supabase()
