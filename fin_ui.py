@@ -113,12 +113,12 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .frombox{border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:14px}
   .frombox .row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px}
   .frombox .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 10px;margin-top:4px;font-size:11px;color:#444}
-  table.items{width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #999}
+  .items-wrap{border:1px solid #999;border-radius:8px;overflow:hidden;margin-bottom:14px}
+  table.items{width:100%;border-collapse:collapse}
   table.items th{padding:10px 8px;font-size:11px;text-align:center;background:#1a5fb4;color:#fff;font-weight:600}
-  table.items td{padding:12px 8px;font-size:12px;border-bottom:1px solid #eee;vertical-align:top}
+  table.items td{padding:12px 8px;font-size:12px;vertical-align:top}
   table.items td.num{text-align:center;color:#888}
   table.items tr.empty-row td{height:34px}
-  table.items tr:last-child td{border-bottom:none}
   .bottom{display:flex;gap:18px;margin-bottom:14px;align-items:flex-start}
   .payment{flex:1.2;font-size:12px;padding-top:4px}
   .payment label{display:block;margin-bottom:10px;white-space:nowrap}
@@ -162,12 +162,14 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('hq_tax_id','') or '—'}</div>
 </div>
 
+<div class="items-wrap">
 <table class="items">
   <tr><th style="width:8%">ลำดับ<br>No.</th><th>รายการสินค้า/บริการ<br>Description</th><th style="width:12%">จำนวน<br>Qty</th><th style="width:15%">ราคาต่อหน่วย<br>Unit Price</th><th style="width:18%">จำนวนเงิน<br>Amount</th></tr>
   <tr><td class="num">1</td><td>{_desc}</td><td></td><td></td><td style="text-align:right;font-weight:600">{_amount:,.2f}</td></tr>
   <tr class="empty-row"><td colspan="5">&nbsp;</td></tr>
   <tr class="empty-row"><td colspan="5">&nbsp;</td></tr>
 </table>
+</div>
 
 <div class="bottom">
   <div class="payment">
