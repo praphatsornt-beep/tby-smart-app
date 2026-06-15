@@ -438,11 +438,11 @@ def render():
                 st.caption(f"เลขที่เอกสาร: {_year_code}/{int(cm_receipt_seq):03d}")
 
             st.divider()
-            st.markdown("**เคลม VAT จากสำนักงานใหญ่** (VAT ที่เราจ่ายล่วงหน้าไปก่อน แล้วออกเอกสารขอเบิกคืน)")
+            st.markdown("**เคลม VAT จากสำนักงานใหญ่** (VAT 7% ของค่าคอมมิชชั่น — คำนวณอัตโนมัติ)")
+            cm_vat_claim = round(cm_amount * 0.07, 2)
             vc1, vc2, vc3 = st.columns(3)
             with vc1:
-                cm_vat_claim = st.number_input("ยอด VAT ที่ขอเบิกคืน (฿)", min_value=0.0, step=10.0,
-                    value=float(_cr.get("vat_claim_amount", 0)), key=f"cm_vat_claim_{cm_period}")
+                st.metric("ยอด VAT 7% ที่ขอเบิกคืน", f"{cm_vat_claim:,.2f} ฿")
             with vc2:
                 cm_vat_doc_issued = st.checkbox("ออกเอกสารเคลม VAT แล้ว", value=bool(_cr.get("vat_claim_doc_issued", False)), key=f"cm_vat_doc_issued_{cm_period}")
                 cm_vat_doc_date = st.date_input("วันที่ออกเอกสารเคลม", value=_parse_date(_cr.get("vat_claim_doc_date")), key=f"cm_vat_doc_date_{cm_period}")
@@ -454,26 +454,29 @@ def render():
             cm_submitted = st.form_submit_button("💾 บันทึก", type="primary", use_container_width=True)
 
         if cm_submitted:
-            db.upsert_commission_record({
-                "period": cm_period,
-                "commission_amount": cm_amount,
-                "wht_rate": cm_wht_rate,
-                "wht_amount": _wht_amount,
-                "net_amount": _net_amount,
-                "receipt_book_no": cm_receipt_book_no,
-                "receipt_seq": int(cm_receipt_seq),
-                "receipt_date": str(cm_receipt_date),
-                "commission_received": cm_received,
-                "commission_received_date": str(cm_received_date) if cm_received else None,
-                "vat_claim_amount": cm_vat_claim,
-                "vat_claim_doc_issued": cm_vat_doc_issued,
-                "vat_claim_doc_date": str(cm_vat_doc_date) if cm_vat_doc_issued else None,
-                "vat_claim_received": cm_vat_received,
-                "vat_claim_received_date": str(cm_vat_received_date) if cm_vat_received else None,
-                "notes": cm_notes,
-            })
-            st.success("✅ บันทึกแล้ว")
-            st.rerun()
+            try:
+                db.upsert_commission_record({
+                    "period": cm_period,
+                    "commission_amount": cm_amount,
+                    "wht_rate": cm_wht_rate,
+                    "wht_amount": _wht_amount,
+                    "net_amount": _net_amount,
+                    "receipt_book_no": cm_receipt_book_no,
+                    "receipt_seq": int(cm_receipt_seq),
+                    "receipt_date": str(cm_receipt_date),
+                    "commission_received": cm_received,
+                    "commission_received_date": str(cm_received_date) if cm_received else None,
+                    "vat_claim_amount": cm_vat_claim,
+                    "vat_claim_doc_issued": cm_vat_doc_issued,
+                    "vat_claim_doc_date": str(cm_vat_doc_date) if cm_vat_doc_issued else None,
+                    "vat_claim_received": cm_vat_received,
+                    "vat_claim_received_date": str(cm_vat_received_date) if cm_vat_received else None,
+                    "notes": cm_notes,
+                })
+                st.success("✅ บันทึกแล้ว")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ บันทึกไม่สำเร็จ: {e}")
 
         if _cr and float(_cr.get("commission_amount", 0)) > 0:
             if st.button("🖨️ พิมพ์ใบเสร็จรับเงิน/ใบกำกับภาษี", key=f"cm_print_{cm_period}", use_container_width=True):
