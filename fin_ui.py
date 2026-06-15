@@ -125,6 +125,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .payment{flex:1.2;font-size:12px;padding-top:4px;display:flex;flex-direction:column}
   .payment label{display:block;margin-bottom:10px;white-space:nowrap}
   .amountwords{background:#f0f0f0;border-radius:6px;padding:8px 12px;font-size:12px;color:#444;margin-top:auto}
+  .amountwords .awlabel{font-size:9px;color:#999;margin-top:4px}
   .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
   .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
   .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px;margin-top:auto}
@@ -180,7 +181,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   <div class="payment">
     <label>☐ เงินสด</label>
     <label>☐ เช็ค/ดราฟต์ธนาคาร เลขที่ ............... วันที่ ...............</label>
-    <div class="amountwords">({_amount_text})</div>
+    <div class="amountwords">{_amount_text}<div class="awlabel">จำนวนเงิน (ตัวอักษร)</div></div>
   </div>
   <div class="totals">
     <div class="row"><span>รวมมูลค่าสินค้า/บริการ<br>SUB TOTAL</span><span>{_amount:,.2f}</span></div>
