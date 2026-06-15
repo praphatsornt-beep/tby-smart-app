@@ -72,7 +72,8 @@ def push_outstanding(line_user_id: str, customer_name: str,
         lines.append(f"📦 ค้างรับ: {pending_qty} ชิ้น")
     if items:
         lines.append("")
-        for it in items[:8]:
+        _max_items = 30
+        for it in items[:_max_items]:
             bill = it.get("bill_no", "")
             prod = it.get("product", "")
             amt  = float(it.get("amount") or 0)
@@ -83,6 +84,8 @@ def push_outstanding(line_user_id: str, customer_name: str,
             if amt > 0:
                 line += f" {amt:,.0f}฿"
             lines.append(line)
+        if len(items) > _max_items:
+            lines.append(f"...และอีก {len(items) - _max_items} รายการ")
     if cod_transferred:
         lines.append("")
         lines.append("✅ COD รับยอดแล้ว — กรุณาติดต่อเปิดบิล:")

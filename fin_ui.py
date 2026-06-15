@@ -82,83 +82,103 @@ def _thai_baht_text(amount: float) -> str:
     return result
 
 
-def _render_wht_cert_html(cr: dict, ci: dict, period: str) -> str:
+def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
     _year, _month = period.split("-")
-    _pay_date = _parse_date(cr.get("wht_issue_date"))
+    _doc_date = _parse_date(cr.get("receipt_date"))
     _amount = float(cr.get("commission_amount", 0))
-    _wht_amount = float(cr.get("wht_amount", 0))
-    _amount_text = _thai_baht_text(_wht_amount)
-    _doc_no = cr.get("wht_doc_no") or "—"
+    _vat = float(cr.get("vat_claim_amount", 0))
+    _grand = _amount + _vat
+    _amount_text = _thai_baht_text(_grand)
+    _book_no = cr.get("receipt_book_no") or "—"
+    _seq = cr.get("receipt_seq")
+    _no_text = f"{(int(_year) + 543) % 100}/{int(_seq):03d}" if _seq else "—"
+    _desc = f"ค่าคอมมิชชั่นประจำเดือน{_THAI_MONTHS[int(_month)]} {(int(_year) + 543) % 100}"
 
     _css = """
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Sarabun',sans-serif;padding:20px;color:#111;background:#fff;font-size:13px}
-  .title{text-align:center;font-size:16px;font-weight:700;margin-bottom:2px}
-  .subtitle{text-align:center;font-size:12px;color:#444;margin-bottom:12px}
-  .docno{text-align:right;font-size:12px;margin-bottom:8px}
-  .box{border:1px solid #000;padding:10px;margin-bottom:10px}
-  .box h3{font-size:13px;margin-bottom:6px}
-  .row{display:flex;gap:8px;margin-bottom:3px}
-  .row .lbl{min-width:140px;color:#444}
-  table{width:100%;border-collapse:collapse;margin-top:8px;border:1px solid #000}
-  th{background:#000;color:#fff;padding:6px;text-align:center;font-size:12px;border:1px solid #000}
-  td{padding:6px;border:1px solid #aaa;font-size:12px;text-align:center}
-  .total-words{margin-top:8px;font-size:12px}
-  .sign{margin-top:40px;text-align:center;font-size:12px}
-  .sign .line{margin-bottom:6px}
+  body{font-family:'Sarabun',sans-serif;padding:16px;color:#111;background:#fff;font-size:12px}
+  .header{text-align:center;margin-bottom:8px}
+  .header .name-th{font-size:15px;font-weight:700}
+  .header .name-en{font-size:12px;color:#333}
+  .header .addr{font-size:11px;color:#333;margin-top:2px}
+  .docboxes{display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px}
+  .docboxes .box{border:1px solid #000;padding:4px 10px;font-size:11px;text-align:center}
+  .docboxes .box .lbl{color:#444}
+  .docboxes .box .val{font-weight:700;font-size:13px}
+  .titlebox{border:1px solid #000;border-radius:6px;text-align:center;padding:6px;margin-bottom:8px}
+  .titlebox .th{font-weight:700;font-size:14px;color:#1a5fb4}
+  .titlebox .en{font-size:11px;color:#1a5fb4}
+  .titlebox .orig{font-size:11px;color:#1a5fb4;margin-top:2px}
+  .frombox{border:1px solid #000;border-radius:6px;padding:8px;margin-bottom:8px}
+  .frombox .row{display:flex;justify-content:space-between;margin-bottom:3px}
+  .frombox .taxid{display:inline-block;border:1px solid #000;border-radius:4px;padding:2px 8px;margin-top:2px}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:8px}
+  table.items th{border:1px solid #000;padding:6px;font-size:11px;text-align:center;background:#f5f5f5}
+  table.items td{border:1px solid #000;padding:6px;font-size:12px;height:26px}
+  .bottom{display:flex;gap:10px;margin-bottom:8px}
+  .payment{flex:1;font-size:11px}
+  .payment label{display:block;margin-bottom:6px}
+  .totals{flex:1;border:1px solid #000}
+  .totals .row{display:flex;justify-content:space-between;padding:4px 8px;border-bottom:1px solid #000;font-size:11px}
+  .totals .row:last-child{border-bottom:none;font-weight:700}
+  .words{font-size:12px;margin-bottom:24px}
+  .signatures{display:flex;justify-content:space-around;text-align:center;font-size:11px}
+  .signatures .line{margin-bottom:8px;border-top:1px dotted #000;padding-top:30px;min-width:180px}
   .btn{display:block;margin:0 auto 14px;padding:7px 28px;background:#c0392b;color:#fff;
        border:none;border-radius:6px;font-size:13px;cursor:pointer}
   @media print{
     .btn{display:none}
-    @page{size:A4;margin:15mm}
-    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    th{background:#000!important;color:#fff!important}
+    @page{size:A5 landscape;margin:10mm}
   }"""
 
     _body = f"""
-<div class="docno">เลขที่ {_doc_no}</div>
-<div class="title">หนังสือรับรองการหักภาษี ณ ที่จ่าย</div>
-<div class="subtitle">ตามมาตรา 50 ทวิ แห่งประมวลรัษฎากร</div>
-
-<div class="box">
-  <h3>ผู้มีหน้าที่หักภาษี ณ ที่จ่าย</h3>
-  <div class="row"><span class="lbl">ชื่อ:</span><span>{ci.get('our_name','') or '—'}</span></div>
-  <div class="row"><span class="lbl">เลขประจำตัวผู้เสียภาษี:</span><span>{ci.get('our_tax_id','') or '—'}</span></div>
-  <div class="row"><span class="lbl">ที่อยู่:</span><span>{ci.get('our_address','') or '—'}</span></div>
+<div class="header">
+  <div class="name-th">{ci.get('our_name','') or '—'}</div>
+  <div class="addr">{ci.get('our_address','') or '—'}</div>
+  <div class="addr">{('Tel. ' + ci.get('our_tel')) if ci.get('our_tel') else ''}</div>
+  <div class="addr">เลขประจำตัวผู้เสียภาษี {ci.get('our_tax_id','') or '—'}</div>
 </div>
 
-<div class="box">
-  <h3>ผู้ถูกหักภาษี ณ ที่จ่าย</h3>
-  <div class="row"><span class="lbl">ชื่อ:</span><span>{ci.get('hq_name','') or '—'}</span></div>
-  <div class="row"><span class="lbl">เลขประจำตัวผู้เสียภาษี:</span><span>{ci.get('hq_tax_id','') or '—'}</span></div>
-  <div class="row"><span class="lbl">ที่อยู่:</span><span>{ci.get('hq_address','') or '—'}</span></div>
+<div class="docboxes">
+  <div class="box"><div class="lbl">เล่มที่ No</div><div class="val">{_book_no}</div></div>
+  <div class="box"><div class="lbl">เลขที่ No</div><div class="val">{_no_text}</div></div>
 </div>
 
-<table>
-  <tr>
-    <th>ประเภทเงินได้ที่จ่าย</th>
-    <th>วันเดือนปีที่จ่าย</th>
-    <th>จำนวนเงินที่จ่าย (บาท)</th>
-    <th>ภาษีที่หักไว้ (บาท)</th>
-  </tr>
-  <tr>
-    <td>ค่าคอมมิชชั่น/ค่าบริการ — ประจำเดือน {_THAI_MONTHS[int(_month)]} {int(_year)+543}</td>
-    <td>{_pay_date.day}/{_pay_date.month}/{_pay_date.year+543}</td>
-    <td>{_amount:,.2f}</td>
-    <td>{_wht_amount:,.2f}</td>
-  </tr>
-  <tr>
-    <td colspan="2" style="text-align:right;font-weight:700">รวม</td>
-    <td style="font-weight:700">{_amount:,.2f}</td>
-    <td style="font-weight:700">{_wht_amount:,.2f}</td>
-  </tr>
+<div class="titlebox">
+  <div class="th">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>
+  <div class="en">Receipt / Tax Invoice</div>
+  <div class="orig">ต้นฉบับ / Original</div>
+</div>
+
+<div class="frombox">
+  <div class="row"><span>ได้รับเงินจาก {ci.get('hq_name','') or '—'}</span><span>วันที่ {_doc_date.day}/{_doc_date.month}/{_doc_date.year+543}</span></div>
+  <div class="row"><span>{ci.get('hq_address','') or '—'}</span></div>
+  <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('hq_tax_id','') or '—'}</div>
+</div>
+
+<table class="items">
+  <tr><th>รายการสินค้า/บริการ<br>Description</th><th>จำนวน<br>Quantity</th><th>ราคาต่อหน่วย<br>Unit Price</th><th>จำนวนเงิน<br>Amount</th></tr>
+  <tr><td>{_desc}</td><td></td><td></td><td style="text-align:right">{_amount:,.2f}</td></tr>
+  <tr><td colspan="4"></td></tr>
 </table>
 
-<div class="total-words">ภาษีที่หักไว้ทั้งสิ้น ({_amount_text})</div>
+<div class="bottom">
+  <div class="payment">
+    <label>☐ เงินสด</label>
+    <label>☐ เช็ค/ดราฟต์ธนาคาร เลขที่ ............................ วันที่ ............................</label>
+  </div>
+  <div class="totals">
+    <div class="row"><span>รวมมูลค่าสินค้า/บริการ<br>SUB TOTAL</span><span>{_amount:,.2f}</span></div>
+    <div class="row"><span>ภาษีมูลค่าเพิ่ม 7%<br>VALUE ADDED TAX 7%</span><span>{_vat:,.2f}</span></div>
+    <div class="row"><span>จำนวนเงินรวมทั้งสิ้น<br>GRAND TOTAL</span><span>{_grand:,.2f}</span></div>
+  </div>
+</div>
 
-<div class="sign">
-  <div class="line">ลงชื่อ ......................................................... ผู้จ่ายเงิน</div>
-  <div>วันที่ {_pay_date.day}/{_pay_date.month}/{_pay_date.year+543}</div>
+<div class="words">({_amount_text})</div>
+
+<div class="signatures">
+  <div><div class="line"></div>ผู้รับเงิน / CASHIER<br>วันที่ Date ............/............/............</div>
+  <div><div class="line"></div>ผู้จัดการทั่วไป / MANAGER<br>วันที่ Date ............/............/............</div>
 </div>
 """
 
@@ -343,25 +363,26 @@ def render():
         st.divider()
 
     with _tab_wht:
-        # ── ค่าคอมมิชชั่น & ใบหัก ณ ที่จ่าย (50 ทวิ) / เคลม VAT ──────────────────
-        st.markdown("### 📑 ค่าคอมมิชชั่น & ใบหัก ณ ที่จ่าย (50 ทวิ)")
+        # ── ค่าคอมมิชชั่น & ใบเสร็จรับเงิน/ใบกำกับภาษี / เคลม VAT ──────────────────
+        st.markdown("### 📑 ค่าคอมมิชชั่น & ใบเสร็จรับเงิน/ใบกำกับภาษี")
 
-        with st.expander("⚙️ ข้อมูลบริษัท (ผู้จ่าย / ผู้ถูกหักภาษี)", expanded=False):
+        with st.expander("⚙️ ข้อมูลบริษัท (ผู้ออกใบเสร็จ / ผู้จ่ายเงิน)", expanded=False):
             _ci = db.get_company_info()
             cic1, cic2 = st.columns(2)
             with cic1:
-                st.markdown("**TBY (เรา) — ผู้มีหน้าที่หักภาษี ณ ที่จ่าย**")
+                st.markdown("**TBY (เรา) — ผู้ออกใบเสร็จรับเงิน/ใบกำกับภาษี**")
                 ci_our_name = st.text_input("ชื่อ", value=_ci.get("our_name", "") or "", key="ci_our_name")
                 ci_our_tax_id = st.text_input("เลขประจำตัวผู้เสียภาษี", value=_ci.get("our_tax_id", "") or "", key="ci_our_tax_id")
+                ci_our_tel = st.text_input("เบอร์โทร/แฟกซ์", value=_ci.get("our_tel", "") or "", key="ci_our_tel")
                 ci_our_address = st.text_area("ที่อยู่", value=_ci.get("our_address", "") or "", key="ci_our_address")
             with cic2:
-                st.markdown("**สำนักงานใหญ่ — ผู้ถูกหักภาษี ณ ที่จ่าย**")
+                st.markdown("**สำนักงานใหญ่ — ได้รับเงินจาก (ผู้จ่ายค่าคอมมิชชั่น)**")
                 ci_hq_name = st.text_input("ชื่อ", value=_ci.get("hq_name", "") or "", key="ci_hq_name")
                 ci_hq_tax_id = st.text_input("เลขประจำตัวผู้เสียภาษี", value=_ci.get("hq_tax_id", "") or "", key="ci_hq_tax_id")
                 ci_hq_address = st.text_area("ที่อยู่", value=_ci.get("hq_address", "") or "", key="ci_hq_address")
             if st.button("💾 บันทึกข้อมูลบริษัท", key="ci_save"):
                 db.upsert_company_info({
-                    "our_name": ci_our_name, "our_tax_id": ci_our_tax_id, "our_address": ci_our_address,
+                    "our_name": ci_our_name, "our_tax_id": ci_our_tax_id, "our_tel": ci_our_tel, "our_address": ci_our_address,
                     "hq_name": ci_hq_name, "hq_tax_id": ci_hq_tax_id, "hq_address": ci_hq_address,
                 })
                 st.success("✅ บันทึกข้อมูลบริษัทแล้ว")
@@ -377,6 +398,22 @@ def render():
                                    index=_cm_today.month - 1, key="cm_month")
         cm_period = f"{cm_year}-{cm_month:02d}"
         _cr = db.get_commission_record(cm_period) or {}
+        _cm_df_all = db.get_commission_records()
+
+        # ── คำนวณเลขที่/เล่มที่ใบเสร็จเริ่มต้น (รันอัตโนมัติ) ──
+        _year_code = (cm_year + 543) % 100
+        _default_book_no = _cr.get("receipt_book_no") or ""
+        _default_seq = _cr.get("receipt_seq")
+        if not _cm_df_all.empty:
+            _prev = _cm_df_all[_cm_df_all["period"] != cm_period]
+            if not _default_book_no and not _prev.empty:
+                _default_book_no = _prev.iloc[0].get("receipt_book_no") or ""
+            if _default_seq is None:
+                _same_year = _prev[_prev["period"].str[:4].astype(int).apply(lambda y: (y + 543) % 100) == _year_code]
+                if not _same_year.empty and _same_year["receipt_seq"].notna().any():
+                    _default_seq = int(_same_year["receipt_seq"].max()) + 1
+        if _default_seq is None:
+            _default_seq = 1
 
         with st.form(f"commission_form_{cm_period}"):
             st.markdown(f"**บันทึกข้อมูลเดือน {_THAI_MONTHS[cm_month]} {cm_year + 543}**")
@@ -386,17 +423,19 @@ def render():
                     value=float(_cr.get("commission_amount", 0)), key=f"cm_amount_{cm_period}")
                 cm_wht_rate = st.number_input("อัตราหัก ณ ที่จ่าย (%)", min_value=0.0, max_value=100.0, step=0.5,
                     value=float(_cr.get("wht_rate", 3.0)), key=f"cm_wht_rate_{cm_period}")
-                cm_doc_no = st.text_input("เลขที่ใบหัก ณ ที่จ่าย", value=_cr.get("wht_doc_no", "") or "", key=f"cm_doc_no_{cm_period}")
             _wht_amount = round(cm_amount * cm_wht_rate / 100, 2)
             _net_amount = round(cm_amount - _wht_amount, 2)
             with fc2:
                 st.metric("ภาษีหัก ณ ที่จ่าย", f"{_wht_amount:,.2f} ฿")
                 st.metric("ยอดสุทธิที่ได้รับ", f"{_net_amount:,.2f} ฿")
-                cm_wht_issued = st.checkbox("ออกใบหัก ณ ที่จ่ายแล้ว", value=bool(_cr.get("wht_issued", False)), key=f"cm_wht_issued_{cm_period}")
-                cm_wht_issue_date = st.date_input("วันที่ออกเอกสาร", value=_parse_date(_cr.get("wht_issue_date")), key=f"cm_wht_issue_date_{cm_period}")
-            with fc3:
                 cm_received = st.checkbox("ได้รับเงินค่าคอมมิชชั่นแล้ว", value=bool(_cr.get("commission_received", False)), key=f"cm_received_{cm_period}")
                 cm_received_date = st.date_input("วันที่ได้รับเงิน", value=_parse_date(_cr.get("commission_received_date")), key=f"cm_received_date_{cm_period}")
+            with fc3:
+                cm_receipt_book_no = st.text_input("เล่มที่ใบเสร็จ", value=_cr.get("receipt_book_no") or _default_book_no, key=f"cm_receipt_book_no_{cm_period}")
+                cm_receipt_seq = st.number_input("เลขที่ใบเสร็จ (ลำดับ)", min_value=1, step=1,
+                    value=int(_cr.get("receipt_seq") or _default_seq), key=f"cm_receipt_seq_{cm_period}")
+                cm_receipt_date = st.date_input("วันที่ออกใบเสร็จ", value=_parse_date(_cr.get("receipt_date")), key=f"cm_receipt_date_{cm_period}")
+                st.caption(f"เลขที่เอกสาร: {_year_code}/{int(cm_receipt_seq):03d}")
 
             st.divider()
             st.markdown("**เคลม VAT จากสำนักงานใหญ่** (VAT ที่เราจ่ายล่วงหน้าไปก่อน แล้วออกเอกสารขอเบิกคืน)")
@@ -421,9 +460,9 @@ def render():
                 "wht_rate": cm_wht_rate,
                 "wht_amount": _wht_amount,
                 "net_amount": _net_amount,
-                "wht_doc_no": cm_doc_no,
-                "wht_issued": cm_wht_issued,
-                "wht_issue_date": str(cm_wht_issue_date) if cm_wht_issued else None,
+                "receipt_book_no": cm_receipt_book_no,
+                "receipt_seq": int(cm_receipt_seq),
+                "receipt_date": str(cm_receipt_date),
                 "commission_received": cm_received,
                 "commission_received_date": str(cm_received_date) if cm_received else None,
                 "vat_claim_amount": cm_vat_claim,
@@ -437,35 +476,39 @@ def render():
             st.rerun()
 
         if _cr and float(_cr.get("commission_amount", 0)) > 0:
-            if st.button("🖨️ พิมพ์ใบหัก ณ ที่จ่าย (50 ทวิ)", key=f"cm_print_{cm_period}", use_container_width=True):
-                _wht_html = _render_wht_cert_html(_cr, _ci, cm_period)
-                components.html(_wht_html, height=700, scrolling=True)
+            if st.button("🖨️ พิมพ์ใบเสร็จรับเงิน/ใบกำกับภาษี", key=f"cm_print_{cm_period}", use_container_width=True):
+                _receipt_html = _render_receipt_html(_cr, _ci, cm_period)
+                components.html(_receipt_html, height=700, scrolling=True)
 
-        # ── สรุปทุกเดือน ──────────────────────────────────────────────────────────
+        # ── บันทึกรายการ (Ledger) ────────────────────────────────────────────────
         _cm_df = db.get_commission_records()
         if not _cm_df.empty:
             st.divider()
-            st.markdown("**📋 สรุปรายเดือน**")
+            st.markdown("**📋 บันทึกรายการ (Ledger)**")
             _show_cm = _cm_df.copy()
-            _show_cm["หัก ณ ที่จ่าย"] = _show_cm.apply(
-                lambda r: "✅ออกแล้ว" if r.get("wht_issued") else "—", axis=1)
-            _show_cm["รับเงิน"] = _show_cm.apply(
-                lambda r: "✅รับแล้ว" if r.get("commission_received") else "⏳ยังไม่รับ", axis=1)
-            _show_cm["เคลม VAT"] = _show_cm.apply(
-                lambda r: ("✅รับคืนแล้ว" if r.get("vat_claim_received")
-                           else ("📄ออกเอกสารแล้ว" if r.get("vat_claim_doc_issued") else "—")), axis=1)
+            _show_cm["เลขที่"] = _show_cm.apply(
+                lambda r: (f"{(int(r['period'][:4]) + 543) % 100}/{int(r['receipt_seq']):03d}"
+                           if pd.notna(r.get("receipt_seq")) else "—"), axis=1)
+            _show_cm["เล่มที่"] = _show_cm["receipt_book_no"].fillna("—")
+            _show_cm["วันที่"] = _show_cm["receipt_date"].apply(
+                lambda d: (lambda dt: f"{dt.day}/{dt.month}/{dt.year + 543}")(_parse_date(d)) if pd.notna(d) and d else "—")
+            _show_cm["รายละเอียด"] = _show_cm["period"].apply(
+                lambda p: f"ค่าคอมมิชชั่นประจำเดือน{_THAI_MONTHS[int(p.split('-')[1])]} {(int(p.split('-')[0]) + 543) % 100}")
+            _show_cm["status transfer"] = _show_cm.apply(
+                lambda r: "transfer" if r.get("commission_received") else "—", axis=1)
             _disp = _show_cm[[
-                "period", "commission_amount", "wht_amount", "net_amount",
-                "หัก ณ ที่จ่าย", "รับเงิน", "vat_claim_amount", "เคลม VAT",
+                "เลขที่", "เล่มที่", "วันที่", "รายละเอียด", "commission_amount",
+                "wht_amount", "status transfer", "vat_claim_amount", "net_amount",
             ]].rename(columns={
-                "period": "เดือน", "commission_amount": "ค่าคอมมิชชั่น",
-                "wht_amount": "ภาษีหัก ณ ที่จ่าย", "net_amount": "สุทธิ",
-                "vat_claim_amount": "ยอด VAT เคลม",
+                "commission_amount": "จำนวนเงิน",
+                "wht_amount": "หัก ณ ที่จ่าย 3%",
+                "vat_claim_amount": "vat claim",
+                "net_amount": "commission",
             })
             st.dataframe(
                 _disp.style.format({
-                    "ค่าคอมมิชชั่น": "{:,.2f}", "ภาษีหัก ณ ที่จ่าย": "{:,.2f}",
-                    "สุทธิ": "{:,.2f}", "ยอด VAT เคลม": "{:,.2f}",
+                    "จำนวนเงิน": "{:,.2f}", "หัก ณ ที่จ่าย 3%": "{:,.2f}",
+                    "vat claim": "{:,.2f}", "commission": "{:,.2f}",
                 }),
                 use_container_width=True, hide_index=True,
             )

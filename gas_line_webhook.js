@@ -104,8 +104,8 @@ function doPost(e) {
   if (_staffTag && STAFF_TAGS.indexOf(_staffTag.toLowerCase()) !== -1) {
     // check [name]
     var _chk = _msg.match(/^check\s+(.+)$/i);
-    // [name] เก่า CODE-QTY (จ่าย[bill] amount)?
-    var _old = _msg.match(/^(.+?)\s+เก่า\s+([A-Za-z0-9]+)-(\d+)(?:\s+จ่าย(\S+)\s+(\d+(?:\.\d+)?))?$/);
+    // [name] เก่า CODE-QTY [CODE-QTY ...] (จ่าย[bill] amount)? — รับของได้หลายรายการ
+    var _old = _msg.match(/^(.+?)\s+เก่า\s+([A-Za-z0-9]+-\d+(?:\s+[A-Za-z0-9]+-\d+)*)(?:\s+จ่าย(\S+)\s+(\d+(?:\.\d+)?))?$/);
     // [name] เก่า  (ไม่ระบุ CODE-QTY — แสดงรายการของค้างรับทั้งหมด)
     var _oldMenu = _msg.match(/^(.+?)\s+เก่า$/);
     // [name] เบิก CODE-QTY [CODE-QTY ...] — บันทึกรับของ ไม่จ่ายเงิน (หลายรายการได้)
@@ -128,9 +128,13 @@ function doPost(e) {
     if (_chk) { handleCustomerByName(_chk[1].trim(), replyToken); return; }
 
     if (_old) {
+      var _oldItems = _old[2].trim().split(/\s+/).map(function(tok) {
+        var p = tok.split('-');
+        return { code: p[0].toUpperCase(), qty: parseInt(p[1]) };
+      });
       handleOldGoods(
-        _old[1].trim(), _old[2].toUpperCase(), parseInt(_old[3]),
-        _old[5] ? parseFloat(_old[5]) : 0, _old[4] || null, replyToken, _confirmed, _staffTag
+        _old[1].trim(), _oldItems,
+        _old[4] ? parseFloat(_old[4]) : 0, _old[3] || null, replyToken, _confirmed, _staffTag
       );
       return;
     }
@@ -463,6 +467,15 @@ function buildAndSendSummary(custId, custName, replyToken) {
 function findOneCustomer(name, replyToken, resendTemplate) {
   var enc = encodeURIComponent('%' + name + '%');
   var rows = _sbGet('/rest/v1/customers?name=ilike.' + enc + '&select=id,name');
+
+  if (!rows || rows.length === 0) {
+    // ลองค้นแบบไม่สนใจวรรค (เช่น "mokham" → "Mo Kham")
+    var needle = name.trim().toLowerCase().replace(/\s+/g, '');
+    var allRows = _sbGet('/rest/v1/customers?select=id,name') || [];
+    rows = allRows.filter(function(c) {
+      return c.name.toLowerCase().replace(/\s+/g, '').indexOf(needle) !== -1;
+    });
+  }
   if (!rows || rows.length === 0) return null;
 
   if (rows.length === 1 && rows[0].name.toLowerCase() !== name.trim().toLowerCase()) {
@@ -508,8 +521,8 @@ function handleManual(replyToken, staffTag) {
 
   msg += '📦 รับของเก่าที่ค้างส่ง\n';
   msg += '  • ' + tag + ' [ชื่อ] เก่า  — แสดงรายการของค้างรับทั้งหมด แยกตามบิล\n';
-  msg += '  • ' + tag + ' [ชื่อ] เก่า CODE-จำนวน  — บันทึกรับของ\n';
-  msg += '  • ' + tag + ' [ชื่อ] เก่า CODE-จำนวน จ่ายเลขบิล จำนวนเงิน  — รับของ+จ่ายเงินพร้อมกัน\n\n';
+  msg += '  • ' + tag + ' [ชื่อ] เก่า CODE-จำนวน CODE-จำนวน ...  — บันทึกรับของ (หลายรายการได้)\n';
+  msg += '  • ' + tag + ' [ชื่อ] เก่า CODE-จำนวน ... จ่ายเลขบิล จำนวนเงิน  — รับของ+จ่ายเงินพร้อมกัน\n\n';
 
   msg += '💰 รับเงิน/เก็บเงินค้างจ่าย\n';
   msg += '  • ' + tag + ' [ชื่อ] จ่าย  — แสดงบิลค้างจ่ายทั้งหมดให้เลือก\n';
@@ -1123,90 +1136,103 @@ function handleOldGoodsMenu(name, replyToken, staffTag) {
   sendReply(replyToken, msg);
 }
 
-// ─── [name] เก่า CODE-QTY (จ่าย[bill] amount)? — บันทึกรับของ(+จ่าย) ────────
+// ─── [name] เก่า CODE-QTY [CODE-QTY ...] (จ่าย[bill] amount)? — บันทึกรับของ(+จ่าย) ────────
 
-function handleOldGoods(name, productCode, qty, payAmount, billNo, replyToken, confirmed, staffTag) {
-  var _resendSuffix = 'เก่า ' + productCode + '-' + qty
+function handleOldGoods(name, items, payAmount, billNo, replyToken, confirmed, staffTag) {
+  var _resendSuffix = 'เก่า ' + items.map(function(it) { return it.code + '-' + it.qty; }).join(' ')
     + (payAmount > 0 ? ' จ่าย' + billNo + ' ' + payAmount : '');
   var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} ' + _resendSuffix);
   if (!cust) return;
 
-  var txnUrl = '/rest/v1/transactions?customer_id=eq.' + cust.id
-    + '&product_id=eq.' + encodeURIComponent(productCode)
-    + '&select=id,product_name,qty,total_amount,pay_status,initial_qty_received,bill_no'
-    + '&order=date.asc';
-  if (billNo) txnUrl += '&bill_no=eq.' + encodeURIComponent(billNo);
-  var txns = _sbGet(txnUrl) || [];
+  var results = [], notFound = [];
 
-  if (txns.length === 0) {
-    sendReply(replyToken, '❌ ไม่พบรายการ [' + productCode + '] ของคุณ' + cust.name);
-    return;
-  }
+  items.forEach(function(it) {
+    var txnUrl = '/rest/v1/transactions?customer_id=eq.' + cust.id
+      + '&product_id=eq.' + encodeURIComponent(it.code)
+      + '&select=id,product_name,qty,total_amount,pay_status,initial_qty_received,bill_no'
+      + '&order=date.asc';
+    if (billNo) txnUrl += '&bill_no=eq.' + encodeURIComponent(billNo);
+    var txns = _sbGet(txnUrl) || [];
+    if (txns.length === 0) { notFound.push(it.code); return; }
 
-  var txnIds = txns.map(function(t) { return t.id; });
-  var events = _sbGet(
-    '/rest/v1/partial_events?transaction_id=in.(' + txnIds.join(',') + ')&select=transaction_id,amount_paid,qty_received'
-  ) || [];
+    var txnIds = txns.map(function(t) { return t.id; });
+    var events = _sbGet(
+      '/rest/v1/partial_events?transaction_id=in.(' + txnIds.join(',') + ')&select=transaction_id,amount_paid,qty_received'
+    ) || [];
+    var paidMap = {}, receivedMap = {};
+    events.forEach(function(e) {
+      paidMap[e.transaction_id] = (paidMap[e.transaction_id] || 0) + parseFloat(e.amount_paid || 0);
+      receivedMap[e.transaction_id] = (receivedMap[e.transaction_id] || 0) + parseInt(e.qty_received || 0);
+    });
 
-  var paidMap = {}, receivedMap = {};
-  events.forEach(function(e) {
-    paidMap[e.transaction_id] = (paidMap[e.transaction_id] || 0) + parseFloat(e.amount_paid || 0);
-    receivedMap[e.transaction_id] = (receivedMap[e.transaction_id] || 0) + parseInt(e.qty_received || 0);
+    // หา transaction แรกที่ยังมีของค้างรับ
+    var target = null;
+    for (var i = 0; i < txns.length; i++) {
+      var t = txns[i];
+      var totalReceived = (t.initial_qty_received || 0) + (receivedMap[t.id] || 0);
+      var pendingQty = t.qty - totalReceived;
+      if (pendingQty > 0) { target = { txn: t, pendingQty: pendingQty, paid: paidMap[t.id] || 0, totalReceived: totalReceived }; break; }
+    }
+    // ไม่มีของค้างรับแล้ว แต่ยังค้างจ่าย (เช่น มาจาก เบิก ที่รับของครบแล้ว) → ให้บันทึกจ่ายเงินได้
+    if (!target) {
+      for (var j = 0; j < txns.length; j++) {
+        var tj = txns[j];
+        if (tj.pay_status !== 'จ่ายแล้ว') {
+          target = { txn: tj, pendingQty: 0, paid: paidMap[tj.id] || 0, totalReceived: (tj.initial_qty_received || 0) + (receivedMap[tj.id] || 0) };
+          break;
+        }
+      }
+    }
+    if (!target) { notFound.push(it.code); return; }
+
+    results.push({ code: it.code, requestedQty: it.qty, target: target, actualQty: Math.min(it.qty, target.pendingQty) });
   });
 
-  // หา transaction แรกที่ยังมีของค้างรับ
-  var target = null;
-  for (var i = 0; i < txns.length; i++) {
-    var t = txns[i];
-    var totalReceived = (t.initial_qty_received || 0) + (receivedMap[t.id] || 0);
-    var pendingQty = t.qty - totalReceived;
-    if (pendingQty > 0) { target = { txn: t, pendingQty: pendingQty }; break; }
-  }
-
-  // ไม่มีของค้างรับแล้ว แต่ยังค้างจ่าย (เช่น มาจาก เบิก ที่รับของครบแล้ว) → ให้บันทึกจ่ายเงินได้
-  if (!target) {
-    for (var j = 0; j < txns.length; j++) {
-      var tj = txns[j];
-      if (tj.pay_status !== 'จ่ายแล้ว') { target = { txn: tj, pendingQty: 0 }; break; }
-    }
-  }
-
-  if (!target) {
-    sendReply(replyToken, '❌ ไม่มีของค้างรับ/ค้างจ่าย [' + productCode + '] ของคุณ' + cust.name + ' แล้วค่ะ');
+  if (results.length === 0) {
+    sendReply(replyToken, '❌ ไม่พบรายการ/ของค้างรับ [' + items.map(function(it) { return it.code; }).join(', ') + '] ของคุณ' + cust.name);
     return;
   }
 
-  var actualQty = Math.min(qty, target.pendingQty);
-  var qtyNote = (actualQty > 0 && actualQty < qty) ? '⚠️ ค้างรับมีเพียง ' + target.pendingQty + ' ชิ้น บันทึก ' + actualQty + ' ชิ้น\n' : '';
-
-  var t = target.txn;
-  var existingPaid = paidMap[t.id] || 0;
-  var maxPay = parseFloat(t.total_amount) - existingPaid;
+  // เงินที่จ่ายมา (ถ้ามี) จะบันทึกไว้กับรายการสุดท้าย
+  var payTarget = results[results.length - 1].target;
+  var existingPaid = payTarget.paid;
+  var maxPay = parseFloat(payTarget.txn.total_amount) - existingPaid;
   var applyPay = payAmount > 0 ? Math.min(payAmount, maxPay) : 0;
-  var payNote = (payAmount > 0 && applyPay < payAmount)
-    ? '⚠️ ยอดค้างในรายการนี้มีเพียง ฿' + numFmt(maxPay) + ' บันทึกเฉพาะส่วนที่ค้างนะคะ\n' : '';
-  var eventType = actualQty > 0 ? (applyPay > 0 ? 'ทั้งคู่' : 'รับของ') : 'จ่ายเงิน';
-
   var newPaid = existingPaid + applyPay;
-  var fullyPaid = newPaid >= parseFloat(t.total_amount) - 0.01;
-  var newReceived = (t.initial_qty_received || 0) + (receivedMap[t.id] || 0) + actualQty;
-  var pendingAfter = t.qty - newReceived;
-  var billInfo = t.bill_no ? ' (บิล ' + t.bill_no + ')' : '';
+  var fullyPaid = newPaid >= parseFloat(payTarget.txn.total_amount) - 0.01;
+
+  var noteLines = '';
+  if (notFound.length) noteLines += '⚠️ ไม่พบ/ไม่มีของค้างรับ: ' + notFound.join(', ') + '\n';
+  results.forEach(function(r) {
+    if (r.actualQty < r.requestedQty) {
+      noteLines += '⚠️ [' + r.code + '] ค้างรับมีเพียง ' + r.target.pendingQty + ' ชิ้น บันทึก ' + r.actualQty + ' ชิ้น\n';
+    }
+  });
+  if (payAmount > 0 && applyPay < payAmount) {
+    noteLines += '⚠️ ยอดค้างในรายการนี้มีเพียง ฿' + numFmt(maxPay) + ' บันทึกเฉพาะส่วนที่ค้างนะคะ\n';
+  }
+
+  var msg = noteLines + (confirmed ? '✅ บันทึกรับของ' : '📋 ตรวจสอบก่อนบันทึก:') + ' คุณ' + cust.name + '\n';
+  msg += '─────────────────\n';
+  results.forEach(function(r) {
+    var t = r.target.txn;
+    var billInfo = t.bill_no ? ' (บิล ' + t.bill_no + ')' : '';
+    var pendingAfter = t.qty - (r.target.totalReceived + r.actualQty);
+    msg += '📦 [' + r.code + '] ' + t.product_name + billInfo + '\n';
+    if (r.actualQty > 0) {
+      msg += '   รับ ' + r.actualQty + ' ชิ้น | ค้างรับเหลือ ' + pendingAfter + ' ชิ้น\n';
+    } else {
+      msg += '   (ไม่มีของค้างรับ)\n';
+    }
+  });
+  if (applyPay > 0) {
+    var payStatus = fullyPaid ? '(ชำระครบ ✓)' : '(ยังค้าง ฿' + numFmt(parseFloat(payTarget.txn.total_amount) - newPaid) + ')';
+    msg += '💰 รับเงิน ฿' + numFmt(applyPay) + ' ' + payStatus + '\n';
+  }
+  msg += '─────────────────\n';
 
   if (!confirmed) {
-    var preview = qtyNote + payNote;
-    preview += '📋 ตรวจสอบก่อนบันทึก: คุณ' + cust.name + billInfo + '\n';
-    preview += '─────────────────\n';
-    preview += '📦 [' + productCode + '] ' + t.product_name + '\n';
-    if (actualQty > 0) {
-      preview += '   รับ ' + actualQty + ' ชิ้น | ค้างรับเหลือ ' + pendingAfter + ' ชิ้น\n';
-    }
-    if (applyPay > 0) {
-      var payStatusP = fullyPaid ? '(ชำระครบ ✓)' : '(ยังค้าง ฿' + numFmt(parseFloat(t.total_amount) - newPaid) + ')';
-      preview += '   💰 รับเงิน ฿' + numFmt(applyPay) + ' ' + payStatusP + '\n';
-    }
-    preview += '─────────────────\n';
-    sendQuickReply(replyToken, preview, [{
+    sendQuickReply(replyToken, msg, [{
       type: 'action',
       action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน #' + staffTag + ' ' + cust.name + ' ' + _resendSuffix }
     }, {
@@ -1216,26 +1242,20 @@ function handleOldGoods(name, productCode, qty, payAmount, billNo, replyToken, c
     return;
   }
 
-  _sbPost('partial_events', {
-    id: Utilities.getUuid(), date: _today(),
-    transaction_id: t.id,
-    qty_received: actualQty, amount_paid: applyPay, event_type: eventType,
-    notes: '#' + staffTag
+  results.forEach(function(r, idx) {
+    var isPayTarget = (idx === results.length - 1);
+    var pay = isPayTarget ? applyPay : 0;
+    if (r.actualQty === 0 && pay === 0) return;
+    _sbPost('partial_events', {
+      id: Utilities.getUuid(), date: _today(),
+      transaction_id: r.target.txn.id,
+      qty_received: r.actualQty, amount_paid: pay,
+      event_type: r.actualQty > 0 ? (pay > 0 ? 'ทั้งคู่' : 'รับของ') : 'จ่ายเงิน',
+      notes: '#' + staffTag
+    });
   });
-  if (fullyPaid) _sbPatch('/rest/v1/transactions?id=eq.' + t.id, { pay_status: 'จ่ายแล้ว' });
+  if (fullyPaid && applyPay > 0) _sbPatch('/rest/v1/transactions?id=eq.' + payTarget.txn.id, { pay_status: 'จ่ายแล้ว' });
 
-  var msg = qtyNote + payNote;
-  msg += '✅ บันทึกรับของ คุณ' + cust.name + billInfo + '\n';
-  msg += '─────────────────\n';
-  msg += '📦 [' + productCode + '] ' + t.product_name + '\n';
-  if (actualQty > 0) {
-    msg += '   รับ ' + actualQty + ' ชิ้น | ค้างรับเหลือ ' + pendingAfter + ' ชิ้น\n';
-  }
-  if (applyPay > 0) {
-    var payStatus = fullyPaid ? '(ชำระครบ ✓)' : '(ยังค้าง ฿' + numFmt(parseFloat(t.total_amount) - newPaid) + ')';
-    msg += '   💰 รับเงิน ฿' + numFmt(applyPay) + ' ' + payStatus + '\n';
-  }
-  msg += '─────────────────\n';
   sendReply(replyToken, msg);
 }
 
