@@ -558,6 +558,7 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
 
 # ─── Finance ─────────────────────────────────────────────────────────────────
 
+@st.cache_data(ttl=60)
 def get_finance_entry(entry_date: str) -> dict | None:
     rows = get_supabase().table("finance_daily").select("*").eq("entry_date", entry_date).execute().data
     return rows[0] if rows else None
@@ -567,6 +568,9 @@ def upsert_finance_entry(data: dict) -> None:
     db = get_supabase()
     db.table("finance_daily").delete().eq("entry_date", data["entry_date"]).execute()
     db.table("finance_daily").insert(data).execute()
+    get_finance_entry.clear()
+    get_finance_df.clear()
+    get_finance_summary.clear()
 
 
 @st.cache_data(ttl=120)
@@ -623,6 +627,7 @@ def get_commission_records() -> pd.DataFrame:
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
 
+@st.cache_data(ttl=60)
 def get_commission_record(period: str) -> dict | None:
     rows = get_supabase().table("commission_records").select("*").eq("period", period).execute().data
     return rows[0] if rows else None
@@ -633,6 +638,7 @@ def upsert_commission_record(data: dict) -> None:
     db.table("commission_records").delete().eq("period", data["period"]).execute()
     db.table("commission_records").insert(data).execute()
     get_commission_records.clear()
+    get_commission_record.clear()
 
 
 @st.cache_data(ttl=300)
