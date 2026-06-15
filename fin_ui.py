@@ -108,11 +108,11 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .headerflex .right .th{font-weight:700;font-size:15px;color:#1a5fb4;margin-top:8px}
   .headerflex .right .en{font-size:11px;color:#1a5fb4;margin-top:2px}
   .headerflex .right .orig{font-size:11px;color:#1a5fb4;margin-top:2px;font-weight:600}
-  .headerflex .right .docbox{border:1px solid #1a5fb4;border-radius:6px;overflow:hidden;margin-left:auto;min-width:170px}
-  .headerflex .right .docbox .row{display:flex;align-items:center;border-bottom:1px solid #1a5fb4}
+  .headerflex .right .docbox{display:table;border:1px solid #1a5fb4;border-radius:6px;overflow:hidden;margin-left:auto;min-width:170px}
+  .headerflex .right .docbox .row{display:table-row;border-bottom:1px solid #1a5fb4}
   .headerflex .right .docbox .row:last-child{border-bottom:none}
-  .headerflex .right .docbox .lbl{flex:1;padding:4px 12px;font-size:11px;font-weight:600;color:#333;text-align:left}
-  .headerflex .right .docbox .val{padding:4px 16px;font-size:13px;font-weight:700;color:#111;background:#eaf2fb;border-left:1px solid #1a5fb4;min-width:54px;text-align:center}
+  .headerflex .right .docbox .lbl{display:table-cell;padding:4px 12px;font-size:11px;font-weight:600;color:#333;text-align:left;vertical-align:middle}
+  .headerflex .right .docbox .val{display:table-cell;padding:4px 16px;font-size:13px;font-weight:700;color:#111;background:#eaf2fb;border-left:1px solid #1a5fb4;min-width:54px;text-align:center;vertical-align:middle}
   .frombox{border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:14px}
   .frombox .row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px}
   .frombox .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 10px;margin-top:4px;font-size:11px;color:#444}
