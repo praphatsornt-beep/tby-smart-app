@@ -98,19 +98,18 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   *{box-sizing:border-box;margin:0;padding:0}
   body{font-family:'Sarabun',sans-serif;background:#eef0f3;padding:24px;color:#1a1a1a}
   .sheet{max-width:720px;margin:0 auto;background:#fff;padding:28px 34px;box-shadow:0 0 14px rgba(0,0,0,.10)}
-  .header{text-align:center;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #1a5fb4}
-  .header .name-th{font-size:18px;font-weight:700}
-  .header .name-en{font-size:12px;color:#555;margin-top:2px}
-  .header .addr{font-size:11px;color:#555;margin-top:2px}
-  .header .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 12px;margin-top:6px;font-size:11px;color:#444}
-  .docboxes{display:flex;justify-content:flex-end;gap:10px;margin:14px 0}
-  .docboxes .box{border:1px solid #1a5fb4;border-radius:6px;padding:6px 18px;text-align:center;min-width:90px}
-  .docboxes .box .lbl{font-size:10px;color:#1a5fb4;font-weight:600}
-  .docboxes .box .val{font-size:16px;font-weight:700;margin-top:2px}
-  .titlebox{background:#eaf2fb;border:1px solid #1a5fb4;border-radius:8px;text-align:center;padding:10px;margin-bottom:14px}
-  .titlebox .th{font-weight:700;font-size:16px;color:#1a5fb4}
-  .titlebox .en{font-size:11px;color:#1a5fb4;margin-top:2px}
-  .titlebox .orig{font-size:11px;color:#1a5fb4;margin-top:4px;font-weight:600}
+  .headerflex{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #1a5fb4}
+  .headerflex .left{text-align:left}
+  .headerflex .name-th{font-size:18px;font-weight:700}
+  .headerflex .name-en{font-size:12px;color:#555;margin-top:2px}
+  .headerflex .addr{font-size:11px;color:#555;margin-top:2px}
+  .headerflex .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 12px;margin-top:6px;font-size:11px;color:#444}
+  .headerflex .right{text-align:right;white-space:nowrap}
+  .headerflex .right .th{font-weight:700;font-size:15px;color:#1a5fb4}
+  .headerflex .right .en{font-size:11px;color:#1a5fb4;margin-top:2px}
+  .headerflex .right .orig{font-size:11px;color:#1a5fb4;margin-top:2px;font-weight:600}
+  .headerflex .right .docnos{font-size:12px;margin-top:8px;color:#333}
+  .headerflex .right .docnos b{font-weight:700}
   .frombox{border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:14px}
   .frombox .row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px}
   .frombox .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 10px;margin-top:4px;font-size:11px;color:#444}
@@ -138,22 +137,19 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 
     _body = f"""
 <div class="sheet">
-<div class="header">
-  <div class="name-th">{ci.get('our_name','') or '—'}</div>
-  <div class="addr">{ci.get('our_address','') or '—'}</div>
-  <div class="addr">{('Tel. ' + ci.get('our_tel')) if ci.get('our_tel') else ''}</div>
-  <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('our_tax_id','') or '—'}</div>
-</div>
-
-<div class="docboxes">
-  <div class="box"><div class="lbl">เล่มที่ No</div><div class="val">{_book_no}</div></div>
-  <div class="box"><div class="lbl">เลขที่ No</div><div class="val">{_no_text}</div></div>
-</div>
-
-<div class="titlebox">
-  <div class="th">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>
-  <div class="en">Receipt / Tax Invoice</div>
-  <div class="orig">ต้นฉบับ / Original</div>
+<div class="headerflex">
+  <div class="left">
+    <div class="name-th">{ci.get('our_name','') or '—'}</div>
+    <div class="addr">{ci.get('our_address','') or '—'}</div>
+    <div class="addr">{('Tel. ' + ci.get('our_tel')) if ci.get('our_tel') else ''}</div>
+    <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('our_tax_id','') or '—'}</div>
+  </div>
+  <div class="right">
+    <div class="th">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>
+    <div class="en">Receipt / Tax Invoice</div>
+    <div class="orig">ต้นฉบับ / Original</div>
+    <div class="docnos">เล่มที่ <b>{_book_no}</b>&nbsp;&nbsp;&nbsp;เลขที่ <b>{_no_text}</b></div>
+  </div>
 </div>
 
 <div class="frombox">
