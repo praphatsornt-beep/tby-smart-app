@@ -103,6 +103,8 @@ def _clear_transaction_caches() -> None:
     get_unbilled_pv_summary.clear()
     get_customer_ledger.clear()
     get_bill_summaries.clear()
+    get_bill_list.clear()
+    get_pending_receipts_for_customer.clear()
 
 
 def insert_transaction(data: dict) -> None:
@@ -287,6 +289,7 @@ def delete_bill(bill_no: str) -> int:
     return len(rows)
 
 
+@st.cache_data(ttl=20)
 def get_bill_list() -> list[str]:
     rows = (get_supabase().table("transactions")
             .select("bill_no").not_.is_("bill_no", "null")
@@ -428,6 +431,7 @@ def delete_partial_event(event_id: str) -> None:
     bill_has_partial_events.clear()
 
 
+@st.cache_data(ttl=20)
 def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
     """คืน transactions ที่ยังค้างรับของ สำหรับลูกค้านี้ เรียงจากเก่าสุด
     [{id, product_id, ค้างรับ, bill_no, outstanding_amt, pay_status}]"""
