@@ -209,7 +209,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 
 def render():
     st.subheader("💵 การเงิน")
-    _tab_sales, _tab_wht = st.tabs(["💰 ยอดขาย", "📑 ใบหัก ณ ที่จ่าย (50 ทวิ)"])
+    _tab_sales, _tab_wht = st.tabs(["💰 ยอดขาย", "📑 ใบเสร็จ/เคลม VAT"])
 
     with _tab_sales:
         fin_summary = db.get_finance_summary()
