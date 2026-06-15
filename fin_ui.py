@@ -163,10 +163,10 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 </div>
 
 <table class="items">
-  <tr><th style="width:8%">ลำดับ<br>No.</th><th>รายการสินค้า/บริการ<br>Description</th><th style="width:20%">จำนวนเงิน<br>Amount</th></tr>
-  <tr><td class="num">1</td><td>{_desc}</td><td style="text-align:right;font-weight:600">{_amount:,.2f}</td></tr>
-  <tr class="empty-row"><td colspan="3">&nbsp;</td></tr>
-  <tr class="empty-row"><td colspan="3">&nbsp;</td></tr>
+  <tr><th style="width:8%">ลำดับ<br>No.</th><th>รายการสินค้า/บริการ<br>Description</th><th style="width:12%">จำนวน<br>Qty</th><th style="width:15%">ราคาต่อหน่วย<br>Unit Price</th><th style="width:18%">จำนวนเงิน<br>Amount</th></tr>
+  <tr><td class="num">1</td><td>{_desc}</td><td></td><td></td><td style="text-align:right;font-weight:600">{_amount:,.2f}</td></tr>
+  <tr class="empty-row"><td colspan="5">&nbsp;</td></tr>
+  <tr class="empty-row"><td colspan="5">&nbsp;</td></tr>
 </table>
 
 <div class="bottom">
