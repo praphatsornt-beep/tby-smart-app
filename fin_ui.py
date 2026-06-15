@@ -127,14 +127,18 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
   .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px}
   .signatures{display:flex;justify-content:space-around;text-align:center;font-size:12px;margin-top:60px}
+  .signatures .sigbox{position:relative}
+  .signatures .stamp{position:absolute;top:-54px;right:20px;width:64px;height:64px;border:1px dashed #bbb;
+       border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;
+       color:#bbb;text-align:center;line-height:1.3}
   .signatures .line{margin-bottom:8px;border-top:1px dotted #999;padding-top:36px;min-width:200px}
   .btn{display:block;margin:0 auto 14px;padding:8px 32px;background:#1a5fb4;color:#fff;
        border:none;border-radius:6px;font-size:13px;cursor:pointer}
   .tip{text-align:center;font-size:11px;color:#888;margin-bottom:10px}
   @media print{
     body{background:#fff;padding:0}
-    .sheet{box-shadow:none;max-width:none;padding:0;min-height:267mm;display:flex;flex-direction:column}
-    .signatures{margin-top:auto;padding-top:60px}
+    .sheet{box-shadow:none;max-width:none;padding:0;min-height:230mm;display:flex;flex-direction:column}
+    .signatures{margin-top:auto;padding-top:40px}
     .btn,.tip{display:none}
     @page{size:A4;margin:15mm}
   }"""
@@ -185,7 +189,10 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 </div>
 
 <div class="signatures">
-  <div><div class="line"></div>ผู้รับเงิน / CASHIER<br>วันที่ Date ............/............/............</div>
+  <div class="sigbox">
+    <div class="stamp">ประทับตรา<br>บริษัท</div>
+    <div class="line"></div>ผู้รับเงิน / CASHIER<br>วันที่ Date ............/............/............
+  </div>
   <div><div class="line"></div>ผู้จัดการทั่วไป / MANAGER<br>วันที่ Date ............/............/............</div>
 </div>
 </div>
