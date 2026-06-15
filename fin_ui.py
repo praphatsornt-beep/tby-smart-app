@@ -105,10 +105,10 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .headerflex .addr{font-size:11px;color:#555;margin-top:2px}
   .headerflex .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 12px;margin-top:6px;font-size:11px;color:#444}
   .headerflex .right{text-align:right;white-space:nowrap;flex-shrink:0}
-  .headerflex .right .th{font-weight:700;font-size:15px;color:#1a5fb4}
+  .headerflex .right .th{font-weight:700;font-size:15px;color:#1a5fb4;margin-top:8px}
   .headerflex .right .en{font-size:11px;color:#1a5fb4;margin-top:2px}
   .headerflex .right .orig{font-size:11px;color:#1a5fb4;margin-top:2px;font-weight:600}
-  .headerflex .right .docnos{display:flex;gap:8px;margin-top:8px;justify-content:flex-end}
+  .headerflex .right .docnos{display:flex;gap:8px;justify-content:flex-end}
   .headerflex .right .docbox{border:1px solid #1a5fb4;border-radius:6px;padding:4px 14px;text-align:center;min-width:74px}
   .headerflex .right .docbox .lbl{font-size:9px;color:#1a5fb4;font-weight:600;display:block}
   .headerflex .right .docbox .val{font-size:14px;font-weight:700;color:#111}
@@ -150,17 +150,18 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
     <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('our_tax_id','') or '—'}</div>
   </div>
   <div class="right">
-    <div class="th">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>
-    <div class="en">Receipt / Tax Invoice</div>
-    <div class="orig">ต้นฉบับ / Original</div>
     <div class="docnos">
       <div class="docbox"><span class="lbl">เล่มที่</span><span class="val">{_book_no}</span></div>
       <div class="docbox"><span class="lbl">เลขที่</span><span class="val">{_no_text}</span></div>
     </div>
+    <div class="th">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>
+    <div class="en">Receipt / Tax Invoice</div>
+    <div class="orig">ต้นฉบับ / Original</div>
   </div>
 </div>
 
 <div class="frombox">
+  <div class="row"><span></span><span>วันที่ {_doc_date.day} {_THAI_MONTHS[_doc_date.month]} {_doc_date.year+543}</span></div>
   <div class="row"><span>ได้รับเงินจาก {ci.get('hq_name','') or '—'}</span></div>
   <div class="row"><span>{ci.get('hq_address','') or '—'}</span></div>
   <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('hq_tax_id','') or '—'}</div>
@@ -169,7 +170,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 <div class="items-wrap">
 <table class="items">
   <tr><th style="width:8%">ลำดับ<br>No.</th><th>รายการสินค้า/บริการ<br>Description</th><th style="width:12%">จำนวน<br>Qty</th><th style="width:15%">ราคาต่อหน่วย<br>Unit Price</th><th style="width:18%">จำนวนเงิน<br>Amount</th></tr>
-  <tr><td class="num">1</td><td>{_desc}<br><span style="font-size:11px;color:#888">วันที่ {_doc_date.day} {_THAI_MONTHS[_doc_date.month]} {_doc_date.year+543}</span></td><td></td><td></td><td style="text-align:right;font-weight:600">{_amount:,.2f}</td></tr>
+  <tr><td class="num">1</td><td>{_desc}</td><td></td><td></td><td style="text-align:right;font-weight:600">{_amount:,.2f}</td></tr>
   <tr class="empty-row"><td colspan="5">&nbsp;</td></tr>
   <tr class="empty-row"><td colspan="5">&nbsp;</td></tr>
 </table>
