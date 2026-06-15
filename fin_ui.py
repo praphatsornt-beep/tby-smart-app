@@ -499,9 +499,12 @@ def render():
                 lambda p: f"ค่าคอมมิชชั่นประจำเดือน{_THAI_MONTHS[int(p.split('-')[1])]} {(int(p.split('-')[0]) + 543) % 100}")
             _show_cm["status transfer"] = _show_cm.apply(
                 lambda r: "transfer" if r.get("commission_received") else "—", axis=1)
+            _show_cm["status vat claim"] = _show_cm.apply(
+                lambda r: "transfer" if r.get("vat_claim_received")
+                          else ("ขอเบิกแล้ว" if r.get("vat_claim_doc_issued") else "—"), axis=1)
             _disp = _show_cm[[
                 "เลขที่", "เล่มที่", "วันที่", "รายละเอียด", "commission_amount",
-                "wht_amount", "status transfer", "vat_claim_amount", "net_amount",
+                "wht_amount", "status transfer", "vat_claim_amount", "status vat claim", "net_amount",
             ]].rename(columns={
                 "commission_amount": "จำนวนเงิน",
                 "wht_amount": "หัก ณ ที่จ่าย 3%",
