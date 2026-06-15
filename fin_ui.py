@@ -96,47 +96,53 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 
     _css = """
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Sarabun',sans-serif;padding:16px;color:#111;background:#fff;font-size:12px}
-  .header{text-align:center;margin-bottom:8px}
-  .header .name-th{font-size:15px;font-weight:700}
-  .header .name-en{font-size:12px;color:#333}
-  .header .addr{font-size:11px;color:#333;margin-top:2px}
-  .docboxes{display:flex;justify-content:flex-end;gap:8px;margin-bottom:8px}
-  .docboxes .box{border:1px solid #000;padding:4px 10px;font-size:11px;text-align:center}
-  .docboxes .box .lbl{color:#444}
-  .docboxes .box .val{font-weight:700;font-size:13px}
-  .titlebox{border:1px solid #000;border-radius:6px;text-align:center;padding:6px;margin-bottom:8px}
-  .titlebox .th{font-weight:700;font-size:14px;color:#1a5fb4}
-  .titlebox .en{font-size:11px;color:#1a5fb4}
-  .titlebox .orig{font-size:11px;color:#1a5fb4;margin-top:2px}
-  .frombox{border:1px solid #000;border-radius:6px;padding:8px;margin-bottom:8px}
-  .frombox .row{display:flex;justify-content:space-between;margin-bottom:3px}
-  .frombox .taxid{display:inline-block;border:1px solid #000;border-radius:4px;padding:2px 8px;margin-top:2px}
-  table.items{width:100%;border-collapse:collapse;margin-bottom:8px}
-  table.items th{border:1px solid #000;padding:6px;font-size:11px;text-align:center;background:#f5f5f5}
-  table.items td{border:1px solid #000;padding:6px;font-size:12px;height:26px}
-  .bottom{display:flex;gap:10px;margin-bottom:8px}
-  .payment{flex:1;font-size:11px}
-  .payment label{display:block;margin-bottom:6px}
-  .totals{flex:1;border:1px solid #000}
-  .totals .row{display:flex;justify-content:space-between;padding:4px 8px;border-bottom:1px solid #000;font-size:11px}
-  .totals .row:last-child{border-bottom:none;font-weight:700}
-  .words{font-size:12px;margin-bottom:24px}
-  .signatures{display:flex;justify-content:space-around;text-align:center;font-size:11px}
-  .signatures .line{margin-bottom:8px;border-top:1px dotted #000;padding-top:30px;min-width:180px}
-  .btn{display:block;margin:0 auto 14px;padding:7px 28px;background:#c0392b;color:#fff;
+  body{font-family:'Sarabun',sans-serif;background:#eef0f3;padding:24px;color:#1a1a1a}
+  .sheet{max-width:720px;margin:0 auto;background:#fff;padding:28px 34px;box-shadow:0 0 14px rgba(0,0,0,.10)}
+  .header{text-align:center;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #1a5fb4}
+  .header .name-th{font-size:18px;font-weight:700}
+  .header .name-en{font-size:12px;color:#555;margin-top:2px}
+  .header .addr{font-size:11px;color:#555;margin-top:2px}
+  .header .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 12px;margin-top:6px;font-size:11px;color:#444}
+  .docboxes{display:flex;justify-content:flex-end;gap:10px;margin:14px 0}
+  .docboxes .box{border:1px solid #1a5fb4;border-radius:6px;padding:6px 18px;text-align:center;min-width:90px}
+  .docboxes .box .lbl{font-size:10px;color:#1a5fb4;font-weight:600}
+  .docboxes .box .val{font-size:16px;font-weight:700;margin-top:2px}
+  .titlebox{background:#eaf2fb;border:1px solid #1a5fb4;border-radius:8px;text-align:center;padding:10px;margin-bottom:14px}
+  .titlebox .th{font-weight:700;font-size:16px;color:#1a5fb4}
+  .titlebox .en{font-size:11px;color:#1a5fb4;margin-top:2px}
+  .titlebox .orig{font-size:11px;color:#1a5fb4;margin-top:4px;font-weight:600}
+  .frombox{border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:14px}
+  .frombox .row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px}
+  .frombox .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 10px;margin-top:4px;font-size:11px;color:#444}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:14px}
+  table.items th{border:1px solid #999;padding:8px;font-size:11px;text-align:center;background:#f5f7fa;color:#444}
+  table.items td{border:1px solid #ddd;padding:8px;font-size:12px;height:34px;vertical-align:top}
+  .bottom{display:flex;gap:18px;margin-bottom:14px;align-items:flex-start}
+  .payment{flex:1.2;font-size:12px;padding-top:4px}
+  .payment label{display:block;margin-bottom:10px}
+  .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden}
+  .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
+  .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px}
+  .words{font-size:12px;font-style:italic;text-align:center;color:#444;margin-bottom:36px}
+  .signatures{display:flex;justify-content:space-around;text-align:center;font-size:12px}
+  .signatures .line{margin-bottom:8px;border-top:1px dotted #999;padding-top:36px;min-width:200px}
+  .btn{display:block;margin:0 auto 14px;padding:8px 32px;background:#1a5fb4;color:#fff;
        border:none;border-radius:6px;font-size:13px;cursor:pointer}
+  .tip{text-align:center;font-size:11px;color:#888;margin-bottom:10px}
   @media print{
-    .btn{display:none}
+    body{background:#fff;padding:0}
+    .sheet{box-shadow:none;max-width:none;padding:0}
+    .btn,.tip{display:none}
     @page{size:A4;margin:15mm}
   }"""
 
     _body = f"""
+<div class="sheet">
 <div class="header">
   <div class="name-th">{ci.get('our_name','') or '—'}</div>
   <div class="addr">{ci.get('our_address','') or '—'}</div>
   <div class="addr">{('Tel. ' + ci.get('our_tel')) if ci.get('our_tel') else ''}</div>
-  <div class="addr">เลขประจำตัวผู้เสียภาษี {ci.get('our_tax_id','') or '—'}</div>
+  <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('our_tax_id','') or '—'}</div>
 </div>
 
 <div class="docboxes">
@@ -159,7 +165,8 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 <table class="items">
   <tr><th>รายการสินค้า/บริการ<br>Description</th><th>จำนวน<br>Quantity</th><th>ราคาต่อหน่วย<br>Unit Price</th><th>จำนวนเงิน<br>Amount</th></tr>
   <tr><td>{_desc}</td><td></td><td></td><td style="text-align:right">{_amount:,.2f}</td></tr>
-  <tr><td colspan="4"></td></tr>
+  <tr><td colspan="4">&nbsp;</td></tr>
+  <tr><td colspan="4">&nbsp;</td></tr>
 </table>
 
 <div class="bottom">
@@ -180,11 +187,13 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   <div><div class="line"></div>ผู้รับเงิน / CASHIER<br>วันที่ Date ............/............/............</div>
   <div><div class="line"></div>ผู้จัดการทั่วไป / MANAGER<br>วันที่ Date ............/............/............</div>
 </div>
+</div>
 """
 
     return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{_css}</style></head><body>
 <button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+<div class="tip">เคล็ดลับ: ตอนพิมพ์ ให้ปิดตัวเลือก "Headers and footers" ในหน้าตั้งค่าพิมพ์ จะได้ไม่มีวันที่/URL แทรกที่หัว-ท้ายกระดาษ</div>
 {_body}
 <br><button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
 </body></html>"""
