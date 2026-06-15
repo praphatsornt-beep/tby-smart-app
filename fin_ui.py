@@ -119,10 +119,10 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .bottom{display:flex;gap:18px;margin-bottom:14px;align-items:flex-start}
   .payment{flex:1.2;font-size:12px;padding-top:4px}
   .payment label{display:block;margin-bottom:10px}
+  .amountwords{background:#f0f0f0;border-radius:6px;padding:8px 12px;font-size:12px;color:#444;margin-bottom:12px}
   .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden}
   .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
   .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px}
-  .words{font-size:12px;font-style:italic;text-align:center;color:#444;margin-bottom:24px}
   .signatures{display:flex;justify-content:space-around;text-align:center;font-size:12px;margin-top:60px}
   .signatures .line{margin-bottom:8px;border-top:1px dotted #999;padding-top:36px;min-width:200px}
   .btn{display:block;margin:0 auto 14px;padding:8px 32px;background:#1a5fb4;color:#fff;
@@ -167,6 +167,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 
 <div class="bottom">
   <div class="payment">
+    <div class="amountwords">({_amount_text})</div>
     <label>☐ เงินสด</label>
     <label>☐ เช็ค/ดราฟต์ธนาคาร เลขที่ ............................ วันที่ ............................</label>
   </div>
@@ -176,8 +177,6 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
     <div class="row"><span>จำนวนเงินรวมทั้งสิ้น<br>GRAND TOTAL</span><span>{_grand:,.2f}</span></div>
   </div>
 </div>
-
-<div class="words">({_amount_text})</div>
 
 <div class="signatures">
   <div><div class="line"></div>ผู้รับเงิน / CASHIER<br>วันที่ Date ............/............/............</div>
