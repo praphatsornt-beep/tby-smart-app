@@ -108,8 +108,10 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .headerflex .right .th{font-weight:700;font-size:15px;color:#1a5fb4}
   .headerflex .right .en{font-size:11px;color:#1a5fb4;margin-top:2px}
   .headerflex .right .orig{font-size:11px;color:#1a5fb4;margin-top:2px;font-weight:600}
-  .headerflex .right .docnos{font-size:12px;margin-top:8px;color:#333}
-  .headerflex .right .docnos b{font-weight:700}
+  .headerflex .right .docnos{display:flex;gap:8px;margin-top:8px;justify-content:flex-end}
+  .headerflex .right .docbox{border:1px solid #1a5fb4;border-radius:6px;padding:4px 14px;text-align:center;min-width:74px}
+  .headerflex .right .docbox .lbl{font-size:9px;color:#1a5fb4;font-weight:600;display:block}
+  .headerflex .right .docbox .val{font-size:14px;font-weight:700;color:#111}
   .frombox{border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:14px}
   .frombox .row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px}
   .frombox .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 10px;margin-top:4px;font-size:11px;color:#444}
@@ -126,7 +128,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden}
   .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
   .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px}
-  .signatures{display:flex;justify-content:space-around;text-align:center;font-size:12px;margin-top:60px}
+  .signatures{display:flex;justify-content:space-around;text-align:center;font-size:12px;margin-top:80px}
   .signatures .sigbox{position:relative}
   .signatures .stamp{position:absolute;top:-54px;right:20px;width:64px;height:64px;border:1px dashed #bbb;
        border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;
@@ -137,8 +139,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .tip{text-align:center;font-size:11px;color:#888;margin-bottom:10px}
   @media print{
     body{background:#fff;padding:0}
-    .sheet{box-shadow:none;max-width:none;padding:0;min-height:230mm;display:flex;flex-direction:column}
-    .signatures{margin-top:auto;padding-top:40px}
+    .sheet{box-shadow:none;max-width:none;padding:0}
     .btn,.tip{display:none}
     @page{size:A4;margin:15mm}
   }"""
@@ -156,12 +157,15 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
     <div class="th">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>
     <div class="en">Receipt / Tax Invoice</div>
     <div class="orig">ต้นฉบับ / Original</div>
-    <div class="docnos">เล่มที่ <b>{_book_no}</b>&nbsp;&nbsp;&nbsp;เลขที่ <b>{_no_text}</b></div>
+    <div class="docnos">
+      <div class="docbox"><span class="lbl">เล่มที่</span><span class="val">{_book_no}</span></div>
+      <div class="docbox"><span class="lbl">เลขที่</span><span class="val">{_no_text}</span></div>
+    </div>
   </div>
 </div>
 
 <div class="frombox">
-  <div class="row"><span>ได้รับเงินจาก {ci.get('hq_name','') or '—'}</span><span>วันที่ {_doc_date.day}/{_doc_date.month}/{_doc_date.year+543}</span></div>
+  <div class="row"><span>ได้รับเงินจาก {ci.get('hq_name','') or '—'}</span></div>
   <div class="row"><span>{ci.get('hq_address','') or '—'}</span></div>
   <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('hq_tax_id','') or '—'}</div>
 </div>
@@ -169,7 +173,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 <div class="items-wrap">
 <table class="items">
   <tr><th style="width:8%">ลำดับ<br>No.</th><th>รายการสินค้า/บริการ<br>Description</th><th style="width:12%">จำนวน<br>Qty</th><th style="width:15%">ราคาต่อหน่วย<br>Unit Price</th><th style="width:18%">จำนวนเงิน<br>Amount</th></tr>
-  <tr><td class="num">1</td><td>{_desc}</td><td></td><td></td><td style="text-align:right;font-weight:600">{_amount:,.2f}</td></tr>
+  <tr><td class="num">1</td><td>{_desc}<br><span style="font-size:11px;color:#888">วันที่ {_doc_date.day} {_THAI_MONTHS[_doc_date.month]} {_doc_date.year+543}</span></td><td></td><td></td><td style="text-align:right;font-weight:600">{_amount:,.2f}</td></tr>
   <tr class="empty-row"><td colspan="5">&nbsp;</td></tr>
   <tr class="empty-row"><td colspan="5">&nbsp;</td></tr>
 </table>
