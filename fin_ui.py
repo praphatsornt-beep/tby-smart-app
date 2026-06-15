@@ -108,10 +108,11 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .headerflex .right .th{font-weight:700;font-size:15px;color:#1a5fb4;margin-top:8px}
   .headerflex .right .en{font-size:11px;color:#1a5fb4;margin-top:2px}
   .headerflex .right .orig{font-size:11px;color:#1a5fb4;margin-top:2px;font-weight:600}
-  .headerflex .right .docnos{display:flex;gap:8px;justify-content:flex-end}
-  .headerflex .right .docbox{border:1px solid #1a5fb4;border-radius:6px;padding:4px 14px;text-align:center;min-width:74px}
-  .headerflex .right .docbox .lbl{font-size:9px;color:#1a5fb4;font-weight:600;display:block}
-  .headerflex .right .docbox .val{font-size:14px;font-weight:700;color:#111}
+  .headerflex .right .docbox{border:1px solid #1a5fb4;border-radius:6px;overflow:hidden;margin-left:auto;min-width:170px}
+  .headerflex .right .docbox .row{display:flex;align-items:center;border-bottom:1px solid #1a5fb4}
+  .headerflex .right .docbox .row:last-child{border-bottom:none}
+  .headerflex .right .docbox .lbl{flex:1;padding:4px 12px;font-size:11px;font-weight:600;color:#333;text-align:left}
+  .headerflex .right .docbox .val{padding:4px 16px;font-size:13px;font-weight:700;color:#111;background:#eaf2fb;border-left:1px solid #1a5fb4;min-width:54px;text-align:center}
   .frombox{border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:14px}
   .frombox .row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px}
   .frombox .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 10px;margin-top:4px;font-size:11px;color:#444}
@@ -125,7 +126,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .payment{flex:1.2;font-size:12px;padding-top:4px;display:flex;flex-direction:column}
   .payment label{display:block;margin-bottom:10px;white-space:nowrap}
   .amountwords{background:#f0f0f0;border-radius:6px;padding:8px 12px;font-size:12px;color:#444;margin-top:auto}
-  .amountwords .awlabel{font-size:9px;color:#999;margin-top:4px}
+  .amountwords .awlabel{font-size:9px;color:#999;margin-top:4px;text-align:center}
   .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
   .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
   .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px;margin-top:auto}
@@ -151,9 +152,9 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
     <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('our_tax_id','') or '—'}</div>
   </div>
   <div class="right">
-    <div class="docnos">
-      <div class="docbox"><span class="lbl">เล่มที่</span><span class="val">{_book_no}</span></div>
-      <div class="docbox"><span class="lbl">เลขที่</span><span class="val">{_no_text}</span></div>
+    <div class="docbox">
+      <div class="row"><span class="lbl">เล่มที่ No:</span><span class="val">{_book_no}</span></div>
+      <div class="row"><span class="lbl">เลขที่ No:</span><span class="val">{_no_text}</span></div>
     </div>
     <div class="th">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>
     <div class="en">Receipt / Tax Invoice</div>
