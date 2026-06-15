@@ -128,7 +128,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
        border:none;border-radius:6px;font-size:13px;cursor:pointer}
   @media print{
     .btn{display:none}
-    @page{size:A5 landscape;margin:10mm}
+    @page{size:A4;margin:15mm}
   }"""
 
     _body = f"""
