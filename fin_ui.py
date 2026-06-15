@@ -95,7 +95,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
     _desc = f"ค่าคอมมิชชั่นประจำเดือน{_THAI_MONTHS[int(_month)]} {(int(_year) + 543) % 100}"
 
     _css = """
-  *{box-sizing:border-box;margin:0;padding:0}
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   body{font-family:'Sarabun',sans-serif;background:#eef0f3;padding:24px;color:#1a1a1a}
   .sheet{max-width:720px;margin:0 auto;background:#fff;padding:28px 34px;box-shadow:0 0 14px rgba(0,0,0,.10)}
   .headerflex{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #1a5fb4}
