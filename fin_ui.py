@@ -121,13 +121,13 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   table.items td{padding:12px 8px;font-size:12px;vertical-align:top}
   table.items td.num{text-align:center;color:#888}
   table.items tr.empty-row td{height:34px}
-  .bottom{display:flex;gap:18px;margin-bottom:14px;align-items:flex-start}
-  .payment{flex:1.2;font-size:12px;padding-top:4px}
+  .bottom{display:flex;gap:18px;margin-bottom:14px;align-items:stretch}
+  .payment{flex:1.2;font-size:12px;padding-top:4px;display:flex;flex-direction:column}
   .payment label{display:block;margin-bottom:10px;white-space:nowrap}
-  .amountwords{background:#f0f0f0;border-radius:6px;padding:8px 12px;font-size:12px;color:#444;margin-bottom:12px}
-  .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden}
+  .amountwords{background:#f0f0f0;border-radius:6px;padding:8px 12px;font-size:12px;color:#444;margin-top:auto}
+  .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden;display:flex;flex-direction:column}
   .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
-  .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px}
+  .totals .row:last-child{border-bottom:none;font-weight:700;background:#eaf2fb;color:#1a5fb4;font-size:13px;margin-top:auto}
   .signatures{display:flex;justify-content:space-around;text-align:center;font-size:12px;margin-top:80px}
   .signatures .line{margin-bottom:8px;border-top:1px dotted #999;padding-top:36px;min-width:200px}
   .btn{display:block;margin:0 auto 14px;padding:8px 32px;background:#1a5fb4;color:#fff;
