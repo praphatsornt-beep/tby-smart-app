@@ -99,12 +99,12 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   body{font-family:'Sarabun',sans-serif;background:#eef0f3;padding:24px;color:#1a1a1a}
   .sheet{max-width:720px;margin:0 auto;background:#fff;padding:28px 34px;box-shadow:0 0 14px rgba(0,0,0,.10)}
   .headerflex{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px;padding-bottom:12px;border-bottom:2px solid #1a5fb4}
-  .headerflex .left{text-align:left}
-  .headerflex .name-th{font-size:18px;font-weight:700}
-  .headerflex .name-en{font-size:12px;color:#555;margin-top:2px}
+  .headerflex .left{text-align:left;flex:1;min-width:0}
+  .headerflex .name-th{font-size:14px;font-weight:700}
+  .headerflex .name-en{font-size:11px;color:#555;margin-top:2px}
   .headerflex .addr{font-size:11px;color:#555;margin-top:2px}
   .headerflex .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 12px;margin-top:6px;font-size:11px;color:#444}
-  .headerflex .right{text-align:right;white-space:nowrap}
+  .headerflex .right{text-align:right;white-space:nowrap;flex-shrink:0}
   .headerflex .right .th{font-weight:700;font-size:15px;color:#1a5fb4}
   .headerflex .right .en{font-size:11px;color:#1a5fb4;margin-top:2px}
   .headerflex .right .orig{font-size:11px;color:#1a5fb4;margin-top:2px;font-weight:600}
@@ -118,7 +118,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   table.items td{border:1px solid #ddd;padding:8px;font-size:12px;height:34px;vertical-align:top}
   .bottom{display:flex;gap:18px;margin-bottom:14px;align-items:flex-start}
   .payment{flex:1.2;font-size:12px;padding-top:4px}
-  .payment label{display:block;margin-bottom:10px}
+  .payment label{display:block;margin-bottom:10px;white-space:nowrap}
   .amountwords{background:#f0f0f0;border-radius:6px;padding:8px 12px;font-size:12px;color:#444;margin-bottom:12px}
   .totals{flex:1;border:1px solid #999;border-radius:8px;overflow:hidden}
   .totals .row{display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid #eee;font-size:12px}
@@ -169,7 +169,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   <div class="payment">
     <div class="amountwords">({_amount_text})</div>
     <label>☐ เงินสด</label>
-    <label>☐ เช็ค/ดราฟต์ธนาคาร เลขที่ ............................ วันที่ ............................</label>
+    <label>☐ เช็ค/ดราฟต์ธนาคาร เลขที่ ............... วันที่ ...............</label>
   </div>
   <div class="totals">
     <div class="row"><span>รวมมูลค่าสินค้า/บริการ<br>SUB TOTAL</span><span>{_amount:,.2f}</span></div>
