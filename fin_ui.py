@@ -113,7 +113,7 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
   .frombox{border:1px solid #ccc;border-radius:8px;padding:12px;margin-bottom:14px}
   .frombox .row{display:flex;justify-content:space-between;margin-bottom:4px;font-size:12px}
   .frombox .taxid{display:inline-block;border:1px solid #999;border-radius:4px;padding:2px 10px;margin-top:4px;font-size:11px;color:#444}
-  table.items{width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #999;border-radius:8px;overflow:hidden}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #999}
   table.items th{padding:10px 8px;font-size:11px;text-align:center;background:#1a5fb4;color:#fff;font-weight:600}
   table.items td{padding:12px 8px;font-size:12px;border-bottom:1px solid #eee;vertical-align:top}
   table.items td.num{text-align:center;color:#888}
