@@ -3850,12 +3850,11 @@ with _t5_ledger:
                             elif _r["type"] == "จ่ายเงิน":
                                 _pay_details = _r.get("details", [])
                                 if _pay_details:
-                                    with st.expander(
+                                    _pd_str = " + ".join(f"{a:,.0f}" for a in _pay_details)
+                                    st.caption(
                                         f"💰 {_r['date']}  จ่ายเงิน {_r['amount']:,.0f}฿ "
-                                        f"({len(_pay_details)} รายการ) — คงค้าง {_r['remaining']:,.0f}฿"
-                                    ):
-                                        for _pd_amt in _pay_details:
-                                            st.caption(f"  ▫️ {_pd_amt:,.0f}฿")
+                                        f"({_pd_str}) — คงค้าง {_r['remaining']:,.0f}฿"
+                                    )
                                 else:
                                     st.caption(
                                         f"💰 {_r['date']}  จ่ายเงิน {_r['amount']:,.0f}฿ "
