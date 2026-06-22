@@ -969,7 +969,10 @@ def _show_carrier_select():
             _cs_hgt = _b3.number_input("สูง (cm)", 1, 300, _def_h, key=f"_cs_hgt_{_preset_sel}")
 
         st.divider()
-        _btn1, _btn2 = st.columns(2)
+        _btn1, _btn2, _btn3 = st.columns(3)
+        if _btn3.button("⬅️ ย้อนกลับแก้ไข", use_container_width=True, key="_cs_back"):
+            st.session_state.pop("_iship_carrier_select", None)
+            st.rerun()
         if _btn1.button("📦 ส่ง iShip", type="primary", use_container_width=True, key="_cs_send"):
             _cs_items       = info.get("items", [])
             _cs_item_codes  = " ".join(
@@ -1058,7 +1061,11 @@ def _show_carrier_select():
                     st.caption(f"❌ {o['name']} รับได้สูงสุด {o['max_kg']} kg")
     else:
         st.warning("ไม่มีขนส่งที่รองรับน้ำหนักนี้")
-        if st.button("ปิด", key="_cs_close"):
+        _bc1, _bc2 = st.columns(2)
+        if _bc1.button("⬅️ ย้อนกลับแก้ไข", use_container_width=True, key="_cs_back2"):
+            st.session_state.pop("_iship_carrier_select", None)
+            st.rerun()
+        if _bc2.button("ข้าม", use_container_width=True, key="_cs_close"):
             st.session_state.pop("_iship_carrier_select", None)
             st.session_state["_do_clear_after_iship"] = tab
             st.rerun()
