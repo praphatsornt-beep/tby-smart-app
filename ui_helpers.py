@@ -1,0 +1,1005 @@
+import re
+import streamlit as st
+import streamlit.components.v1 as components
+import pandas as pd
+from datetime import date, datetime, timezone, timedelta
+from math import floor, ceil
+import uuid
+import io
+
+import database as db
+import carriers as carr
+import calc_logic
+import thai_address
+import line_api
+import iship_api
+from flash_zones import lookup_zone, zone_surcharge, ZONE_LABELS, carrier_fees
+
+# ── Constants ────────────────────────────────────────────────────────────────
+
+_BKK = timezone(timedelta(hours=7))
+
+_PROVINCES = [
+    "กรุงเทพมหานคร","กระบี่","กาญจนบุรี","กาฬสินธุ์","กำแพงเพชร","ขอนแก่น",
+    "จันทบุรี","ฉะเชิงเทรา","ชลบุรี","ชัยนาท","ชัยภูมิ","ชุมพร",
+    "ตรัง","ตราด","ตาก","นครนายก","นครปฐม","นครพนม","นครราชสีมา",
+    "นครศรีธรรมราช","นครสวรรค์","นนทบุรี","นราธิวาส","น่าน","บึงกาฬ",
+    "บุรีรัมย์","ปทุมธานี","ประจวบคีรีขันธ์","ปราจีนบุรี","ปัตตานี",
+    "พระนครศรีอยุธยา","พะเยา","พังงา","พัทลุง","พิจิตร","พิษณุโลก",
+    "ภูเก็ต","มหาสารคาม","มุกดาหาร","ยะลา","ยโสธร","ระนอง","ระยอง",
+    "ราชบุรี","ร้อยเอ็ด","ลพบุรี","ลำปาง","ลำพูน","ศรีสะเกษ","สกลนคร",
+    "สงขลา","สตูล","สมุทรปราการ","สมุทรสงคราม","สมุทรสาคร","สระบุรี",
+    "สระแก้ว","สิงห์บุรี","สุพรรณบุรี","สุราษฎร์ธานี","สุรินทร์","สุโขทัย",
+    "หนองคาย","หนองบัวลำภู","อำนาจเจริญ","อุดรธานี","อุตรดิตถ์",
+    "อุทัยธานี","อุบลราชธานี","อ่างทอง","เชียงราย","เชียงใหม่",
+    "เพชรบุรี","เพชรบูรณ์","เลย","แพร่","แม่ฮ่องสอน",
+]
+
+BOX_WEIGHT_G = 500  # น้ำหนักกล่อง 0.5 kg (ไม่แสดงในระบบ)
+
+_TAMBON_PREFIXES   = ["ตำบล", "ต.", "แขวง"]
+_PROVINCE_PREFIXES = ["จังหวัด", "จ."]
+
+
+# ── Functions ────────────────────────────────────────────────────────────────
+
+def _to_bkk(ts: str) -> str:
+    if not ts:
+        return ""
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt.astimezone(_BKK).strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        return ts[:16].replace("T", " ")
+
+
+def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+    return buf.getvalue()
+
+
+@st.cache_data
+def _tambon_select_options() -> list:
+    """[{tambon, amphure, province, zipcode}, ...] เรียงตามชื่อตำบล"""
+    return sorted(thai_address._load_tambon_index(), key=lambda r: r["tambon"])
+
+
+@st.cache_data
+def _tambon_by_postcode(pc: str) -> list:
+    """[{tambon, amphure, province, zipcode}, ...] ที่ตรงกับรหัสไปรษณีย์นี้"""
+    return [o for o in _tambon_select_options() if o["zipcode"] == pc]
+
+
+def _tambon_option_label(opt) -> str:
+    return f"{opt['tambon']} / {opt['amphure']} / {opt['province']} ({opt['zipcode']})"
+
+
+def _strip_admin_prefix(s: str, prefixes: list) -> str:
+    s = (s or "").strip()
+    for p in prefixes:
+        if s.startswith(p):
+            return s[len(p):].strip()
+    return s
+
+
+def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
+                       selectbox_key: str, label: str = "ตำบล/แขวง"):
+    """ช่อง ตำบล/แขวง แบบ dropdown ค้นหา (st.selectbox มาตรฐาน — พิมพ์กรองรายการได้ทันที)
+    เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย ถ้ายังไม่เลือก จะแสดงเป็นช่องว่างพร้อม placeholder
+    """
+    options = _tambon_select_options()
+
+    cur_val = st.session_state.get(value_key, "")
+    cur_am  = st.session_state.get(am_key, "")
+    cur_pv  = st.session_state.get(pv_key, "")
+    cur_pc  = st.session_state.get(pc_key, "")
+    cur_sig = (cur_val, cur_pv)
+
+    _sig_key = f"_{selectbox_key}_sig"
+    if st.session_state.get(_sig_key) != cur_sig:
+        st.session_state.pop(selectbox_key, None)
+        st.session_state[_sig_key] = cur_sig
+
+    _norm_val = _strip_admin_prefix(cur_val, _TAMBON_PREFIXES)
+    _norm_pv  = _strip_admin_prefix(cur_pv, _PROVINCE_PREFIXES)
+
+    match_idx = None
+    if _norm_val:
+        for i, opt in enumerate(options):
+            if opt["tambon"] == _norm_val and (not _norm_pv or opt["province"] == _norm_pv):
+                match_idx = i
+                break
+
+    # ถ้าค่าที่บันทึกไว้ไม่ตรงกับรายชื่อตำบลในฐานข้อมูล (เช่น สะกดต่างกัน)
+    # ให้แสดงค่าเดิมเป็นตัวเลือกแรกไว้ก่อน เพื่อไม่ให้ช่องว่างเปล่า
+    if cur_val and match_idx is None:
+        options = [{"tambon": cur_val, "amphure": cur_am, "province": cur_pv, "zipcode": cur_pc}] + options
+        match_idx = 0
+
+    # บังคับค่า widget ให้ตรงกับ match_idx ตรงๆ — ไม่พึ่ง `index=` ของ st.selectbox อย่างเดียว
+    # (กรณี rerun ซ้อน rerun เช่นกดเลือก "ที่อยู่เดิม" แล้ว auto-fill จากเบอร์โทรต่อ)
+    if match_idx is not None and selectbox_key not in st.session_state:
+        st.session_state[selectbox_key] = match_idx
+
+    idx_options = list(range(len(options)))
+    _short_label = lambda opt: f"{opt['tambon']} ({opt['zipcode']})"
+    label_map = {_short_label(opt): i for i, opt in enumerate(options)}
+
+    def _on_change():
+        raw = st.session_state.get(selectbox_key)
+        i = raw if isinstance(raw, int) else label_map.get(raw)
+        if i is not None:
+            sel = options[i]
+            st.session_state[value_key] = sel["tambon"]
+            st.session_state[am_key]    = sel["amphure"]
+            st.session_state[pv_key]    = sel["province"]
+            st.session_state[pc_key]    = sel["zipcode"]
+            st.session_state[_sig_key]  = (sel["tambon"], sel["province"])
+
+    st.selectbox(
+        label, idx_options, index=match_idx, placeholder="พิมพ์ค้นหาตำบล",
+        format_func=lambda i: _short_label(options[i]),
+        key=selectbox_key, on_change=_on_change,
+    )
+
+    return st.session_state.get(value_key, cur_val)
+
+
+def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
+                       searchbox_key: str, suggest_key: str,
+                       stage_dt: str = "", stage_am: str = "", stage_pv: str = ""):
+    """ถ้ารหัสไปรษณีย์ตรงกับ ต./อ./จ. → auto-fill (1 ตำบล) หรือ selectbox (หลายตำบล)"""
+    pc = (pc or "").strip()
+    if len(pc) != 5:
+        return
+
+    def _stage(dt="", am="", pv=""):
+        if dt: st.session_state[stage_dt or value_key] = dt
+        if am: st.session_state[stage_am or am_key] = am
+        if pv: st.session_state[stage_pv or pv_key] = pv
+        if stage_dt or stage_am or stage_pv:
+            st.rerun()
+
+    opts = _tambon_by_postcode(pc)
+    if not opts:
+        from bangkok_addresses import lookup_from_zipcode
+        prov, amph = lookup_from_zipcode(pc)
+        if amph and not st.session_state.get(am_key):
+            _stage(am=amph, pv=prov)
+        return
+    cur = (st.session_state.get(value_key, ""), st.session_state.get(am_key, ""), st.session_state.get(pv_key, ""))
+    if cur in [(o["tambon"], o["amphure"], o["province"]) for o in opts]:
+        return
+
+    if len(opts) == 1:
+        _stage(dt=opts[0]["tambon"], am=opts[0]["amphure"], pv=opts[0]["province"])
+        if not (stage_dt or stage_am or stage_pv):
+            st.rerun()
+        return
+
+    _fill_am = ""
+    _fill_pv = ""
+    _all_provinces = {o["province"] for o in opts}
+    if len(_all_provinces) == 1 and not st.session_state.get(pv_key):
+        _fill_pv = next(iter(_all_provinces))
+    _all_amphures = {o["amphure"] for o in opts}
+    if len(_all_amphures) == 1 and not st.session_state.get(am_key):
+        _fill_am = next(iter(_all_amphures))
+    if _fill_am or _fill_pv:
+        _stage(am=_fill_am, pv=_fill_pv)
+
+    idx_options = list(range(len(opts)))
+    _suggest_label = lambda i: f"{opts[i]['tambon']} / {opts[i]['amphure']} / {opts[i]['province']}"
+    label_map = {_suggest_label(i): i for i in idx_options}
+
+    def _on_pick():
+        raw = st.session_state.get(suggest_key)
+        i = raw if isinstance(raw, int) else label_map.get(raw)
+        if i is not None:
+            sel = opts[i]
+            st.session_state[value_key] = sel["tambon"]
+            st.session_state[am_key]    = sel["amphure"]
+            st.session_state[pv_key]    = sel["province"]
+            st.session_state.pop(searchbox_key, None)
+            st.session_state.pop(f"_{searchbox_key}_sig", None)
+
+    st.selectbox(
+        f"📍 ตำบล/อำเภอ/จังหวัด สำหรับรหัส {pc}", idx_options, index=None,
+        placeholder="เลือกที่อยู่ตามรหัสไปรษณีย์",
+        format_func=_suggest_label,
+        key=suggest_key, on_change=_on_pick,
+    )
+
+
+def _extract_tracking(resp: dict) -> str:
+    """Extract tracking code from iShip API response (checks data sub-dict then top-level)."""
+    _d = resp.get("data") or {}
+    return (_d.get("tracking_code") or _d.get("tracking_number")
+            or resp.get("tracking_code") or resp.get("tracking_number") or "")
+
+
+def _build_success_info(tracking, tab, customer, dst_name, dst_phone, address,
+                        carrier, weight_kg, cod_amount, items, line_user_id,
+                        shipment_id, **extra) -> dict:
+    """Build the _iship_success_info dict for storing in session state."""
+    d = {
+        "tracking":     tracking,
+        "tab":          tab,
+        "customer":     customer,
+        "dst_name":     dst_name,
+        "dst_phone":    dst_phone,
+        "address":      address,
+        "carrier":      carrier,
+        "weight_kg":    weight_kg,
+        "cod_amount":   cod_amount,
+        "items":        items,
+        "line_user_id": line_user_id,
+        "shipment_id":  shipment_id,
+    }
+    d.update(extra)
+    return d
+
+
+def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,
+                               event_date: str,
+                               collect_ship_items: bool = False) -> tuple:
+    """Process receive-old-items loop.
+
+    Returns (saved_count, total_pay, ship_items).
+    ship_items is populated only when *collect_ship_items* is True.
+    """
+    saved_count = 0
+    total_pay   = 0.0
+    ship_items  = []
+    for _ri, _rrow in rx_edit.iterrows():
+        _delta      = int(_rrow["รับวันนี้"] or 0)
+        _owed_this  = float(rx_df.iloc[_ri]["_owed"])
+        _cap        = int(rx_df.iloc[_ri]["_max"])
+        _actual_qty = min(max(_delta, 0), _cap)
+        if _actual_qty <= 0:
+            continue
+        _custom_pay = rx_pay_map.get(rx_df.iloc[_ri]["_tid"], 0.0)
+        if _custom_pay > 0:
+            _apply_pay = round(min(_custom_pay, _owed_this), 2)
+        else:
+            _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+        _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
+        db.insert_partial_event({
+            "id":             str(uuid.uuid4()),
+            "date":           event_date,
+            "transaction_id": rx_df.iloc[_ri]["_tid"],
+            "qty_received":   _actual_qty,
+            "amount_paid":    _apply_pay,
+            "event_type":     _etype,
+        })
+        saved_count += 1
+        total_pay   += _apply_pay
+        if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
+            db.update_transaction_status(rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
+        if collect_ship_items:
+            ship_items.append({
+                "product_id": pending_rx[_ri]["product_id"],
+                "name":       str(_rrow["สินค้า"]),
+                "qty":        _actual_qty,
+            })
+    return saved_count, total_pay, ship_items
+
+
+def _quick_add_customer(key_prefix: str):
+    """Inline quick-add customer form.
+
+    *key_prefix* differentiates widget keys across tabs (e.g. "" for sale, "sp_" for ship).
+    Returns the new customer name (str) when a customer was just created, else None.
+    """
+    _btn_key   = f"{key_prefix}cust_add_btn"
+    _state_key = f"_{key_prefix}adding_cust"
+    _form_key  = f"{key_prefix}add_cust_quick"
+    _picked_key = f"_{key_prefix}cust_picked"
+
+    if st.button("➕ เพิ่มลูกค้าใหม่", key=_btn_key, use_container_width=False):
+        st.session_state[_state_key] = ""
+    if _state_key in st.session_state:
+        with st.form(_form_key):
+            _fn = st.text_input("ชื่อลูกค้า")
+            _fp = st.text_input("เบอร์โทร (ถ้ามี)")
+            _fc1, _fc2 = st.columns(2)
+            if _fc1.form_submit_button("💾 บันทึก", type="primary"):
+                _all_cids = [c["id"] for c in db.get_customers()]
+                _cmax = max((int(re.match(r'C-(\d+)', x).group(1))
+                             for x in _all_cids if re.match(r'C-(\d+)', x)), default=0)
+                _new_cid = f"C-{_cmax + 1:03d}"
+                db.upsert_customer({"id": _new_cid,
+                                    "name": _fn.strip(), "phone": _fp.strip()})
+                db.get_customers.clear()
+                st.session_state[_picked_key] = _fn.strip()
+                st.session_state.pop(_state_key, None)
+                st.rerun()
+            if _fc2.form_submit_button("ยกเลิก"):
+                st.session_state.pop(_state_key, None)
+                st.rerun()
+    return None
+
+
+def _warn_duplicate_phone(phone: str, current_cid: str):
+    """ถ้าเบอร์นี้มีที่อยู่ของลูกค้าคนอื่นอยู่แล้ว ให้เตือน (บันทึกที่อยู่จะลบของเดิมทิ้ง)"""
+    phone = (phone or "").strip()
+    if len(phone) != 10:
+        return
+    try:
+        addr = db.get_address_by_phone(phone)
+    except Exception:
+        addr = None
+    if addr and addr.get("customer_id") and addr.get("customer_id") != current_cid:
+        other_name = (addr.get("customers") or {}).get("name", "")
+        other_addr = f"{addr.get('address_line','')} {addr.get('district','')} {addr.get('amphure','')} {addr.get('province','')}".strip()
+        st.warning(f"⚠️ เบอร์นี้มีที่อยู่ของคุณ{other_name} อยู่แล้ว ({other_addr}) — ถ้าบันทึกที่อยู่นี้ จะลบที่อยู่เดิมของคุณ{other_name}")
+
+
+def calc_shipping(weight_grams: float, postcode: str = "") -> float:
+    """ค่าส่ง Flash Express: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท + ค่าพื้นที่"""
+    kg  = (weight_grams + BOX_WEIGHT_G) / 1000
+    fee = 39 + max(0, ceil(kg - 5)) * 10
+    return fee + zone_surcharge(postcode)
+
+
+def _style_status(val):
+    colors = {
+        "เปิดบิลแล้ว":   "background-color:#1a5c2e;color:white",
+        "ยังไม่เปิดบิล": "background-color:#7c4a00;color:white",
+        "จ่ายแล้ว":      "background-color:#1a5c2e;color:white",
+        "ค้างจ่าย":      "background-color:#6b1a1a;color:white",
+        "COD":          "background-color:#7a5c00;color:white",
+        "COD จ่ายแล้ว":  "background-color:#1a5c2e;color:white",
+    }
+    return colors.get(val, "")
+
+
+def _fmt_note(note: str) -> str:
+    """แปลง raw tag → label กระชับ เช่น 'ส่งพัสดุ COD'"""
+    import re as _re
+    labels = []
+    if "[ส่งพัสดุ|" in note:
+        labels.append("ส่งพัสดุ")
+    if "[COD|" in note:
+        labels.append("COD")
+    free = _re.sub(r"\[[^\]]+\]", "", note).strip()
+    free = _re.sub(r"#\w+", "", free).strip()
+    if free:
+        labels.append(free)
+    return " ".join(labels)
+
+
+def _extract_staff_tag(notes: list) -> str:
+    """หา #tag (เช่น #milk) จาก notes ของรายการในบิล คืนชื่อไม่มี # หรือ '' ถ้าไม่เจอ"""
+    import re as _re
+    for note in notes:
+        _m = _re.search(r"#(\w+)", str(note or ""))
+        if _m:
+            return _m.group(1)
+    return ""
+
+
+def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
+    """รวมรายการในแต่ละบิล (groupby เลขที่บิล) คืน DataFrame หนึ่งแถวต่อบิล:
+    เลขที่บิล, วันที่, ยอดรวม, ค้างจ่าย, ค้างรับ, is_paid, is_billed, pv_unbilled
+    """
+    _cols = ["เลขที่บิล", "วันที่", "ยอดรวม", "ค้างจ่าย", "ค้างรับ", "is_paid", "is_billed", "pv_unbilled"]
+    if df.empty:
+        return pd.DataFrame(columns=_cols)
+
+    _bills = (df.groupby("เลขที่บิล", dropna=False)
+              .agg(วันที่=("วันที่", "max"),
+                   ยอดรวม=("ยอดรวม", "sum"),
+                   ค้างจ่าย=("ค้างจ่าย", "sum"),
+                   ค้างรับ=("ค้างรับ", "sum"),
+                   is_billed=("สถานะบิล", lambda x: (x == "เปิดบิลแล้ว").all()))
+              .reset_index()
+              .sort_values("วันที่", ascending=False))
+    _bills["is_paid"] = _bills["ค้างจ่าย"] <= 0.01
+
+    _pv_col = "PV รวม" if "PV รวม" in df.columns else None
+    if _pv_col:
+        _pv_map = (df[df.get("สถานะบิล", pd.Series(dtype=str)) == "ยังไม่เปิดบิล"]
+                   .groupby("เลขที่บิล")[_pv_col].sum())
+        _bills["pv_unbilled"] = _bills["เลขที่บิล"].map(_pv_map).fillna(0)
+    else:
+        _bills["pv_unbilled"] = 0
+
+    return _bills
+
+
+def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix, preselected_bill=None):
+    """แสดงส่วนเลือกบิล / พิมพ์บิล / จัดการบิล สำหรับลูกค้า sel_p
+    preselected_bill: ถ้าระบุ ข้ามตัวเลือกบิล แสดงบิลนี้ตรง ๆ (ใช้กับค้นด้วยเลขที่บิล)
+    key_prefix: prefix สำหรับ widget key / session_state กันชนกันเมื่อเรียกซ้ำหลายลูกค้า
+    """
+    if preselected_bill:
+        all_df_p = all_txn_cache[all_txn_cache["เลขที่บิล"] == preselected_bill]
+        if all_df_p.empty:
+            st.warning(f"ไม่พบบิล {preselected_bill}")
+            return
+        sel_p = all_df_p["ลูกค้า"].iloc[0]
+        _bill_picked = preselected_bill
+    else:
+        all_df_p = all_txn_cache[all_txn_cache["ลูกค้า"] == sel_p]
+
+        _ck = f"_{key_prefix}_bill_cust"
+        _pk = f"_{key_prefix}_bill_picked"
+        if st.session_state.get(_ck) != sel_p:
+            st.session_state.pop(_pk, None)
+            st.session_state[_ck] = sel_p
+
+        _bill_picked = st.session_state.get(_pk, "")
+
+        if not _bill_picked:
+            if all_df_p.empty:
+                st.info("ไม่มีรายการ")
+                return
+
+            _bills = _bills_from_df(all_df_p)
+
+            if len(_bills) == 1:
+                st.session_state[_pk] = _bills.iloc[0]["เลขที่บิล"] or "—"
+                st.rerun()
+            st.caption("เลือกบิลที่ต้องการพิมพ์")
+            _total_owed    = _bills["ค้างจ่าย"].sum()
+            _total_pending = int(_bills["ค้างรับ"].sum())
+            _total_pv_unbilled = _bills["pv_unbilled"].sum()
+            _all_color    = "🔴" if _total_owed > 0.01 else "✅"
+            _all_pv_str   = f" &nbsp; ⭐ {_total_pv_unbilled:,.0f} PV" if _total_pv_unbilled > 0 else ""
+            _all_recv_str = f" &nbsp; 📦 ยังไม่รับของ {_total_pending} ชิ้น" if _total_pending > 0 else ""
+            if st.button(
+                f"📋 **รวมทุกบิล** &nbsp; {_all_color} ค้างจ่ายรวม {_total_owed:,.0f} บาท{_all_recv_str}{_all_pv_str}",
+                key=f"{key_prefix}_pbill_ALL", use_container_width=True):
+                st.session_state[_pk] = "__ALL__"
+                st.rerun()
+            st.divider()
+            for _, _br in _bills.iterrows():
+                _bno      = _br["เลขที่บิล"] or "—"
+                _owing    = _br["ค้างจ่าย"]
+                _pending  = int(_br["ค้างรับ"])
+                _color    = "🔴" if _owing > 0.01 else "✅"
+                _pv_un    = _br["pv_unbilled"]
+                _pv_str   = f" &nbsp; ⭐ {_pv_un:,.0f} PV" if _pv_un > 0 else ""
+                _recv_str = f" &nbsp; 📦 ยังไม่รับของ {_pending} ชิ้น" if _pending > 0 else ""
+                _lbl = (f"📄 **{_bno}** &nbsp; {_br['วันที่']} &nbsp; "
+                        f"{_color} ค้างจ่าย {_owing:,.0f} บาท{_recv_str}{_pv_str}")
+                if st.button(_lbl, key=f"{key_prefix}_pbill_{_bno}", use_container_width=True):
+                    st.session_state[_pk] = _bno
+                    st.rerun()
+            return
+        else:
+            _bx1, _bx2 = st.columns([6, 1])
+            _lbl_picked = "รวมทุกบิล" if _bill_picked == "__ALL__" else f"บิล {_bill_picked}"
+            _bx1.markdown(f"📄 **{_lbl_picked}**")
+            if _bx2.button("✕ เปลี่ยน", key=f"{key_prefix}_bill_clear"):
+                st.session_state.pop(_pk, None)
+                st.rerun()
+            if _bill_picked != "__ALL__":
+                if _bill_picked == "—":
+                    all_df_p = all_df_p[all_df_p["เลขที่บิล"].replace("", "—") == "—"]
+                else:
+                    all_df_p = all_df_p[all_df_p["เลขที่บิล"] == _bill_picked]
+
+    if all_df_p.empty:
+        return
+
+    show_p = all_df_p.copy()
+
+    if show_p.empty:
+        st.success(f"✅ {sel_p} ไม่มียอดค้าง")
+        return
+
+    rows_html = ""
+    for _, r in show_p.iterrows():
+        bill_color  = "#b8860b" if r["สถานะบิล"] == "ยังไม่เปิดบิล" else "#1a7a3a"
+        owed_color  = "#c0392b" if r["ค้างจ่าย"] > 0.01 else "#1a7a3a"
+        rows_html += f"""
+        <tr>
+          <td>{r['วันที่']}</td>
+          <td style="font-size:11px;color:#666">{r.get('รหัส','')}</td>
+          <td>{r['สินค้า']}</td>
+          <td style="text-align:center">{int(r['สั่ง'])}</td>
+          <td style="text-align:center">{int(r['รับแล้ว'])}</td>
+          <td style="text-align:right">{r['ยอดรวม']:,.0f}</td>
+          <td style="text-align:right">{r['จ่ายแล้ว']:,.0f}</td>
+          <td style="text-align:right;color:{owed_color};font-weight:600">{r['ค้างจ่าย']:,.0f}</td>
+          <td style="text-align:center;color:{bill_color}">{r['สถานะบิล']}</td>
+          <td>{_fmt_note(r.get('หมายเหตุ','') or '')}</td>
+        </tr>"""
+
+    total_amount      = show_p["ยอดรวม"].sum()
+    total_paid        = show_p["จ่ายแล้ว"].sum()
+    total_outstanding = show_p["ค้างจ่าย"].sum()
+    total_pv          = show_p["PV รวม"].sum() if "PV รวม" in show_p.columns else 0
+    unbilled_pv       = show_p.loc[show_p["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in show_p.columns else 0
+    today_str         = date.today().strftime("%d/%m/%Y")
+    filter_label      = "รายการทั้งหมด"
+    bill_nos          = show_p["เลขที่บิล"].dropna().unique().tolist() if "เลขที่บิล" in show_p.columns else []
+    bill_nos_str      = ", ".join(b for b in bill_nos if b) or ""
+    staff_tag         = _extract_staff_tag(show_p.get("หมายเหตุ", pd.Series(dtype=str)).tolist())
+    _last_paid_raw    = show_p["last_payment_date"].replace("", None).max() if "last_payment_date" in show_p.columns else None
+    try:
+        _paid_date_str = pd.to_datetime(_last_paid_raw).strftime("%d/%m/%Y") if _last_paid_raw else "—"
+    except Exception:
+        _paid_date_str = "—"
+
+    # ตรวจสอบว่ามี tag ส่งพัสดุจาก notes ของรายการแรก
+    first_note = str(show_p.iloc[0].get("หมายเหตุ", "") or "")
+    is_ship_bill = "[ส่งพัสดุ|" in first_note
+    ship_weight_str, ship_fee_str, ship_remote = "", "", False
+    ship_carrier = ship_postcode = ship_weight_str = ship_fee_str = ship_remote = ""
+    if is_ship_bill:
+        import re as _re
+        _m = _re.search(
+            r"\[ส่งพัสดุ\|([^|]+)?\|?(\d{5})?\|?น้ำหนัก=([\d.]+)kg\|ค่าส่ง=(\d+)([^\]]*)\]",
+            first_note
+        )
+        if _m:
+            ship_carrier    = _m.group(1) or ""
+            ship_postcode   = _m.group(2) or ""
+            ship_weight_str = _m.group(3) or ""
+            ship_fee_str    = _m.group(4) or ""
+            ship_remote     = _m.group(5).strip("|") if _m.group(5) else ""
+
+    bm1, bm2 = st.columns(2)
+    bm1.metric("💸 ยอดค้างจ่ายรวม",  f"{total_outstanding:,.0f} บาท")
+    bm2.metric("⭐ PV ยังไม่เปิดบิล", f"{unbilled_pv:,.0f}")
+
+    _ship_row_html = (
+        f"<tr><td>⚖️ น้ำหนัก {ship_weight_str} kg &nbsp; 🚚 ค่าส่ง</td>"
+        f"<td><b style='color:#1a5c8e'>{ship_fee_str} บาท</b></td></tr>"
+    ) if is_ship_bill and ship_fee_str else ""
+
+    _staff_row_html = (
+        f"<tr><td>ผู้บันทึก</td><td>{staff_tag}</td></tr>"
+    ) if staff_tag else ""
+
+    def _bill_body(label: str) -> str:
+        _lbl = f"<div style='font-size:11px;color:#888;margin-bottom:4px'>{label}</div>" if label else ""
+        return f"""{_lbl}
+<div class="header" style="display:flex;justify-content:space-between;align-items:flex-start">
+  <div>
+    <h1>ใบรับสินค้า ZHULIAN TBY</h1>
+    <h2>ลูกค้า: {sel_p}{"&nbsp;&nbsp;🚚 ส่งพัสดุ" if is_ship_bill else ""}</h2>
+  </div>
+  <div style="text-align:right">
+    <div style="font-size:14px;font-weight:600">เลขที่บิล: {bill_nos_str if bill_nos_str else "—"}</div>
+    <div style="font-size:14px;font-weight:600;margin-top:4px">วันที่รับเงิน: {_paid_date_str}</div>
+    <div class="info" style="margin-top:4px">วันที่พิมพ์: {today_str}</div>
+    <div class="info">{filter_label} ({len(show_p)} รายการ)</div>
+  </div>
+</div>
+<table>
+  <thead><tr>
+    <th>วันที่</th><th>รหัส</th><th>สินค้า</th>
+    <th style="text-align:center">สั่ง</th><th style="text-align:center">รับแล้ว</th>
+    <th style="text-align:right">ยอดรวม</th><th style="text-align:right">จ่ายแล้ว</th>
+    <th style="text-align:right">ค้างจ่าย</th><th style="text-align:center">สถานะบิล</th>
+    <th>หมายเหตุ</th>
+  </tr></thead>
+  <tbody>{rows_html}</tbody>
+</table>
+<div class="summary">
+  <table>
+    <tr><td>ยอดสินค้า</td><td><b>{total_amount:,.0f} บาท</b></td></tr>
+    {_ship_row_html}
+    <tr><td>ยอดรวม (รวมค่าส่ง)</td><td><b>{total_amount + int(ship_fee_str or 0):,.0f} บาท</b></td></tr>
+    <tr><td>จ่ายแล้ว</td><td><b style="color:#1a7a3a">{total_paid:,.0f} บาท</b></td></tr>
+    <tr class="big"><td>ค้างจ่าย</td><td><b style="color:#c0392b">{total_outstanding:,.0f} บาท</b></td></tr>
+    <tr><td>⭐ PV รวม (ยังไม่เปิดบิล)</td><td><b style="color:#b8860b">{unbilled_pv:.0f}</b></td></tr>
+    {_staff_row_html}
+  </table>
+</div>"""
+
+    _css = """
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Sarabun',sans-serif;padding:16px;color:#111;background:#fff;font-size:12px}
+  .header{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px}
+  .header h1{font-size:15px;font-weight:700}
+  .header h2{font-size:13px;font-weight:600;margin-top:2px}
+  .info{color:#444;font-size:10px;margin-top:2px}
+  table{width:100%;border-collapse:collapse;margin-top:5px;border:1px solid #000}
+  th{background:#000;color:#fff;padding:5px 6px;text-align:left;font-size:11px;border:1px solid #000}
+  td{padding:4px 6px;border:1px solid #aaa;font-size:11px}
+  tr:nth-child(even) td{background:#f0f0f0}
+  .summary{margin-top:12px;border-top:2px solid #000;padding-top:8px;text-align:right}
+  .summary table{width:auto;margin-left:auto;border:none}
+  .summary td{padding:2px 8px;border:none;font-size:12px}
+  .big td{font-weight:900;font-size:14px;border-top:2px solid #000;padding-top:5px}
+  .two-col{display:flex;gap:0;height:100%}
+  .copy{width:50%;padding:16px;min-height:400px}
+  .vcut{width:2px;background:repeating-linear-gradient(to bottom,#aaa 0,#aaa 6px,transparent 6px,transparent 12px);flex-shrink:0}
+  .copy-lbl{font-size:10px;color:#999;margin-bottom:4px;font-style:italic}
+  .btn{display:block;margin:0 auto 14px;padding:7px 28px;background:#c0392b;color:#fff;
+       border:none;border-radius:6px;font-size:13px;cursor:pointer}
+  @media print{
+    .btn{display:none}
+    @page{size:A4 landscape;margin:8mm}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{color:#000!important;font-size:11px}
+    th{background:#000!important;color:#fff!important;border:1px solid #000}
+    td{border-bottom:1px solid #999!important;color:#000!important}
+    tr:nth-child(even) td{background:#eee!important}
+    .info{color:#333!important}
+    .copy-lbl{color:#333!important}
+    .vcut{background:repeating-linear-gradient(to bottom,#000 0,#000 4px,transparent 4px,transparent 8px)!important}
+    b[style],span[style],[style*="color"]{color:#000!important}
+    .summary .big td{font-weight:900}
+  }"""
+
+    _body = f"""<div class="two-col">
+  <div class="copy">{_bill_body("สำหรับลูกค้า")}</div>
+  <div class="vcut"></div>
+  <div class="copy">{_bill_body("สำหรับร้าน")}</div>
+</div>"""
+    _height = 750
+
+    bill_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<style>{_css}</style></head><body>
+<button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+{_body}
+<br><button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
+</body></html>"""
+
+    components.html(bill_html, height=_height, scrolling=True)
+
+    # ── ส่งสรุปบิล LINE ─────────────────────────────────────
+    _t7_cust_name = show_p["ลูกค้า"].iloc[0] if not show_p.empty else sel_p
+    _t7_cust_id   = cust_map_p.get(_t7_cust_name, {}).get("id", "")
+    _t7_line_uid  = db.get_customer_line_user_id(_t7_cust_id) if _t7_cust_id else ""
+    _t7_items = [{"name": r["สินค้า"], "qty": int(r["สั่ง"]),
+                  "total": float(r["ยอดรวม"])} for _, r in show_p.iterrows()]
+    _t7_pay = show_p.iloc[0].get("สถานะบิล", "") if not show_p.empty else ""
+    _t7_col1, _t7_col2 = st.columns([1, 2])
+    if _t7_col1.button("📨 ส่งสรุปบิล LINE", key=f"{key_prefix}_line_btn",
+                       disabled=not bool(_t7_line_uid),
+                       help="ส่งสรุปให้ลูกค้าใน LINE" if _t7_line_uid else "ลูกค้าไม่มี LINE ID"):
+        _r7 = line_api.push_bill_summary(
+            _t7_line_uid, _t7_cust_name, bill_nos_str,
+            _t7_items, total_amount, _t7_pay
+        )
+        if _r7["ok"]:
+            st.success("✅ ส่ง LINE แล้ว")
+        else:
+            st.error(f"LINE error: {_r7['error']}")
+
+    # ── จัดการบิล ────────────────────────────────────────────
+    _t7_tids = show_p["id"].tolist()
+    _t7_single = len(bill_nos) == 1 and bill_nos[0]
+
+    with st.expander("💰 บันทึกรับเงิน"):
+        _t7_owed = float(show_p["ค้างจ่าย"].sum())
+        _t7_paid_so_far = float(show_p["จ่ายแล้ว"].sum())
+        _t7_total_amt   = float(show_p["ยอดรวม"].sum())
+        pm1, pm2, pm3 = st.columns(3)
+        pm1.metric("ยอดรวมบิล",  f"{_t7_total_amt:,.0f} ฿")
+        pm2.metric("จ่ายแล้ว",    f"{_t7_paid_so_far:,.0f} ฿")
+        pm3.metric("ค้างจ่าย",    f"{_t7_owed:,.0f} ฿")
+        if _t7_owed <= 0.01:
+            st.success("✅ ชำระครบแล้ว")
+        else:
+            _t7_pay_date = st.date_input("วันที่รับเงิน", value=date.today(), key=f"{key_prefix}_pay_date")
+            _t7_pay_amt  = st.number_input(
+                "จำนวนเงินที่รับ (บาท)",
+                min_value=0.0, max_value=float(_t7_owed),
+                value=float(_t7_owed), step=1.0, key=f"{key_prefix}_pay_amount",
+            )
+            if st.button("💾 บันทึกรับเงิน", key=f"{key_prefix}_save_pay", type="primary",
+                         use_container_width=True):
+                _owed_rows = show_p[show_p["ค้างจ่าย"] > 0.01].reset_index(drop=True)
+                _owed_ids  = _owed_rows["id"].tolist()
+                _row_owed  = _owed_rows["ค้างจ่าย"].tolist()
+                _total_row_owed = sum(_row_owed)
+                _remaining = float(_t7_pay_amt)
+                for _pi, (_tid_p, _row_o) in enumerate(zip(_owed_ids, _row_owed)):
+                    if _remaining <= 0:
+                        break
+                    if _pi == len(_owed_ids) - 1:
+                        _share = _remaining
+                    else:
+                        _share = round(_row_o / _total_row_owed * float(_t7_pay_amt), 2)
+                        _share = min(_share, _remaining)
+                    db.insert_partial_event({
+                        "id":             str(uuid.uuid4()),
+                        "date":           str(_t7_pay_date),
+                        "transaction_id": _tid_p,
+                        "qty_received":   0,
+                        "amount_paid":    _share,
+                        "event_type":     "จ่ายเงิน",
+                    })
+                    _remaining -= _share
+                if float(_t7_pay_amt) >= _t7_owed - 0.01:
+                    for _tid in _t7_tids:
+                        db.update_transaction_status(_tid, pay_status="จ่ายแล้ว")
+                st.success(f"✅ บันทึกรับเงิน {_t7_pay_amt:,.0f} ฿ แล้ว")
+                st.rerun()
+
+    if _t7_single:
+        with st.expander("📦 บันทึกรับของ"):
+            _recv_base = show_p[["สินค้า","สั่ง","รับแล้ว","ค้างรับ"]].copy().reset_index(drop=True)
+            _recv_ids  = show_p["id"].reset_index(drop=True)
+            _recv_base["รับเพิ่ม"] = pd.Series([0]*len(_recv_base), dtype="int64")
+            _recv_edit = st.data_editor(
+                _recv_base,
+                hide_index=True, use_container_width=True,
+                column_config={
+                    "รับเพิ่ม": st.column_config.NumberColumn("รับเพิ่ม", min_value=0, step=1, width="small"),
+                },
+                disabled=["สินค้า","สั่ง","รับแล้ว","ค้างรับ"],
+                key=f"{key_prefix}_recv_edit"
+            )
+            if st.button("💾 บันทึกรับของ", key=f"{key_prefix}_save_recv"):
+                _saved_r = 0
+                for _ri, _rrow in _recv_edit.iterrows():
+                    _delta = int(_rrow["รับเพิ่ม"] or 0)
+                    if _delta <= 0:
+                        continue
+                    _cap = int(_recv_base.iloc[_ri]["ค้างรับ"])
+                    _delta = min(_delta, _cap)
+                    db.insert_partial_event({
+                        "id":             str(uuid.uuid4()),
+                        "date":           str(date.today()),
+                        "transaction_id": _recv_ids.iloc[_ri],
+                        "qty_received":   _delta,
+                        "amount_paid":    0.0,
+                        "event_type":     "รับของ",
+                    })
+                    _saved_r += 1
+                if _saved_r:
+                    st.success(f"✅ บันทึกรับของ {_saved_r} รายการ")
+                    st.rerun()
+                else:
+                    st.warning("ไม่มีรายการที่เปลี่ยนแปลง")
+
+    # ── แก้ไขเพิ่มเติม (เปลี่ยนลูกค้า / ลบบิล) ─────────────────
+    with st.expander("⚙️ แก้ไขเพิ่มเติม"):
+        st.markdown("**✏️ เปลี่ยนลูกค้าในบิลนี้**")
+        st.caption(f"บิลปัจจุบัน: {bill_nos_str} | ลูกค้า: {_t7_cust_name}")
+        if bill_nos_str and db.bill_has_partial_events(bill_nos_str):
+            st.warning("⚠️ บิลนี้มีการจ่าย/รับของแล้ว — เปลี่ยนได้แต่ยอดค้างอาจเปลี่ยน")
+        _new_cust_name = st.selectbox(
+            "เลือกลูกค้าใหม่",
+            [c["name"] for c in customers_p],
+            key=f"{key_prefix}_new_cust"
+        )
+        _new_cust_id = cust_map_p.get(_new_cust_name, {}).get("id")
+        _confirm_cust = st.checkbox("ยืนยันการเปลี่ยนลูกค้า", key=f"{key_prefix}_confirm_cust")
+        if st.button("💾 บันทึก", disabled=not (_confirm_cust and _new_cust_id and bill_nos_str),
+                     key=f"{key_prefix}_save_cust"):
+            db.update_bill_customer(bill_nos_str, _new_cust_id)
+            st.success(f"✅ เปลี่ยนเป็น {_new_cust_name} แล้ว")
+            st.rerun()
+
+        if _t7_single:
+            st.divider()
+            st.markdown("**🗑️ ลบบิล**")
+            st.dataframe(show_p[["สินค้า", "สั่ง", "ยอดรวม"]], use_container_width=True, hide_index=True)
+            st.warning(f"⚠️ จะลบบิล **{bill_nos[0]}** ({_t7_total_amt:,.0f} ฿) และรายการทั้งหมดข้างต้น ({len(show_p)} รายการ) — กู้คืนไม่ได้")
+            _t7_del_chk = st.checkbox("ยืนยันการลบ", key=f"{key_prefix}_del_confirm")
+            if st.button("🗑️ ลบบิล", disabled=not _t7_del_chk,
+                         type="secondary", key=f"{key_prefix}_del_bill"):
+                db.delete_bill(bill_nos[0])
+                st.success("✅ ลบบิลแล้ว")
+                if not preselected_bill:
+                    st.session_state.pop(_pk, None)
+                st.rerun()
+
+    with st.expander("🗑️ ลบรายการ"):
+        st.caption("เลือกรายการสินค้าที่ต้องการลบออก (ไม่ลบทั้งบิล) — เลือกได้หลายรายการ")
+        _t7_item_opts = {
+            f"{r['สินค้า']} — บิล {r['เลขที่บิล'] or '—'} (฿{r['ยอดรวม']:,.0f})": r["id"]
+            for _, r in show_p.iterrows()
+        }
+        _t7_del_item_labels = st.multiselect(
+            "รายการ", list(_t7_item_opts.keys()), key=f"{key_prefix}_del_item_sel"
+        )
+        _t7_del_item_chk = st.checkbox(
+            f"ยืนยันการลบ {len(_t7_del_item_labels)} รายการนี้",
+            key=f"{key_prefix}_del_item_confirm", disabled=not _t7_del_item_labels,
+        )
+        if st.button("🗑️ ลบรายการ", disabled=not (_t7_del_item_chk and _t7_del_item_labels),
+                     type="secondary", key=f"{key_prefix}_del_item_btn"):
+            for _lbl in _t7_del_item_labels:
+                db.delete_transaction(_t7_item_opts[_lbl])
+            st.success(f"✅ ลบ {len(_t7_del_item_labels)} รายการแล้ว")
+            if not preselected_bill:
+                st.session_state.pop(_pk, None)
+            st.rerun()
+
+    # ── เคลียร์บิลหลายใบ ──────────────────────────────────────
+    _t7_all_cust_df = all_txn_cache[all_txn_cache["ลูกค้า"] == _t7_cust_name]
+    if not _t7_all_cust_df.empty:
+        _t7_bill_grp = _bills_from_df(_t7_all_cust_df)
+        with st.expander("✅ เคลียร์บิล"):
+            st.caption("ติ๊กบิลที่ต้องการ → เปลี่ยนเป็น จ่ายแล้ว + เปิดบิลแล้ว พร้อมกัน")
+            _clr_sel = []
+            for _, _clr_br in _t7_bill_grp.iterrows():
+                _clr_bno = _clr_br["เลขที่บิล"] or "—"
+                _clr_done = bool(_clr_br["is_paid"]) and bool(_clr_br["is_billed"])
+                _clr_icon = "✅" if _clr_done else ("🔴" if _clr_br["ค้างจ่าย"] > 0.01 else "🟡")
+                _clr_lbl = f"{_clr_icon} **{_clr_bno}** — {_clr_br['วันที่']} — ค้างจ่าย {_clr_br['ค้างจ่าย']:,.0f} ฿"
+                _clr_ticked = st.checkbox(_clr_lbl, key=f"{key_prefix}_clr_{_clr_bno}",
+                                          value=_clr_done, disabled=_clr_done)
+                if _clr_ticked and not _clr_done:
+                    _clr_sel.append(_clr_bno)
+            if _clr_sel:
+                if st.button(f"✅ เคลียร์ {len(_clr_sel)} บิล", type="primary", key=f"{key_prefix}_clear_bills"):
+                    for _clr_bno in _clr_sel:
+                        _clr_tids = _t7_all_cust_df[
+                            _t7_all_cust_df["เลขที่บิล"] == _clr_bno
+                        ]["id"].tolist()
+                        for _clr_tid in _clr_tids:
+                            db.update_transaction_status(
+                                _clr_tid,
+                                pay_status="จ่ายแล้ว",
+                                bill_status="เปิดบิลแล้ว",
+                            )
+                    st.success(f"✅ เคลียร์ {len(_clr_sel)} บิลแล้ว")
+                    st.rerun()
+
+
+def _parse_iship_address(text: str) -> dict:
+    """Parse 3 formats:
+    1. iShip LINE bilingual: ตำบล/ English + Receiver: ชื่อ
+    2. Thai standard: ชื่อ บ้านเลขที่ ต.ตำบล อ.อำเภอ จ.จังหวัด รหัสปณ.
+    3. iShip compact: {phone}  {name}    {address}\\n{district} {amphure} {province} {zipcode}
+    """
+    import re as _re
+    r = {"dst_name": "", "dst_phone": "", "address_line": "",
+         "district": "", "amphure": "", "province": "", "zipcode": ""}
+
+    # Phone (shared)
+    m = _re.search(r'0[6-9]\d{8}', text)
+    if m:
+        r["dst_phone"] = m.group()
+
+    # Zipcode standalone (shared)
+    m_zip = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)', text)
+    if m_zip:
+        r["zipcode"] = m_zip.group(1)
+
+    _lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
+
+    # ── Format 0: multi-line (ชื่อ / เบอร์ / ที่อยู่) ───────────────────
+    if (len(_lines) >= 3
+        and not _re.search(r'0[6-9]\d{8}', _lines[0])
+        and _re.fullmatch(r'0[6-9]\d{8}', _lines[1])):
+        r["dst_name"]  = _lines[0].strip()
+        r["dst_phone"] = _lines[1].strip()
+        _addr_rest = " ".join(_lines[2:])
+        _mz = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)', _addr_rest)
+        if _mz:
+            r["zipcode"] = _mz.group(1)
+        _dt = _re.search(r'[ตแ](?:ำบล|ขวง)?\.\s*(\S+)', _addr_rest)
+        _am = _re.search(r'[อเ](?:ำเภอ|ขต)?\.\s*(\S+)', _addr_rest)
+        _pv = _re.search(r'จ(?:ังหวัด)?\.\s*(\S+)', _addr_rest)
+        if _dt: r["district"] = _dt.group(1)
+        if _am: r["amphure"]  = _am.group(1)
+        if _pv: r["province"] = _pv.group(1)
+        _clean = _addr_rest
+        for _pat in [r'[ตแ](?:ำบล|ขวง)?\.\s*\S+', r'[อเ](?:ำเภอ|ขต)?\.\s*\S+',
+                     r'จ(?:ังหวัด)?\.\s*\S+', r'(?<!\d)[1-9]\d{4}(?!\d)']:
+            _clean = _re.sub(_pat, '', _clean)
+        r["address_line"] = _re.sub(r'\s+', ' ', _clean).strip()
+        return r
+
+    # ── Format 3: iShip compact LINE format ─────────────────────────────
+    # L1: {phone}  {name}    {address}   (2+ spaces separate name from address)
+    # Ln: {district} {amphure} {province} {zipcode} [extra]
+    _m3_l1 = (_re.match(r'^(0[6-9]\d{8})\s+(.+?)\s{2,}(\S.+)$', _lines[0])
+               if _lines else None)
+    _m3_ln = (_re.match(r'^([^\d\s]+)\s+([^\d\s]+)\s+([^\d\s]+)\s+(\d{5})', _lines[-1])
+               if len(_lines) >= 2 else None)
+    if _m3_l1 and _m3_ln:
+        r["dst_phone"]    = _m3_l1.group(1)
+        r["dst_name"]     = _m3_l1.group(2).strip()
+        r["address_line"] = _m3_l1.group(3).strip()
+        r["district"]     = _m3_ln.group(1)
+        r["amphure"]      = _m3_ln.group(2)
+        r["province"]     = _m3_ln.group(3)
+        r["zipcode"]      = _m3_ln.group(4)
+
+    elif _re.search(r'[฀-๿]+/\s*[A-Za-z]', text):
+        # ── Format 1: iShip LINE format ──────────────────────────────────
+        m = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)\s+(.+?)(?=\s*\.\s*[฀-๿]|[\r\n]|$)',
+                       text, _re.DOTALL)
+        if m:
+            addr_raw = m.group(2).strip()
+            if r["dst_phone"] and r["dst_phone"] in addr_raw:
+                addr_raw = addr_raw.replace(r["dst_phone"], "").strip()
+            r["address_line"] = addr_raw
+
+        parts = _re.findall(r'([฀-๿][฀-๿\s]*?)\s*/\s*[A-Za-z]', text)
+        seen, unique = set(), []
+        for p in parts:
+            p = p.strip()
+            if p and p not in seen:
+                seen.add(p); unique.append(p)
+        if len(unique) >= 1: r["district"] = unique[0]
+        if len(unique) == 2: r["province"] = unique[1]
+        elif len(unique) >= 3: r["amphure"] = unique[1]; r["province"] = unique[2]
+
+        m = _re.search(r'Receiver:\s*([^(\n]+)', text, _re.IGNORECASE)
+        if m:
+            r["dst_name"] = m.group(1).strip()
+
+    elif _re.search(r'[ตอจ]\.\s*\S', text):
+        # ── Format 2: Thai standard format (ต./อ./จ.) ────────────────────
+        _dt = _re.search(r'ต\.\s*([^\s,]+)', text)
+        _am = _re.search(r'อ\.\s*([^\s,]+)', text)
+        _pv = _re.search(r'จ\.\s*([^\s,\d]+)', text)
+        if _dt: r["district"] = _dt.group(1).strip()
+        if _am: r["amphure"]  = _am.group(1).strip()
+        if _pv: r["province"] = _pv.group(1).strip()
+
+        # ชื่อ + บ้านเลขที่ จากบรรทัดแรก
+        first_line = text.strip().splitlines()[0].strip()
+        clean = _re.sub(r'(?<!\d)[1-9]\d{4}(?!\d)', '', first_line)  # ลบรหัสปณ.
+        clean = _re.sub(r'\s*[ตอจ]\.\s*[^\s,]+', '', clean).strip()  # ลบ ต./อ./จ.
+        nm = _re.match(r'^([^\d]+?)\s{1,}(\d.+)$', clean.strip())
+        if nm:
+            r["dst_name"]    = nm.group(1).strip()
+            r["address_line"] = nm.group(2).strip()
+        else:
+            r["dst_name"] = clean.strip()
+
+    elif _re.search(r'0[6-9]\d{8}', text):
+        # ── Format 4: single line, name first ────────────────────────────
+        # {name}  {phone}   {address} {amphure} {province} {zipcode}
+        _all_f4 = ' '.join(_lines)
+        _m4 = _re.match(r'^(.+?)\s+(0[6-9]\d{8})\s+(.+)$', _all_f4.strip())
+        if _m4:
+            r["dst_name"]  = _m4.group(1).strip()
+            r["dst_phone"] = _m4.group(2)
+            _rest4 = _m4.group(3).strip()
+            _m4z = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)', _rest4)
+            if _m4z:
+                r["zipcode"] = _m4z.group(1)
+                _wz = _rest4[:_m4z.start()].strip().split()
+                # last 2 Thai words before zipcode = amphure + province
+                if len(_wz) >= 2:
+                    r["province"]     = _wz[-1]
+                    r["amphure"]      = _wz[-2]
+                    r["address_line"] = ' '.join(_wz[:-2])
+                elif len(_wz) == 1:
+                    r["province"]     = _wz[0]
+                else:
+                    r["address_line"] = _rest4[:_m4z.start()].strip()
+            else:
+                r["address_line"] = _rest4
+
+    # lookup เขต/อำเภอ จากฐานข้อมูล (shared)
+    from bangkok_addresses import lookup_khet, lookup_from_zipcode
+    if r["district"] and r["zipcode"] and not r["amphure"]:
+        khet = lookup_khet(r["district"], r["zipcode"])
+        if khet: r["amphure"] = khet
+    if r["zipcode"] and not r["amphure"]:
+        prov, amph = lookup_from_zipcode(r["zipcode"])
+        if amph: r["amphure"] = amph
+        if prov and not r["province"]: r["province"] = prov
+
+    return r
+
+
+def _parse_quick_order(text: str, products: list) -> tuple:
+    product_by_id = {p["id"].upper(): p for p in products}
+    found, unknown = [], []
+    for token in text.strip().split():
+        parts = token.rsplit("-", 1)
+        if len(parts) == 2:
+            code, qty_str = parts[0].upper(), parts[1]
+            if qty_str.isdigit() and int(qty_str) > 0:
+                p = product_by_id.get(code)
+                if p:
+                    found.append({"product": p, "qty": int(qty_str)})
+                else:
+                    unknown.append(code)
+    return found, unknown
+
+
+def _pick_carrier(pc: str, kg: float = 0) -> str:
+    is_metro = pc[:2] in {"10", "11", "12"}
+    return "Flash Express" if (kg <= 3 and not is_metro) else "SPX Express"
