@@ -3,7 +3,9 @@ from math import ceil
 from flash_zones import lookup_zone, zone_surcharge_by_weight, spx_surcharge
 
 # ── Bangkok zone detection ────────────────────────────────────────────────────
-_BKK_SET = {str(i).zfill(5) for i in range(10000, 11000)}
+_BKK_SET = {str(i).zfill(5) for i in range(10000, 11000)}  # กรุงเทพฯ + สมุทรปราการ
+_BKK_SET |= {str(i).zfill(5) for i in range(11000, 11200)}  # นนทบุรี
+_BKK_SET |= {str(i).zfill(5) for i in range(12000, 12200)}  # ปทุมธานี
 
 def _is_bkk(pc: str) -> bool:
     return str(pc).strip() in _BKK_SET

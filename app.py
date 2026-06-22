@@ -1041,8 +1041,6 @@ def _show_carrier_select():
                     "_carrier_select_info": info,
                 }
                 st.session_state.pop("_iship_carrier_select", None)
-                st.session_state["_open_success_dialog"] = True
-                st.session_state["_do_clear_after_iship"] = tab
                 st.rerun()
             else:
                 st.error(f"❌ {_cs_resp.get('message', str(_cs_resp))}")
@@ -1112,8 +1110,8 @@ for _stale in ("_iship_pending", "_sp_iship_pending"):
 # carrier select: persistent (ต้องเรียกทุก rerun เพื่อให้ interactive widget ทำงานได้)
 if st.session_state.get("_iship_carrier_select"):
     _show_carrier_select()
-# success dialog: pop-once (ไม่มี interactive widget ภายใน)
-if st.session_state.pop("_open_success_dialog", False):
+# success dialog: คงอยู่จนกว่าจะกดปิด (มีปุ่ม LINE ข้างใน)
+if st.session_state.get("_iship_success_info"):
     _show_iship_success_dialog()
 
 
@@ -1659,7 +1657,7 @@ with tab1:
             # auto-select carrier จาก weight + location (รันทุกครั้งที่ items หรือ postcode เปลี่ยน)
             if m_delivery == "ส่งพัสดุ" and len(m_postcode.strip()) == 5:
                 _w_kg = (sum(float(p.get("weight_grams") or 0) * q
-                             for p, q, _ in valid_items) + _rx_extra_weight_g + 500) / 1000
+                             for p, q, _ in valid_items) + _rx_extra_weight_g + BOX_WEIGHT_G) / 1000
                 _optimal = _pick_carrier(m_postcode.strip(), _w_kg)
                 _sig = (m_postcode.strip(), round(_w_kg, 2))
                 if _sig != st.session_state.get("_carrier_sig"):
@@ -1677,7 +1675,7 @@ with tab1:
             if valid_items or (_has_rx_action and m_delivery == "ส่งพัสดุ"):
                 total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
                 total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
-                total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items) + _rx_extra_weight_g
+                total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items) + _rx_extra_weight_g + BOX_WEIGHT_G
                 if valid_items:
                     st.success("🛒 " + "  |  ".join(f"**{p['id']}** ×{q}" for p, q, _ in valid_items))
                 if m_delivery == "ส่งพัสดุ":
@@ -1754,7 +1752,7 @@ with tab1:
                          disabled=bool(m_errors)):
                 customer     = customer_map[m_customer]
                 is_shipping  = m_delivery == "ส่งพัสดุ"
-                total_w_g    = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items) + _rx_extra_weight_g
+                total_w_g    = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items) + _rx_extra_weight_g + BOX_WEIGHT_G
                 if is_shipping:
                     fees_save = carrier_fees(total_w_g, m_postcode)
                     ship_fee  = fees_save[m_carrier]["total"]
@@ -1879,7 +1877,7 @@ with tab1:
                         "amphure":     r_amphure,
                         "province":    r_province,
                         "zipcode":     m_postcode,
-                        "weight_kg":   (total_w_g + 500) / 1000,
+                        "weight_kg":   total_w_g / 1000,
                         "cod_amount":  ceil(collect) if m_cod else 0,
                         "carrier":      m_carrier,
                         "remark":       " ".join(filter(None, [customer['name'], _prod_codes, st.session_state.get("m_iship_note","").strip()])),
@@ -1895,7 +1893,7 @@ with tab1:
                         st.session_state["_iship_carrier_select"] = {
                             "tab":          "sale",
                             "postcode":     m_postcode,
-                            "weight_kg":    (total_w_g + 500) / 1000,
+                            "weight_kg":    total_w_g / 1000,
                             "dst_name":     r_name or customer["name"],
                             "dst_phone":    r_phone,
                             "address_line": r_addr_line,
@@ -1981,7 +1979,7 @@ with tab1:
                 if st.button("🚚 รับแต่ของเก่า", type="primary", use_container_width=True,
                              key="m_rxonly_submit", disabled=bool(_rxo_errors)):
                     _rxo_customer   = customer_map[m_customer]
-                    _rxo_weight_g   = _rx_extra_weight_g
+                    _rxo_weight_g   = _rx_extra_weight_g + BOX_WEIGHT_G
                     _rxo_fees       = carrier_fees(_rxo_weight_g, m_postcode)
                     _rxo_ship_fee   = _rxo_fees[m_carrier]["total"]
                     _rxo_zone       = _rxo_fees[m_carrier]["zone"]
@@ -2019,7 +2017,7 @@ with tab1:
                         st.session_state["_iship_carrier_select"] = {
                             "tab":          "sale",
                             "postcode":     m_postcode,
-                            "weight_kg":    (_rxo_weight_g + 500) / 1000,
+                            "weight_kg":    _rxo_weight_g / 1000,
                             "dst_name":     r_name or _rxo_customer["name"],
                             "dst_phone":    r_phone,
                             "address_line": r_addr_line,
@@ -2209,7 +2207,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                                 "line_user_id":  _luid_s2,
                                 "shipment_id":   "",
                             }
-                            st.session_state["_open_success_dialog"] = True
+                            # dialog จะเปิดอัตโนมัติจาก _iship_success_info
                             st.rerun()
                         else:
                             _err_msg = resp.get("message") or resp.get("msg") or str(resp)
@@ -2382,7 +2380,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             float(_sp_prod_map.get(r["สินค้า"], {}).get("weight_grams") or 0) * int(r["จำนวน"] or 0)
             for _, r in _sp_cart_edit.iterrows()
             if str(r.get("สินค้า","")) in _sp_prod_map
-        )
+        ) + BOX_WEIGHT_G
         _sp_total_amt = sum(
             float(_sp_prod_map.get(r["สินค้า"], {}).get("price") or 0) * int(r["จำนวน"] or 0)
             for _, r in _sp_cart_edit.iterrows()
@@ -2779,7 +2777,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     st.markdown(_line_str)
                     _c_lines.append(_line_str)
 
-                _c_weight_kg = (_c_total_w + 500) / 1000
+                _c_weight_kg = (_c_total_w + BOX_WEIGHT_G) / 1000
                 st.markdown(f"✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg")
                 st.divider()
 
@@ -3683,7 +3681,7 @@ with _t5_ledger:
 
                 # ── summary metrics ──────────────────────────────────────
                 _l_ord_qty  = sum(r["qty_in"]  for r in _l_orders)
-                _l_recv_qty = sum(r["qty_out"] for r in _l_receipts)
+                _l_recv_qty = sum(r["qty_out"] for r in _l_receipts) + sum(r.get("initial_received", 0) for r in _l_orders)
                 _l_paid_tot = _l_all_df["จ่ายแล้ว"].sum() if not _l_all_df.empty else 0.0
                 _sm1, _sm2, _sm3, _sm4 = st.columns(4)
                 _sm1.metric("สั่งซื้อ",  f"{_l_ord_qty:,} ชิ้น")
@@ -3747,6 +3745,9 @@ with _t5_ledger:
                         (_r["product"], int(_r["qty_out"]))
                     )
                 _recv_cumul: dict = {}
+                for _r in _l_orders:
+                    _bk = _r["bill_no"] or "—"
+                    _recv_cumul[_bk] = _recv_cumul.get(_bk, 0) + _r.get("initial_received", 0)
                 for (_bk, _rd), _items in sorted(_recv_groups.items(), key=lambda x: x[0][1]):
                     _batch_qty = sum(q for _, q in _items)
                     _recv_cumul[_bk] = _recv_cumul.get(_bk, 0) + _batch_qty
