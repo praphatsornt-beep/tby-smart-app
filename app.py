@@ -3408,8 +3408,8 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                                 event_notes = st.text_input("หมายเหตุ", key=f"enotes_{txn_id}")
                                 _also_open_bill = False
                                 if is_unbilled:
-                                    _also_open_bill = st.toggle(
-                                        "📄 เปิดบิลด้วย",
+                                    _also_open_bill = st.checkbox(
+                                        "📄 เปิดบิลด้วย", value=False,
                                         key=f"also_open_{txn_id}",
                                     )
                                 submit_evt  = st.form_submit_button(
@@ -3546,7 +3546,7 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                         _do_open_bill  = False
                         if _any_unbilled:
                             _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
-                            _do_open_bill = st.toggle(
+                            _do_open_bill = st.checkbox(
                                 f"📄 เปิดบิลด้วย ({_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str})",
                                 key=f"multi_open_chk_{customer_name}",
                             )
