@@ -93,17 +93,22 @@ def _show_carrier_select():
             _sur_txt  = f"+{o['surcharge']} ({o['sur_label']})" if o["surcharge"] else "-"
             _fuel_txt = f"+{o['fuel']}" if o["fuel"] else "-"
             _cod_txt  = f"+{o['cod_fee']:,}" if o["cod_fee"] else "-"
+            _size_txt = f"≤{o['max_cm']}cm" if o.get("max_cm") else "-"
             _cmp.append({"ขนส่ง": ("🥇 " if _ci == 0 else "") + o["name"],
                          "ค่าส่ง": o["base"], "พื้นที่พิเศษ": _sur_txt,
-                         "น้ำมัน": _fuel_txt, "รวม (฿)": o["total"], "COD": _cod_txt})
+                         "น้ำมัน": _fuel_txt, "รวม (฿)": o["total"], "📐": _size_txt, "COD": _cod_txt})
         st.dataframe(pd.DataFrame(_cmp), hide_index=True, use_container_width=True,
                      column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
 
         _cs_carrier = st.selectbox("เลือกขนส่ง", [o["name"] for o in opts_ok],
                                    index=0, key="_cs_carrier_sel")
         _cs_code    = iship_api.COURIER_MAP.get(_cs_carrier, "")
-        _cs_total   = next((o["total"] for o in opts_ok if o["name"] == _cs_carrier), 0)
+        _cs_sel_opt = next((o for o in opts_ok if o["name"] == _cs_carrier), {})
+        _cs_total   = _cs_sel_opt.get("total", 0)
+        _cs_max_cm  = _cs_sel_opt.get("max_cm", 0)
         st.caption(f"iShip code: `{_cs_code}` | ราคาจริง: {_cs_total:,} ฿")
+        if _cs_max_cm:
+            st.warning(f"📐 {_cs_carrier} — กล่องด้านที่ยาวสุดต้องไม่เกิน **{_cs_max_cm} cm**")
         if not _cs_code:
             st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_cs_carrier}'")
 
