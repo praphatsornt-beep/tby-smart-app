@@ -1685,6 +1685,9 @@ with tab1:
                 total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items) + _rx_extra_weight_g + BOX_WEIGHT_G
                 if valid_items:
                     st.success("🛒 " + "  |  ".join(f"**{p['id']}** ×{q}" for p, q, _ in valid_items))
+                if _rx_old_items and valid_items:
+                    _old_label = "  +  ".join(f"{it['name']} ×{it['qty']}" for it in _rx_old_items)
+                    st.info(f"📦 ของเก่า: {_old_label}  ·  ยอดค้างที่จะจ่าย **{_rx_total_pay:,.0f}฿**  ·  รวมยอดทั้งหมด **{total_amt + _rx_total_pay:,.0f}฿**")
                 if m_delivery == "ส่งพัสดุ":
                     fees_all  = carrier_fees(total_weight, m_postcode)
                     ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(total_weight, m_postcode)
@@ -1692,9 +1695,11 @@ with tab1:
                     cod_fee   = round(_base * COD_FEE_RATE, 2) if m_cod else 0
                     collect   = _base + cod_fee if m_cod else _base
                     net_recv  = _base
+                    _amt_label = f"ยอดสินค้า (ใหม่ {total_amt:,.0f} + เก่า {_rx_total_pay:,.0f})" if _rx_total_pay > 0.01 else "ยอดสินค้า"
+                    _grand_amt = total_amt + _rx_total_pay
                     if m_cod:
                         vm1, vm2, vm3, vm4, vm5, vm6, vm7 = st.columns(7)
-                        vm1.metric("ยอดสินค้า",       f"{total_amt:,.0f} ฿")
+                        vm1.metric(_amt_label,          f"{_grand_amt:,.0f} ฿")
                         vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
                         vm3.metric("💰 ยอดเก็บ (อัตโนมัติ)", f"{collect:,.0f} ฿")
                         vm4.metric("💸 ค่า COD",       f"{cod_fee:,.2f} ฿")
@@ -1711,7 +1716,7 @@ with tab1:
                         collect = float(_cod_custom)
                     else:
                         vm1, vm2, vm3, vm4, vm5 = st.columns(5)
-                        vm1.metric("ยอดสินค้า",        f"{total_amt:,.0f} ฿")
+                        vm1.metric(_amt_label,          f"{_grand_amt:,.0f} ฿")
                         vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
                         vm3.metric("💰 ยอดรวม",        f"{collect:,.0f} ฿")
                         vm4.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
