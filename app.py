@@ -4352,8 +4352,8 @@ with _t5_ship:
             if r.get("tracking_no")
         )
         _sh_cod_map = {**{tn: {} for tn in _db_transferred}, **_sh_cod_map}
-    except Exception:
-        pass
+    except Exception as _cod_db_e:
+        st.caption(f"⚠️ ดึงสถานะ COD จาก DB ไม่สำเร็จ: {_cod_db_e}")
     if _sh_cod_map:
         _sh_cod_col.caption(f"✅ COD โอนแล้ว {len(_sh_cod_map)} tracking")
 
