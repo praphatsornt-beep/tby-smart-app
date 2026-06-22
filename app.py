@@ -3270,7 +3270,8 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                     # ── LINE แจ้งยอดค้าง ─────────────────────────────────
                     if line_api.is_configured():
                         _line_items = [
-                            {"bill_no": r["เลขที่บิล"], "product": r["สินค้า"],
+                            {"bill_no": r["เลขที่บิล"],
+                             "product": f"[{r['รหัส']}] {r['สินค้า']}" if r.get("รหัส") else r["สินค้า"],
                              "amount": 0.0 if r["สถานะจ่าย"] == "COD" else float(r["ค้างจ่าย"]),
                              "qty": int(r["ค้างรับ"])}
                             for _, r in grp.iterrows()
