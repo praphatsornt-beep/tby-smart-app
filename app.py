@@ -3546,6 +3546,11 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                         _do_open_bill  = False
                         if _any_unbilled:
                             _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
+                            st.markdown(
+                                "<style>[data-testid='stCheckbox'] > label > div:last-child "
+                                "{ font-size: 1.15rem; font-weight: 700; }</style>",
+                                unsafe_allow_html=True,
+                            )
                             _do_open_bill = st.checkbox(
                                 f"📄 เปิดบิลด้วย ({_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str})",
                                 key=f"multi_open_chk_{customer_name}",
