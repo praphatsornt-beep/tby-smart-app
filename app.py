@@ -180,6 +180,13 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
         st.rerun()
         return
 
+    _all_provinces = {o["province"] for o in opts}
+    if len(_all_provinces) == 1 and not st.session_state.get(pv_key):
+        st.session_state[pv_key] = next(iter(_all_provinces))
+    _all_amphures = {o["amphure"] for o in opts}
+    if len(_all_amphures) == 1 and not st.session_state.get(am_key):
+        st.session_state[am_key] = next(iter(_all_amphures))
+
     idx_options = list(range(len(opts)))
     _suggest_label = lambda i: f"{opts[i]['tambon']} / {opts[i]['amphure']} / {opts[i]['province']}"
     label_map = {_suggest_label(i): i for i in idx_options}
