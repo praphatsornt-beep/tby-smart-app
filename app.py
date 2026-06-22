@@ -154,16 +154,30 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
 
 def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
                        searchbox_key: str, suggest_key: str):
-    """ถ้ารหัสไปรษณีย์ตรงกับ ต./อ./จ. มากกว่า 1 รายการ และค่าปัจจุบันยังไม่ตรง
-    ให้แสดง selectbox ให้เลือก ต./อ./จ. ตามรหัสไปรษณีย์นั้น"""
+    """ถ้ารหัสไปรษณีย์ตรงกับ ต./อ./จ. → auto-fill (1 ตำบล) หรือ selectbox (หลายตำบล)"""
     pc = (pc or "").strip()
     if len(pc) != 5:
         return
     opts = _tambon_by_postcode(pc)
     if not opts:
+        from bangkok_addresses import lookup_from_zipcode
+        prov, amph = lookup_from_zipcode(pc)
+        if amph:
+            if not st.session_state.get(am_key):
+                st.session_state[am_key] = amph
+            if not st.session_state.get(pv_key):
+                st.session_state[pv_key] = prov
         return
     cur = (st.session_state.get(value_key, ""), st.session_state.get(am_key, ""), st.session_state.get(pv_key, ""))
     if cur in [(o["tambon"], o["amphure"], o["province"]) for o in opts]:
+        return
+
+    if len(opts) == 1:
+        sel = opts[0]
+        st.session_state[value_key] = sel["tambon"]
+        st.session_state[am_key]    = sel["amphure"]
+        st.session_state[pv_key]    = sel["province"]
+        st.rerun()
         return
 
     idx_options = list(range(len(opts)))
