@@ -3732,16 +3732,21 @@ with _t5_ledger:
                         "bill_status": _bv["bill_status"], "delivery": _dlv,
                     })
 
-                # Phase 2: payment events (running balance)
-                _pay_cumul: dict = {}
+                # Phase 2: payment events grouped by (bill, date)
+                _pay_groups: dict = {}
                 for _r in sorted(_l_payments, key=lambda x: x["date"]):
                     _bk = _r["bill_no"] or "—"
-                    _pay_cumul[_bk] = _pay_cumul.get(_bk, 0.0) + _r["amount"]
+                    _pay_groups.setdefault((_bk, _r["date"]), []).append(_r["amount"])
+                _pay_cumul: dict = {}
+                for (_bk, _pd), _amounts in sorted(_pay_groups.items(), key=lambda x: x[0][1]):
+                    _batch_total = sum(_amounts)
+                    _pay_cumul[_bk] = _pay_cumul.get(_bk, 0.0) + _batch_total
                     _rem_pay = max(0.0, _bills_tl.get(_bk, {}).get("total", 0.0) - _pay_cumul[_bk])
                     if _bk in _bills_tl:
                         _bills_tl[_bk]["events"].append({
-                            "date": _r["date"], "order": 2, "type": "จ่ายเงิน",
-                            "amount": _r["amount"], "remaining": _rem_pay,
+                            "date": _pd, "order": 2, "type": "จ่ายเงิน",
+                            "amount": _batch_total, "remaining": _rem_pay,
+                            "details": _amounts if len(_amounts) > 1 else [],
                         })
 
                 # Phase 3: receipt events grouped by (bill, date)
@@ -3843,10 +3848,19 @@ with _t5_ledger:
                                     + ")"
                                 )
                             elif _r["type"] == "จ่ายเงิน":
-                                st.caption(
-                                    f"💰 {_r['date']}  จ่ายเงิน {_r['amount']:,.0f}฿ "
-                                    f"(คงค้าง {_r['remaining']:,.0f}฿)"
-                                )
+                                _pay_details = _r.get("details", [])
+                                if _pay_details:
+                                    with st.expander(
+                                        f"💰 {_r['date']}  จ่ายเงิน {_r['amount']:,.0f}฿ "
+                                        f"({len(_pay_details)} รายการ) — คงค้าง {_r['remaining']:,.0f}฿"
+                                    ):
+                                        for _pd_amt in _pay_details:
+                                            st.caption(f"  ▫️ {_pd_amt:,.0f}฿")
+                                else:
+                                    st.caption(
+                                        f"💰 {_r['date']}  จ่ายเงิน {_r['amount']:,.0f}฿ "
+                                        f"(คงค้าง {_r['remaining']:,.0f}฿)"
+                                    )
                             elif _r["type"] == "รับของ":
                                 st.caption(
                                     f"📦 {_r['date']}  รับของ {_r['detail']} "
