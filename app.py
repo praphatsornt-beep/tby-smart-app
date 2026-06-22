@@ -771,6 +771,29 @@ def _parse_iship_address(text: str) -> dict:
 
     _lines = [l.strip() for l in text.strip().splitlines() if l.strip()]
 
+    # ── Format 0: multi-line (ชื่อ / เบอร์ / ที่อยู่) ───────────────────
+    if (len(_lines) >= 3
+        and not _re.search(r'0[6-9]\d{8}', _lines[0])
+        and _re.fullmatch(r'0[6-9]\d{8}', _lines[1])):
+        r["dst_name"]  = _lines[0].strip()
+        r["dst_phone"] = _lines[1].strip()
+        _addr_rest = " ".join(_lines[2:])
+        _mz = _re.search(r'(?<!\d)([1-9]\d{4})(?!\d)', _addr_rest)
+        if _mz:
+            r["zipcode"] = _mz.group(1)
+        _dt = _re.search(r'[ตแ](?:ำบล|ขวง)?\.\s*(\S+)', _addr_rest)
+        _am = _re.search(r'[อเ](?:ำเภอ|ขต)?\.\s*(\S+)', _addr_rest)
+        _pv = _re.search(r'จ(?:ังหวัด)?\.\s*(\S+)', _addr_rest)
+        if _dt: r["district"] = _dt.group(1)
+        if _am: r["amphure"]  = _am.group(1)
+        if _pv: r["province"] = _pv.group(1)
+        _clean = _addr_rest
+        for _pat in [r'[ตแ](?:ำบล|ขวง)?\.\s*\S+', r'[อเ](?:ำเภอ|ขต)?\.\s*\S+',
+                     r'จ(?:ังหวัด)?\.\s*\S+', r'(?<!\d)[1-9]\d{4}(?!\d)']:
+            _clean = _re.sub(_pat, '', _clean)
+        r["address_line"] = _re.sub(r'\s+', ' ', _clean).strip()
+        return r
+
     # ── Format 3: iShip compact LINE format ─────────────────────────────
     # L1: {phone}  {name}    {address}   (2+ spaces separate name from address)
     # Ln: {district} {amphure} {province} {zipcode} [extra]
