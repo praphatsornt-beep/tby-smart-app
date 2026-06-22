@@ -218,6 +218,115 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
     )
 
 
+def _extract_tracking(resp: dict) -> str:
+    """Extract tracking code from iShip API response (checks data sub-dict then top-level)."""
+    _d = resp.get("data") or {}
+    return (_d.get("tracking_code") or _d.get("tracking_number")
+            or resp.get("tracking_code") or resp.get("tracking_number") or "")
+
+
+def _build_success_info(tracking, tab, customer, dst_name, dst_phone, address,
+                        carrier, weight_kg, cod_amount, items, line_user_id,
+                        shipment_id, **extra) -> dict:
+    """Build the _iship_success_info dict for storing in session state."""
+    d = {
+        "tracking":     tracking,
+        "tab":          tab,
+        "customer":     customer,
+        "dst_name":     dst_name,
+        "dst_phone":    dst_phone,
+        "address":      address,
+        "carrier":      carrier,
+        "weight_kg":    weight_kg,
+        "cod_amount":   cod_amount,
+        "items":        items,
+        "line_user_id": line_user_id,
+        "shipment_id":  shipment_id,
+    }
+    d.update(extra)
+    return d
+
+
+def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,
+                               event_date: str,
+                               collect_ship_items: bool = False) -> tuple:
+    """Process receive-old-items loop.
+
+    Returns (saved_count, total_pay, ship_items).
+    ship_items is populated only when *collect_ship_items* is True.
+    """
+    saved_count = 0
+    total_pay   = 0.0
+    ship_items  = []
+    for _ri, _rrow in rx_edit.iterrows():
+        _delta      = int(_rrow["รับวันนี้"] or 0)
+        _owed_this  = float(rx_df.iloc[_ri]["_owed"])
+        _cap        = int(rx_df.iloc[_ri]["_max"])
+        _actual_qty = min(max(_delta, 0), _cap)
+        if _actual_qty <= 0:
+            continue
+        _custom_pay = rx_pay_map.get(rx_df.iloc[_ri]["_tid"], 0.0)
+        if _custom_pay > 0:
+            _apply_pay = round(min(_custom_pay, _owed_this), 2)
+        else:
+            _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
+        _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
+        db.insert_partial_event({
+            "id":             str(uuid.uuid4()),
+            "date":           event_date,
+            "transaction_id": rx_df.iloc[_ri]["_tid"],
+            "qty_received":   _actual_qty,
+            "amount_paid":    _apply_pay,
+            "event_type":     _etype,
+        })
+        saved_count += 1
+        total_pay   += _apply_pay
+        if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
+            db.update_transaction_status(rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
+        if collect_ship_items:
+            ship_items.append({
+                "product_id": pending_rx[_ri]["product_id"],
+                "name":       str(_rrow["สินค้า"]),
+                "qty":        _actual_qty,
+            })
+    return saved_count, total_pay, ship_items
+
+
+def _quick_add_customer(key_prefix: str):
+    """Inline quick-add customer form.
+
+    *key_prefix* differentiates widget keys across tabs (e.g. "" for sale, "sp_" for ship).
+    Returns the new customer name (str) when a customer was just created, else None.
+    """
+    _btn_key   = f"{key_prefix}cust_add_btn"
+    _state_key = f"_{key_prefix}adding_cust"
+    _form_key  = f"{key_prefix}add_cust_quick"
+    _picked_key = f"_{key_prefix}cust_picked"
+
+    if st.button("➕ เพิ่มลูกค้าใหม่", key=_btn_key, use_container_width=False):
+        st.session_state[_state_key] = ""
+    if _state_key in st.session_state:
+        with st.form(_form_key):
+            _fn = st.text_input("ชื่อลูกค้า")
+            _fp = st.text_input("เบอร์โทร (ถ้ามี)")
+            _fc1, _fc2 = st.columns(2)
+            if _fc1.form_submit_button("💾 บันทึก", type="primary"):
+                _all_cids = [c["id"] for c in db.get_customers()]
+                _cmax = max((int(re.match(r'C-(\d+)', x).group(1))
+                             for x in _all_cids if re.match(r'C-(\d+)', x)), default=0)
+                _new_cid = f"C-{_cmax + 1:03d}"
+                db.upsert_customer({"id": _new_cid,
+                                    "name": _fn.strip(), "phone": _fp.strip()})
+                db.get_customers.clear()
+                st.session_state[_picked_key] = _fn.strip()
+                st.session_state.pop(_state_key, None)
+                st.rerun()
+            if _fc2.form_submit_button("ยกเลิก"):
+                st.session_state.pop(_state_key, None)
+                st.rerun()
+    return None
+
+
 def _warn_duplicate_phone(phone: str, current_cid: str):
     """ถ้าเบอร์นี้มีที่อยู่ของลูกค้าคนอื่นอยู่แล้ว ให้เตือน (บันทึกที่อยู่จะลบของเดิมทิ้ง)"""
     phone = (phone or "").strip()
@@ -1054,9 +1163,7 @@ def _show_carrier_select():
                     height_cm    = int(_cs_hgt),
                 )
             if _cs_resp.get("status"):
-                _cs_d       = _cs_resp.get("data") or {}
-                _cs_track   = (_cs_d.get("tracking_code") or _cs_d.get("tracking_number")
-                               or _cs_resp.get("tracking_code") or _cs_resp.get("tracking_number") or "")
+                _cs_track   = _extract_tracking(_cs_resp)
                 if tab == "ship" and info.get("shipment_id") and _cs_track:
                     db.update_shipment_tracking(info["shipment_id"], _cs_track)
                 if tab in ("sale", "pending"):
@@ -1080,21 +1187,19 @@ def _show_carrier_select():
                     except Exception as _cs_e:
                         st.warning(f"⚠️ ส่ง iShip สำเร็จ (tracking {_cs_track}) แต่บันทึกประวัติการส่งไม่สำเร็จ: {_cs_e}")
                 _cs_luid = db.get_customer_line_user_id(info.get("customer_id","")) if info.get("customer_id") else ""
-                st.session_state["_iship_success_info"] = {
-                    "tracking":             _cs_track,
-                    "tab":                  tab,
-                    "customer":             info.get("customer_name", ""),
-                    "dst_name":             info.get("dst_name", ""),
-                    "dst_phone":            info.get("dst_phone", ""),
-                    "address":              f"{info.get('address_line','')} {info.get('district','')} {info.get('amphure','')} {info.get('province','')} {postcode}".strip(),
-                    "carrier":              _cs_carrier,
-                    "weight_kg":            weight_kg,
-                    "cod_amount":           int(cod_amt),
-                    "items":                info.get("items", []),
-                    "line_user_id":         _cs_luid,
-                    "shipment_id":          info.get("shipment_id", ""),
-                    "_carrier_select_info": info,
-                }
+                st.session_state["_iship_success_info"] = _build_success_info(
+                    tracking=_cs_track, tab=tab,
+                    customer=info.get("customer_name", ""),
+                    dst_name=info.get("dst_name", ""),
+                    dst_phone=info.get("dst_phone", ""),
+                    address=f"{info.get('address_line','')} {info.get('district','')} {info.get('amphure','')} {info.get('province','')} {postcode}".strip(),
+                    carrier=_cs_carrier, weight_kg=weight_kg,
+                    cod_amount=int(cod_amt),
+                    items=info.get("items", []),
+                    line_user_id=_cs_luid,
+                    shipment_id=info.get("shipment_id", ""),
+                    _carrier_select_info=info,
+                )
                 st.session_state.pop("_iship_carrier_select", None)
                 st.rerun()
             else:
@@ -1299,27 +1404,7 @@ with tab1:
                     if _cust_sel != "— เลือกลูกค้า —":
                         st.session_state["_cust_picked"] = _cust_sel
                         st.rerun()
-                    if st.button("➕ เพิ่มลูกค้าใหม่", key="cust_add_btn", use_container_width=False):
-                        st.session_state["_adding_cust"] = ""
-                    if st.session_state.get("_adding_cust") is not None and "_adding_cust" in st.session_state:
-                        with st.form("add_cust_quick"):
-                            _fn = st.text_input("ชื่อลูกค้า")
-                            _fp = st.text_input("เบอร์โทร (ถ้ามี)")
-                            _fc1, _fc2 = st.columns(2)
-                            if _fc1.form_submit_button("💾 บันทึก", type="primary"):
-                                _all_cids = [c["id"] for c in db.get_customers()]
-                                _cmax = max((int(re.match(r'C-(\d+)', x).group(1))
-                                             for x in _all_cids if re.match(r'C-(\d+)', x)), default=0)
-                                _new_cid = f"C-{_cmax + 1:03d}"
-                                db.upsert_customer({"id": _new_cid,
-                                                    "name": _fn.strip(), "phone": _fp.strip()})
-                                db.get_customers.clear()
-                                st.session_state["_cust_picked"] = _fn.strip()
-                                st.session_state.pop("_adding_cust", None)
-                                st.rerun()
-                            if _fc2.form_submit_button("ยกเลิก"):
-                                st.session_state.pop("_adding_cust", None)
-                                st.rerun()
+                    _quick_add_customer("")
             m_date = mc2.date_input("วันที่", value=date.today(), key="m_date")
 
             # ── รับของจากบิลเก่า ─────────────────────────────────────────────
@@ -1417,35 +1502,10 @@ with tab1:
                             st.caption("⬆️ เลือก การรับ/สถานะของ ด้านบนก่อน")
                         elif _cur_delivery in ("ฝากของ", "รับแล้ว"):
                             if st.button("💾 บันทึกรับของจากบิลเก่า", key="sale_recv_old_btn", type="primary"):
-                                _saved_rx  = 0
-                                _total_pay = 0.0
-                                for _ri, _rrow in _rx_edit.iterrows():
-                                    _delta      = int(_rrow["รับวันนี้"] or 0)
-                                    _owed_this  = float(_rx_df.iloc[_ri]["_owed"])
-                                    _cap        = int(_rx_df.iloc[_ri]["_max"])
-                                    _actual_qty = min(_delta, _cap)
-                                    if _actual_qty <= 0:
-                                        continue
-                                    _custom_pay = _rx_pay_map.get(_rx_df.iloc[_ri]["_tid"], 0.0)
-                                    if _custom_pay > 0:
-                                        _apply_pay = round(min(_custom_pay, _owed_this), 2)
-                                    else:
-                                        _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
-                                    _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
-                                    db.insert_partial_event({
-                                        "id":             str(uuid.uuid4()),
-                                        "date":           str(m_date),
-                                        "transaction_id": _rx_df.iloc[_ri]["_tid"],
-                                        "qty_received":   _actual_qty,
-                                        "amount_paid":    _apply_pay,
-                                        "event_type":     _etype,
-                                    })
-                                    _saved_rx += 1
-                                    _total_pay += _apply_pay
-                                    if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
-                                        db.update_transaction_status(
-                                            _rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว"
-                                        )
+                                _saved_rx, _total_pay, _ = _process_old_items_receipt(
+                                    _rx_edit, _rx_df, _rx_pay_map, _pending_rx,
+                                    event_date=str(m_date),
+                                )
                                 if _saved_rx:
                                     _pay_note = f" · ปรับยอดค้าง ฿{_total_pay:,.0f}" if _total_pay > 0.01 else ""
                                     st.success(f"✅ บันทึกรับของ {_saved_rx} รายการ{_pay_note}")
@@ -1902,34 +1962,10 @@ with tab1:
                 if is_shipping and r_addr_line:
                     _old_ship_items = []
                     if _rx_df is not None and _rx_edit is not None:
-                        for _ri, _rrow in _rx_edit.iterrows():
-                            _delta     = int(_rrow["รับวันนี้"] or 0)
-                            _owed_this = float(_rx_df.iloc[_ri]["_owed"])
-                            _cap       = int(_rx_df.iloc[_ri]["_max"])
-                            _recv      = min(max(_delta, 0), _cap)
-                            _custom_pay = _rx_pay_map.get(_rx_df.iloc[_ri]["_tid"], 0.0)
-                            if _custom_pay > 0:
-                                _apply_pay = round(min(_custom_pay, _owed_this), 2)
-                            else:
-                                _apply_pay = round(_owed_this * _recv / _cap, 2) if _owed_this > 0.01 and _cap > 0 and _recv > 0 else 0.0
-                            if _recv <= 0:
-                                continue
-                            _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
-                            db.insert_partial_event({
-                                "id":             str(uuid.uuid4()),
-                                "date":           str(m_date),
-                                "transaction_id": _rx_df.iloc[_ri]["_tid"],
-                                "qty_received":   _recv,
-                                "amount_paid":    _apply_pay,
-                                "event_type":     _etype,
-                            })
-                            if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
-                                db.update_transaction_status(_rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
-                            _old_ship_items.append({
-                                "product_id": _pending_rx[_ri]["product_id"],
-                                "name":       str(_rrow["สินค้า"]),
-                                "qty":        _recv,
-                            })
+                        _, _, _old_ship_items = _process_old_items_receipt(
+                            _rx_edit, _rx_df, _rx_pay_map, _pending_rx,
+                            event_date=str(m_date), collect_ship_items=True,
+                        )
                     _new_items = [{"product_id": p["id"], "name": p["name"], "qty": qty}
                                   for p, qty, _ in valid_items]
                     _all_items = _new_items + _old_ship_items
@@ -1975,29 +2011,10 @@ with tab1:
                         pass  # _iship_carrier_select set above — dialog triggers automatically
                 elif not is_shipping and _rx_df is not None and _rx_edit is not None:
                     # บันทึกรับของเก่า สำหรับ รับแล้ว / ฝากของ (จ่ายอัตโนมัติตามสัดส่วน)
-                    for _ri, _rrow in _rx_edit.iterrows():
-                        _delta      = int(_rrow["รับวันนี้"] or 0)
-                        _owed_this  = float(_rx_df.iloc[_ri]["_owed"])
-                        _cap        = int(_rx_df.iloc[_ri]["_max"])
-                        _actual_qty = min(max(_delta, 0), _cap)
-                        if _actual_qty <= 0:
-                            continue
-                        _custom_pay = _rx_pay_map.get(_rx_df.iloc[_ri]["_tid"], 0.0)
-                        if _custom_pay > 0:
-                            _apply_pay = round(min(_custom_pay, _owed_this), 2)
-                        else:
-                            _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
-                        _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
-                        db.insert_partial_event({
-                            "id":             str(uuid.uuid4()),
-                            "date":           str(m_date),
-                            "transaction_id": _rx_df.iloc[_ri]["_tid"],
-                            "qty_received":   _actual_qty,
-                            "amount_paid":    _apply_pay,
-                            "event_type":     _etype,
-                        })
-                        if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
-                            db.update_transaction_status(_rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
+                    _process_old_items_receipt(
+                        _rx_edit, _rx_df, _rx_pay_map, _pending_rx,
+                        event_date=str(m_date),
+                    )
                 # ── print popup (เฉพาะเมื่อมีสินค้าใหม่) ──────────────────────
                 if valid_items:
                     st.session_state["_print_popup"] = {
@@ -2049,35 +2066,10 @@ with tab1:
                     _rxo_ship_fee   = _rxo_fees[m_carrier]["total"]
                     _rxo_zone       = _rxo_fees[m_carrier]["zone"]
                     _rxo_zone_tag   = f"|{_rxo_zone}" if _rxo_zone else ""
-                    _rxo_items      = []
-                    for _ri, _rrow in _rx_edit.iterrows():
-                        _delta     = int(_rrow["รับวันนี้"] or 0)
-                        _owed_this = float(_rx_df.iloc[_ri]["_owed"])
-                        _cap       = int(_rx_df.iloc[_ri]["_max"])
-                        _recv      = min(max(_delta, 0), _cap)
-                        if _recv <= 0:
-                            continue
-                        _custom_pay = _rx_pay_map.get(_rx_df.iloc[_ri]["_tid"], 0.0)
-                        if _custom_pay > 0:
-                            _apply_pay = round(min(_custom_pay, _owed_this), 2)
-                        else:
-                            _apply_pay = round(_owed_this * _recv / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
-                        _etype     = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
-                        db.insert_partial_event({
-                            "id":             str(uuid.uuid4()),
-                            "date":           str(m_date),
-                            "transaction_id": _rx_df.iloc[_ri]["_tid"],
-                            "qty_received":   _recv,
-                            "amount_paid":    _apply_pay,
-                            "event_type":     _etype,
-                        })
-                        if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
-                            db.update_transaction_status(_rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
-                        _rxo_items.append({
-                            "product_id": _pending_rx[_ri]["product_id"],
-                            "name":       str(_rrow["สินค้า"]),
-                            "qty":        _recv,
-                        })
+                    _, _, _rxo_items = _process_old_items_receipt(
+                        _rx_edit, _rx_df, _rx_pay_map, _pending_rx,
+                        event_date=str(m_date), collect_ship_items=True,
+                    )
                     if iship_api.is_configured() and _rxo_items:
                         st.session_state["_iship_carrier_select"] = {
                             "tab":          "sale",
@@ -2233,9 +2225,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                         with st.spinner("กำลังสร้างรายการใน iShip..."):
                             resp = iship_api.create_order(**_call)
                         if resp.get("status"):
-                            _rd = resp.get("data") or {}
-                            tracking = (_rd.get("tracking_code") or _rd.get("tracking_number")
-                                        or resp.get("tracking_code") or resp.get("tracking_number") or "")
+                            tracking = _extract_tracking(resp)
                             try:
                                 db.create_shipment({
                                     "customer_id":    _p.get("_customer_id") or None,
@@ -2258,20 +2248,19 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                             _cid_s2 = _p.get("_customer_id", "")
                             _luid_s2 = db.get_customer_line_user_id(_cid_s2) if (tracking and _cid_s2) else ""
                             del st.session_state["_iship_pending"]
-                            st.session_state["_iship_success_info"] = {
-                                "tracking":      tracking,
-                                "tab":           "sale",
-                                "customer":      _p.get("sender_name",""),
-                                "dst_name":      _p.get("dst_name",""),
-                                "dst_phone":     _p.get("dst_phone",""),
-                                "address":       addr_full,
-                                "carrier":       _carrier_choice,
-                                "weight_kg":     _p.get("weight_kg",0),
-                                "cod_amount":    _p.get("cod_amount",0),
-                                "items":         _p.get("_items",[]),
-                                "line_user_id":  _luid_s2,
-                                "shipment_id":   "",
-                            }
+                            st.session_state["_iship_success_info"] = _build_success_info(
+                                tracking=tracking, tab="sale",
+                                customer=_p.get("sender_name",""),
+                                dst_name=_p.get("dst_name",""),
+                                dst_phone=_p.get("dst_phone",""),
+                                address=addr_full,
+                                carrier=_carrier_choice,
+                                weight_kg=_p.get("weight_kg",0),
+                                cod_amount=_p.get("cod_amount",0),
+                                items=_p.get("_items",[]),
+                                line_user_id=_luid_s2,
+                                shipment_id="",
+                            )
                             # dialog จะเปิดอัตโนมัติจาก _iship_success_info
                             st.rerun()
                         else:
@@ -2360,27 +2349,7 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                 if _sp_sel != "— เลือกลูกค้า —":
                     st.session_state["_sp_cust_picked"] = _sp_sel
                     st.rerun()
-                if st.button("➕ เพิ่มลูกค้าใหม่", key="sp_cust_add_btn", use_container_width=False):
-                    st.session_state["_sp_adding_cust"] = ""
-                if "_sp_adding_cust" in st.session_state:
-                    with st.form("sp_add_cust_quick"):
-                        _spf_n = st.text_input("ชื่อลูกค้า")
-                        _spf_p = st.text_input("เบอร์โทร (ถ้ามี)")
-                        _spfc1, _spfc2 = st.columns(2)
-                        if _spfc1.form_submit_button("💾 บันทึก", type="primary"):
-                            _all_cids_sp = [c["id"] for c in db.get_customers()]
-                            _cmax_sp = max((int(re.match(r'C-(\d+)', x).group(1))
-                                            for x in _all_cids_sp if re.match(r'C-(\d+)', x)), default=0)
-                            _new_cid_sp = f"C-{_cmax_sp + 1:03d}"
-                            db.upsert_customer({"id": _new_cid_sp,
-                                                "name": _spf_n.strip(), "phone": _spf_p.strip()})
-                            db.get_customers.clear()
-                            st.session_state["_sp_cust_picked"] = _spf_n.strip()
-                            st.session_state.pop("_sp_adding_cust", None)
-                            st.rerun()
-                        if _spfc2.form_submit_button("ยกเลิก"):
-                            st.session_state.pop("_sp_adding_cust", None)
-                            st.rerun()
+                _quick_add_customer("sp_")
         _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
         _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
 
@@ -2716,29 +2685,26 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
                     with st.spinner("กำลังสร้างรายการใน iShip..."):
                         _sp_resp = iship_api.create_order(**_sp_call)
                     if _sp_resp.get("status"):
-                        _d = _sp_resp.get("data") or {}
-                        _sp_tracking = (_d.get("tracking_code") or _d.get("tracking_number")
-                                        or _sp_resp.get("tracking_code") or _sp_resp.get("tracking_number") or "")
+                        _sp_tracking = _extract_tracking(_sp_resp)
                         if _spp.get("_shipment_id") and _sp_tracking:
                             db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
                         _sp_cid2 = _spp.get("_customer_id", "")
                         _sp_luid_b = db.get_customer_line_user_id(_sp_cid2) if (_sp_tracking and _sp_cid2) else ""
                         del st.session_state["_sp_iship_pending"]
                         _spp_addr = f"{_spp.get('address_line','')} {_spp.get('district','')} {_spp.get('amphure','')} {_spp.get('province','')} {_spp.get('zipcode','')}".strip()
-                        st.session_state["_iship_success_info"] = {
-                            "tracking":      _sp_tracking,
-                            "tab":           "ship",
-                            "customer":      _spp.get("_customer_name",""),
-                            "dst_name":      _spp.get("dst_name",""),
-                            "dst_phone":     _spp.get("dst_phone",""),
-                            "address":       _spp_addr,
-                            "carrier":       _spp.get("carrier",""),
-                            "weight_kg":     _spp.get("weight_kg",0),
-                            "cod_amount":    _spp.get("cod_amount",0),
-                            "items":         _spp.get("_items",[]),
-                            "line_user_id":  _sp_luid_b,
-                            "shipment_id":   _spp.get("_shipment_id", ""),
-                        }
+                        st.session_state["_iship_success_info"] = _build_success_info(
+                            tracking=_sp_tracking, tab="ship",
+                            customer=_spp.get("_customer_name",""),
+                            dst_name=_spp.get("dst_name",""),
+                            dst_phone=_spp.get("dst_phone",""),
+                            address=_spp_addr,
+                            carrier=_spp.get("carrier",""),
+                            weight_kg=_spp.get("weight_kg",0),
+                            cod_amount=_spp.get("cod_amount",0),
+                            items=_spp.get("_items",[]),
+                            line_user_id=_sp_luid_b,
+                            shipment_id=_spp.get("_shipment_id", ""),
+                        )
                         st.session_state["_open_success_dialog"] = True
                         st.rerun()
                     else:
