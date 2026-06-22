@@ -3318,7 +3318,9 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                     if selected_ids:
                         sel_rows       = grp[grp["id"].isin(selected_ids)]
                         total_selected = sel_rows["ค้างจ่าย"].sum()
-                        st.info(f"เลือก {len(selected_ids)} รายการ — ค้างจ่ายรวม **{total_selected:,.0f} บาท**")
+                        _sel_pv = sel_rows["PV รวม"].sum() if "PV รวม" in sel_rows.columns else 0
+                        _pv_str = f"  |  ⭐ PV รวม **{_sel_pv:,.0f}**" if _sel_pv > 0 else ""
+                        st.info(f"เลือก {len(selected_ids)} รายการ — ค้างจ่ายรวม **{total_selected:,.0f} บาท**{_pv_str}")
 
                     st.divider()
 
@@ -3531,12 +3533,15 @@ td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
                             key=f"multi_combo_{customer_name}",
                         )
 
-                        _any_unbilled  = (sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล").any()
-                        _unbilled_cnt  = int((sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล").sum())
+                        _unbilled_mask = sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล"
+                        _any_unbilled  = _unbilled_mask.any()
+                        _unbilled_cnt  = int(_unbilled_mask.sum())
+                        _unbilled_pv   = sel_rows.loc[_unbilled_mask, "PV รวม"].sum() if "PV รวม" in sel_rows.columns else 0
                         _do_open_bill  = False
                         if _any_unbilled:
+                            _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
                             _do_open_bill = st.checkbox(
-                                f"📄 เปิดบิลด้วย ({_unbilled_cnt} รายการที่ยังไม่เปิดบิล)",
+                                f"📄 เปิดบิลด้วย ({_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str})",
                                 key=f"multi_open_chk_{customer_name}",
                             )
 
