@@ -186,7 +186,7 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 
 # ── Carrier definitions ───────────────────────────────────────────────────────
 # (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm)
-# max_cm: ด้านที่ยาวที่สุดของกล่องต้องไม่เกินค่านี้ (0 = ไม่จำกัด)
+# max_cm: กว้าง+ยาว+สูง รวมต้องไม่เกินค่านี้ (0 = ไม่จำกัด)
 _CARRIER_DEFS = [
     ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,    60),
     ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,    60),

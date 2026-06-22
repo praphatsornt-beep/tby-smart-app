@@ -108,7 +108,7 @@ def _show_carrier_select():
         _cs_max_cm  = _cs_sel_opt.get("max_cm", 0)
         st.caption(f"iShip code: `{_cs_code}` | ราคาจริง: {_cs_total:,} ฿")
         if _cs_max_cm:
-            st.warning(f"📐 {_cs_carrier} — กล่องด้านที่ยาวสุดต้องไม่เกิน **{_cs_max_cm} cm**")
+            st.warning(f"📐 {_cs_carrier} — กว้าง+ยาว+สูง รวมไม่เกิน **{_cs_max_cm} cm** (ถึงกล่องเบอร์ {'2B' if _cs_max_cm <= 60 else 'G' if _cs_max_cm <= 100 else '?'})")
         if not _cs_code:
             st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_cs_carrier}'")
 
