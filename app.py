@@ -153,44 +153,47 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
 
 
 def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
-                       searchbox_key: str, suggest_key: str):
+                       searchbox_key: str, suggest_key: str,
+                       stage_dt: str = "", stage_am: str = "", stage_pv: str = ""):
     """ถ้ารหัสไปรษณีย์ตรงกับ ต./อ./จ. → auto-fill (1 ตำบล) หรือ selectbox (หลายตำบล)"""
     pc = (pc or "").strip()
     if len(pc) != 5:
         return
+
+    def _stage(dt="", am="", pv=""):
+        if dt: st.session_state[stage_dt or value_key] = dt
+        if am: st.session_state[stage_am or am_key] = am
+        if pv: st.session_state[stage_pv or pv_key] = pv
+        if stage_dt or stage_am or stage_pv:
+            st.rerun()
+
     opts = _tambon_by_postcode(pc)
     if not opts:
         from bangkok_addresses import lookup_from_zipcode
         prov, amph = lookup_from_zipcode(pc)
-        if amph:
-            if not st.session_state.get(am_key):
-                st.session_state[am_key] = amph
-            if not st.session_state.get(pv_key):
-                st.session_state[pv_key] = prov
+        if amph and not st.session_state.get(am_key):
+            _stage(am=amph, pv=prov)
         return
     cur = (st.session_state.get(value_key, ""), st.session_state.get(am_key, ""), st.session_state.get(pv_key, ""))
     if cur in [(o["tambon"], o["amphure"], o["province"]) for o in opts]:
         return
 
     if len(opts) == 1:
-        sel = opts[0]
-        st.session_state[value_key] = sel["tambon"]
-        st.session_state[am_key]    = sel["amphure"]
-        st.session_state[pv_key]    = sel["province"]
-        st.rerun()
+        _stage(dt=opts[0]["tambon"], am=opts[0]["amphure"], pv=opts[0]["province"])
+        if not (stage_dt or stage_am or stage_pv):
+            st.rerun()
         return
 
-    _need_rerun = False
+    _fill_am = ""
+    _fill_pv = ""
     _all_provinces = {o["province"] for o in opts}
     if len(_all_provinces) == 1 and not st.session_state.get(pv_key):
-        st.session_state[pv_key] = next(iter(_all_provinces))
-        _need_rerun = True
+        _fill_pv = next(iter(_all_provinces))
     _all_amphures = {o["amphure"] for o in opts}
     if len(_all_amphures) == 1 and not st.session_state.get(am_key):
-        st.session_state[am_key] = next(iter(_all_amphures))
-        _need_rerun = True
-    if _need_rerun:
-        st.rerun()
+        _fill_am = next(iter(_all_amphures))
+    if _fill_am or _fill_pv:
+        _stage(am=_fill_am, pv=_fill_pv)
 
     idx_options = list(range(len(opts)))
     _suggest_label = lambda i: f"{opts[i]['tambon']} / {opts[i]['amphure']} / {opts[i]['province']}"
@@ -1692,7 +1695,8 @@ with tab1:
                         m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
                                                     key="m_postcode", placeholder="เช่น 10400")
                         _postcode_suggest(m_postcode, "r_dt", "r_am", "r_pv",
-                                          "r_dt_searchbox", "r_pc_suggest")
+                                          "r_dt_searchbox", "r_pc_suggest",
+                                          stage_dt="_fr_dt", stage_am="_fr_am", stage_pv="_fr_pv")
                         if m_customer != "— เลือกลูกค้า —":
                             if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                 db.upsert_customer_address({
@@ -2546,7 +2550,8 @@ td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
             _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
             _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key=f"sp_pc_v{_sp_av}", placeholder="เช่น 10400")
             _postcode_suggest(_sp_pc, f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
-                              f"sp_dt_searchbox_v{_sp_av}", f"sp_pc_suggest_v{_sp_av}")
+                              f"sp_dt_searchbox_v{_sp_av}", f"sp_pc_suggest_v{_sp_av}",
+                              stage_dt="_fsp_dt", stage_am="_fsp_am", stage_pv="_fsp_pv")
             if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                 db.upsert_customer_address({
                     "id":             str(uuid.uuid4()),
