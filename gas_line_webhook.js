@@ -124,6 +124,11 @@ function doPost(e) {
     var _payBillMenu = _msg.match(/^(.+?)\s+จ่าย([A-Za-z0-9\-]+)$/);
 
     if (_msg.toLowerCase() === 'คู่มือ' || _msg.toLowerCase() === 'help') { handleManual(replyToken, _staffTag); return; }
+    if (_msg.toLowerCase() === 'groupid') {
+      var _gid = (event.source || {}).groupId || '';
+      sendReply(replyToken, _gid ? '🔑 Group ID:\n' + _gid : '❌ ไม่ได้อยู่ในกลุ่ม (ใช้คำสั่งนี้ในกลุ่มเท่านั้น)');
+      return;
+    }
     if (_msg.toLowerCase() === 'check') { handleCheckMenu(replyToken); return; }
     if (_chk) { handleCustomerByName(_chk[1].trim(), replyToken); return; }
 
