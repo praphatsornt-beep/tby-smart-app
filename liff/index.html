@@ -161,10 +161,11 @@ async function init() {
 
 // ── Categories ──────────────────────────────────────────────────────────
 const CATEGORIES = [
-  { key: 'all',   th: 'ทั้งหมด',            mm: 'အားလုံး',         prefixes: [] },
-  { key: 'drink', th: 'เครื่องดื่ม/อาหารเสริม', mm: 'အချိုရည်/အားဆေး',  prefixes: ['TF','TY','PS','RB','RP'] },
-  { key: 'care',  th: 'ของใช้ส่วนตัว',        mm: 'ကိုယ်ပိုင်သုံး',    prefixes: ['TU','TJ','WK','TV'] },
-  { key: 'home',  th: 'ของใช้ในบ้าน',        mm: 'အိမ်သုံး',        prefixes: ['TW','RT','RJ','WA','WT','WF'] },
+  { key: 'all',    th: 'ทั้งหมด',              mm: 'အားလုံး',              prefixes: [] },
+  { key: 'health', th: 'ผลิตภัณฑ์เพื่อสุขภาพ',    mm: 'ကျန်းမာရေးထုတ်ကုန်',   prefixes: ['TF','TY','PS','RB','RP'] },
+  { key: 'home',   th: 'ผลิตภัณฑ์เพื่อบ้าน',      mm: 'အိမ်သုံးထုတ်ကုန်',      prefixes: ['TW','RT','RJ','WA','WT','WF'] },
+  { key: 'body',   th: 'ผลิตภัณฑ์เพื่อร่างกาย',    mm: 'ခန္ဓာကိုယ်စောင့်ရှောက်',  prefixes: ['TU','TJ','WK'] },
+  { key: 'belt',   th: 'เข็มขัด M-Belt',       mm: 'ခါးပတ် M-Belt',       prefixes: ['TV'] },
 ];
 let activeCategory = 'all';
 let searchText = '';
