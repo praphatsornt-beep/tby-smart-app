@@ -138,7 +138,7 @@ async function init() {
       document.getElementById('userInfo').textContent = profile.displayName + ' (ยังไม่ได้ลงทะเบียน)';
     }
 
-    products = await sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams,image_url&show_in_liff=eq.true&order=name');
+    products = await sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams,image_url&show_in_liff=eq.true&order=id');
     renderProducts();
     document.getElementById('loadingScreen').classList.add('hidden');
     document.getElementById('mainContent').classList.remove('hidden');
