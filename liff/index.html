@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>TBY สั่งสินค้า</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+:root { --primary: #06C755; --bg: #f5f5f5; --card: #fff; --text: #333; --muted: #888; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg); color: var(--text); padding-bottom: 160px; }
+.header { background: var(--primary); color: #fff; padding: 16px; text-align: center; position: sticky; top: 0; z-index: 10; }
+.header h1 { font-size: 18px; }
+.header .user { font-size: 13px; opacity: 0.9; margin-top: 4px; }
+.section { margin: 12px; background: var(--card); border-radius: 12px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.section h2 { font-size: 15px; margin-bottom: 10px; }
+.product-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+.product-row:last-child { border-bottom: none; }
+.product-info { flex: 1; }
+.product-name { font-size: 14px; font-weight: 600; }
+.product-meta { font-size: 12px; color: var(--muted); }
+.qty-control { display: flex; align-items: center; gap: 8px; }
+.qty-btn { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--primary); background: #fff; color: var(--primary); font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.qty-btn:active { background: var(--primary); color: #fff; }
+.qty-val { width: 32px; text-align: center; font-size: 16px; font-weight: 700; }
+.delivery-options { display: flex; gap: 8px; margin-top: 8px; }
+.delivery-btn { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 10px; background: #fff; font-size: 14px; text-align: center; cursor: pointer; }
+.delivery-btn.active { border-color: var(--primary); background: #e8f5e9; }
+.postcode-input { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; margin-top: 8px; text-align: center; letter-spacing: 4px; }
+.postcode-input:focus { border-color: var(--primary); outline: none; }
+.summary-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 14px; }
+.summary-row.total { font-size: 20px; font-weight: 700; color: var(--primary); border-top: 2px solid #eee; padding-top: 10px; margin-top: 6px; }
+.submit-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; padding: 12px 16px; box-shadow: 0 -2px 10px rgba(0,0,0,0.1); z-index: 10; }
+.submit-btn { width: 100%; padding: 14px; background: var(--primary); color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
+.submit-btn:disabled { background: #ccc; }
+.submit-btn:active:not(:disabled) { background: #05a647; }
+.loading { text-align: center; padding: 40px; color: var(--muted); }
+.error { background: #fee; color: #c00; padding: 12px; border-radius: 8px; margin: 12px; text-align: center; }
+.hidden { display: none; }
+.ship-info { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.badge { display: inline-block; background: var(--primary); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🛍️ TBY สั่งสินค้า</h1>
+  <div class="user" id="userInfo">กำลังโหลด...</div>
+</div>
+
+<div id="loadingScreen" class="loading">
+  <p>กำลังโหลดข้อมูลสินค้า...</p>
+</div>
+
+<div id="mainContent" class="hidden">
+  <div class="section">
+    <h2>📦 เลือกสินค้า</h2>
+    <div id="productList"></div>
+  </div>
+
+  <div class="section">
+    <h2>🚚 การรับสินค้า</h2>
+    <div class="delivery-options">
+      <div class="delivery-btn active" id="btnShip" onclick="setDelivery('ship')">📦 ส่งพัสดุ</div>
+      <div class="delivery-btn" id="btnPickup" onclick="setDelivery('pickup')">🏪 รับหน้าร้าน</div>
+    </div>
+    <div id="postcodeSection">
+      <input type="tel" class="postcode-input" id="postcodeInput" placeholder="รหัสไปรษณีย์" maxlength="5" oninput="onPostcodeChange()">
+      <div class="ship-info" id="shipInfo"></div>
+    </div>
+  </div>
+
+  <div class="section" id="summarySection" style="display:none">
+    <h2>📋 สรุปยอด</h2>
+    <div id="summaryItems"></div>
+    <div class="summary-row"><span>สินค้า</span><span id="sumProduct">0 ฿</span></div>
+    <div class="summary-row" id="sumShipRow"><span>ค่าส่ง</span><span id="sumShip">0 ฿</span></div>
+    <div class="summary-row"><span>⭐ PV รวม</span><span id="sumPV">0</span></div>
+    <div class="summary-row total"><span>ยอดรวม</span><span id="sumTotal">0 ฿</span></div>
+  </div>
+</div>
+
+<div class="submit-bar">
+  <button class="submit-btn" id="submitBtn" disabled onclick="submitOrder()">📨 ส่งออเดอร์</button>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────
+const LIFF_ID = '2010489838-VUZjf7Cp';
+const SUPABASE_URL = 'https://vpvpcdtpysfbatkugfzs.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwdnBjZHRweXNmYmF0a3VnZnpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NzY3MTAsImV4cCI6MjA5MjM1MjcxMH0.PndMvCduruClArolKh56vS5fMkMPt8zWbgnYEex5Qk8';
+
+// ── State ───────────────────────────────────────────────────────────────
+let products = [];
+let quantities = {};
+let delivery = 'ship';
+let postcode = '';
+let lineUserId = '';
+let customerName = '';
+let customerId = '';
+
+// ── Supabase helpers ────────────────────────────────────────────────────
+const sbHeaders = { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY };
+
+async function sbGet(path) {
+  const r = await fetch(SUPABASE_URL + path, { headers: sbHeaders });
+  return r.json();
+}
+
+// ── Init ────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    await liff.init({ liffId: LIFF_ID });
+    if (!liff.isLoggedIn()) { liff.login(); return; }
+
+    const profile = await liff.getProfile();
+    lineUserId = profile.userId;
+    document.getElementById('userInfo').textContent = 'สวัสดี ' + profile.displayName;
+
+    // ดึงข้อมูลลูกค้าจาก line_user_id
+    const custs = await sbGet('/rest/v1/customers?line_user_id=eq.' + lineUserId + '&select=id,name,phone');
+    if (custs.length > 0) {
+      customerName = custs[0].name;
+      customerId = custs[0].id;
+      document.getElementById('userInfo').textContent = 'สวัสดี คุณ' + customerName;
+    } else {
+      document.getElementById('userInfo').textContent = profile.displayName + ' (ยังไม่ได้ลงทะเบียน)';
+    }
+
+    // ดึงสินค้า
+    products = await sbGet('/rest/v1/products?select=id,name,price,points_per_unit,weight_grams&order=name');
+    renderProducts();
+    document.getElementById('loadingScreen').classList.add('hidden');
+    document.getElementById('mainContent').classList.remove('hidden');
+  } catch (e) {
+    document.getElementById('loadingScreen').innerHTML =
+      '<div class="error">เกิดข้อผิดพลาด: ' + e.message + '</div>';
+  }
+}
+
+// ── Render products ─────────────────────────────────────────────────────
+function renderProducts() {
+  const el = document.getElementById('productList');
+  el.innerHTML = products.map(p => {
+    const qty = quantities[p.id] || 0;
+    return `
+      <div class="product-row">
+        <div class="product-info">
+          <div class="product-name">[${p.id}] ${p.name}</div>
+          <div class="product-meta">฿${num(p.price)} · ${p.points_per_unit} PV · ${p.weight_grams}g</div>
+        </div>
+        <div class="qty-control">
+          <button class="qty-btn" onclick="changeQty('${p.id}',-1)" ${qty<=0?'disabled':''}>−</button>
+          <span class="qty-val">${qty}</span>
+          <button class="qty-btn" onclick="changeQty('${p.id}',1)">+</button>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function changeQty(pid, delta) {
+  quantities[pid] = Math.max(0, (quantities[pid] || 0) + delta);
+  renderProducts();
+  updateSummary();
+}
+
+// ── Delivery ────────────────────────────────────────────────────────────
+function setDelivery(mode) {
+  delivery = mode;
+  document.getElementById('btnShip').classList.toggle('active', mode === 'ship');
+  document.getElementById('btnPickup').classList.toggle('active', mode === 'pickup');
+  document.getElementById('postcodeSection').style.display = mode === 'ship' ? 'block' : 'none';
+  updateSummary();
+}
+
+function onPostcodeChange() {
+  postcode = document.getElementById('postcodeInput').value.trim();
+  updateSummary();
+}
+
+// ── Shipping calc (same logic as app.py) ────────────────────────────────
+function calcShipping(weightGrams, pc) {
+  const kg = (weightGrams + 500) / 1000; // +500g กล่อง
+  let base = 39 + Math.max(0, Math.ceil(kg - 5)) * 10;
+  return base;
+}
+
+// ── Summary ─────────────────────────────────────────────────────────────
+function updateSummary() {
+  const items = [];
+  let totalPrice = 0, totalPV = 0, totalWeight = 0;
+
+  products.forEach(p => {
+    const qty = quantities[p.id] || 0;
+    if (qty > 0) {
+      const subtotal = p.price * qty;
+      totalPrice += subtotal;
+      totalPV += p.points_per_unit * qty;
+      totalWeight += p.weight_grams * qty;
+      items.push({ id: p.id, name: p.name, qty, price: p.price, subtotal });
+    }
+  });
+
+  const hasItems = items.length > 0;
+  document.getElementById('summarySection').style.display = hasItems ? 'block' : 'none';
+  document.getElementById('submitBtn').disabled = !hasItems;
+
+  if (!hasItems) return;
+
+  // items list
+  document.getElementById('summaryItems').innerHTML = items.map(it =>
+    `<div class="summary-row"><span>${it.name} ×${it.qty}</span><span>${num(it.subtotal)} ฿</span></div>`
+  ).join('');
+
+  // shipping
+  let shipFee = 0;
+  const shipRow = document.getElementById('sumShipRow');
+  const shipInfo = document.getElementById('shipInfo');
+  if (delivery === 'ship') {
+    shipRow.style.display = 'flex';
+    if (postcode.length === 5) {
+      shipFee = calcShipping(totalWeight, postcode);
+      const totalKg = (totalWeight + 500) / 1000;
+      shipInfo.textContent = '⚖️ ' + totalKg.toFixed(2) + ' kg (รวมกล่อง)';
+    } else {
+      shipInfo.textContent = 'กรอกรหัสไปรษณีย์ 5 หลักเพื่อคำนวณค่าส่ง';
+      shipFee = 0;
+    }
+  } else {
+    shipRow.style.display = 'none';
+    shipInfo.textContent = '';
+  }
+
+  const total = totalPrice + shipFee;
+  document.getElementById('sumProduct').textContent = num(totalPrice) + ' ฿';
+  document.getElementById('sumShip').textContent = num(shipFee) + ' ฿';
+  document.getElementById('sumPV').textContent = num(totalPV);
+  document.getElementById('sumTotal').textContent = num(total) + ' ฿';
+}
+
+// ── Submit ───────────────────────────────────────────────────────────────
+async function submitOrder() {
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ กำลังส่ง...';
+
+  try {
+    const items = [];
+    let totalPrice = 0, totalPV = 0, totalWeight = 0;
+    products.forEach(p => {
+      const qty = quantities[p.id] || 0;
+      if (qty > 0) {
+        items.push({ id: p.id, name: p.name, qty, price: p.price, subtotal: p.price * qty });
+        totalPrice += p.price * qty;
+        totalPV += p.points_per_unit * qty;
+        totalWeight += p.weight_grams * qty;
+      }
+    });
+
+    let shipFee = 0;
+    if (delivery === 'ship' && postcode.length === 5) {
+      shipFee = calcShipping(totalWeight, postcode);
+    }
+    const total = totalPrice + shipFee;
+    const totalKg = (totalWeight + 500) / 1000;
+
+    // สร้างข้อความสรุป
+    let msg = '🛍️ ออเดอร์ใหม่จาก LIFF\n';
+    msg += '👤 ' + (customerName || 'ลูกค้าใหม่') + (customerId ? ' (' + customerId + ')' : '') + '\n';
+    msg += '─────────────────\n';
+    items.forEach(it => {
+      msg += '📦 [' + it.id + '] ' + it.name + ' ×' + it.qty + ' = ' + num(it.subtotal) + '฿\n';
+    });
+    msg += '─────────────────\n';
+    msg += '💵 สินค้า: ' + num(totalPrice) + '฿\n';
+    if (delivery === 'ship') {
+      msg += '🚚 ค่าส่ง: ' + num(shipFee) + '฿ (' + postcode + ', ' + totalKg.toFixed(2) + 'kg)\n';
+    } else {
+      msg += '🏪 รับหน้าร้าน\n';
+    }
+    msg += '💰 ยอดรวม: ' + num(total) + '฿\n';
+    msg += '⭐ PV: ' + num(totalPV) + '\n';
+    msg += '\n📱 กรุณาส่งสลิปโอนเงินมาค่ะ';
+
+    // ส่งข้อความผ่าน LIFF
+    if (liff.isInClient()) {
+      await liff.sendMessages([{ type: 'text', text: msg }]);
+      alert('✅ ส่งออเดอร์แล้ว!\nกรุณาส่งสลิปโอนเงินมาในแชทค่ะ');
+      liff.closeWindow();
+    } else {
+      // เปิดนอก LINE — แสดงสรุปให้ copy
+      alert('✅ สรุปออเดอร์:\n\n' + msg + '\n\n(กรุณา copy ส่งในแชท LINE)');
+    }
+  } catch (e) {
+    alert('❌ เกิดข้อผิดพลาด: ' + e.message);
+  }
+
+  btn.disabled = false;
+  btn.textContent = '📨 ส่งออเดอร์';
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+function num(n) { return Math.round(n).toLocaleString(); }
+
+// ── Start ───────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>
