@@ -18,10 +18,10 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
 /* ── Search + Category ─────────────────────────────────────────── */
 .search-input { width: 100%; padding: 10px 14px; border: 2px solid #ddd; border-radius: 10px; font-size: 14px; margin-bottom: 10px; }
 .search-input:focus { border-color: var(--primary); outline: none; }
-.category-bar { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; -webkit-overflow-scrolling: touch; }
-.category-bar::-webkit-scrollbar { display: none; }
-.cat-btn { flex-shrink: 0; padding: 6px 14px; border: 2px solid #ddd; border-radius: 20px; background: #fff; font-size: 12px; cursor: pointer; white-space: nowrap; -webkit-tap-highlight-color: transparent; }
+.category-bar { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 8px; }
+.cat-btn { padding: 8px 16px; border: 2px solid #e0e0e0; border-radius: 25px; background: #fff; font-size: 13px; cursor: pointer; -webkit-tap-highlight-color: transparent; text-align: center; }
 .cat-btn.active { border-color: var(--primary); background: var(--primary); color: #fff; }
+.cat-btn small { display: block; font-size: 10px; opacity: 0.8; margin-top: 1px; }
 
 /* ── Product grid ──────────────────────────────────────────────── */
 .product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; max-width: 500px; margin: 0 auto; }
