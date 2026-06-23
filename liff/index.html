@@ -73,11 +73,11 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
   <div class="section">
     <h2>🚚 การรับสินค้า</h2>
     <div class="delivery-options">
-      <div class="delivery-btn active" id="btnShip" onclick="setDelivery('ship')">📦 ส่งพัสดุ</div>
-      <div class="delivery-btn" id="btnPickup" onclick="setDelivery('pickup')">🏪 รับหน้าร้าน</div>
+      <div class="delivery-btn active" id="btnShip" onclick="setDelivery('ship')">📦 ส่งพัสดุ<br><small>အိမ်အရောက်ပို့</small></div>
+      <div class="delivery-btn" id="btnPickup" onclick="setDelivery('pickup')">🏪 รับหน้าร้าน<br><small>ဆိုင်တွင်လာယူ</small></div>
     </div>
     <div id="postcodeSection">
-      <input type="tel" class="postcode-input" id="postcodeInput" placeholder="รหัสไปรษณีย์" maxlength="5" oninput="onPostcodeChange()">
+      <input type="tel" class="postcode-input" id="postcodeInput" placeholder="กรอกรหัสไปรษณีย์เพื่อคำนวณค่าจัดส่ง" maxlength="5" oninput="onPostcodeChange()">
       <div class="ship-info" id="shipInfo"></div>
     </div>
   </div>
@@ -93,7 +93,7 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
 </div>
 
 <div class="submit-bar">
-  <button class="submit-btn" id="submitBtn" disabled onclick="submitOrder()">📨 ส่งออเดอร์</button>
+  <button class="submit-btn" id="submitBtn" disabled onclick="submitOrder()">📨 ส่งออเดอร์ · အော်ဒါပို့မည်</button>
 </div>
 
 <script>
