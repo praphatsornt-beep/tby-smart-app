@@ -132,6 +132,26 @@ async function sbGet(path) {
   return r.json();
 }
 
+async function sbPost(table, data) {
+  const r = await fetch(SUPABASE_URL + '/rest/v1/' + table, {
+    method: 'POST', headers: { ...sbHeaders, 'Content-Type': 'application/json', 'Prefer': 'return=representation' },
+    body: JSON.stringify(data),
+  });
+  return r.json();
+}
+
+async function autoCreateCustomer(userId, displayName) {
+  const allCusts = await sbGet('/rest/v1/customers?select=id&order=id.desc&limit=50');
+  let maxNum = 0;
+  (allCusts || []).forEach(c => {
+    const m = (c.id || '').match(/^C-(\d+)$/);
+    if (m) maxNum = Math.max(maxNum, parseInt(m[1]));
+  });
+  const newId = 'C-' + String(maxNum + 1).padStart(3, '0');
+  await sbPost('customers', { id: newId, name: displayName, phone: '', line_user_id: userId });
+  return { id: newId, name: displayName };
+}
+
 // ── Init ────────────────────────────────────────────────────────────────
 async function init() {
   try {
@@ -148,7 +168,10 @@ async function init() {
       customerId = custs[0].id;
       document.getElementById('userInfo').textContent = 'สวัสดี คุณ' + customerName;
     } else {
-      document.getElementById('userInfo').textContent = profile.displayName + ' (ยังไม่ได้ลงทะเบียน)';
+      const newCust = await autoCreateCustomer(lineUserId, profile.displayName);
+      customerName = newCust.name;
+      customerId = newCust.id;
+      document.getElementById('userInfo').textContent = 'สวัสดี คุณ' + customerName + ' (ลูกค้าใหม่)';
     }
 
     products = await sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams,image_url&show_in_liff=eq.true&order=id');
