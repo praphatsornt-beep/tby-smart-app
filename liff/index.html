@@ -14,17 +14,26 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
 .header .user { font-size: 13px; opacity: 0.9; margin-top: 4px; }
 .section { margin: 12px; background: var(--card); border-radius: 12px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
 .section h2 { font-size: 15px; margin-bottom: 10px; }
-.product-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
-.product-row:last-child { border-bottom: none; }
-.product-info { flex: 1; }
-.product-name { font-size: 14px; font-weight: 600; }
-.product-meta { font-size: 12px; color: var(--muted); }
-.qty-control { display: flex; align-items: center; gap: 8px; }
-.qty-btn { width: 32px; height: 32px; border-radius: 50%; border: 2px solid var(--primary); background: #fff; color: var(--primary); font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+
+/* ── Product grid ──────────────────────────────────────────────── */
+.product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.product-card { border: 2px solid #eee; border-radius: 12px; overflow: hidden; background: #fff; transition: border-color 0.2s; }
+.product-card.selected { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.product-img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #f0f0f0; display: block; }
+.product-img-placeholder { width: 100%; aspect-ratio: 1; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); display: flex; align-items: center; justify-content: center; font-size: 36px; }
+.product-body { padding: 8px 10px; }
+.product-name { font-size: 13px; font-weight: 600; line-height: 1.3; height: 2.6em; overflow: hidden; }
+.product-price { font-size: 15px; font-weight: 700; color: var(--primary); margin-top: 2px; }
+.product-meta { font-size: 11px; color: var(--muted); }
+.qty-control { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px; padding-bottom: 4px; }
+.qty-btn { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--primary); background: #fff; color: var(--primary); font-size: 20px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent; }
 .qty-btn:active { background: var(--primary); color: #fff; }
-.qty-val { width: 32px; text-align: center; font-size: 16px; font-weight: 700; }
+.qty-val { width: 28px; text-align: center; font-size: 18px; font-weight: 700; }
+.qty-val.has-qty { color: var(--primary); }
+
+/* ── Delivery / Summary ────────────────────────────────────────── */
 .delivery-options { display: flex; gap: 8px; margin-top: 8px; }
-.delivery-btn { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 10px; background: #fff; font-size: 14px; text-align: center; cursor: pointer; }
+.delivery-btn { flex: 1; padding: 12px; border: 2px solid #ddd; border-radius: 10px; background: #fff; font-size: 14px; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .delivery-btn.active { border-color: var(--primary); background: #e8f5e9; }
 .postcode-input { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; margin-top: 8px; text-align: center; letter-spacing: 4px; }
 .postcode-input:focus { border-color: var(--primary); outline: none; }
@@ -38,7 +47,7 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
 .error { background: #fee; color: #c00; padding: 12px; border-radius: 8px; margin: 12px; text-align: center; }
 .hidden { display: none; }
 .ship-info { font-size: 12px; color: var(--muted); margin-top: 4px; }
-.badge { display: inline-block; background: var(--primary); color: #fff; font-size: 11px; padding: 2px 8px; border-radius: 10px; margin-left: 6px; }
+.cart-badge { position: fixed; top: 12px; right: 16px; background: #ff5722; color: #fff; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 20px; z-index: 11; display: none; }
 </style>
 </head>
 <body>
@@ -47,6 +56,7 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
   <h1>🛍️ TBY สั่งสินค้า</h1>
   <div class="user" id="userInfo">กำลังโหลด...</div>
 </div>
+<div class="cart-badge" id="cartBadge">0 ชิ้น</div>
 
 <div id="loadingScreen" class="loading">
   <p>กำลังโหลดข้อมูลสินค้า...</p>
@@ -55,7 +65,7 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
 <div id="mainContent" class="hidden">
   <div class="section">
     <h2>📦 เลือกสินค้า</h2>
-    <div id="productList"></div>
+    <div class="product-grid" id="productList"></div>
   </div>
 
   <div class="section">
@@ -117,7 +127,6 @@ async function init() {
     lineUserId = profile.userId;
     document.getElementById('userInfo').textContent = 'สวัสดี ' + profile.displayName;
 
-    // ดึงข้อมูลลูกค้าจาก line_user_id
     const custs = await sbGet('/rest/v1/customers?line_user_id=eq.' + lineUserId + '&select=id,name,phone');
     if (custs.length > 0) {
       customerName = custs[0].name;
@@ -127,8 +136,7 @@ async function init() {
       document.getElementById('userInfo').textContent = profile.displayName + ' (ยังไม่ได้ลงทะเบียน)';
     }
 
-    // ดึงสินค้า
-    products = await sbGet('/rest/v1/products?select=id,name,price,points_per_unit,weight_grams&order=name');
+    products = await sbGet('/rest/v1/products?select=id,name,price,points_per_unit,weight_grams,image_url&order=name');
     renderProducts();
     document.getElementById('loadingScreen').classList.add('hidden');
     document.getElementById('mainContent').classList.remove('hidden');
@@ -138,21 +146,26 @@ async function init() {
   }
 }
 
-// ── Render products ─────────────────────────────────────────────────────
+// ── Render products (card grid) ─────────────────────────────────────────
 function renderProducts() {
   const el = document.getElementById('productList');
   el.innerHTML = products.map(p => {
     const qty = quantities[p.id] || 0;
+    const imgHtml = p.image_url
+      ? `<img class="product-img" src="${p.image_url}" alt="${p.name}" loading="lazy">`
+      : `<div class="product-img-placeholder">📦</div>`;
     return `
-      <div class="product-row">
-        <div class="product-info">
-          <div class="product-name">[${p.id}] ${p.name}</div>
-          <div class="product-meta">฿${num(p.price)} · ${p.points_per_unit} PV · ${p.weight_grams}g</div>
-        </div>
-        <div class="qty-control">
-          <button class="qty-btn" onclick="changeQty('${p.id}',-1)" ${qty<=0?'disabled':''}>−</button>
-          <span class="qty-val">${qty}</span>
-          <button class="qty-btn" onclick="changeQty('${p.id}',1)">+</button>
+      <div class="product-card ${qty > 0 ? 'selected' : ''}">
+        ${imgHtml}
+        <div class="product-body">
+          <div class="product-name">${p.name}</div>
+          <div class="product-price">฿${num(p.price)}</div>
+          <div class="product-meta">${p.points_per_unit} PV</div>
+          <div class="qty-control">
+            <button class="qty-btn" onclick="changeQty('${p.id}',-1)" ${qty<=0?'disabled':''}>−</button>
+            <span class="qty-val ${qty > 0 ? 'has-qty' : ''}">${qty}</span>
+            <button class="qty-btn" onclick="changeQty('${p.id}',1)">+</button>
+          </div>
         </div>
       </div>`;
   }).join('');
@@ -162,6 +175,18 @@ function changeQty(pid, delta) {
   quantities[pid] = Math.max(0, (quantities[pid] || 0) + delta);
   renderProducts();
   updateSummary();
+  updateCartBadge();
+}
+
+function updateCartBadge() {
+  const total = Object.values(quantities).reduce((s, q) => s + q, 0);
+  const badge = document.getElementById('cartBadge');
+  if (total > 0) {
+    badge.textContent = total + ' ชิ้น';
+    badge.style.display = 'block';
+  } else {
+    badge.style.display = 'none';
+  }
 }
 
 // ── Delivery ────────────────────────────────────────────────────────────
@@ -178,11 +203,10 @@ function onPostcodeChange() {
   updateSummary();
 }
 
-// ── Shipping calc (same logic as app.py) ────────────────────────────────
+// ── Shipping calc ───────────────────────────────────────────────────────
 function calcShipping(weightGrams, pc) {
-  const kg = (weightGrams + 500) / 1000; // +500g กล่อง
-  let base = 39 + Math.max(0, Math.ceil(kg - 5)) * 10;
-  return base;
+  const kg = (weightGrams + 500) / 1000;
+  return 39 + Math.max(0, Math.ceil(kg - 5)) * 10;
 }
 
 // ── Summary ─────────────────────────────────────────────────────────────
@@ -193,26 +217,22 @@ function updateSummary() {
   products.forEach(p => {
     const qty = quantities[p.id] || 0;
     if (qty > 0) {
-      const subtotal = p.price * qty;
-      totalPrice += subtotal;
+      totalPrice += p.price * qty;
       totalPV += p.points_per_unit * qty;
       totalWeight += p.weight_grams * qty;
-      items.push({ id: p.id, name: p.name, qty, price: p.price, subtotal });
+      items.push({ id: p.id, name: p.name, qty, price: p.price, subtotal: p.price * qty });
     }
   });
 
   const hasItems = items.length > 0;
   document.getElementById('summarySection').style.display = hasItems ? 'block' : 'none';
   document.getElementById('submitBtn').disabled = !hasItems;
-
   if (!hasItems) return;
 
-  // items list
   document.getElementById('summaryItems').innerHTML = items.map(it =>
     `<div class="summary-row"><span>${it.name} ×${it.qty}</span><span>${num(it.subtotal)} ฿</span></div>`
   ).join('');
 
-  // shipping
   let shipFee = 0;
   const shipRow = document.getElementById('sumShipRow');
   const shipInfo = document.getElementById('shipInfo');
@@ -220,22 +240,19 @@ function updateSummary() {
     shipRow.style.display = 'flex';
     if (postcode.length === 5) {
       shipFee = calcShipping(totalWeight, postcode);
-      const totalKg = (totalWeight + 500) / 1000;
-      shipInfo.textContent = '⚖️ ' + totalKg.toFixed(2) + ' kg (รวมกล่อง)';
+      shipInfo.textContent = '⚖️ ' + ((totalWeight + 500) / 1000).toFixed(2) + ' kg (รวมกล่อง)';
     } else {
       shipInfo.textContent = 'กรอกรหัสไปรษณีย์ 5 หลักเพื่อคำนวณค่าส่ง';
-      shipFee = 0;
     }
   } else {
     shipRow.style.display = 'none';
     shipInfo.textContent = '';
   }
 
-  const total = totalPrice + shipFee;
   document.getElementById('sumProduct').textContent = num(totalPrice) + ' ฿';
   document.getElementById('sumShip').textContent = num(shipFee) + ' ฿';
   document.getElementById('sumPV').textContent = num(totalPV);
-  document.getElementById('sumTotal').textContent = num(total) + ' ฿';
+  document.getElementById('sumTotal').textContent = num(totalPrice + shipFee) + ' ฿';
 }
 
 // ── Submit ───────────────────────────────────────────────────────────────
@@ -264,7 +281,6 @@ async function submitOrder() {
     const total = totalPrice + shipFee;
     const totalKg = (totalWeight + 500) / 1000;
 
-    // สร้างข้อความสรุป
     let msg = '🛍️ ออเดอร์ใหม่จาก LIFF\n';
     msg += '👤 ' + (customerName || 'ลูกค้าใหม่') + (customerId ? ' (' + customerId + ')' : '') + '\n';
     msg += '─────────────────\n';
@@ -282,13 +298,11 @@ async function submitOrder() {
     msg += '⭐ PV: ' + num(totalPV) + '\n';
     msg += '\n📱 กรุณาส่งสลิปโอนเงินมาค่ะ';
 
-    // ส่งข้อความผ่าน LIFF
     if (liff.isInClient()) {
       await liff.sendMessages([{ type: 'text', text: msg }]);
       alert('✅ ส่งออเดอร์แล้ว!\nกรุณาส่งสลิปโอนเงินมาในแชทค่ะ');
       liff.closeWindow();
     } else {
-      // เปิดนอก LINE — แสดงสรุปให้ copy
       alert('✅ สรุปออเดอร์:\n\n' + msg + '\n\n(กรุณา copy ส่งในแชท LINE)');
     }
   } catch (e) {
