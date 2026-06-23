@@ -161,13 +161,10 @@ async function init() {
 
 // ── Categories ──────────────────────────────────────────────────────────
 const CATEGORIES = [
-  { key: 'all',   th: 'ทั้งหมด',        mm: 'အားလုံး',         prefixes: [] },
-  { key: 'drink', th: 'เครื่องดื่ม/อาหาร', mm: 'အစားအသောက်',    prefixes: ['TF','TY','PS'] },
-  { key: 'care',  th: 'ของใช้ส่วนตัว',    mm: 'ကိုယ်ပိုင်သုံး',    prefixes: ['TU','TJ','WK'] },
-  { key: 'home',  th: 'ของใช้ในบ้าน',    mm: 'အိမ်သုံး',        prefixes: ['TW'] },
-  { key: 'health',th: 'อาหารเสริม',      mm: 'အားဆေး',        prefixes: ['RB','RP'] },
-  { key: 'belt',  th: 'เข็มขัด',         mm: 'ခါးပတ်',         prefixes: ['TV'] },
-  { key: 'water', th: 'เครื่องกรองน้ำ',   mm: 'ရေစစ်',          prefixes: ['RT','RJ','WA','WT','WF'] },
+  { key: 'all',   th: 'ทั้งหมด',            mm: 'အားလုံး',         prefixes: [] },
+  { key: 'drink', th: 'เครื่องดื่ม/อาหารเสริม', mm: 'အစားအသောက်',    prefixes: ['TF','TY','PS','RB','RP'] },
+  { key: 'care',  th: 'ของใช้ส่วนตัว',        mm: 'ကိုယ်ပိုင်သုံး',    prefixes: ['TU','TJ','WK','TV'] },
+  { key: 'home',  th: 'ของใช้ในบ้าน',        mm: 'အိမ်သုံး',        prefixes: ['TW','RT','RJ','WA','WT','WF'] },
 ];
 let activeCategory = 'all';
 let searchText = '';
