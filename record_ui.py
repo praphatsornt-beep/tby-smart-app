@@ -1261,6 +1261,7 @@ def render(tab1, products, customers, customer_map):
             # ── tracking + หมายเหตุ ───────────────────────────────────────────
             _sp_track = st.text_input("เลข tracking (กรอกทีหลังได้)", key=f"sp_track_v{_sp_av}", placeholder="TH123456789")
             _sp_notes = st.text_input("หมายเหตุ", key=f"sp_notes_v{_sp_av}")
+            _sp_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key=f"sp_iship_note_v{_sp_av}")
 
             # ── บันทึก ────────────────────────────────────────────────────────
             if st.button("💾 บันทึกการส่งของ", type="primary", use_container_width=True, key="sp_save"):
@@ -1299,6 +1300,7 @@ def render(tab1, products, customers, customer_map):
                         _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
                         _sp_item_codes,
                         _sp_notes.strip(),
+                        _sp_iship_note.strip(),
                     ]))
                     _sp_iship_args = {
                         "dst_name":     _sp_rname.strip(),
