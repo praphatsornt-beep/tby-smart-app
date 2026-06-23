@@ -1025,6 +1025,16 @@ def get_customer_line_user_id(customer_id: str) -> str:
     return (rows[0].get("line_user_id") or "") if rows else ""
 
 
+def get_customer_line_ids(customer_id: str) -> tuple[str, str]:
+    """คืน (line_user_id, group_id) ของลูกค้า"""
+    if not customer_id:
+        return "", ""
+    rows = get_supabase().table("customers").select("line_user_id,group_id").eq("id", customer_id).execute().data
+    if not rows:
+        return "", ""
+    return (rows[0].get("line_user_id") or ""), (rows[0].get("group_id") or "")
+
+
 def mark_line_notified(shipment_id: str) -> None:
     """บันทึกวันที่ส่ง LINE notification แล้ว"""
     from datetime import datetime, timezone

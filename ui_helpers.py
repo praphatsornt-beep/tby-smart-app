@@ -222,7 +222,7 @@ def _extract_tracking(resp: dict) -> str:
 
 def _build_success_info(tracking, tab, customer, dst_name, dst_phone, address,
                         carrier, weight_kg, cod_amount, items, line_user_id,
-                        shipment_id, **extra) -> dict:
+                        shipment_id, group_id="", **extra) -> dict:
     """Build the _iship_success_info dict for storing in session state."""
     d = {
         "tracking":     tracking,
@@ -237,6 +237,7 @@ def _build_success_info(tracking, tab, customer, dst_name, dst_phone, address,
         "items":        items,
         "line_user_id": line_user_id,
         "shipment_id":  shipment_id,
+        "group_id":     group_id,
     }
     d.update(extra)
     return d
@@ -649,7 +650,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     # ── ส่งสรุปบิล LINE ─────────────────────────────────────
     _t7_cust_name = show_p["ลูกค้า"].iloc[0] if not show_p.empty else sel_p
     _t7_cust_id   = cust_map_p.get(_t7_cust_name, {}).get("id", "")
-    _t7_line_uid  = db.get_customer_line_user_id(_t7_cust_id) if _t7_cust_id else ""
+    _t7_line_uid, _t7_gid = db.get_customer_line_ids(_t7_cust_id) if _t7_cust_id else ("", "")
     _t7_items = [{"name": r["สินค้า"], "qty": int(r["สั่ง"]),
                   "total": float(r["ยอดรวม"])} for _, r in show_p.iterrows()]
     _t7_pay = show_p.iloc[0].get("สถานะบิล", "") if not show_p.empty else ""
@@ -659,7 +660,8 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                        help="ส่งสรุปให้ลูกค้าใน LINE" if _t7_line_uid else "ลูกค้าไม่มี LINE ID"):
         _r7 = line_api.push_bill_summary(
             _t7_line_uid, _t7_cust_name, bill_nos_str,
-            _t7_items, total_amount, _t7_pay
+            _t7_items, total_amount, _t7_pay,
+            group_id=_t7_gid,
         )
         if _r7["ok"]:
             st.success("✅ ส่ง LINE แล้ว")

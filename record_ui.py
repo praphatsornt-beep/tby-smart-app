@@ -810,7 +810,7 @@ def render(tab1, products, customers, customer_map):
                             _pb2.markdown(
                                 f"💰 **{_grand:,.0f} ฿** &nbsp;&nbsp; ⭐ PV {_pd['total_pv']:.0f}"
                             )
-                        _popup_line_uid = db.get_customer_line_user_id(_pd.get("customer_id", "")) if _pd.get("customer_id") else ""
+                        _popup_line_uid, _popup_gid = db.get_customer_line_ids(_pd.get("customer_id", "")) if _pd.get("customer_id") else ("", "")
                         if _pb3.button("📨 LINE", key="popup_line_btn",
                                        disabled=not bool(_popup_line_uid),
                                        use_container_width=True,
@@ -821,7 +821,8 @@ def render(tab1, products, customers, customer_map):
                                             for it in _old_items]
                             _res = line_api.push_bill_summary(
                                 _popup_line_uid, _pd["customer_name"], _pd["bill_no"],
-                                _line_items, _pd["total_amt"] + _old_total, _pd["pay_status"]
+                                _line_items, _pd["total_amt"] + _old_total, _pd["pay_status"],
+                                group_id=_popup_gid,
                             )
                             if _res["ok"]:
                                 st.toast("✅ ส่ง LINE แล้ว")
@@ -942,7 +943,7 @@ def render(tab1, products, customers, customer_map):
                                 except Exception as _cs2_e:
                                     st.warning(f"⚠️ ส่ง iShip สำเร็จ (tracking {tracking}) แต่บันทึกประวัติการส่งไม่สำเร็จ: {_cs2_e}")
                                 _cid_s2 = _p.get("_customer_id", "")
-                                _luid_s2 = db.get_customer_line_user_id(_cid_s2) if (tracking and _cid_s2) else ""
+                                _luid_s2, _gid_s2 = db.get_customer_line_ids(_cid_s2) if (tracking and _cid_s2) else ("", "")
                                 del st.session_state["_iship_pending"]
                                 st.session_state["_iship_success_info"] = _build_success_info(
                                     tracking=tracking, tab="sale",
@@ -956,6 +957,7 @@ def render(tab1, products, customers, customer_map):
                                     items=_p.get("_items",[]),
                                     line_user_id=_luid_s2,
                                     shipment_id="",
+                                    group_id=_gid_s2,
                                 )
                                 # dialog จะเปิดอัตโนมัติจาก _iship_success_info
                                 st.rerun()
@@ -1387,7 +1389,7 @@ def render(tab1, products, customers, customer_map):
                             if _spp.get("_shipment_id") and _sp_tracking:
                                 db.update_shipment_tracking(_spp["_shipment_id"], _sp_tracking)
                             _sp_cid2 = _spp.get("_customer_id", "")
-                            _sp_luid_b = db.get_customer_line_user_id(_sp_cid2) if (_sp_tracking and _sp_cid2) else ""
+                            _sp_luid_b, _sp_gid_b = db.get_customer_line_ids(_sp_cid2) if (_sp_tracking and _sp_cid2) else ("", "")
                             del st.session_state["_sp_iship_pending"]
                             _spp_addr = f"{_spp.get('address_line','')} {_spp.get('district','')} {_spp.get('amphure','')} {_spp.get('province','')} {_spp.get('zipcode','')}".strip()
                             st.session_state["_iship_success_info"] = _build_success_info(
@@ -1402,6 +1404,7 @@ def render(tab1, products, customers, customer_map):
                                 items=_spp.get("_items",[]),
                                 line_user_id=_sp_luid_b,
                                 shipment_id=_spp.get("_shipment_id", ""),
+                                group_id=_sp_gid_b,
                             )
                             st.session_state["_open_success_dialog"] = True
                             st.rerun()
@@ -1657,7 +1660,7 @@ def render(tab1, products, customers, customer_map):
                     # ─── ปุ่มส่ง LINE (แสดงใน slot ข้างชื่อลูกค้า) ───────────
                     if _calc_cust_sel != "— ไม่ระบุ —" and line_api.is_configured():
                         _c_cust  = _calc_cust_map.get(_calc_cust_sel, {})
-                        _c_luid  = db.get_customer_line_user_id(_c_cust.get("id", "")) if _c_cust.get("id") else ""
+                        _c_luid, _c_gid  = db.get_customer_line_ids(_c_cust.get("id", "")) if _c_cust.get("id") else ("", "")
                         if _c_luid:
                             if _line_btn_slot.button(f"📨 ส่ง LINE ให้คุณ {_calc_cust_sel}", type="primary", key="calc_line_btn", use_container_width=True):
                                 _c_msg_lines = ["📝 รายการสินค้า", ""]
@@ -1676,7 +1679,7 @@ def render(tab1, products, customers, customer_map):
                                 _formula = " + ".join(_parts)
                                 _c_msg_lines.append(f"\n{_formula} = {int(_c_grand):,}")
                                 _c_msg_lines.append(f"💰 ยอดโอนสุทธิ: ฿{int(_c_grand):,}")
-                                _c_res = line_api.push_text(_c_luid, "\n".join(_c_msg_lines))
+                                _c_res = line_api.push_text(_c_luid, "\n".join(_c_msg_lines), group_id=_c_gid)
                                 if _c_res["ok"]:
                                     st.success(f"✅ ส่ง LINE ให้ {_calc_cust_sel} แล้ว")
                                 else:

@@ -124,9 +124,18 @@ function doPost(e) {
     var _payBillMenu = _msg.match(/^(.+?)\s+จ่าย([A-Za-z0-9\-]+)$/);
 
     if (_msg.toLowerCase() === 'คู่มือ' || _msg.toLowerCase() === 'help') { handleManual(replyToken, _staffTag); return; }
-    if (_msg.toLowerCase() === 'groupid') {
+    if (_msg.toLowerCase().startsWith('groupid')) {
       var _gid = (event.source || {}).groupId || '';
-      sendReply(replyToken, _gid ? '🔑 Group ID:\n' + _gid : '❌ ไม่ได้อยู่ในกลุ่ม (ใช้คำสั่งนี้ในกลุ่มเท่านั้น)');
+      if (!_gid) { sendReply(replyToken, '❌ ใช้คำสั่งนี้ในกลุ่มเท่านั้น'); return; }
+      var _gCustName = _msg.replace(/^groupid\s*/i, '').trim();
+      if (!_gCustName) {
+        sendReply(replyToken, '🔑 Group ID:\n' + _gid + '\n\nถ้าจะผูกกับลูกค้า พิมพ์:\n#' + _staffTag + ' groupid [ชื่อลูกค้า]');
+        return;
+      }
+      var _gCust = findOneCustomer(_gCustName, replyToken, '#' + _staffTag + ' groupid {name}');
+      if (!_gCust) return;
+      _sbPatch('/rest/v1/customers?id=eq.' + _gCust.id, { group_id: _gid });
+      sendReply(replyToken, '✅ ผูกกลุ่มนี้กับคุณ' + _gCust.name + ' แล้ว\nเวลาแจ้งเตือนจะส่งเข้ากลุ่มนี้ค่ะ');
       return;
     }
     if (_msg.toLowerCase() === 'check') { handleCheckMenu(replyToken); return; }

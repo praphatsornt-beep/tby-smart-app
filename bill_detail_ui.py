@@ -123,6 +123,7 @@ def render(tab5, products, customers):
             else:
                 # โหลด line_user_id ของลูกค้าทั้งหมด
                 _cust_line_map = {c["name"]: c.get("line_user_id") or "" for c in customers}
+                _cust_gid_map  = {c["name"]: c.get("group_id") or "" for c in customers}
                 _cust_map_all  = {c["name"]: c for c in customers}
                 _all_txn_cache = db.get_all_transactions_df()
 
@@ -143,6 +144,7 @@ def render(tab5, products, customers):
                     pending = int(grp["ค้างรับ"].sum())
                     txn_ids = grp["id"].tolist()
                     _luid   = _cust_line_map.get(customer_name, "")
+                    _gid    = _cust_gid_map.get(customer_name, "")
                     _unbilled_pv = grp.loc[grp["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in grp.columns else 0
                     exp_label = (f"**{customer_name}** — ค้างจ่าย {owed:,.0f}฿"
                                  + (f" | 🟡 COD {owed_cod:,.0f}฿" if owed_cod > 0 else "")
@@ -228,7 +230,8 @@ def render(tab5, products, customers):
                                 help=None if _luid else "ยังไม่มี line_user_id ของลูกค้านี้",
                             ):
                                 _r = line_api.push_outstanding(
-                                    _luid, customer_name, owed, pending, _line_items, _cod_done
+                                    _luid, customer_name, owed, pending, _line_items, _cod_done,
+                                    group_id=_gid,
                                 )
                                 if _r.get("ok"):
                                     st.success("✅ ส่ง LINE แล้ว")

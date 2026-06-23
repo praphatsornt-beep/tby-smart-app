@@ -13,15 +13,32 @@ def is_configured() -> bool:
     return bool(_token())
 
 
-def push_tracking(line_user_id: str, dst_name: str, tracking: str,
-                  carrier: str, cod: float = 0) -> dict:
-    """ส่งข้อความแจ้ง tracking ให้ลูกค้าใน LINE"""
+def _push(to_id: str, text: str, group_id: str = "") -> dict:
+    """ส่งข้อความไปยัง to_id และ group_id (ถ้ามี)"""
     token = _token()
     if not token:
         return {"ok": False, "error": "ไม่มี LINE_CHANNEL_ACCESS_TOKEN ใน secrets"}
-    if not line_user_id:
+    if not to_id:
         return {"ok": False, "error": "ไม่มี line_user_id"}
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    targets = [to_id]
+    if group_id:
+        targets.append(group_id)
+    last_err = ""
+    for tid in targets:
+        try:
+            r = requests.post(LINE_PUSH_URL, json={"to": tid, "messages": [{"type": "text", "text": text}]},
+                              headers=headers, timeout=10)
+            if r.status_code != 200:
+                last_err = f"LINE API HTTP {r.status_code}: {r.text[:200]}"
+        except Exception as e:
+            last_err = str(e)
+    return {"ok": True} if not last_err else {"ok": True, "warning": last_err}
 
+
+def push_tracking(line_user_id: str, dst_name: str, tracking: str,
+                  carrier: str, cod: float = 0, group_id: str = "") -> dict:
+    """ส่งข้อความแจ้ง tracking ให้ลูกค้าใน LINE"""
     lines = [
         f"ส่งของให้คุณ {dst_name} แล้วนะคะ 📦",
         f"ขนส่ง: {carrier}",
@@ -30,41 +47,14 @@ def push_tracking(line_user_id: str, dst_name: str, tracking: str,
     ]
     if cod > 0:
         lines.append(f"เก็บเงินปลายทาง: {int(cod):,} บาท")
-
-    body = {
-        "to": line_user_id,
-        "messages": [{"type": "text", "text": "\n".join(lines)}],
-    }
-    try:
-        r = requests.post(
-            LINE_PUSH_URL,
-            json=body,
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type":  "application/json",
-            },
-            timeout=10,
-        )
-        if r.status_code == 200:
-            return {"ok": True}
-        return {"ok": False, "error": f"LINE API HTTP {r.status_code}: {r.text[:200]}"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    return _push(line_user_id, "\n".join(lines), group_id)
 
 
 def push_outstanding(line_user_id: str, customer_name: str,
                      outstanding_amount: float, pending_qty: int,
-                     items: list, cod_transferred: list = None) -> dict:
-    """ส่งสรุปยอดค้างให้ลูกค้าใน LINE
-    items = [{"bill_no": str, "product": str, "amount": float, "qty": int}]
-    cod_transferred = [{"tracking_no": str, "cod_amount": float}]  COD ที่โอนแล้วรอเปิดบิล
-    """
-    token = _token()
-    if not token:
-        return {"ok": False, "error": "ไม่มี LINE_CHANNEL_ACCESS_TOKEN ใน secrets"}
-    if not line_user_id:
-        return {"ok": False, "error": "ไม่มี line_user_id"}
-
+                     items: list, cod_transferred: list = None,
+                     group_id: str = "") -> dict:
+    """ส่งสรุปยอดค้างให้ลูกค้าใน LINE"""
     lines = [f"คุณ {customer_name} มียอดค้างดังนี้ค่ะ 🙏"]
     if outstanding_amount > 0:
         lines.append(f"💰 ค้างจ่าย: {outstanding_amount:,.0f} บาท")
@@ -93,73 +83,20 @@ def push_outstanding(line_user_id: str, customer_name: str,
             tn  = c.get("tracking_no", "")
             amt = float(c.get("cod_amount") or 0)
             lines.append(f"• {tn}  {amt:,.0f}฿")
-
-    body = {
-        "to": line_user_id,
-        "messages": [{"type": "text", "text": "\n".join(lines)}],
-    }
-    try:
-        r = requests.post(
-            LINE_PUSH_URL, json=body,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            return {"ok": True}
-        return {"ok": False, "error": f"LINE API HTTP {r.status_code}: {r.text[:200]}"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    return _push(line_user_id, "\n".join(lines), group_id)
 
 
-def push_text(line_user_id: str, text: str) -> dict:
+def push_text(line_user_id: str, text: str, group_id: str = "") -> dict:
     """ส่งข้อความอิสระหา LINE user"""
-    token = _token()
-    if not token:
-        return {"ok": False, "error": "ไม่มี LINE_CHANNEL_ACCESS_TOKEN ใน secrets"}
-    if not line_user_id:
-        return {"ok": False, "error": "ไม่มี line_user_id"}
-    body = {"to": line_user_id, "messages": [{"type": "text", "text": text}]}
-    try:
-        r = requests.post(
-            LINE_PUSH_URL, json=body,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            return {"ok": True}
-        return {"ok": False, "error": f"LINE API HTTP {r.status_code}: {r.text[:200]}"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    return _push(line_user_id, text, group_id)
 
 
 def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
-                      items: list, total_amount: float, pay_status: str) -> dict:
-    """ส่งสรุปบิลให้ลูกค้าใน LINE
-    items = [{"name": str, "qty": int, "total": float}]
-    """
-    token = _token()
-    if not token:
-        return {"ok": False, "error": "ไม่มี LINE_CHANNEL_ACCESS_TOKEN ใน secrets"}
-    if not line_user_id:
-        return {"ok": False, "error": "ไม่มี line_user_id"}
-
+                      items: list, total_amount: float, pay_status: str,
+                      group_id: str = "") -> dict:
+    """ส่งสรุปบิลให้ลูกค้าใน LINE"""
     lines = [f"📋 สรุปบิล {bill_no}", f"คุณ {customer_name}", ""]
     for it in items[:10]:
         lines.append(f"• {it['name']} ×{it['qty']} = {float(it['total']):,.0f}฿")
     lines += ["", f"💰 รวม: {total_amount:,.0f} บาท", f"สถานะ: {pay_status}"]
-
-    body = {
-        "to": line_user_id,
-        "messages": [{"type": "text", "text": "\n".join(lines)}],
-    }
-    try:
-        r = requests.post(
-            LINE_PUSH_URL, json=body,
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            timeout=10,
-        )
-        if r.status_code == 200:
-            return {"ok": True}
-        return {"ok": False, "error": f"LINE API HTTP {r.status_code}: {r.text[:200]}"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    return _push(line_user_id, "\n".join(lines), group_id)

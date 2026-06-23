@@ -221,7 +221,7 @@ def _show_carrier_select():
                         })
                     except Exception as _cs_e:
                         st.warning(f"⚠️ ส่ง iShip สำเร็จ (tracking {_cs_track}) แต่บันทึกประวัติการส่งไม่สำเร็จ: {_cs_e}")
-                _cs_luid = db.get_customer_line_user_id(info.get("customer_id","")) if info.get("customer_id") else ""
+                _cs_luid, _cs_gid = db.get_customer_line_ids(info.get("customer_id","")) if info.get("customer_id") else ("", "")
                 st.session_state["_iship_success_info"] = _build_success_info(
                     tracking=_cs_track, tab=tab,
                     customer=info.get("customer_name", ""),
@@ -233,6 +233,7 @@ def _show_carrier_select():
                     items=info.get("items", []),
                     line_user_id=_cs_luid,
                     shipment_id=info.get("shipment_id", ""),
+                    group_id=_cs_gid,
                     _carrier_select_info=info,
                 )
                 st.session_state.pop("_iship_carrier_select", None)
@@ -280,6 +281,7 @@ def _show_iship_success_dialog():
         ))
     st.divider()
     _dluid = info.get("line_user_id", "")
+    _dlgid = info.get("group_id", "")
     if _dluid and line_api.is_configured():
         if st.button("📨 ส่งแจ้งลูกค้าทาง LINE", use_container_width=True):
             _dlr = line_api.push_tracking(
@@ -288,6 +290,7 @@ def _show_iship_success_dialog():
                 info.get("tracking", ""),
                 info.get("carrier", ""),
                 float(info.get("cod_amount", 0)),
+                group_id=_dlgid,
             )
             if _dlr.get("ok"):
                 st.success("✅ ส่ง LINE แล้ว")
