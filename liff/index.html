@@ -348,22 +348,23 @@ async function submitOrder() {
     const total = totalPrice + shipFee;
     const totalKg = (totalWeight + 500) / 1000;
 
-    let msg = '🛍️ ออเดอร์ใหม่จาก LIFF\n';
-    msg += '👤 ' + (customerName || 'ลูกค้าใหม่') + (customerId ? ' (' + customerId + ')' : '') + '\n';
+    let msg = '📜 สรุปออเดอร์\n';
+    msg += '👤 ' + (customerName || 'ลูกค้าใหม่') + '\n';
     msg += '─────────────────\n';
     items.forEach(it => {
-      msg += '📦 [' + it.id + '] ' + it.name + ' ×' + it.qty + ' = ' + num(it.subtotal) + '฿\n';
+      msg += '📦 [' + it.id + '] ' + it.name + '\n';
+      msg += '      ' + it.qty + ' ชิ้น x ฿' + num(it.price) + ' = ฿' + num(it.subtotal) + '\n';
     });
-    msg += '─────────────────\n';
-    msg += '💵 สินค้า: ' + num(totalPrice) + '฿\n';
-    if (delivery === 'ship') {
-      msg += '🚚 ค่าส่ง: ' + num(shipFee) + '฿ (' + postcode + ', ' + totalKg.toFixed(2) + 'kg)\n';
-    } else {
+    msg += '\n✨ ' + num(totalPV) + ' PV\n\n';
+    msg += '💵 สินค้า: ฿' + num(totalPrice) + '\n';
+    if (shipFee > 0) {
+      msg += '🚚 ค่าส่ง: ฿' + num(shipFee) + '\n';
+      msg += '\n' + num(totalPrice) + ' + ' + num(shipFee) + ' = ' + num(total) + '\n';
+    } else if (delivery === 'pickup') {
       msg += '🏪 รับหน้าร้าน\n';
     }
-    msg += '💰 ยอดรวม: ' + num(total) + '฿\n';
-    msg += '⭐ PV: ' + num(totalPV) + '\n';
-    msg += '\n📱 กรุณาส่งสลิปโอนเงินมาค่ะ';
+    msg += '💰 ยอดรวม: ฿' + num(total) + '\n';
+    msg += '\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
 
     if (liff.isInClient()) {
       await liff.sendMessages([{ type: 'text', text: msg }]);
