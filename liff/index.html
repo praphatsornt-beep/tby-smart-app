@@ -58,6 +58,9 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
 .hidden { display: none; }
 .ship-info { font-size: 12px; color: var(--muted); margin-top: 4px; }
 .cart-badge { position: fixed; top: 12px; right: 16px; background: #ff5722; color: #fff; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 20px; z-index: 11; display: none; }
+.lightbox { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.85); z-index: 100; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.lightbox img { max-width: 90%; max-height: 85vh; border-radius: 8px; }
+.lightbox-close { position: absolute; top: 16px; right: 20px; color: #fff; font-size: 32px; font-weight: 700; }
 </style>
 </head>
 <body>
@@ -215,7 +218,7 @@ function renderProducts() {
   el.innerHTML = filtered.map(p => {
     const qty = quantities[p.id] || 0;
     const imgHtml = p.image_url
-      ? `<img class="product-img" src="${p.image_url}" alt="${p.name}" loading="lazy">`
+      ? `<img class="product-img" src="${p.image_url}" alt="${p.name}" loading="lazy" onclick="showImage('${p.image_url}','${p.name.replace(/'/g,"\\'")}'); event.stopPropagation();">`
       : `<div class="product-img-placeholder">📦</div>`;
     return `
       <div class="product-card ${qty > 0 ? 'selected' : ''}">
@@ -375,6 +378,15 @@ async function submitOrder() {
 
   btn.disabled = false;
   btn.textContent = '📨 ส่งออเดอร์';
+}
+
+// ── Image lightbox ──────────────────────────────────────────────────────
+function showImage(url, name) {
+  const lb = document.createElement('div');
+  lb.className = 'lightbox';
+  lb.innerHTML = `<span class="lightbox-close">✕</span><img src="${url}" alt="${name}">`;
+  lb.onclick = () => lb.remove();
+  document.body.appendChild(lb);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────
