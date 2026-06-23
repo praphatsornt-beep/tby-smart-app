@@ -21,9 +21,7 @@ def _push(to_id: str, text: str, group_id: str = "") -> dict:
     if not to_id:
         return {"ok": False, "error": "ไม่มี line_user_id"}
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    targets = [to_id]
-    if group_id:
-        targets.append(group_id)
+    targets = [group_id] if group_id else [to_id]
     last_err = ""
     for tid in targets:
         try:
