@@ -23,7 +23,8 @@ body { font-family: 'Sarabun', -apple-system, sans-serif; background: var(--bg);
 .product-img { width: 100%; aspect-ratio: 1; object-fit: cover; background: #f0f0f0; display: block; }
 .product-img-placeholder { width: 100%; aspect-ratio: 1; background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%); display: flex; align-items: center; justify-content: center; font-size: 36px; }
 .product-body { padding: 8px 10px; }
-.product-name { font-size: 13px; font-weight: 600; line-height: 1.3; height: 2.6em; overflow: hidden; }
+.product-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.product-name-mm { font-size: 11px; color: var(--muted); line-height: 1.3; }
 .product-price { font-size: 15px; font-weight: 700; color: var(--primary); margin-top: 2px; }
 .product-meta { font-size: 11px; color: var(--muted); }
 .qty-control { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px; padding-bottom: 4px; }
@@ -137,7 +138,7 @@ async function init() {
       document.getElementById('userInfo').textContent = profile.displayName + ' (ยังไม่ได้ลงทะเบียน)';
     }
 
-    products = await sbGet('/rest/v1/products?select=id,name,price,points_per_unit,weight_grams,image_url&show_in_liff=eq.true&order=name');
+    products = await sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams,image_url&show_in_liff=eq.true&order=name');
     renderProducts();
     document.getElementById('loadingScreen').classList.add('hidden');
     document.getElementById('mainContent').classList.remove('hidden');
@@ -160,6 +161,7 @@ function renderProducts() {
         ${imgHtml}
         <div class="product-body">
           <div class="product-name">${p.name}</div>
+          ${p.name_mm ? `<div class="product-name-mm">${p.name_mm}</div>` : ''}
           <div class="product-price">฿${num(p.price)}</div>
           <div class="product-meta">${p.points_per_unit} PV</div>
           <div class="qty-control">
