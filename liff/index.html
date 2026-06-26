@@ -317,6 +317,9 @@ function updateSummary() {
   const hasItems = items.length > 0;
   document.getElementById('summarySection').style.display = hasItems ? 'block' : 'none';
   document.getElementById('submitBtn').disabled = !hasItems;
+  document.getElementById('submitBtn').textContent = hasItems
+    ? '📨 ส่งออเดอร์ · ฿' + num(totalPrice) + ' (' + items.reduce((s,i) => s+i.qty, 0) + ' ชิ้น)'
+    : '📨 ส่งออเดอร์ · အော်ဒါပို့မည်';
   if (!hasItems) return;
 
   document.getElementById('summaryItems').innerHTML = items.map(it =>
@@ -339,10 +342,12 @@ function updateSummary() {
     shipInfo.textContent = '';
   }
 
+  const grandTotal = totalPrice + shipFee;
   document.getElementById('sumProduct').textContent = num(totalPrice) + ' ฿';
   document.getElementById('sumShip').textContent = num(shipFee) + ' ฿';
   document.getElementById('sumPV').textContent = num(totalPV);
-  document.getElementById('sumTotal').textContent = num(totalPrice + shipFee) + ' ฿';
+  document.getElementById('sumTotal').textContent = num(grandTotal) + ' ฿';
+  document.getElementById('submitBtn').textContent = '📨 ส่งออเดอร์ · ฿' + num(grandTotal) + ' (' + items.reduce((s,i) => s+i.qty, 0) + ' ชิ้น)';
 }
 
 // ── Submit ───────────────────────────────────────────────────────────────
