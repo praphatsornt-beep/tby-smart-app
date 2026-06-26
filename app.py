@@ -54,9 +54,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-_logo_col, _title_col = st.columns([1, 4])
-_logo_col.image("https://zhulian.com/wp-content/uploads/2023/03/zhulian-wordmark-colour-768x104.png", width=120)
-_title_col.title("TBY SMART APP")
+st.title("🛍️ TBY SMART APP")
 
 @st.dialog("🚚 เลือกขนส่ง", width="large")
 def _show_carrier_select():
