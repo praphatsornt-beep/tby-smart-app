@@ -105,6 +105,8 @@ def _clear_transaction_caches() -> None:
     get_bill_summaries.clear()
     get_bill_list.clear()
     get_pending_receipts_for_customer.clear()
+    get_unbilled_received_qty_by_product.clear()
+    get_billed_not_received_qty_by_product.clear()
 
 
 def insert_transaction(data: dict) -> None:
@@ -289,7 +291,7 @@ def delete_bill(bill_no: str) -> int:
     return len(rows)
 
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=120)
 def get_bill_list() -> list[str]:
     rows = (get_supabase().table("transactions")
             .select("bill_no").not_.is_("bill_no", "null")
@@ -325,7 +327,7 @@ def get_bill_summaries() -> list[dict]:
     return list(seen.values())
 
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=60)
 def get_customer_ledger(customer_id: str) -> list[dict]:
     """คืน timeline ของลูกค้า 1 คน เรียงตามวันที่
     แต่ละ row: {date, type, bill_no, product, qty_in, qty_out, amount, txn_id}
@@ -431,7 +433,7 @@ def delete_partial_event(event_id: str) -> None:
     bill_has_partial_events.clear()
 
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=60)
 def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
     """คืน transactions ที่ยังค้างรับของ สำหรับลูกค้านี้ เรียงจากเก่าสุด
     [{id, product_id, ค้างรับ, bill_no, outstanding_amt, pay_status}]"""
@@ -748,7 +750,7 @@ def get_billed_not_received_qty_by_product() -> dict:
     return dict(result)
 
 
-@st.cache_data(ttl=20)
+@st.cache_data(ttl=60)
 def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
     """รายการที่ยังค้างชำระหรือค้างรับของ"""
     db = get_supabase()

@@ -330,12 +330,15 @@ tab_dash, tab1, tab5, tab6, tab_fin, tab_ecom, tab4 = st.tabs([
 with tab_dash:
     dashboard_ui.render()
 
+_products = db.get_products()
+_customers = db.get_customers()
+
 # Tab 1: render
-record_ui.render(tab1, db.get_products(), db.get_customers(),
-                 {c['name']: c for c in db.get_customers()})
+record_ui.render(tab1, _products, _customers,
+                 {c['name']: c for c in _customers})
 
 # Tab 5: render
-bill_detail_ui.render(tab5, db.get_products(), db.get_customers())
+bill_detail_ui.render(tab5, _products, _customers)
 
 with tab4:
     master_data_ui.render()
