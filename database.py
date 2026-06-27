@@ -107,6 +107,7 @@ def _clear_transaction_caches() -> None:
     get_pending_receipts_for_customer.clear()
     get_unbilled_received_qty_by_product.clear()
     get_billed_not_received_qty_by_product.clear()
+    get_today_transactions.clear()
 
 
 def insert_transaction(data: dict) -> None:
@@ -146,6 +147,10 @@ def insert_partial_event(data: dict) -> None:
     get_unbilled_pv_summary.clear()
     bill_has_partial_events.clear()
     get_customer_ledger.clear()
+    get_pending_receipts_for_customer.clear()
+    get_unbilled_received_qty_by_product.clear()
+    get_billed_not_received_qty_by_product.clear()
+    get_today_transactions.clear()
 
 
 def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
@@ -495,6 +500,18 @@ def get_unbilled_pv_summary() -> dict:
     total_amount = sum(float(r["total_amount"]) for r in rows)
     count = len(rows)
     return {"count": count, "total_pv": total_pv, "total_amount": total_amount}
+
+
+@st.cache_data(ttl=60)
+def get_today_transactions() -> list[dict]:
+    """รายการวันนี้ (lightweight สำหรับ dashboard — ไม่ดึง partial_events)"""
+    from datetime import date as _date
+    today_str = _date.today().strftime("%Y-%m-%d")
+    return _retry(lambda: get_supabase().table("transactions")
+                  .select("bill_no, product_name, total_amount, bill_status, pay_status, customer_id, customers(name)")
+                  .eq("date", today_str)
+                  .order("bill_no", desc=True)
+                  .execute().data) or []
 
 
 @st.cache_data(ttl=300)

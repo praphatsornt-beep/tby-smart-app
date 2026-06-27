@@ -18,7 +18,7 @@ def render():
 
     # ── โหลด data (ทั้งหมด cached) ──────────────────────────────────────────
     try:
-        _dash_txn   = db.get_all_transactions_df()
+        _dash_today = db.get_today_transactions()
         _dash_outs  = db.get_outstanding_df()
         _dash_ships = db.get_shipments()
         _dash_pv    = db.get_unbilled_pv_summary()
@@ -28,9 +28,8 @@ def render():
         st.stop()
 
     # ── คำนวณ metrics ────────────────────────────────────────────────────────
-    _today_txn = _dash_txn[_dash_txn["วันที่"] == _today_str] if not _dash_txn.empty else pd.DataFrame()
-    _today_sales = _today_txn["ยอดรวม"].sum() if not _today_txn.empty else 0.0
-    _today_count = len(_today_txn)
+    _today_sales = sum(float(t.get("total_amount") or 0) for t in _dash_today)
+    _today_count = len(_dash_today)
 
     _total_owed  = _dash_outs["ค้างจ่าย"].sum() if not _dash_outs.empty else 0.0
     _total_custs = _dash_outs["ลูกค้า"].nunique() if not _dash_outs.empty else 0
@@ -67,11 +66,16 @@ def render():
 
     with _dl:
         st.markdown("**📋 รายการที่บันทึกวันนี้**")
-        if _today_txn.empty:
+        if not _dash_today:
             st.caption("ยังไม่มีรายการวันนี้")
         else:
-            _show_today = _today_txn[["เลขที่บิล","ลูกค้า","สินค้า","ยอดรวม","สถานะบิล"]].copy()
-            _show_today = _show_today.rename(columns={"เลขที่บิล": "บิล", "ยอดรวม": "ยอด (฿)"})
+            _show_today = pd.DataFrame([{
+                "บิล": t.get("bill_no") or "",
+                "ลูกค้า": (t.get("customers") or {}).get("name", t.get("customer_id", "")),
+                "สินค้า": t.get("product_name", ""),
+                "ยอด (฿)": float(t.get("total_amount") or 0),
+                "สถานะบิล": t.get("bill_status", ""),
+            } for t in _dash_today])
             st.dataframe(
                 _show_today.style.format({"ยอด (฿)": "{:,.0f}"}),
                 use_container_width=True, hide_index=True,
@@ -112,11 +116,11 @@ def render():
         _now_utc     = datetime.now(timezone.utc)
         _cutoff      = _now_utc - timedelta(days=3)
 
-        # ลูกค้าที่มี COD + ยังไม่เปิดบิล
+        # ลูกค้าที่มี COD + ยังไม่เปิดบิล (ดึงจาก outstanding ซึ่งโหลดอยู่แล้ว)
         _cod_unbilled_custs = set()
-        if not _dash_txn.empty and "สถานะจ่าย" in _dash_txn.columns and "สถานะบิล" in _dash_txn.columns:
-            _cmask = (_dash_txn["สถานะจ่าย"] == "COD") & (_dash_txn["สถานะบิล"] == "ยังไม่เปิดบิล")
-            _cod_unbilled_custs = set(_dash_txn.loc[_cmask, "ลูกค้า"].unique())
+        if not _dash_outs.empty and "สถานะจ่าย" in _dash_outs.columns:
+            _cmask = (_dash_outs["สถานะจ่าย"] == "COD") & (_dash_outs["สถานะบิล"] == "ยังไม่เปิดบิล")
+            _cod_unbilled_custs = set(_dash_outs.loc[_cmask, "ลูกค้า"].unique())
 
         _slow_ships, _problem_ships, _cod_rows = [], [], []
 
