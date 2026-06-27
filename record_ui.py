@@ -838,17 +838,17 @@ def render(tab1, products, customers, customer_map):
                     if st.session_state.get("_popup_show_print") and st.session_state.get("_print_popup"):
                         _pit = _pd.get("items", [])
                         _rows_html = "".join(
-                            f"<tr><td style='font-size:11px;color:#666'>{it.get('product_id','')}</td>"
-                            f"<td>{it['name']}</td><td style='text-align:center'>{it['qty']}</td>"
+                            f"<tr><td><b>{it.get('product_id','')}</b></td>"
+                            f"<td>{it['name']}</td><td style='text-align:center'><b>{it['qty']}</b></td>"
                             f"<td style='text-align:right'>{float(it['price']):,.0f}</td>"
-                            f"<td style='text-align:right'>{float(it['total']):,.0f}</td></tr>"
+                            f"<td style='text-align:right'><b>{float(it['total']):,.0f}</b></td></tr>"
                             for it in _pit
                         )
                         _old_rows_html = "".join(
-                            f"<tr><td style='font-size:11px;color:#666'>{it['product_id']}</td>"
-                            f"<td>{it['name']} (เก่า)</td><td style='text-align:center'>{it['qty']}</td>"
+                            f"<tr><td><b>{it['product_id']}</b></td>"
+                            f"<td>{it['name']} (เก่า)</td><td style='text-align:center'><b>{it['qty']}</b></td>"
                             f"<td style='text-align:right'>{(float(it['amount'])/it['qty'] if it['qty'] else 0):,.0f}</td>"
-                            f"<td style='text-align:right'>{float(it['amount']):,.0f}</td></tr>"
+                            f"<td style='text-align:right'><b>{float(it['amount']):,.0f}</b></td></tr>"
                             for it in _old_items
                         )
                         _ship_row = f"<tr><td></td><td>ค่าส่ง ({_pd.get('carrier','')})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
@@ -866,16 +866,16 @@ def render(tab1, products, customers, customer_map):
                         _bill_html_popup = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
     <style>
     html,body{{background:#fff!important;color:#000!important;margin:0;padding:0}}
-    body{{font-family:'Sarabun',sans-serif;padding:14px;font-size:13px}}
-    h3{{margin:0 0 4px;font-size:15px}}
-    .info{{font-size:12px;margin-bottom:8px;color:#333}}
-    table{{width:100%;border-collapse:collapse;margin:6px 0;font-size:12px}}
-    th{{background:#333;color:#fff;padding:4px 6px;text-align:left}}
-    td{{padding:3px 6px;border-bottom:1px solid #ddd;color:#000}}
-    .subtotal{{font-size:11px;color:#666;text-align:right;margin-top:4px}}
-    .total{{font-weight:bold;font-size:20px;text-align:right;margin-top:2px}}
-    .btn{{display:inline-block;margin:0 0 10px;padding:5px 16px;background:#333;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
-    @media print{{.btn{{display:none}}@page{{size:A5;margin:8mm}}}}
+    body{{font-family:'Sarabun',sans-serif;padding:20px;font-size:15px}}
+    h3{{margin:0 0 6px;font-size:20px}}
+    .info{{font-size:14px;margin-bottom:10px;color:#222}}
+    table{{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}}
+    th{{background:#333;color:#fff;padding:6px 8px;text-align:left;font-size:14px}}
+    td{{padding:5px 8px;border-bottom:1px solid #ccc;color:#000}}
+    .subtotal{{font-size:13px;color:#444;text-align:right;margin-top:6px}}
+    .total{{font-weight:bold;font-size:24px;text-align:right;margin-top:4px}}
+    .btn{{display:inline-block;margin:0 0 12px;padding:7px 20px;background:#333;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:14px}}
+    @media print{{.btn{{display:none}}@page{{size:A5;margin:10mm}}}}
     </style></head><body style="background:#fff;color:#000">
     <button class='btn' onclick='window.print()'>🖨️ พิมพ์บิล</button>
     <h3>TBY — ใบเสร็จรับเงิน</h3>
