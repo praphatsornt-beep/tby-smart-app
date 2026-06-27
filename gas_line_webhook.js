@@ -205,8 +205,11 @@ function doPost(e) {
   if (userMsg.startsWith('th ')) { lang = 'th'; userMsg = userMsg.replace('th ', '').trim(); }
   else if (userMsg.startsWith('mm ')) { lang = 'mm'; userMsg = userMsg.replace('mm ', '').trim(); }
 
-  var ss = SpreadsheetApp.getActiveSpreadsheet(), productSheet = ss.getSheetByName('ProductData');
-  var pData = productSheet.getDataRange().getValues(), tokens = userMsg.split(/[\s\n]+/);
+  var _sbProducts = _sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id');
+  var pData = (_sbProducts || []).map(function(p) {
+    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
+  });
+  var tokens = userMsg.split(/[\s\n]+/);
 
   var orderMap = {}, manualShipPrice = -1, isAutoShip = false, targetZip = '';
   for (var ti = 0; ti < tokens.length; ti++) {
@@ -231,7 +234,7 @@ function doPost(e) {
 
   var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '';
   Object.keys(orderMap).forEach(function(code) {
-    for (var i = 1; i < pData.length; i++) {
+    for (var i = 0; i < pData.length; i++) {
       if (pData[i][0].toString().toUpperCase() == code) {
         var qty = orderMap[code], pPrice = pData[i][3], pPV = pData[i][4], pW = pData[i][5];
         totalPrice += pPrice * qty; totalPV += pPV * qty; productWeight += pW * qty;
@@ -834,13 +837,15 @@ function handleWithdraw(name, items, replyToken, confirmed, staffTag) {
   var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} เบิก ' + _resendItems);
   if (!cust) return;
 
-  var pData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProductData').getDataRange().getValues();
+  var pData = (_sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id') || []).map(function(p) {
+    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
+  });
   var today = _today();
 
   var rows = [], lines = '', notFound = '';
   items.forEach(function(item) {
     var prod = null;
-    for (var i = 1; i < pData.length; i++) {
+    for (var i = 0; i < pData.length; i++) {
       if (pData[i][0].toString().toUpperCase() === item.code) {
         prod = { name: pData[i][1], price: pData[i][3], pv: pData[i][4] };
         break;
@@ -912,13 +917,15 @@ function handleWithdrawPaid(name, items, replyToken, confirmed, staffTag) {
   var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} เบิกจ่าย ' + _resendItems);
   if (!cust) return;
 
-  var pData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProductData').getDataRange().getValues();
+  var pData = (_sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id') || []).map(function(p) {
+    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
+  });
   var today = _today();
 
   var rows = [], lines = '', notFound = '';
   items.forEach(function(item) {
     var prod = null;
-    for (var i = 1; i < pData.length; i++) {
+    for (var i = 0; i < pData.length; i++) {
       if (pData[i][0].toString().toUpperCase() === item.code) {
         prod = { name: pData[i][1], price: pData[i][3], pv: pData[i][4] };
         break;
@@ -991,13 +998,15 @@ function handleWithdrawPartialPay(name, items, payAmount, replyToken, confirmed,
   var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} ' + _resendSuffix);
   if (!cust) return;
 
-  var pData = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('ProductData').getDataRange().getValues();
+  var pData = (_sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id') || []).map(function(p) {
+    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
+  });
   var today = _today();
 
   var rows = [], lines = '', notFound = '';
   items.forEach(function(item) {
     var prod = null;
-    for (var i = 1; i < pData.length; i++) {
+    for (var i = 0; i < pData.length; i++) {
       if (pData[i][0].toString().toUpperCase() === item.code) {
         prod = { name: pData[i][1], price: pData[i][3], pv: pData[i][4] };
         break;
@@ -1276,10 +1285,9 @@ function handleOldGoods(name, items, payAmount, billNo, replyToken, confirmed, s
 // ─── doGet — product list ─────────────────────────────────────────────────────
 
 function doGet(e) {
-  var pData = SpreadsheetApp.getActiveSpreadsheet()
-    .getSheetByName('ProductData').getDataRange().getValues();
-  var products = pData.slice(1).filter(function(r) { return r[0]; }).map(function(r) {
-    return { code: r[0].toString().toUpperCase(), nameTH: r[1], nameMM: r[2], price: r[3], pv: r[4] };
+  var sbProducts = _sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit&order=id') || [];
+  var products = sbProducts.map(function(p) {
+    return { code: p.id.toUpperCase(), nameTH: p.name, nameMM: p.name_mm || '', price: p.price, pv: p.points_per_unit };
   });
   return ContentService.createTextOutput(JSON.stringify(products))
     .setMimeType(ContentService.MimeType.JSON);
