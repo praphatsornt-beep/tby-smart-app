@@ -30,6 +30,17 @@ function _sbPatch(path, data) {
     { method: 'PATCH', headers: _sbWriteHdrs(), payload: JSON.stringify(data), muteHttpExceptions: true });
 }
 
+// ─── Product data (cached per request) ────────────────────────────────────────
+
+var _cachedProducts = null;
+function _getProducts() {
+  if (_cachedProducts) return _cachedProducts;
+  _cachedProducts = (_sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id') || []).map(function(p) {
+    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
+  });
+  return _cachedProducts;
+}
+
 // ─── doPost ──────────────────────────────────────────────────────────────────
 
 function doPost(e) {
@@ -205,10 +216,7 @@ function doPost(e) {
   if (userMsg.startsWith('th ')) { lang = 'th'; userMsg = userMsg.replace('th ', '').trim(); }
   else if (userMsg.startsWith('mm ')) { lang = 'mm'; userMsg = userMsg.replace('mm ', '').trim(); }
 
-  var _sbProducts = _sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id');
-  var pData = (_sbProducts || []).map(function(p) {
-    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
-  });
+  var pData = _getProducts();
   var tokens = userMsg.split(/[\s\n]+/);
 
   var orderMap = {}, manualShipPrice = -1, isAutoShip = false, targetZip = '';
@@ -837,9 +845,7 @@ function handleWithdraw(name, items, replyToken, confirmed, staffTag) {
   var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} เบิก ' + _resendItems);
   if (!cust) return;
 
-  var pData = (_sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id') || []).map(function(p) {
-    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
-  });
+  var pData = _getProducts();
   var today = _today();
 
   var rows = [], lines = '', notFound = '';
@@ -917,9 +923,7 @@ function handleWithdrawPaid(name, items, replyToken, confirmed, staffTag) {
   var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} เบิกจ่าย ' + _resendItems);
   if (!cust) return;
 
-  var pData = (_sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id') || []).map(function(p) {
-    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
-  });
+  var pData = _getProducts();
   var today = _today();
 
   var rows = [], lines = '', notFound = '';
@@ -998,9 +1002,7 @@ function handleWithdrawPartialPay(name, items, payAmount, replyToken, confirmed,
   var cust = findOneCustomer(name, replyToken, '#' + staffTag + ' {name} ' + _resendSuffix);
   if (!cust) return;
 
-  var pData = (_sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id') || []).map(function(p) {
-    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
-  });
+  var pData = _getProducts();
   var today = _today();
 
   var rows = [], lines = '', notFound = '';
@@ -1285,9 +1287,8 @@ function handleOldGoods(name, items, payAmount, billNo, replyToken, confirmed, s
 // ─── doGet — product list ─────────────────────────────────────────────────────
 
 function doGet(e) {
-  var sbProducts = _sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit&order=id') || [];
-  var products = sbProducts.map(function(p) {
-    return { code: p.id.toUpperCase(), nameTH: p.name, nameMM: p.name_mm || '', price: p.price, pv: p.points_per_unit };
+  var products = _getProducts().map(function(p) {
+    return { code: p[0].toUpperCase(), nameTH: p[1], nameMM: p[2], price: p[3], pv: p[4] };
   });
   return ContentService.createTextOutput(JSON.stringify(products))
     .setMimeType(ContentService.MimeType.JSON);
