@@ -670,9 +670,7 @@ def render(tab5, products, customers):
                             _bill_sum["เปิดบิล"] = _bill_sum["เปิดบิล"].astype(int)
                             _bill_sum["จ่ายแล้ว(ชิ้น)"] = _bill_sum["จ่ายแล้ว(ชิ้น)"].astype(int)
                             _bill_sum["ค้างสุทธิ"] = (_bill_sum["ค้างจ่ายบิล"] - _bill_sum["จ่ายล่วงหน้า"]).clip(lower=0)
-                            _bill_sum = _bill_sum[
-                                (_bill_sum["ค้างจ่ายบิล"] > 0.01) | (_bill_sum["จ่ายล่วงหน้า"] > 0.01)
-                            ]
+                            _bill_sum = _bill_sum[_bill_sum["ค้างสุทธิ"] > 0.01]
                             if not _bill_sum.empty:
                                 st.dataframe(
                                     _bill_sum[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]]
