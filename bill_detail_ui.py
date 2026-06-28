@@ -1323,11 +1323,15 @@ def render(tab5, products, customers):
             def _delivery_icon(status: str) -> str:
                 if not status:
                     return ""
-                if "จัดส่งแล้ว" in status:
+                if "จัดส่งแล้ว" in status or "ชำระเงินสำเร็จ" in status:
                     return "✅"
                 if "ตีกลับ" in status or "ยกเลิก" in status:
                     return "❌"
-                return "🚚"
+                if "รอเข้ารับ" in status:
+                    return "📋"
+                if "อยู่ระหว่าง" in status or "กำลังจัดส่ง" in status:
+                    return "🚚"
+                return "📦"
 
             def _src_icon(r):
                 s = r.get("source", "")
