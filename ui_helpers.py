@@ -220,6 +220,12 @@ def _extract_tracking(resp: dict) -> str:
             or resp.get("tracking_code") or resp.get("tracking_number") or "")
 
 
+def _extract_iship_order_id(resp: dict) -> str:
+    """Extract iShip order ID from create_order response."""
+    _d = resp.get("data") or {}
+    return str(_d.get("id") or _d.get("order_id") or resp.get("id") or resp.get("order_id") or "")
+
+
 def _build_success_info(tracking, tab, customer, dst_name, dst_phone, address,
                         carrier, weight_kg, cod_amount, items, line_user_id,
                         shipment_id, group_id="", **extra) -> dict:

@@ -15,7 +15,7 @@ import stock_ui
 import master_data_ui
 import record_ui
 import bill_detail_ui
-from ui_helpers import _extract_tracking, _build_success_info
+from ui_helpers import _extract_tracking, _extract_iship_order_id, _build_success_info
 
 thai_address._load_db()  # pre-warm cache
 
@@ -198,7 +198,8 @@ def _show_carrier_select():
                     height_cm    = int(_cs_hgt),
                 )
             if _cs_resp.get("status"):
-                _cs_track   = _extract_tracking(_cs_resp)
+                _cs_track    = _extract_tracking(_cs_resp)
+                _cs_order_id = _extract_iship_order_id(_cs_resp)
                 if tab == "ship" and info.get("shipment_id") and _cs_track:
                     db.update_shipment_tracking(info["shipment_id"], _cs_track)
                 if tab in ("sale", "pending"):
@@ -234,6 +235,7 @@ def _show_carrier_select():
                     line_user_id=_cs_luid,
                     shipment_id=info.get("shipment_id", ""),
                     group_id=_cs_gid,
+                    iship_order_id=_cs_order_id,
                     _carrier_select_info=info,
                 )
                 st.session_state.pop("_iship_carrier_select", None)
@@ -281,22 +283,10 @@ def _show_iship_success_dialog():
         ))
     st.divider()
     _track = info.get("tracking", "")
-    if _track and iship_api.is_configured():
-        if st.button("🖨️ ปริ้นใบปะหน้า", use_container_width=True):
-            with st.spinner("กำลังหา order ID จาก iShip..."):
-                _label = iship_api.get_label_url(_track)
-            if _label.get("url"):
-                import streamlit.components.v1 as _comp
-                _comp.html(
-                    f'<a id="_lbl" href="{_label["url"]}" target="_blank" '
-                    f'style="display:inline-block;padding:8px 24px;background:#00A86B;color:#fff;'
-                    f'border-radius:8px;text-decoration:none;font-size:16px">'
-                    f'🖨️ กดที่นี่เพื่อปริ้น</a>'
-                    f'<script>document.getElementById("_lbl").click()</script>',
-                    height=50,
-                )
-            else:
-                st.warning(f"⚠️ {_label.get('error','หา order ไม่ได้')}")
+    _iship_oid = info.get("iship_order_id", "")
+    if _track and _iship_oid:
+        _print_url = f"https://app.iship.cloud/print/a6?order={_iship_oid}"
+        st.link_button("🖨️ ปริ้นใบปะหน้า", _print_url, use_container_width=True)
 
     _dluid = info.get("line_user_id", "")
     _dlgid = info.get("group_id", "")
