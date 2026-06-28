@@ -646,6 +646,47 @@ def render(tab5, products, customers):
                     _sm3.metric("ค้างรับ",   f"{max(0, _l_ord_qty - _l_recv_qty):,} ชิ้น")
                     _sm4.metric("จ่ายแล้ว",  f"{_l_paid_tot:,.0f} ฿")
 
+                    # ── สรุปรายสินค้า ────────────────────────────────────────
+                    with st.expander("📊 สรุปรายสินค้า", expanded=False):
+                        _l_txn_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
+                        if not _l_txn_df.empty:
+                            _prod_sum = _l_txn_df.groupby("รหัส").agg(
+                                สินค้า=("สินค้า", "first"),
+                                เปิดบิล=("สั่ง", lambda x: x[_l_txn_df.loc[x.index, "สถานะบิล"] == "เปิดบิลแล้ว"].sum()),
+                                ยังไม่เปิดบิล=("สั่ง", lambda x: x[_l_txn_df.loc[x.index, "สถานะบิล"] == "ยังไม่เปิดบิล"].sum()),
+                                เอาไปแล้ว=("รับแล้ว", "sum"),
+                                ค้างรับ=("ค้างรับ", "sum"),
+                                ยอดรวม=("ยอดรวม", "sum"),
+                                จ่ายแล้ว=("จ่ายแล้ว", "sum"),
+                                ค้างจ่าย=("ค้างจ่าย", "sum"),
+                            ).reset_index()
+                            _prod_sum = _prod_sum[
+                                (_prod_sum["เปิดบิล"] > 0) | (_prod_sum["ยังไม่เปิดบิล"] > 0)
+                                | (_prod_sum["ค้างรับ"] > 0) | (_prod_sum["ค้างจ่าย"] > 0.01)
+                            ]
+                            if not _prod_sum.empty:
+                                st.dataframe(
+                                    _prod_sum[["รหัส","สินค้า","เปิดบิล","ยังไม่เปิดบิล","เอาไปแล้ว","ค้างรับ","ยอดรวม","จ่ายแล้ว","ค้างจ่าย"]]
+                                    .style.format({"ยอดรวม":"{:,.0f}","จ่ายแล้ว":"{:,.0f}","ค้างจ่าย":"{:,.0f}"}),
+                                    use_container_width=True, hide_index=True,
+                                )
+                                _unbilled = _prod_sum[_prod_sum["ยังไม่เปิดบิล"] > 0]
+                                if not _unbilled.empty:
+                                    _ub_items = "  ·  ".join(
+                                        f"{r['รหัส']} ×{int(r['ยังไม่เปิดบิล'])}"
+                                        for _, r in _unbilled.iterrows()
+                                    )
+                                    st.warning(f"⚠️ เอาไปแต่ยังไม่เปิดบิล: {_ub_items}")
+                                st.caption(
+                                    f"รวม: เปิดบิล {int(_prod_sum['เปิดบิล'].sum())} ชิ้น"
+                                    f" | ยังไม่เปิดบิล {int(_prod_sum['ยังไม่เปิดบิล'].sum())} ชิ้น"
+                                    f" | ค้างจ่าย {_prod_sum['ค้างจ่าย'].sum():,.0f} ฿"
+                                )
+                            else:
+                                st.info("ไม่มีรายการค้าง")
+                        else:
+                            st.info("ไม่มีข้อมูล")
+
                     # ── สร้าง timeline per bill ──────────────────────────────
                     _bills_tl: dict = {}  # bill_no → {date, total, pv, qty, events[]}
 
