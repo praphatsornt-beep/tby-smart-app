@@ -705,16 +705,13 @@ def render(tab5, products, customers):
                             if not _unbilled_unpaid.empty:
                                 st.divider()
                                 st.markdown("**📦 เบิกของ** (ยังไม่เปิดบิล · ยังไม่จ่าย)")
-                                _borrow = _unbilled_unpaid.groupby("รหัส").agg(
-                                    สินค้า=("สินค้า", "first"),
-                                    จำนวน=("สั่ง", "sum"),
-                                    ยอด=("ยอดรวม", "sum"),
-                                ).reset_index()
+                                _bw = _unbilled_unpaid.groupby("รหัส").agg({"สินค้า":"first","สั่ง":"sum","ยอดรวม":"sum"}).reset_index()
+                                _bw.columns = ["รหัส","สินค้า","จำนวน","ยอด"]
                                 st.dataframe(
-                                    _borrow.style.format({"ยอด":"{:,.0f}"}),
+                                    _bw.style.format({"ยอด":"{:,.0f}"}),
                                     use_container_width=True, hide_index=True,
                                 )
-                                st.caption(f"รวม: {int(_borrow['จำนวน'].sum())} ชิ้น | {_borrow['ยอด'].sum():,.0f} ฿")
+                                st.caption(f"รวม: {int(_bw['จำนวน'].sum())} ชิ้น | {_bw['ยอด'].sum():,.0f} ฿")
                             else:
                                 st.info("ไม่มีรายการค้าง")
                         else:
