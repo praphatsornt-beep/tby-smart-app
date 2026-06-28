@@ -200,8 +200,7 @@ def _show_carrier_select():
             if _cs_resp.get("status"):
                 _cs_track    = _extract_tracking(_cs_resp)
                 _cs_order_id = _extract_iship_order_id(_cs_resp)
-                if not _cs_order_id:
-                    st.session_state["_iship_debug_resp"] = _cs_resp
+                st.session_state["_iship_debug_resp"] = _cs_resp
                 if tab == "ship" and info.get("shipment_id") and _cs_track:
                     db.update_shipment_tracking(info["shipment_id"], _cs_track)
                 if tab in ("sale", "pending"):
