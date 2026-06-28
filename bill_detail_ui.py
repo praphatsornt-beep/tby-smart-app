@@ -1410,28 +1410,28 @@ def render(tab5, products, customers):
                         st.rerun()
 
             # ── ปริ้นใบปะหน้า ──────────────────────────────────────────
-            _sh_to_print = [i for i, v in enumerate(_sh_edit["📤"]) if v]
-            if len(_sh_to_print) == 1 and iship_api.is_configured():
-                _pr_i = _sh_to_print[0]
-                _pr_tn = (_sh_all[_pr_i].get("tracking_no") or "").strip()
-                if _pr_tn:
-                    if st.button(f"🖨️ ปริ้นใบปะหน้า ({_pr_tn})", key="sh_print_label"):
-                        with st.spinner("กำลังดึงใบปะหน้าจาก iShip..."):
-                            _pr_result = iship_api.get_label_pdf(_pr_tn)
-                        if _pr_result.get("pdf"):
-                            import base64 as _b64
-                            import streamlit.components.v1 as _comp
-                            _pdf_b64 = _b64.b64encode(_pr_result["pdf"]).decode()
-                            _comp.html(
-                                f'<iframe src="data:application/pdf;base64,{_pdf_b64}" '
-                                f'width="100%" height="600" style="border:none"></iframe>',
-                                height=620,
-                            )
-                        else:
-                            st.warning(f"⚠️ {_pr_result.get('error','ดึง label ไม่ได้')}")
-                            if _pr_result.get("_debug"):
-                                with st.expander("🔍 debug"):
-                                    st.json(_pr_result["_debug"])
+            if iship_api.is_configured():
+                _pr_tracking_opts = [r.get("tracking_no","") for r in _sh_all if r.get("tracking_no")]
+                if _pr_tracking_opts:
+                    with st.expander("🖨️ ปริ้นใบปะหน้า"):
+                        _pr_sel = st.selectbox("เลือก Tracking", _pr_tracking_opts, key="sh_print_sel")
+                        if st.button("🖨️ ปริ้น", key="sh_print_label", type="primary"):
+                            with st.spinner("กำลังดึงใบปะหน้าจาก iShip..."):
+                                _pr_result = iship_api.get_label_pdf(_pr_sel)
+                            if _pr_result.get("pdf"):
+                                import base64 as _b64
+                                import streamlit.components.v1 as _comp
+                                _pdf_b64 = _b64.b64encode(_pr_result["pdf"]).decode()
+                                _comp.html(
+                                    f'<iframe src="data:application/pdf;base64,{_pdf_b64}" '
+                                    f'width="100%" height="600" style="border:none"></iframe>',
+                                    height=620,
+                                )
+                            else:
+                                st.warning(f"⚠️ {_pr_result.get('error','ดึง label ไม่ได้')}")
+                                if _pr_result.get("_debug"):
+                                    with st.expander("🔍 debug"):
+                                        st.json(_pr_result["_debug"])
 
             _sh_to_resend = [i for i, v in enumerate(_sh_edit["📤"]) if v]
             if len(_sh_to_resend) > 1:
