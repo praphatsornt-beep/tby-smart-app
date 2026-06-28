@@ -441,11 +441,14 @@ def get_label_pdf(tracking_no: str) -> dict:
             ("cancel_btn", "", True, True),
             ("detail_btn", "", True, True),
         ]
+        _end = _dt.date.today()
+        _start = _end - _dt.timedelta(days=90)
         params = {
             "draw": 1, "start": 0, "length": 20,
             "order[0][column]": 1, "order[0][dir]": "desc",
             "search[value]": tracking_no, "search[regex]": "false",
             "status_id": "", "order_print": 3, "courier_filter": "all",
+            "start_date": str(_start), "end_date": str(_end),
         }
         for i, (data, name, searchable, orderable) in enumerate(_cols):
             params[f"columns[{i}][data]"] = data

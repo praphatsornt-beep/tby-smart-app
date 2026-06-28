@@ -124,6 +124,7 @@ def render(tab5, products, customers):
                 _cust_line_map = {c["name"]: c.get("line_user_id") or "" for c in customers}
                 _cust_gid_map  = {c["name"]: c.get("group_id") or "" for c in customers}
                 _cust_map_all  = {c["name"]: c for c in customers}
+                _all_txn_cache = db.get_all_transactions_df()
 
                 single_cust = (_t2_search.strip() != "" or _t2_bill_search.strip() != "") and outstanding_df["ลูกค้า"].nunique() == 1
                 # pre-fetch shipments ครั้งเดียวแทนการเรียงใน loop (N+1 fix)
@@ -155,7 +156,7 @@ def render(tab5, products, customers):
                             _cust_obj_bp = _cust_map_all.get(customer_name)
                             _bp_id = _cust_obj_bp["id"] if _cust_obj_bp else customer_name
                             _render_bill_panel(
-                                customer_name, _cust_map_all, None, customers,
+                                customer_name, _cust_map_all, _all_txn_cache, customers,
                                 key_prefix=f"bp_{_bp_id}",
                             )
                         st.divider()
