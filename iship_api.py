@@ -404,3 +404,112 @@ def create_order(
         _src_data = form_data if is_cod else payload
         result["_debug_payload"] = {k: v for k, v in _src_data.items() if k not in _excl}
     return result
+
+
+def get_label_pdf(tracking_no: str) -> dict:
+    """ดึง PDF ใบปะหน้าจาก iShip สำหรับ tracking number ที่ระบุ
+    คืน: {"pdf": bytes|None, "error": str|None, "_debug": ...}
+    """
+    sess, login_msg = _web_session()
+    if not sess:
+        return {"pdf": None, "error": f"Login failed: {login_msg}"}
+
+    try:
+        # ดึง shipment list เพื่อหา order ID จาก tracking number
+        sess.get(f"{WEB_BASE}/shipment", timeout=10)
+        xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
+        hdrs = {
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Referer": f"{WEB_BASE}/shipment",
+            "X-XSRF-TOKEN": xsrf,
+        }
+
+        _cols = [
+            ("checkbox", "", False, False),
+            ("order_date", "orders.created_at", True, True),
+            ("track_no", "shippings.track_no", True, True),
+            ("custom_order_id", "shippings.custom_order_id", True, True),
+            ("status_btn", "status_btn", False, False),
+            ("name", "", True, True),
+            ("dst_name", "", True, True),
+            ("dst_phone", "", True, True),
+            ("dst_address", "", True, True),
+            ("print_btn", "print_count", False, False),
+            ("cod_amount", "", True, True),
+            ("remark", "", True, True),
+            ("cancel_btn", "", True, True),
+            ("detail_btn", "", True, True),
+        ]
+        params = {
+            "draw": 1, "start": 0, "length": 20,
+            "order[0][column]": 1, "order[0][dir]": "desc",
+            "search[value]": tracking_no, "search[regex]": "false",
+            "status_id": "", "order_print": 3, "courier_filter": "all",
+        }
+        for i, (data, name, searchable, orderable) in enumerate(_cols):
+            params[f"columns[{i}][data]"] = data
+            params[f"columns[{i}][name]"] = name
+            params[f"columns[{i}][searchable]"] = "true" if searchable else "false"
+            params[f"columns[{i}][orderable]"] = "true" if orderable else "false"
+            params[f"columns[{i}][search][value]"] = ""
+            params[f"columns[{i}][search][regex]"] = "false"
+
+        r = sess.get(f"{WEB_BASE}/getdt-new-shipment", headers=hdrs,
+                     params=params, timeout=15)
+        if r.status_code != 200:
+            return {"pdf": None, "error": f"search HTTP {r.status_code}"}
+
+        rows = r.json().get("data", [])
+        if not rows:
+            return {"pdf": None, "error": f"ไม่พบ tracking {tracking_no} ใน iShip"}
+
+        # หา order_id จาก checkbox HTML หรือ print_btn HTML
+        row = rows[0]
+        order_id = None
+        cb_html = row.get("checkbox", "") or ""
+        m_id = re.search(r'value=["\']?(\d+)', cb_html)
+        if m_id:
+            order_id = m_id.group(1)
+
+        if not order_id:
+            pb_html = row.get("print_btn", "") or ""
+            m_pb = re.search(r'printLabel\((\d+)\)', pb_html)
+            if m_pb:
+                order_id = m_pb.group(1)
+
+        if not order_id:
+            db_html = row.get("detail_btn", "") or ""
+            m_db = re.search(r'/shipment/(\d+)', db_html)
+            if m_db:
+                order_id = m_db.group(1)
+
+        if not order_id:
+            return {"pdf": None, "error": "หา order ID ไม่เจอ",
+                    "_debug": {k: str(v)[:200] for k, v in row.items()}}
+
+        # ลอง URL patterns ที่ iShip ใช้สำหรับ print label
+        _label_urls = [
+            f"{WEB_BASE}/shipment/printlabel/{order_id}",
+            f"{WEB_BASE}/shipment/print/{order_id}",
+            f"{WEB_BASE}/print/label/{order_id}",
+            f"{WEB_BASE}/shipment/{order_id}/print",
+        ]
+
+        for url in _label_urls:
+            r_pdf = sess.get(url, timeout=15, headers={
+                "Accept": "application/pdf,text/html,*/*",
+                "Referer": f"{WEB_BASE}/shipment",
+            })
+            ct = r_pdf.headers.get("Content-Type", "")
+            if r_pdf.status_code == 200 and ("pdf" in ct or r_pdf.content[:4] == b"%PDF"):
+                return {"pdf": r_pdf.content, "error": None,
+                        "_debug": {"order_id": order_id, "url": url}}
+
+        return {"pdf": None, "error": f"หา label URL ไม่เจอ (order_id={order_id})",
+                "_debug": {"order_id": order_id, "tried": _label_urls,
+                           "last_status": r_pdf.status_code,
+                           "last_ct": ct,
+                           "last_body": r_pdf.text[:300]}}
+    except Exception as e:
+        return {"pdf": None, "error": str(e)}

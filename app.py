@@ -280,6 +280,27 @@ def _show_iship_success_dialog():
             f"{it.get('name','')} ×{it.get('qty',0)}" for it in info["items"]
         ))
     st.divider()
+    _track = info.get("tracking", "")
+    if _track and iship_api.is_configured():
+        if st.button("🖨️ ปริ้นใบปะหน้า", use_container_width=True):
+            with st.spinner("กำลังดึงใบปะหน้าจาก iShip..."):
+                _label = iship_api.get_label_pdf(_track)
+            if _label.get("pdf"):
+                import base64 as _b64
+                _pdf_b64 = _b64.b64encode(_label["pdf"]).decode()
+                import streamlit.components.v1 as _comp
+                _comp.html(
+                    f'<iframe src="data:application/pdf;base64,{_pdf_b64}" '
+                    f'width="100%" height="600" style="border:none"></iframe>'
+                    f'<script>setTimeout(function(){{window.frames[0].focus();window.frames[0].print()}},1000)</script>',
+                    height=620,
+                )
+            else:
+                st.warning(f"⚠️ {_label.get('error','ดึง label ไม่ได้')}")
+                if _label.get("_debug"):
+                    with st.expander("🔍 debug"):
+                        st.json(_label["_debug"])
+
     _dluid = info.get("line_user_id", "")
     _dlgid = info.get("group_id", "")
     if _dluid and line_api.is_configured():
