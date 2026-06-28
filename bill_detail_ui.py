@@ -670,22 +670,36 @@ def render(tab5, products, customers):
                             _bill_sum["เปิดบิล"] = _bill_sum["เปิดบิล"].astype(int)
                             _bill_sum["จ่ายแล้ว(ชิ้น)"] = _bill_sum["จ่ายแล้ว(ชิ้น)"].astype(int)
                             _bill_sum["ค้างสุทธิ"] = (_bill_sum["ค้างจ่ายบิล"] - _bill_sum["จ่ายล่วงหน้า"]).clip(lower=0)
-                            _bill_sum = _bill_sum[_bill_sum["ค้างสุทธิ"] > 0.01]
-                            if not _bill_sum.empty:
+                            _bill_sum["เครดิตเหลือ"] = (_bill_sum["จ่ายล่วงหน้า"] - _bill_sum["ค้างจ่ายบิล"]).clip(lower=0)
+                            _bill_owed = _bill_sum[_bill_sum["ค้างสุทธิ"] > 0.01]
+                            _bill_credit = _bill_sum[_bill_sum["เครดิตเหลือ"] > 0.01]
+
+                            if not _bill_owed.empty:
                                 st.dataframe(
-                                    _bill_sum[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]]
+                                    _bill_owed[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]]
                                     .style.format({"ค้างจ่ายบิล":"{:,.0f}","จ่ายล่วงหน้า":"{:,.0f}","ค้างสุทธิ":"{:,.0f}"}),
                                     use_container_width=True, hide_index=True,
                                 )
-                                _net = _bill_sum["ค้างสุทธิ"].sum()
-                                _pre = _bill_sum["จ่ายล่วงหน้า"].sum()
+                                _net = _bill_owed["ค้างสุทธิ"].sum()
+                                _pre = _bill_owed["จ่ายล่วงหน้า"].sum()
                                 st.caption(
-                                    f"ค้างจ่ายบิล {_bill_sum['ค้างจ่ายบิล'].sum():,.0f} ฿"
+                                    f"ค้างจ่ายบิล {_bill_owed['ค้างจ่ายบิล'].sum():,.0f} ฿"
                                     + (f" − จ่ายล่วงหน้า {_pre:,.0f} ฿" if _pre > 0 else "")
                                     + f" = **ค้างสุทธิ {_net:,.0f} ฿**"
                                 )
-                            else:
-                                st.info("ไม่มีค้างจ่ายบิล / จ่ายล่วงหน้า")
+
+                            if not _bill_credit.empty:
+                                _price_map = {p["id"]: float(p.get("price") or 0) for p in products}
+                                _cr_items = []
+                                for _, _cr in _bill_credit.iterrows():
+                                    _cr_amt = _cr["เครดิตเหลือ"]
+                                    _pr = _price_map.get(_cr["รหัส"], 0)
+                                    _cr_qty = int(_cr_amt // _pr) if _pr > 0 else 0
+                                    _cr_items.append(f"{_cr['สินค้า']}: เครดิตเหลือ {_cr_amt:,.0f} ฿ (เปิดบิลเพิ่มได้ {_cr_qty} ชิ้น)")
+                                st.success("💚 " + "  ·  ".join(_cr_items))
+
+                            if _bill_owed.empty and _bill_credit.empty:
+                                st.info("ไม่มีค้างจ่ายบิล / เครดิตเหลือ")
 
                             # ── ตาราง 2: เบิกของ (ยังไม่เปิดบิล ยังไม่จ่าย) ──
                             if not _unbilled_unpaid.empty:
