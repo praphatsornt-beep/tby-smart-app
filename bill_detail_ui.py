@@ -684,6 +684,17 @@ def render(tab5, products, customers):
                                     f" | ยังไม่เปิดบิล {int(_prod_sum['ยังไม่เปิดบิล'].sum())}"
                                     f" | ค้างจ่าย {_prod_sum['ค้างจ่าย'].sum():,.0f} ฿"
                                 )
+
+                                # ── รายละเอียดค้างจ่ายแยกตามบิล ────────────
+                                _owed_txns = _l_txn_df[_l_txn_df["ค้างจ่าย"] > 0.01]
+                                if not _owed_txns.empty:
+                                    with st.expander(f"💰 รายละเอียดค้างจ่าย ({len(_owed_txns)} รายการ)"):
+                                        _owed_show = _owed_txns[["เลขที่บิล","วันที่","รหัส","สินค้า","สั่ง","ยอดรวม","จ่ายแล้ว","ค้างจ่าย","สถานะจ่าย","สถานะบิล"]].copy()
+                                        _owed_show = _owed_show.sort_values(["รหัส","เลขที่บิล"])
+                                        st.dataframe(
+                                            _owed_show.style.format({"ยอดรวม":"{:,.0f}","จ่ายแล้ว":"{:,.0f}","ค้างจ่าย":"{:,.0f}"}),
+                                            use_container_width=True, hide_index=True,
+                                        )
                             else:
                                 st.info("ไม่มีรายการค้าง")
                         else:
