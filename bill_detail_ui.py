@@ -650,16 +650,21 @@ def render(tab5, products, customers):
                     with st.expander("📊 สรุปรายสินค้า", expanded=False):
                         _l_txn_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
                         if not _l_txn_df.empty:
-                            _prod_sum = _l_txn_df.groupby("รหัส").agg(
+                            _billed_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "เปิดบิลแล้ว"]
+                            _unbilled_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "ยังไม่เปิดบิล"]
+                            _ps1 = _l_txn_df.groupby("รหัส").agg(
                                 สินค้า=("สินค้า", "first"),
-                                เปิดบิล=("สั่ง", lambda x: x[_l_txn_df.loc[x.index, "สถานะบิล"] == "เปิดบิลแล้ว"].sum()),
-                                ยังไม่เปิดบิล=("สั่ง", lambda x: x[_l_txn_df.loc[x.index, "สถานะบิล"] == "ยังไม่เปิดบิล"].sum()),
                                 เอาไปแล้ว=("รับแล้ว", "sum"),
                                 ค้างรับ=("ค้างรับ", "sum"),
                                 ยอดรวม=("ยอดรวม", "sum"),
                                 จ่ายแล้ว=("จ่ายแล้ว", "sum"),
                                 ค้างจ่าย=("ค้างจ่าย", "sum"),
                             ).reset_index()
+                            _ps_billed = _billed_df.groupby("รหัส")["สั่ง"].sum().rename("เปิดบิล")
+                            _ps_unbilled = _unbilled_df.groupby("รหัส")["สั่ง"].sum().rename("ยังไม่เปิดบิล")
+                            _prod_sum = _ps1.set_index("รหัส").join(_ps_billed).join(_ps_unbilled).fillna(0).reset_index()
+                            _prod_sum["เปิดบิล"] = _prod_sum["เปิดบิล"].astype(int)
+                            _prod_sum["ยังไม่เปิดบิล"] = _prod_sum["ยังไม่เปิดบิล"].astype(int)
                             _prod_sum = _prod_sum[
                                 (_prod_sum["เปิดบิล"] > 0) | (_prod_sum["ยังไม่เปิดบิล"] > 0)
                                 | (_prod_sum["ค้างรับ"] > 0) | (_prod_sum["ค้างจ่าย"] > 0.01)
