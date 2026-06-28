@@ -219,9 +219,8 @@ def get_transaction_balance(transaction_id: str) -> dict:
     txn = _rows[0]
     events = _retry(lambda: db.table("partial_events").select("*").eq("transaction_id", transaction_id).execute().data)
 
-    total_paid = (
-        float(txn["total_amount"]) if txn["pay_status"] == "จ่ายแล้ว" else 0.0
-    ) + sum(float(e["amount_paid"]) for e in events)
+    _partial_paid = sum(float(e["amount_paid"]) for e in events)
+    total_paid = float(txn["total_amount"]) if txn["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว") else _partial_paid
 
     total_received = txn["initial_qty_received"] + sum(e["qty_received"] for e in events)
     price = float(txn["price_per_unit"])
