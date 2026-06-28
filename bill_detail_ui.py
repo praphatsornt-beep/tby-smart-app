@@ -1132,10 +1132,16 @@ def render(tab5, products, customers):
                                     "amount_paid":    0.0,
                                     "event_type":     "รับของ",
                                 })
-                        if "paid" in _ch and "pay_status" not in _ch:
+                        if "paid" in _ch:
                             _old_p, _new_p = _ch["paid"]
                             _delta_p = _new_p - _old_p
-                            if _delta_p > 0.01:
+                            _txn_total = float(show_df.iloc[_i]["ยอดรวม"])
+                            if "pay_status" not in _ch:
+                                if _new_p <= 0.01:
+                                    _ch["pay_status"] = "ค้างจ่าย"
+                                elif abs(_new_p - _txn_total) < 0.01:
+                                    _ch["pay_status"] = "จ่ายแล้ว"
+                            if _delta_p > 0.01 and "pay_status" not in _ch:
                                 db.insert_partial_event({
                                     "id":             str(uuid.uuid4()),
                                     "date":           str(date.today()),
