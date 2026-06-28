@@ -548,9 +548,8 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
         tid = t["id"]
         evts = events_by_txn[tid]
 
-        total_paid = (
-            float(t["total_amount"]) if t["pay_status"] == "จ่ายแล้ว" else 0.0
-        ) + sum(float(e["amount_paid"]) for e in evts)
+        _partial_paid = sum(float(e["amount_paid"]) for e in evts)
+        total_paid = float(t["total_amount"]) if t["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว") else _partial_paid
 
         total_received = t["initial_qty_received"] + sum(e["qty_received"] for e in evts)
         outstanding_amount = float(t["total_amount"]) - total_paid
@@ -799,9 +798,8 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
         tid = t["id"]
         evts = events_by_txn[tid]
 
-        total_paid = (
-            float(t["total_amount"]) if t["pay_status"] == "จ่ายแล้ว" else 0.0
-        ) + sum(float(e["amount_paid"]) for e in evts)
+        _partial_paid = sum(float(e["amount_paid"]) for e in evts)
+        total_paid = float(t["total_amount"]) if t["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว") else _partial_paid
 
         total_received = t["initial_qty_received"] + sum(e["qty_received"] for e in evts)
         outstanding_amount = float(t["total_amount"]) - total_paid
