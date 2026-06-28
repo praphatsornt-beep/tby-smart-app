@@ -1068,12 +1068,12 @@ def render(tab5, products, customers):
             for _i in range(len(show_df)):
                 if _i >= len(id_map): break
                 _orig = show_df.iloc[_i]
-                _edit = edited_h.iloc[_i]
+                _edit = edited_h.iloc[_i + 0]
                 _tid  = id_map.iloc[_i]
                 _ch   = {}
                 # รับแล้ว → partial_event qty
                 _old_recv = int(_orig["รับแล้ว"])
-                _new_recv = int(_edit["รับแล้ว"] or 0)
+                _new_recv = int(float(_edit["รับแล้ว"] or 0))
                 if _old_recv != _new_recv:
                     _ch["recv"] = (_old_recv, _new_recv)
                 # จ่ายแล้ว → partial_event amount
@@ -1141,7 +1141,9 @@ def render(tab5, products, customers):
                                     _ch["pay_status"] = "ค้างจ่าย"
                                 elif abs(_new_p - _txn_total) < 0.01:
                                     _ch["pay_status"] = "จ่ายแล้ว"
-                            if _delta_p > 0.01 and "pay_status" not in _ch:
+                            if _new_p <= 0.01:
+                                db.delete_payment_events(_tid)
+                            elif _delta_p > 0.01 and "pay_status" not in _ch:
                                 db.insert_partial_event({
                                     "id":             str(uuid.uuid4()),
                                     "date":           str(date.today()),

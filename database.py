@@ -441,6 +441,17 @@ def delete_partial_event(event_id: str) -> None:
     bill_has_partial_events.clear()
 
 
+def delete_payment_events(transaction_id: str) -> None:
+    """ลบ partial_events ที่เป็นการจ่ายเงิน (amount_paid > 0) ของ transaction นี้"""
+    db = get_supabase()
+    evts = db.table("partial_events").select("id, amount_paid").eq("transaction_id", transaction_id).execute().data
+    for e in evts:
+        if float(e.get("amount_paid") or 0) > 0:
+            db.table("partial_events").delete().eq("id", e["id"]).execute()
+    _clear_transaction_caches()
+    bill_has_partial_events.clear()
+
+
 @st.cache_data(ttl=60)
 def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
     """คืน transactions ที่ยังค้างรับของ สำหรับลูกค้านี้ เรียงจากเก่าสุด
