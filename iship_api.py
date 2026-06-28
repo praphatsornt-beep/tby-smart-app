@@ -488,7 +488,7 @@ def get_label_pdf(tracking_no: str) -> dict:
             return {"pdf": None, "error": "หา order ID ไม่เจอ",
                     "_debug": {k: str(v)[:200] for k, v in row.items()}}
 
-        url = f"{WEB_BASE}/shipment/printlabel/a6?order={order_id}"
+        url = f"{WEB_BASE}/print/a6?order={order_id}"
         r_pdf = sess.get(url, timeout=15, headers={
             "Accept": "application/pdf,text/html,*/*",
             "Referer": f"{WEB_BASE}/shipment",
