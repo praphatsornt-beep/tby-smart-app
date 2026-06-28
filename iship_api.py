@@ -488,28 +488,19 @@ def get_label_pdf(tracking_no: str) -> dict:
             return {"pdf": None, "error": "หา order ID ไม่เจอ",
                     "_debug": {k: str(v)[:200] for k, v in row.items()}}
 
-        # ลอง URL patterns ที่ iShip ใช้สำหรับ print label
-        _label_urls = [
-            f"{WEB_BASE}/shipment/printlabel/{order_id}",
-            f"{WEB_BASE}/shipment/print/{order_id}",
-            f"{WEB_BASE}/print/label/{order_id}",
-            f"{WEB_BASE}/shipment/{order_id}/print",
-        ]
+        url = f"{WEB_BASE}/shipment/printlabel/a6?order={order_id}"
+        r_pdf = sess.get(url, timeout=15, headers={
+            "Accept": "application/pdf,text/html,*/*",
+            "Referer": f"{WEB_BASE}/shipment",
+        })
+        ct = r_pdf.headers.get("Content-Type", "")
+        if r_pdf.status_code == 200 and ("pdf" in ct or r_pdf.content[:4] == b"%PDF"):
+            return {"pdf": r_pdf.content, "error": None,
+                    "_debug": {"order_id": order_id, "url": url}}
 
-        for url in _label_urls:
-            r_pdf = sess.get(url, timeout=15, headers={
-                "Accept": "application/pdf,text/html,*/*",
-                "Referer": f"{WEB_BASE}/shipment",
-            })
-            ct = r_pdf.headers.get("Content-Type", "")
-            if r_pdf.status_code == 200 and ("pdf" in ct or r_pdf.content[:4] == b"%PDF"):
-                return {"pdf": r_pdf.content, "error": None,
-                        "_debug": {"order_id": order_id, "url": url}}
-
-        return {"pdf": None, "error": f"หา label URL ไม่เจอ (order_id={order_id})",
-                "_debug": {"order_id": order_id, "tried": _label_urls,
-                           "last_status": r_pdf.status_code,
-                           "last_ct": ct,
-                           "last_body": r_pdf.text[:300]}}
+        return {"pdf": None, "error": f"ดึง label ไม่ได้ (order_id={order_id})",
+                "_debug": {"order_id": order_id, "url": url,
+                           "status": r_pdf.status_code, "content_type": ct,
+                           "body": r_pdf.text[:300]}}
     except Exception as e:
         return {"pdf": None, "error": str(e)}
