@@ -653,62 +653,56 @@ def render(tab5, products, customers):
                         if not _l_txn_df.empty:
                             _billed_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "เปิดบิลแล้ว"]
                             _unbilled_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "ยังไม่เปิดบิล"]
-
-                            _ps_billed_qty = _billed_df.groupby("รหัส")["สั่ง"].sum().rename("เปิดบิลแล้ว")
-                            _ps_billed_owed = _billed_df.groupby("รหัส")["ค้างจ่าย"].sum().rename("ค้างจ่ายบิล")
                             _unbilled_paid = _unbilled_df[_unbilled_df["สถานะจ่าย"].isin(["จ่ายแล้ว", "COD จ่ายแล้ว"])]
-                            _ps_prepaid = _unbilled_paid.groupby("รหัส")["จ่ายแล้ว"].sum().rename("จ่ายล่วงหน้า")
+                            _unbilled_unpaid = _unbilled_df[~_unbilled_df["สถานะจ่าย"].isin(["จ่ายแล้ว", "COD จ่ายแล้ว"])]
 
-                            _prod_sum = _l_txn_df.groupby("รหัส").agg(
-                                สินค้า=("สินค้า", "first"),
-                                เอาไป=("รับแล้ว", "sum"),
-                            ).reset_index()
-                            _prod_sum = (_prod_sum.set_index("รหัส")
-                                         .join(_ps_billed_qty).join(_ps_billed_owed).join(_ps_prepaid)
+                            # ── ตาราง 1: สรุปบิล (เปิดบิลค้างจ่าย vs จ่ายล่วงหน้า) ──
+                            st.markdown("**📋 สรุปบิล**")
+                            _ps_billed_qty = _billed_df.groupby("รหัส")["สั่ง"].sum().rename("เปิดบิล")
+                            _ps_billed_owed = _billed_df.groupby("รหัส")["ค้างจ่าย"].sum().rename("ค้างจ่ายบิล")
+                            _ps_prepaid_qty = _unbilled_paid.groupby("รหัส")["สั่ง"].sum().rename("จ่ายแล้ว(ชิ้น)")
+                            _ps_prepaid_amt = _unbilled_paid.groupby("รหัส")["จ่ายแล้ว"].sum().rename("จ่ายล่วงหน้า")
+                            _all_products = _l_txn_df.groupby("รหัส").agg(สินค้า=("สินค้า","first")).reset_index()
+                            _bill_sum = (_all_products.set_index("รหัส")
+                                         .join(_ps_billed_qty).join(_ps_billed_owed)
+                                         .join(_ps_prepaid_qty).join(_ps_prepaid_amt)
                                          .fillna(0).reset_index())
-                            _prod_sum["เปิดบิลแล้ว"] = _prod_sum["เปิดบิลแล้ว"].astype(int)
-                            _prod_sum["ยังไม่เปิดบิล"] = (_prod_sum["เอาไป"] - _prod_sum["เปิดบิลแล้ว"]).clip(lower=0).astype(int)
-                            _prod_sum["ค้างจ่ายสุทธิ"] = (_prod_sum["ค้างจ่ายบิล"] - _prod_sum["จ่ายล่วงหน้า"]).clip(lower=0)
-                            _prod_sum = _prod_sum[
-                                (_prod_sum["เอาไป"] > 0) | (_prod_sum["ค้างจ่ายบิล"] > 0.01)
+                            _bill_sum["เปิดบิล"] = _bill_sum["เปิดบิล"].astype(int)
+                            _bill_sum["จ่ายแล้ว(ชิ้น)"] = _bill_sum["จ่ายแล้ว(ชิ้น)"].astype(int)
+                            _bill_sum["ค้างสุทธิ"] = (_bill_sum["ค้างจ่ายบิล"] - _bill_sum["จ่ายล่วงหน้า"]).clip(lower=0)
+                            _bill_sum = _bill_sum[
+                                (_bill_sum["ค้างจ่ายบิล"] > 0.01) | (_bill_sum["จ่ายล่วงหน้า"] > 0.01)
                             ]
-                            if not _prod_sum.empty:
-                                _show_cols = ["รหัส","สินค้า","เอาไป","เปิดบิลแล้ว","ยังไม่เปิดบิล","ค้างจ่ายบิล","จ่ายล่วงหน้า","ค้างจ่ายสุทธิ"]
+                            if not _bill_sum.empty:
                                 st.dataframe(
-                                    _prod_sum[_show_cols]
-                                    .style.format({"ค้างจ่ายบิล":"{:,.0f}","จ่ายล่วงหน้า":"{:,.0f}","ค้างจ่ายสุทธิ":"{:,.0f}"}),
+                                    _bill_sum[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]]
+                                    .style.format({"ค้างจ่ายบิล":"{:,.0f}","จ่ายล่วงหน้า":"{:,.0f}","ค้างสุทธิ":"{:,.0f}"}),
                                     use_container_width=True, hide_index=True,
                                 )
-                                _ub_rows = _prod_sum[_prod_sum["ยังไม่เปิดบิล"] > 0]
-                                if not _ub_rows.empty:
-                                    _ub_items = "  ·  ".join(
-                                        f"{r['รหัส']} ×{int(r['ยังไม่เปิดบิล'])}"
-                                        for _, r in _ub_rows.iterrows()
-                                    )
-                                    st.warning(f"⚠️ เอาไปแล้วแต่ยังไม่เปิดบิล: {_ub_items}")
-                                _net_total = _prod_sum["ค้างจ่ายสุทธิ"].sum()
-                                _prepaid_total = _prod_sum["จ่ายล่วงหน้า"].sum()
+                                _net = _bill_sum["ค้างสุทธิ"].sum()
+                                _pre = _bill_sum["จ่ายล่วงหน้า"].sum()
                                 st.caption(
-                                    f"รวม: เอาไป {int(_prod_sum['เอาไป'].sum())} ชิ้น"
-                                    f" | เปิดบิลแล้ว {int(_prod_sum['เปิดบิลแล้ว'].sum())}"
-                                    f" | ยังไม่เปิดบิล {int(_prod_sum['ยังไม่เปิดบิล'].sum())}"
+                                    f"ค้างจ่ายบิล {_bill_sum['ค้างจ่ายบิล'].sum():,.0f} ฿"
+                                    + (f" − จ่ายล่วงหน้า {_pre:,.0f} ฿" if _pre > 0 else "")
+                                    + f" = **ค้างสุทธิ {_net:,.0f} ฿**"
                                 )
-                                st.caption(
-                                    f"ค้างจ่ายบิล {_prod_sum['ค้างจ่ายบิล'].sum():,.0f} ฿"
-                                    + (f" − จ่ายล่วงหน้า {_prepaid_total:,.0f} ฿" if _prepaid_total > 0 else "")
-                                    + f" = **ค้างจ่ายสุทธิ {_net_total:,.0f} ฿**"
-                                )
+                            else:
+                                st.info("ไม่มีค้างจ่ายบิล / จ่ายล่วงหน้า")
 
-                                # ── รายละเอียดค้างจ่ายแยกตามบิล ────────────
-                                _owed_txns = _l_txn_df[_l_txn_df["ค้างจ่าย"] > 0.01]
-                                if not _owed_txns.empty:
-                                    with st.expander(f"💰 รายละเอียดค้างจ่าย ({len(_owed_txns)} รายการ)"):
-                                        _owed_show = _owed_txns[["เลขที่บิล","วันที่","รหัส","สินค้า","สั่ง","ยอดรวม","จ่ายแล้ว","ค้างจ่าย","สถานะจ่าย","สถานะบิล"]].copy()
-                                        _owed_show = _owed_show.sort_values(["รหัส","เลขที่บิล"])
-                                        st.dataframe(
-                                            _owed_show.style.format({"ยอดรวม":"{:,.0f}","จ่ายแล้ว":"{:,.0f}","ค้างจ่าย":"{:,.0f}"}),
-                                            use_container_width=True, hide_index=True,
-                                        )
+                            # ── ตาราง 2: เบิกของ (ยังไม่เปิดบิล ยังไม่จ่าย) ──
+                            if not _unbilled_unpaid.empty:
+                                st.divider()
+                                st.markdown("**📦 เบิกของ** (ยังไม่เปิดบิล · ยังไม่จ่าย)")
+                                _borrow = _unbilled_unpaid.groupby("รหัส").agg(
+                                    สินค้า=("สินค้า", "first"),
+                                    จำนวน=("สั่ง", "sum"),
+                                    ยอด=("ยอดรวม", "sum"),
+                                ).reset_index()
+                                st.dataframe(
+                                    _borrow.style.format({"ยอด":"{:,.0f}"}),
+                                    use_container_width=True, hide_index=True,
+                                )
+                                st.caption(f"รวม: {int(_borrow['จำนวน'].sum())} ชิ้น | {_borrow['ยอด'].sum():,.0f} ฿")
                             else:
                                 st.info("ไม่มีรายการค้าง")
                         else:
