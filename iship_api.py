@@ -406,16 +406,15 @@ def create_order(
     return result
 
 
-def get_label_pdf(tracking_no: str) -> dict:
-    """ดึง PDF ใบปะหน้าจาก iShip สำหรับ tracking number ที่ระบุ
-    คืน: {"pdf": bytes|None, "error": str|None, "_debug": ...}
+def get_label_url(tracking_no: str) -> dict:
+    """หา order ID จาก tracking number แล้วคืน URL สำหรับปริ้นใบปะหน้า
+    คืน: {"url": str|None, "order_id": str|None, "error": str|None}
     """
     sess, login_msg = _web_session()
     if not sess:
-        return {"pdf": None, "error": f"Login failed: {login_msg}"}
+        return {"url": None, "error": f"Login failed: {login_msg}"}
 
     try:
-        # ดึง shipment list เพื่อหา order ID จาก tracking number
         sess.get(f"{WEB_BASE}/shipment", timeout=10)
         xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
         hdrs = {
@@ -461,49 +460,26 @@ def get_label_pdf(tracking_no: str) -> dict:
         r = sess.get(f"{WEB_BASE}/getdt-new-shipment", headers=hdrs,
                      params=params, timeout=15)
         if r.status_code != 200:
-            return {"pdf": None, "error": f"search HTTP {r.status_code}"}
+            return {"url": None, "error": f"search HTTP {r.status_code}"}
 
         rows = r.json().get("data", [])
         if not rows:
-            return {"pdf": None, "error": f"ไม่พบ tracking {tracking_no} ใน iShip"}
+            return {"url": None, "error": f"ไม่พบ tracking {tracking_no} ใน iShip"}
 
-        # หา order_id จาก checkbox HTML หรือ print_btn HTML
         row = rows[0]
         order_id = None
-        cb_html = row.get("checkbox", "") or ""
-        m_id = re.search(r'value=["\']?(\d+)', cb_html)
-        if m_id:
-            order_id = m_id.group(1)
+        for field in ("checkbox", "print_btn", "detail_btn"):
+            html = row.get(field, "") or ""
+            m = re.search(r'(\d{6,})', html)
+            if m:
+                order_id = m.group(1)
+                break
 
         if not order_id:
-            pb_html = row.get("print_btn", "") or ""
-            m_pb = re.search(r'printLabel\((\d+)\)', pb_html)
-            if m_pb:
-                order_id = m_pb.group(1)
-
-        if not order_id:
-            db_html = row.get("detail_btn", "") or ""
-            m_db = re.search(r'/shipment/(\d+)', db_html)
-            if m_db:
-                order_id = m_db.group(1)
-
-        if not order_id:
-            return {"pdf": None, "error": "หา order ID ไม่เจอ",
+            return {"url": None, "error": "หา order ID ไม่เจอ",
                     "_debug": {k: str(v)[:200] for k, v in row.items()}}
 
-        url = f"{WEB_BASE}/print/a6?order={order_id}"
-        r_pdf = sess.get(url, timeout=15, headers={
-            "Accept": "application/pdf,text/html,*/*",
-            "Referer": f"{WEB_BASE}/shipment",
-        })
-        ct = r_pdf.headers.get("Content-Type", "")
-        if r_pdf.status_code == 200 and ("pdf" in ct or r_pdf.content[:4] == b"%PDF"):
-            return {"pdf": r_pdf.content, "error": None,
-                    "_debug": {"order_id": order_id, "url": url}}
-
-        return {"pdf": None, "error": f"ดึง label ไม่ได้ (order_id={order_id})",
-                "_debug": {"order_id": order_id, "url": url,
-                           "status": r_pdf.status_code, "content_type": ct,
-                           "body": r_pdf.text[:300]}}
+        return {"url": f"{WEB_BASE}/print/a6?order={order_id}",
+                "order_id": order_id, "error": None}
     except Exception as e:
-        return {"pdf": None, "error": str(e)}
+        return {"url": None, "error": str(e)}

@@ -283,20 +283,13 @@ def _show_iship_success_dialog():
     _track = info.get("tracking", "")
     if _track and iship_api.is_configured():
         if st.button("🖨️ ปริ้นใบปะหน้า", use_container_width=True):
-            with st.spinner("กำลังดึงใบปะหน้าจาก iShip..."):
-                _label = iship_api.get_label_pdf(_track)
-            if _label.get("pdf"):
-                import base64 as _b64
-                _pdf_b64 = _b64.b64encode(_label["pdf"]).decode()
-                import streamlit.components.v1 as _comp
-                _comp.html(
-                    f'<iframe src="data:application/pdf;base64,{_pdf_b64}" '
-                    f'width="100%" height="600" style="border:none"></iframe>'
-                    f'<script>setTimeout(function(){{window.frames[0].focus();window.frames[0].print()}},1000)</script>',
-                    height=620,
-                )
+            with st.spinner("กำลังหา order ID จาก iShip..."):
+                _label = iship_api.get_label_url(_track)
+            if _label.get("url"):
+                st.link_button("🔗 เปิดหน้าปริ้น iShip", _label["url"], use_container_width=True)
+                st.caption(f"Order ID: {_label['order_id']}")
             else:
-                st.warning(f"⚠️ {_label.get('error','ดึง label ไม่ได้')}")
+                st.warning(f"⚠️ {_label.get('error','หา order ไม่ได้')}")
                 if _label.get("_debug"):
                     with st.expander("🔍 debug"):
                         st.json(_label["_debug"])
