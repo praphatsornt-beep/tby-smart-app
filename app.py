@@ -200,6 +200,8 @@ def _show_carrier_select():
             if _cs_resp.get("status"):
                 _cs_track    = _extract_tracking(_cs_resp)
                 _cs_order_id = _extract_iship_order_id(_cs_resp)
+                if not _cs_order_id:
+                    st.session_state["_iship_debug_resp"] = _cs_resp
                 if tab == "ship" and info.get("shipment_id") and _cs_track:
                     db.update_shipment_tracking(info["shipment_id"], _cs_track)
                 if tab in ("sale", "pending"):
@@ -284,9 +286,22 @@ def _show_iship_success_dialog():
     st.divider()
     _track = info.get("tracking", "")
     _iship_oid = info.get("iship_order_id", "")
-    if _track and _iship_oid:
-        _print_url = f"https://app.iship.cloud/print/a6?order={_iship_oid}"
-        st.link_button("🖨️ ปริ้นใบปะหน้า", _print_url, use_container_width=True)
+    if _track:
+        if _iship_oid:
+            _print_url = f"https://app.iship.cloud/print/a6?order={_iship_oid}"
+            st.link_button("🖨️ ปริ้นใบปะหน้า", _print_url, use_container_width=True)
+        elif iship_api.is_configured():
+            if st.button("🖨️ ปริ้นใบปะหน้า", use_container_width=True):
+                with st.spinner("กำลังหา order ID..."):
+                    _label = iship_api.get_label_url(_track)
+                if _label.get("url"):
+                    st.link_button("🔗 เปิดหน้าปริ้น", _label["url"], use_container_width=True)
+                else:
+                    st.warning(f"⚠️ {_label.get('error','')}")
+        _dbg_resp = st.session_state.get("_iship_debug_resp")
+        if _dbg_resp:
+            with st.expander("🔍 iShip response (หา order_id)"):
+                st.json(_dbg_resp)
 
     _dluid = info.get("line_user_id", "")
     _dlgid = info.get("group_id", "")
