@@ -1132,10 +1132,10 @@ def render(tab5, products, customers):
                                     "amount_paid":    0.0,
                                     "event_type":     "รับของ",
                                 })
-                        if "paid" in _ch:
+                        if "paid" in _ch and "pay_status" not in _ch:
                             _old_p, _new_p = _ch["paid"]
                             _delta_p = _new_p - _old_p
-                            if abs(_delta_p) > 0.01:
+                            if _delta_p > 0.01:
                                 db.insert_partial_event({
                                     "id":             str(uuid.uuid4()),
                                     "date":           str(date.today()),
