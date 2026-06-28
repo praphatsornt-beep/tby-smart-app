@@ -53,11 +53,15 @@ def get_customer_by_phone(phone: str) -> dict | None:
 # ─── Customer Addresses (แยก table — 1 ลูกค้า มีได้หลายที่อยู่) ────────────
 
 @st.cache_data(ttl=120)
+def _all_customer_addresses() -> list[dict]:
+    return get_supabase().table("customer_addresses").select("*, customers(name)").order("phone").execute().data
+
+
 def get_customer_addresses(customer_id: str = None) -> list[dict]:
-    q = get_supabase().table("customer_addresses").select("*, customers(name)")
+    all_addr = _all_customer_addresses()
     if customer_id:
-        q = q.eq("customer_id", customer_id)
-    return q.order("phone").execute().data
+        return [a for a in all_addr if a.get("customer_id") == customer_id]
+    return all_addr
 
 
 def get_address_by_phone(phone: str) -> dict | None:
@@ -71,12 +75,12 @@ def upsert_customer_address(data: dict) -> None:
     if data.get("phone"):
         db.table("customer_addresses").delete().eq("phone", data["phone"].strip()).execute()
     db.table("customer_addresses").insert(data).execute()
-    get_customer_addresses.clear()
+    _all_customer_addresses.clear()
 
 
 def delete_customer_address(address_id: str) -> None:
     get_supabase().table("customer_addresses").delete().eq("id", address_id).execute()
-    get_customer_addresses.clear()
+    _all_customer_addresses.clear()
 
 
 def upsert_product(data: dict) -> None:
