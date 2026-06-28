@@ -651,41 +651,41 @@ def render(tab5, products, customers):
                     with st.expander("📊 สรุปรายสินค้า", expanded=False):
                         _l_txn_df = _l_all_df
                         if not _l_txn_df.empty:
-                            _billed_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "เปิดบิลแล้ว"]
-                            _unbilled_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "ยังไม่เปิดบิล"]
-                            _ps1 = _l_txn_df.groupby("รหัส").agg(
+                            _prod_sum = _l_txn_df.groupby("รหัส").agg(
                                 สินค้า=("สินค้า", "first"),
-                                เอาไปแล้ว=("รับแล้ว", "sum"),
-                                ค้างรับ=("ค้างรับ", "sum"),
+                                สั่ง=("สั่ง", "sum"),
+                                เอาไป=("รับแล้ว", "sum"),
+                                ยังไม่เอา=("ค้างรับ", "sum"),
                                 ยอดรวม=("ยอดรวม", "sum"),
                                 จ่ายแล้ว=("จ่ายแล้ว", "sum"),
                                 ค้างจ่าย=("ค้างจ่าย", "sum"),
                             ).reset_index()
-                            _ps_billed = _billed_df.groupby("รหัส")["สั่ง"].sum().rename("เปิดบิล")
-                            _ps_unbilled = _unbilled_df.groupby("รหัส")["สั่ง"].sum().rename("ยังไม่เปิดบิล")
-                            _prod_sum = _ps1.set_index("รหัส").join(_ps_billed).join(_ps_unbilled).fillna(0).reset_index()
-                            _prod_sum["เปิดบิล"] = _prod_sum["เปิดบิล"].astype(int)
+                            _unbilled_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "ยังไม่เปิดบิล"]
+                            _ps_ub = _unbilled_df.groupby("รหัส")["สั่ง"].sum().rename("ยังไม่เปิดบิล")
+                            _prod_sum = _prod_sum.set_index("รหัส").join(_ps_ub).fillna(0).reset_index()
                             _prod_sum["ยังไม่เปิดบิล"] = _prod_sum["ยังไม่เปิดบิล"].astype(int)
                             _prod_sum = _prod_sum[
-                                (_prod_sum["เปิดบิล"] > 0) | (_prod_sum["ยังไม่เปิดบิล"] > 0)
-                                | (_prod_sum["ค้างรับ"] > 0) | (_prod_sum["ค้างจ่าย"] > 0.01)
+                                (_prod_sum["ยังไม่เอา"] > 0) | (_prod_sum["ค้างจ่าย"] > 0.01)
+                                | (_prod_sum["ยังไม่เปิดบิล"] > 0)
                             ]
                             if not _prod_sum.empty:
+                                _show_cols = ["รหัส","สินค้า","สั่ง","เอาไป","ยังไม่เอา","ค้างจ่าย","ยังไม่เปิดบิล"]
                                 st.dataframe(
-                                    _prod_sum[["รหัส","สินค้า","เปิดบิล","ยังไม่เปิดบิล","เอาไปแล้ว","ค้างรับ","ยอดรวม","จ่ายแล้ว","ค้างจ่าย"]]
-                                    .style.format({"ยอดรวม":"{:,.0f}","จ่ายแล้ว":"{:,.0f}","ค้างจ่าย":"{:,.0f}"}),
+                                    _prod_sum[_show_cols]
+                                    .style.format({"ค้างจ่าย":"{:,.0f}"}),
                                     use_container_width=True, hide_index=True,
                                 )
-                                _unbilled = _prod_sum[_prod_sum["ยังไม่เปิดบิล"] > 0]
-                                if not _unbilled.empty:
+                                _ub_rows = _prod_sum[_prod_sum["ยังไม่เปิดบิล"] > 0]
+                                if not _ub_rows.empty:
                                     _ub_items = "  ·  ".join(
-                                        f"{r['รหัส']} ×{int(r['ยังไม่เปิดบิล'])}"
-                                        for _, r in _unbilled.iterrows()
+                                        f"{r['รหัส']} ×{int(r['ยังไม่เปิดบิล'])} ({r['ค้างจ่าย']:,.0f}฿)"
+                                        for _, r in _ub_rows.iterrows()
                                     )
-                                    st.warning(f"⚠️ เอาไปแต่ยังไม่เปิดบิล: {_ub_items}")
+                                    st.warning(f"⚠️ ยังไม่เปิดบิล: {_ub_items}")
                                 st.caption(
-                                    f"รวม: เปิดบิล {int(_prod_sum['เปิดบิล'].sum())} ชิ้น"
-                                    f" | ยังไม่เปิดบิล {int(_prod_sum['ยังไม่เปิดบิล'].sum())} ชิ้น"
+                                    f"รวม: สั่ง {int(_prod_sum['สั่ง'].sum())} ชิ้น"
+                                    f" | เอาไป {int(_prod_sum['เอาไป'].sum())}"
+                                    f" | ยังไม่เอา {int(_prod_sum['ยังไม่เอา'].sum())}"
                                     f" | ค้างจ่าย {_prod_sum['ค้างจ่าย'].sum():,.0f} ฿"
                                 )
                             else:
