@@ -286,13 +286,10 @@ def _show_iship_success_dialog():
             with st.spinner("กำลังหา order ID จาก iShip..."):
                 _label = iship_api.get_label_url(_track)
             if _label.get("url"):
-                st.link_button("🔗 เปิดหน้าปริ้น iShip", _label["url"], use_container_width=True)
-                st.caption(f"Order ID: {_label['order_id']}")
+                import streamlit.components.v1 as _comp
+                _comp.html(f'<script>window.open("{_label["url"]}", "_blank")</script>', height=0)
             else:
                 st.warning(f"⚠️ {_label.get('error','หา order ไม่ได้')}")
-                if _label.get("_debug"):
-                    with st.expander("🔍 debug"):
-                        st.json(_label["_debug"])
 
     _dluid = info.get("line_user_id", "")
     _dlgid = info.get("group_id", "")

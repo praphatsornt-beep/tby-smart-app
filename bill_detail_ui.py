@@ -1420,13 +1420,10 @@ def render(tab5, products, customers):
                             with st.spinner("กำลังหา order ID จาก iShip..."):
                                 _pr_result = iship_api.get_label_url(_pr_sel)
                             if _pr_result.get("url"):
-                                st.link_button("🔗 เปิดหน้าปริ้น iShip", _pr_result["url"], use_container_width=True)
-                                st.caption(f"Order ID: {_pr_result['order_id']}")
+                                import streamlit.components.v1 as _comp
+                                _comp.html(f'<script>window.open("{_pr_result["url"]}", "_blank")</script>', height=0)
                             else:
                                 st.warning(f"⚠️ {_pr_result.get('error','หา order ไม่ได้')}")
-                                if _pr_result.get("_debug"):
-                                    with st.expander("🔍 debug"):
-                                        st.json(_pr_result["_debug"])
 
             _sh_to_resend = [i for i, v in enumerate(_sh_edit["📤"]) if v]
             if len(_sh_to_resend) > 1:
