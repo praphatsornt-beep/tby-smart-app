@@ -1328,7 +1328,7 @@ def render(tab5, products, customers):
                 if "ตีกลับ" in status or "ยกเลิก" in status:
                     return "❌"
                 if "รอเข้ารับ" in status:
-                    return "📋"
+                    return "⏳"
                 if "อยู่ระหว่าง" in status or "กำลังจัดส่ง" in status:
                     return "🚚"
                 return "📦"
