@@ -652,7 +652,7 @@ def render(tab5, products, customers):
                         _l_txn_df = _l_all_df
                         if not _l_txn_df.empty:
                             _billed_recv = (_l_txn_df[_l_txn_df["สถานะบิล"] == "เปิดบิลแล้ว"]
-                                           .groupby("รหัส")["รับแล้ว"].sum().rename("เปิดบิลแล้ว"))
+                                           .groupby("รหัส")["สั่ง"].sum().rename("เปิดบิลแล้ว"))
                             _prod_sum = _l_txn_df.groupby("รหัส").agg(
                                 สินค้า=("สินค้า", "first"),
                                 เอาไป=("รับแล้ว", "sum"),
