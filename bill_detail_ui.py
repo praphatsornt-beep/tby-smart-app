@@ -98,10 +98,9 @@ def render(tab5, products, customers):
             _bp_bill_q = _t2_bill_search.strip()
             if re.match(r'^\d{6}-\d+$', _bp_bill_q):
                 _cust_map_all_g = {c["name"]: c for c in customers}
-                _all_txn_cache_g = db.get_all_transactions_df()
                 with st.expander(f"📄 บิล {_bp_bill_q}", expanded=True):
                     _render_bill_panel(
-                        None, _cust_map_all_g, _all_txn_cache_g, customers,
+                        None, _cust_map_all_g, None, customers,
                         key_prefix="bp_search", preselected_bill=_bp_bill_q,
                     )
                 st.divider()
@@ -125,7 +124,6 @@ def render(tab5, products, customers):
                 _cust_line_map = {c["name"]: c.get("line_user_id") or "" for c in customers}
                 _cust_gid_map  = {c["name"]: c.get("group_id") or "" for c in customers}
                 _cust_map_all  = {c["name"]: c for c in customers}
-                _all_txn_cache = db.get_all_transactions_df()
 
                 single_cust = (_t2_search.strip() != "" or _t2_bill_search.strip() != "") and outstanding_df["ลูกค้า"].nunique() == 1
                 # pre-fetch shipments ครั้งเดียวแทนการเรียงใน loop (N+1 fix)
@@ -157,7 +155,7 @@ def render(tab5, products, customers):
                             _cust_obj_bp = _cust_map_all.get(customer_name)
                             _bp_id = _cust_obj_bp["id"] if _cust_obj_bp else customer_name
                             _render_bill_panel(
-                                customer_name, _cust_map_all, _all_txn_cache, customers,
+                                customer_name, _cust_map_all, None, customers,
                                 key_prefix=f"bp_{_bp_id}",
                             )
                         st.divider()
@@ -634,12 +632,13 @@ def render(tab5, products, customers):
                     _l_receipts = [r for r in _l_data if r["type"] in ("รับของ", "แก้ไขรับ")]
                     _l_ships    = [r for r in _l_data if "ส่งของ" in r["type"]]
 
-                    _l_all_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
-
                     # ── summary metrics ──────────────────────────────────────
                     _l_ord_qty  = sum(r["qty_in"]  for r in _l_orders)
                     _l_recv_qty = sum(r["qty_out"] for r in _l_receipts) + sum(r.get("initial_received", 0) for r in _l_orders)
-                    _l_paid_tot = _l_all_df["จ่ายแล้ว"].sum() if not _l_all_df.empty else 0.0
+                    _l_paid_tot = (
+                        sum(r.get("total_amount", 0) for r in _l_orders if r.get("pay_status") == "จ่ายแล้ว")
+                        + sum(r["amount"] for r in _l_payments)
+                    )
                     _sm1, _sm2, _sm3, _sm4 = st.columns(4)
                     _sm1.metric("สั่งซื้อ",  f"{_l_ord_qty:,} ชิ้น")
                     _sm2.metric("รับแล้ว",   f"{_l_recv_qty:,} ชิ้น")

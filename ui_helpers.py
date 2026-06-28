@@ -415,7 +415,16 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     """แสดงส่วนเลือกบิล / พิมพ์บิล / จัดการบิล สำหรับลูกค้า sel_p
     preselected_bill: ถ้าระบุ ข้ามตัวเลือกบิล แสดงบิลนี้ตรง ๆ (ใช้กับค้นด้วยเลขที่บิล)
     key_prefix: prefix สำหรับ widget key / session_state กันชนกันเมื่อเรียกซ้ำหลายลูกค้า
+    all_txn_cache: ถ้าเป็น None จะดึงเองตาม context (lazy load)
     """
+    if all_txn_cache is None:
+        if preselected_bill:
+            all_txn_cache = db.get_all_transactions_df(bill_no=preselected_bill)
+        else:
+            _cust_obj = cust_map_p.get(sel_p)
+            _cid = _cust_obj["id"] if _cust_obj else None
+            all_txn_cache = db.get_all_transactions_df(customer_id=_cid)
+
     if preselected_bill:
         all_df_p = all_txn_cache[all_txn_cache["เลขที่บิล"] == preselected_bill]
         if all_df_p.empty:
