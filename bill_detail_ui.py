@@ -647,8 +647,9 @@ def render(tab5, products, customers):
                     _sm4.metric("จ่ายแล้ว",  f"{_l_paid_tot:,.0f} ฿")
 
                     # ── สรุปรายสินค้า ────────────────────────────────────────
+                    _l_all_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
                     with st.expander("📊 สรุปรายสินค้า", expanded=False):
-                        _l_txn_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
+                        _l_txn_df = _l_all_df
                         if not _l_txn_df.empty:
                             _billed_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "เปิดบิลแล้ว"]
                             _unbilled_df = _l_txn_df[_l_txn_df["สถานะบิล"] == "ยังไม่เปิดบิล"]
