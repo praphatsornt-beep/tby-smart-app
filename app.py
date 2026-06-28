@@ -287,7 +287,14 @@ def _show_iship_success_dialog():
                 _label = iship_api.get_label_url(_track)
             if _label.get("url"):
                 import streamlit.components.v1 as _comp
-                _comp.html(f'<script>window.open("{_label["url"]}", "_blank")</script>', height=0)
+                _comp.html(
+                    f'<a id="_lbl" href="{_label["url"]}" target="_blank" '
+                    f'style="display:inline-block;padding:8px 24px;background:#00A86B;color:#fff;'
+                    f'border-radius:8px;text-decoration:none;font-size:16px">'
+                    f'🖨️ กดที่นี่เพื่อปริ้น</a>'
+                    f'<script>document.getElementById("_lbl").click()</script>',
+                    height=50,
+                )
             else:
                 st.warning(f"⚠️ {_label.get('error','หา order ไม่ได้')}")
 
