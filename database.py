@@ -356,7 +356,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     db = get_supabase()
     txns = _retry(lambda: db.table("transactions").select(
         "id, date, bill_no, product_id, product_name, qty, total_amount, pay_status, "
-        "bill_status, points_per_unit, initial_qty_received"
+        "bill_status, points_per_unit, initial_qty_received, notes"
     ).eq("customer_id", customer_id).order("date").execute().data)
     txn_ids = [t["id"] for t in txns]
     txn_map = {t["id"]: t for t in txns}
@@ -384,6 +384,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
             "type":             "สั่งซื้อ",
             "bill_no":          t.get("bill_no") or "",
             "product":          t["product_name"],
+            "product_id":       t.get("product_id") or "",
             "qty_in":           t["qty"],
             "qty_out":          0,
             "amount":           0.0,
@@ -392,6 +393,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
             "bill_status":      t.get("bill_status") or "ยังไม่เปิดบิล",
             "pv":               float(t.get("points_per_unit") or 0) * int(t.get("qty") or 0),
             "initial_received": int(t.get("initial_qty_received") or 0),
+            "notes":            t.get("notes", "") or "",
             "txn_id":           t["id"],
         })
     # partial event rows

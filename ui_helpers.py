@@ -388,6 +388,48 @@ def _extract_staff_tag(notes: list) -> str:
     return ""
 
 
+def _ledger_to_txn_df(ledger_data: list) -> pd.DataFrame:
+    """แปลง get_customer_ledger() data → DataFrame เทียบเท่า get_all_transactions_df()
+    โดยไม่ต้อง query Supabase ซ้ำ (ledger ดึงข้อมูล transactions+partial_events มาแล้ว)"""
+    orders   = [r for r in ledger_data if r["type"] == "สั่งซื้อ"]
+    payments = [r for r in ledger_data if r["type"] == "จ่ายเงิน"]
+    receipts = [r for r in ledger_data if r["type"] in ("รับของ", "แก้ไขรับ")]
+    if not orders:
+        return pd.DataFrame()
+
+    from collections import defaultdict
+    paid_by_txn = defaultdict(float)
+    for p in payments:
+        paid_by_txn[p["txn_id"]] += p["amount"]
+    recv_by_txn = defaultdict(int)
+    for r in receipts:
+        recv_by_txn[r["txn_id"]] += r["qty_out"]
+
+    rows = []
+    for o in orders:
+        tid = o["txn_id"]
+        total_amount = float(o.get("total_amount") or 0)
+        pay_status   = o.get("pay_status") or ""
+        partial_paid = paid_by_txn.get(tid, 0.0)
+        total_paid   = total_amount if pay_status in ("จ่ายแล้ว", "COD จ่ายแล้ว") else partial_paid
+        total_received = o.get("initial_received", 0) + recv_by_txn.get(tid, 0)
+        outstanding_amount = total_amount - total_paid
+        outstanding_qty    = o["qty_in"] - total_received
+        cleared = outstanding_amount <= 0.01 and outstanding_qty <= 0 and o.get("bill_status") == "เปิดบิลแล้ว"
+        rows.append({
+            "id": tid, "วันที่": o["date"], "รหัส": o.get("product_id", ""),
+            "สินค้า": o["product"], "สั่ง": o["qty_in"], "รับแล้ว": total_received,
+            "ยอดรวม": total_amount, "จ่ายแล้ว": total_paid,
+            "ค้างจ่าย": max(0.0, outstanding_amount), "ค้างรับ": max(0, outstanding_qty),
+            "สถานะบิล": o.get("bill_status") or "ยังไม่เปิดบิล", "สถานะจ่าย": pay_status,
+            "หมายเหตุ": o.get("notes", "") or "", "PV รวม": o.get("pv", 0.0),
+            "เลขที่บิล": o.get("bill_no") or "", "เคลียร์แล้ว": cleared,
+        })
+    df = pd.DataFrame(rows)
+    df.sort_values("วันที่", ascending=False, inplace=True)
+    return df.reset_index(drop=True)
+
+
 def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
     """รวมรายการในแต่ละบิล (groupby เลขที่บิล) คืน DataFrame หนึ่งแถวต่อบิล:
     เลขที่บิล, วันที่, ยอดรวม, ค้างจ่าย, ค้างรับ, is_paid, is_billed, pv_unbilled

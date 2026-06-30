@@ -12,7 +12,7 @@ import iship_api
 from ui_helpers import (
     _to_bkk, _to_excel_bytes, BOX_WEIGHT_G,
     _style_status, _fmt_note, _extract_staff_tag,
-    _bills_from_df, _render_bill_panel,
+    _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
 )
 import carriers as carr
 
@@ -683,7 +683,7 @@ def render(tab5, products, customers):
                     _sm4.metric("จ่ายแล้ว",  f"{_l_paid_tot:,.0f} ฿")
 
                     # ── สรุปรายสินค้า ────────────────────────────────────────
-                    _l_all_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
+                    _l_all_df = _ledger_to_txn_df(_l_data)
                     with st.expander("📊 สรุปรายสินค้า", expanded=False):
                         _l_txn_df = _l_all_df
                         if not _l_txn_df.empty:
