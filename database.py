@@ -796,63 +796,18 @@ def get_billed_not_received_qty_by_product() -> dict:
 
 @st.cache_data(ttl=60)
 def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
-    """รายการที่ยังค้างชำระหรือค้างรับของ"""
-    db = get_supabase()
-
-    q = db.table("transactions").select("*, customers(name)")
-    if customer_id:
-        q = q.eq("customer_id", customer_id)
-    txns = _retry(lambda: q.order("date", desc=True).execute().data)
-
-    if not txns:
+    """รายการที่ยังค้างชำระหรือค้างรับของ — derive จาก get_all_transactions_df()
+    (cache เดียวกัน) แทนการ query Supabase ซ้ำ เพราะดึงข้อมูลชุดเดียวกันทุกประการ"""
+    all_df = get_all_transactions_df(customer_id=customer_id)
+    if all_df.empty:
         return pd.DataFrame()
 
-    txn_ids = [t["id"] for t in txns]
-    all_events: list = []
-    for _i in range(0, len(txn_ids), 50):
-        _chunk = txn_ids[_i:_i+50]
-        all_events += _retry(lambda: db.table("partial_events").select("*").in_("transaction_id", _chunk).execute().data)
+    df = all_df[
+        (all_df["ค้างจ่าย"] > 0.01) | (all_df["ค้างรับ"] > 0) | (all_df["สถานะบิล"] == "ยังไม่เปิดบิล")
+    ].drop(columns=["เคลียร์แล้ว", "last_payment_date"], errors="ignore").copy()
 
-    events_by_txn: dict[str, list] = defaultdict(list)
-    for e in all_events:
-        events_by_txn[e["transaction_id"]].append(e)
-
-    rows = []
-    for t in txns:
-        tid = t["id"]
-        evts = events_by_txn[tid]
-
-        _partial_paid = sum(float(e["amount_paid"]) for e in evts)
-        total_paid = float(t["total_amount"]) if t["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว") else _partial_paid
-
-        total_received = t["initial_qty_received"] + sum(e["qty_received"] for e in evts)
-        outstanding_amount = float(t["total_amount"]) - total_paid
-        outstanding_qty = t["qty"] - total_received
-
-        if outstanding_amount > 0.01 or outstanding_qty > 0 or t["bill_status"] == "ยังไม่เปิดบิล":
-            customer_name = (t.get("customers") or {}).get("name", t["customer_id"])
-            rows.append({
-                "id": tid,
-                "วันที่": t["date"],
-                "ลูกค้า": customer_name,
-                "รหัส": t["product_id"],
-                "สินค้า": t["product_name"],
-                "สั่ง": t["qty"],
-                "รับแล้ว": total_received,
-                "ค้างรับ": max(0, outstanding_qty),
-                "ยอดรวม": float(t["total_amount"]),
-                "จ่ายแล้ว": total_paid,
-                "ค้างจ่าย": max(0.0, outstanding_amount),
-                "PV รวม": float(t["points_per_unit"]) * t["qty"],
-                "ประเภท": t["transaction_type"],
-                "สถานะบิล": t["bill_status"],
-                "สถานะจ่าย": t["pay_status"],
-                "เลขที่บิล": t.get("bill_no") or "",
-            })
-
-    if not rows:
+    if df.empty:
         return pd.DataFrame()
-    df = pd.DataFrame(rows)
     df.sort_values(["ลูกค้า", "เลขที่บิล", "วันที่"], ascending=[True, True, True],
                    inplace=True, na_position="last")
     return df.reset_index(drop=True)
