@@ -202,6 +202,28 @@ def render(tab5, products, customers):
                                 st.rerun()
                             st.divider()
 
+                        # ── ปุ่มแจ้ง LINE รับของ/จ่ายเงินบางส่วน ──────────────
+                        _pr = st.session_state.get("_partial_recv_line")
+                        if _pr and _pr.get("customer_name") == customer_name:
+                            _pr_c1, _pr_c2 = st.columns([3, 1])
+                            _pr_c1.info(
+                                f"📦 {_pr['product_name']} ×{int(_pr['qty_received'])}"
+                                + (f" · จ่าย {_pr['amount_paid']:,.0f} ฿" if _pr['amount_paid'] > 0.01 else "")
+                            )
+                            if _pr_c2.button("📨 แจ้ง LINE", key=f"pr_line_{customer_name}", type="primary", use_container_width=True):
+                                _pr_res = line_api.push_partial_receipt(
+                                    _pr["line_user_id"], _pr["product_name"],
+                                    _pr["qty_received"], _pr["amount_paid"],
+                                    _pr["remaining_qty"], _pr["remaining_amount"],
+                                    group_id=_pr.get("group_id", ""),
+                                )
+                                if _pr_res.get("ok"):
+                                    st.success("✅ ส่ง LINE แล้ว")
+                                    del st.session_state["_partial_recv_line"]
+                                else:
+                                    st.error(f"❌ {_pr_res.get('error')}")
+                            st.divider()
+
                         # ── LINE แจ้งยอดค้าง ─────────────────────────────────
                         if line_api.is_configured():
                             _line_items = [
@@ -404,12 +426,16 @@ def render(tab5, products, customers):
                                             _new_paid_amt = balance["total_paid"] + amount_paid
                                             _rem_qty = max(0, int(txn["qty"]) - _new_recv_qty)
                                             _rem_amt = max(0.0, float(txn["total_amount"]) - _new_paid_amt)
-                                            line_api.push_partial_receipt(
-                                                _luid, txn["product_name"],
-                                                qty_received, amount_paid,
-                                                _rem_qty, _rem_amt,
-                                                group_id=_gid,
-                                            )
+                                            st.session_state["_partial_recv_line"] = {
+                                                "customer_name": customer_name,
+                                                "line_user_id":  _luid,
+                                                "group_id":      _gid,
+                                                "product_name":  txn["product_name"],
+                                                "qty_received":  qty_received,
+                                                "amount_paid":   amount_paid,
+                                                "remaining_qty": _rem_qty,
+                                                "remaining_amount": _rem_amt,
+                                            }
                                         st.success("✅ บันทึกแล้ว")
                                         st.rerun()
 
