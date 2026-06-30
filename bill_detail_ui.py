@@ -727,13 +727,25 @@ def render(tab5, products, customers):
 
                             if not _bill_credit.empty:
                                 _price_map = {p["id"]: float(p.get("price") or 0) for p in products}
-                                _cr_items = []
+                                _pv_map    = {p["id"]: float(p.get("points_per_unit") or 0) for p in products}
+                                _cr_rows = []
                                 for _, _cr in _bill_credit.iterrows():
                                     _cr_amt = _cr["เครดิตเหลือ"]
                                     _pr = _price_map.get(_cr["รหัส"], 0)
                                     _cr_qty = int(_cr_amt // _pr) if _pr > 0 else 0
-                                    _cr_items.append(f"{_cr['สินค้า']}: เครดิตเหลือ {_cr_amt:,.0f} ฿ (เปิดบิลเพิ่มได้ {_cr_qty} ชิ้น)")
-                                st.success("💚 " + "  ·  ".join(_cr_items))
+                                    _cr_pv = _cr_qty * _pv_map.get(_cr["รหัส"], 0)
+                                    _cr_rows.append({
+                                        "รหัส": _cr["รหัส"], "สินค้า": _cr["สินค้า"],
+                                        "เครดิตเหลือ": _cr_amt, "เปิดบิลเพิ่มได้": _cr_qty,
+                                        "PV": _cr_pv,
+                                    })
+                                _cr_df = pd.DataFrame(_cr_rows)
+                                st.markdown("**💚 เครดิตเหลือ**")
+                                st.dataframe(
+                                    _cr_df.style.format({"เครดิตเหลือ": "{:,.0f}", "PV": "{:,.0f}"}),
+                                    use_container_width=True, hide_index=True,
+                                )
+                                st.caption(f"รวม PV ที่เปิดบิลได้: **{_cr_df['PV'].sum():,.0f}**")
 
                             if _bill_owed.empty and _bill_credit.empty:
                                 st.info("ไม่มีค้างจ่ายบิล / เครดิตเหลือ")
