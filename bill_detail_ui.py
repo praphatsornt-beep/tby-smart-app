@@ -973,6 +973,32 @@ def render(tab5, products, customers):
                                 elif _r["type"] == "ส่งพัสดุ":
                                     st.caption(f"🚚 {_r['date']}  ส่งพัสดุ {_r['detail']}  Tracking: {_r['tracking']}")
 
+                            # ── ส่งสรุปบิล LINE ──────────────────────────────────
+                            _bl_luid = _l_cust.get("line_user_id") or ""
+                            _bl_gid  = _l_cust.get("group_id") or ""
+                            if line_api.is_configured() and not _bill_rows.empty:
+                                if st.button(
+                                    "📨 ส่งสรุปบิล LINE" if _bl_luid else "📨 ไม่มี LINE ID",
+                                    key=f"ledger_bill_line_{_bk}_{_l_sel}",
+                                    disabled=not _bl_luid,
+                                ):
+                                    _bl_items = [
+                                        {"name": r["สินค้า"], "qty": int(r["สั่ง"]), "total": float(r["ยอดรวม"])}
+                                        for _, r in _bill_rows.iterrows()
+                                    ]
+                                    _bl_total = float(_bill_rows["ยอดรวม"].sum())
+                                    _bl_paid  = float(_bill_rows["จ่ายแล้ว"].sum())
+                                    _bl_res = line_api.push_bill_summary(
+                                        _bl_luid, _l_sel, _bk,
+                                        _bl_items, _bl_total, _bv["bill_status"],
+                                        paid_amount=_bl_paid, outstanding_amount=_b_owed,
+                                        group_id=_bl_gid,
+                                    )
+                                    if _bl_res.get("ok"):
+                                        st.success("✅ ส่ง LINE แล้ว")
+                                    else:
+                                        st.error(f"❌ {_bl_res.get('error')}")
+
                             # ── ลบบิลนี้ ────────────────────────────────────────
                             if _bk != "—":
                                 with st.expander("🗑️ ลบบิลนี้"):
