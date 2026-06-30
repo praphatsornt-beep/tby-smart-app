@@ -854,6 +854,30 @@ def render(tab5, products, customers):
                         _l_bills_owed["เลขที่บิล"].replace("", "—"),
                         _l_bills_owed["ค้างจ่าย"],
                     ))
+
+                    # ── ตารางสรุปทุกบิล (เห็นรวดเดียวไม่ต้องเปิดทีละบิล) ──────
+                    if len(_bills_tl) > 1:
+                        with st.expander("📑 สรุปยอดทุกบิล", expanded=False):
+                            _bl_rows = []
+                            for _bbk, _bbv in sorted(_bills_tl.items(), key=lambda x: x[1]["date"], reverse=True):
+                                _bb_recv = _recv_cumul.get(_bbk, 0)
+                                _bl_rows.append({
+                                    "เลขที่บิล": _bbk,
+                                    "วันที่": _bbv["date"],
+                                    "ยอดรวม": _bbv["total"],
+                                    "ค้างรับ": max(0, _bbv["qty"] - _bb_recv),
+                                    "ค้างจ่าย": _owed_map.get(_bbk, 0.0),
+                                    "สถานะบิล": _bbv["bill_status"],
+                                })
+                            _bl_df = pd.DataFrame(_bl_rows)
+                            st.dataframe(
+                                _bl_df.style.format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
+                                .map(lambda v: "background-color:#6b1a1a;color:white"
+                                     if isinstance(v, (int, float)) and v > 0 else "",
+                                     subset=["ค้างรับ", "ค้างจ่าย"]),
+                                use_container_width=True, hide_index=True,
+                            )
+
                     for _bk, _bv in sorted(
                         _bills_tl.items(), key=lambda x: x[1]["date"], reverse=True
                     ):
