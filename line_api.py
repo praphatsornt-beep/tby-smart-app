@@ -91,10 +91,16 @@ def push_text(line_user_id: str, text: str, group_id: str = "") -> dict:
 
 def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
                       items: list, total_amount: float, pay_status: str,
+                      paid_amount: float = None, outstanding_amount: float = None,
                       group_id: str = "") -> dict:
     """ส่งสรุปบิลให้ลูกค้าใน LINE"""
     lines = [f"📋 สรุปบิล {bill_no}", f"คุณ {customer_name}", ""]
     for it in items[:10]:
         lines.append(f"• {it['name']} ×{it['qty']} = {float(it['total']):,.0f}฿")
-    lines += ["", f"💰 รวม: {total_amount:,.0f} บาท", f"สถานะ: {pay_status}"]
+    lines += ["", f"💰 รวม: {total_amount:,.0f} บาท"]
+    if paid_amount is not None and outstanding_amount is not None and outstanding_amount > 0.01:
+        lines.append(f"✅ จ่ายแล้ว: {paid_amount:,.0f} บาท")
+        lines.append(f"⏳ ค้างจ่าย: {outstanding_amount:,.0f} บาท")
+    else:
+        lines.append(f"สถานะ: {pay_status}")
     return _push(line_user_id, "\n".join(lines), group_id)

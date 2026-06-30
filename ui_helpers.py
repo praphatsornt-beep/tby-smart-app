@@ -676,6 +676,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
         _r7 = line_api.push_bill_summary(
             _t7_line_uid, _t7_cust_name, bill_nos_str,
             _t7_items, total_amount, _t7_pay,
+            paid_amount=total_paid, outstanding_amount=total_outstanding,
             group_id=_t7_gid,
         )
         if _r7["ok"]:

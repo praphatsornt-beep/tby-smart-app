@@ -819,9 +819,12 @@ def render(tab1, products, customers, customer_map):
                                            for it in _pd.get("items", [])]
                             _line_items += [{"name": f"{it['product_id']} {it['name']} (เก่า)", "qty": it["qty"], "total": it["amount"]}
                                             for it in _old_items]
+                            _pb_total = _pd["total_amt"] + _old_total
+                            _pb_paid  = _pb_total if _pd["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว") else 0.0
                             _res = line_api.push_bill_summary(
                                 _popup_line_uid, _pd["customer_name"], _pd["bill_no"],
-                                _line_items, _pd["total_amt"] + _old_total, _pd["pay_status"],
+                                _line_items, _pb_total, _pd["pay_status"],
+                                paid_amount=_pb_paid, outstanding_amount=_pb_total - _pb_paid,
                                 group_id=_popup_gid,
                             )
                             if _res["ok"]:
