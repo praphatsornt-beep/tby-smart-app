@@ -399,6 +399,17 @@ def render(tab5, products, customers):
                                                 "received": [{"product": txn["product_name"], "qty": int(qty_received)}],
                                                 "pending": _rp_pending,
                                             }
+                                        if _luid and line_api.is_configured() and (qty_received > 0 or amount_paid > 0.01):
+                                            _new_recv_qty = balance["total_received"] + int(qty_received)
+                                            _new_paid_amt = balance["total_paid"] + amount_paid
+                                            _rem_qty = max(0, int(txn["qty"]) - _new_recv_qty)
+                                            _rem_amt = max(0.0, float(txn["total_amount"]) - _new_paid_amt)
+                                            line_api.push_partial_receipt(
+                                                _luid, txn["product_name"],
+                                                qty_received, amount_paid,
+                                                _rem_qty, _rem_amt,
+                                                group_id=_gid,
+                                            )
                                         st.success("✅ บันทึกแล้ว")
                                         st.rerun()
 
