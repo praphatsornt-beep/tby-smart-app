@@ -1609,6 +1609,7 @@ def render(tab5, products, customers):
                 _rs_w   = st.number_input("น้ำหนักรวมกล่อง (kg)", 0.1, 100.0, _rs_w_def, 0.1, key=f"sh_resend_w_{_rs_i}")
                 if st.button("📤 ส่ง iShip ใหม่", type="primary", key="sh_resend_btn"):
                     _old_tn = (_rs_row.get("tracking_no") or "").strip()
+                    st.session_state.pop("_cs_carrier_sel", None)
                     st.session_state["_iship_carrier_select"] = {
                         "tab":           "ship",
                         "postcode":      _rs_row.get("postal_code", ""),

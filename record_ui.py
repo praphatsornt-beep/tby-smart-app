@@ -687,6 +687,7 @@ def render(tab1, products, customers, customer_map):
                             "_customer_id": customer["id"],
                         }
                         if iship_api.is_configured():
+                            st.session_state.pop("_cs_carrier_sel", None)
                             st.session_state["_iship_carrier_select"] = {
                                 "tab":          "sale",
                                 "postcode":     m_postcode,
@@ -767,6 +768,7 @@ def render(tab1, products, customers, customer_map):
                             event_date=str(m_date), collect_ship_items=True,
                         )
                         if iship_api.is_configured() and _rxo_items:
+                            st.session_state.pop("_cs_carrier_sel", None)
                             st.session_state["_iship_carrier_select"] = {
                                 "tab":          "sale",
                                 "postcode":     m_postcode,
@@ -1327,6 +1329,7 @@ def render(tab1, products, customers, customer_map):
                         "_customer_name": _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
                     }
                     if iship_api.is_configured():
+                        st.session_state.pop("_cs_carrier_sel", None)
                         st.session_state["_iship_carrier_select"] = {
                             "tab":          "ship",
                             "postcode":     _sp_pc.strip(),
