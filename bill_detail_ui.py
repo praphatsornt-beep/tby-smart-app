@@ -754,13 +754,25 @@ def render(tab5, products, customers):
                             if not _unbilled_unpaid.empty:
                                 st.divider()
                                 st.markdown("**📦 เบิกของ** (ยังไม่เปิดบิล · ยังไม่จ่าย)")
-                                _bw = _unbilled_unpaid.groupby("รหัส").agg({"สินค้า":"first","สั่ง":"sum","ยอดรวม":"sum"}).reset_index()
-                                _bw.columns = ["รหัส","สินค้า","จำนวน","ยอด"]
+                                _bw_aggcols = {"สินค้า":"first","สั่ง":"sum","ยอดรวม":"sum"}
+                                _bw_outcols = ["รหัส","สินค้า","จำนวน","ยอด"]
+                                _has_pv = "PV รวม" in _unbilled_unpaid.columns
+                                if _has_pv:
+                                    _bw_aggcols["PV รวม"] = "sum"
+                                    _bw_outcols.append("PV")
+                                _bw = _unbilled_unpaid.groupby("รหัส").agg(_bw_aggcols).reset_index()
+                                _bw.columns = _bw_outcols
+                                _bw_fmt = {"ยอด":"{:,.0f}"}
+                                if _has_pv:
+                                    _bw_fmt["PV"] = "{:,.0f}"
                                 st.dataframe(
-                                    _bw.style.format({"ยอด":"{:,.0f}"}),
+                                    _bw.style.format(_bw_fmt),
                                     use_container_width=True, hide_index=True,
                                 )
-                                st.caption(f"รวม: {int(_bw['จำนวน'].sum())} ชิ้น | {_bw['ยอด'].sum():,.0f} ฿")
+                                _bw_cap = f"รวม: {int(_bw['จำนวน'].sum())} ชิ้น | {_bw['ยอด'].sum():,.0f} ฿"
+                                if _has_pv:
+                                    _bw_cap += f" | ⭐ {_bw['PV'].sum():,.0f} PV"
+                                st.caption(_bw_cap)
                             else:
                                 st.info("ไม่มีรายการค้าง")
                         else:
