@@ -643,8 +643,7 @@ def render(tab5, products, customers):
                                     f"🗑️ ยืนยันลบ {len(selected_ids)} รายการ", type="primary",
                                     key=f"del_items_now_multi_{customer_name}",
                                 ):
-                                    for _tid in selected_ids:
-                                        db.delete_transaction(_tid)
+                                    db.delete_transactions_batch(selected_ids)
                                     st.success(f"✅ ลบแล้ว {len(selected_ids)} รายการ")
                                     st.rerun()
 
@@ -1127,8 +1126,7 @@ def render(tab5, products, customers):
                 d1, d2 = st.columns([2, 1])
                 d1.warning(f"เลือก {len(to_del_idx)} รายการ")
                 if d2.button("🗑️ ลบรายการที่เลือก", type="secondary", use_container_width=True, key="hist_del_chk_btn"):
-                    for i in to_del_idx:
-                        db.delete_transaction(id_map.iloc[i])
+                    db.delete_transactions_batch([id_map.iloc[i] for i in to_del_idx])
                     st.success(f"✅ ลบ {len(to_del_idx)} รายการแล้ว")
                     st.session_state.pop("hist_table", None)
                     st.rerun()
@@ -1260,8 +1258,7 @@ def render(tab5, products, customers):
                 h_confirm_bulk = bc1.checkbox("ยืนยันลบทั้งหมดที่เคลียร์แล้ว", key="hist_bulk_chk")
                 if bc2.button(f"🗑️ ลบเคลียร์แล้วทั้งหมด ({len(cleared_ids)})",
                               disabled=not h_confirm_bulk, use_container_width=True, key="hist_bulk_del"):
-                    for tid in cleared_ids:
-                        db.delete_transaction(tid)
+                    db.delete_transactions_batch(cleared_ids)
                     st.success(f"✅ ลบ {len(cleared_ids)} รายการแล้ว")
                     st.rerun()
 

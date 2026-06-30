@@ -265,6 +265,18 @@ def delete_transaction(transaction_id: str) -> None:
     _clear_transaction_caches()
 
 
+def delete_transactions_batch(transaction_ids: list[str]) -> None:
+    """ลบหลาย transaction พร้อมกัน — batch แทนการลูปทีละรายการ (ลด round-trip)"""
+    if not transaction_ids:
+        return
+    db = get_supabase()
+    for i in range(0, len(transaction_ids), 50):
+        chunk = transaction_ids[i:i + 50]
+        db.table("partial_events").delete().in_("transaction_id", chunk).execute()
+        db.table("transactions").delete().in_("id", chunk).execute()
+    _clear_transaction_caches()
+
+
 def get_bill_details(bill_no: str) -> list[dict]:
     return (get_supabase().table("transactions")
             .select("product_name, qty, price_per_unit, total_amount, customers(name), date, bill_status")
