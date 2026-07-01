@@ -854,16 +854,6 @@ def render(tab5, products, customers):
                                 "remaining_qty": _rem_recv,
                             })
 
-                    # Phase 4: shipment events (match by bill date)
-                    for _r in _l_ships:
-                        for _bk, _bv in _bills_tl.items():
-                            if _bv["date"] == _r["date"]:
-                                _bv["events"].append({
-                                    "date": _r["date"], "order": 1, "type": "ส่งพัสดุ",
-                                    "detail": _r["product"], "tracking": _r["bill_no"],
-                                })
-                                break
-
                     # sort events within each bill
                     for _bv in _bills_tl.values():
                         _bv["events"].sort(key=lambda e: (e["date"], e["order"]))
@@ -933,7 +923,8 @@ def render(tab5, products, customers):
                                 _bill_rows = _bill_rows.sort_values("_dt")
                                 _disp = _bill_rows[_l_table_cols].reset_index(drop=True)
                                 _disp["หมายเหตุ"] = _disp["หมายเหตุ"].fillna("").apply(_fmt_note)
-                                _disp["สถานะรับของ"] = _bv["events"][0]["delivery"].split(" ", 1)[1]
+                                _dlv_raw = next((e.get("delivery","") for e in _bv["events"] if e.get("delivery")), "")
+                                _disp["สถานะรับของ"] = _dlv_raw.split(" ", 1)[1] if " " in _dlv_raw else _dlv_raw
                                 _disp = _disp[_l_table_cols_disp]
                                 st.dataframe(
                                     _disp, hide_index=True, use_container_width=True,
