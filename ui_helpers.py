@@ -667,10 +667,6 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
   .summary table{width:auto;margin-left:auto;border:none}
   .summary td{padding:3px 8px;border:none;font-size:13px}
   .big td{font-weight:900;font-size:15px;border-top:2px solid #000;padding-top:5px}
-  .two-col{display:flex;gap:0;height:100%}
-  .copy{width:50%;padding:16px;min-height:400px}
-  .vcut{width:2px;background:repeating-linear-gradient(to bottom,#aaa 0,#aaa 6px,transparent 6px,transparent 12px);flex-shrink:0}
-  .copy-lbl{font-size:10px;color:#999;margin-bottom:4px;font-style:italic}
   .btn{display:block;margin:0 auto 14px;padding:7px 28px;background:#c0392b;color:#fff;
        border:none;border-radius:6px;font-size:13px;cursor:pointer}
   @media print{
@@ -682,18 +678,12 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     td{border-bottom:1px solid #999!important;color:#000!important}
     tr:nth-child(even) td{background:#eee!important}
     .info{color:#333!important}
-    .copy-lbl{color:#333!important}
-    .vcut{background:repeating-linear-gradient(to bottom,#000 0,#000 4px,transparent 4px,transparent 8px)!important}
     b[style],span[style],[style*="color"]{color:#000!important}
     .summary .big td{font-weight:900}
   }"""
 
-    _body = f"""<div class="two-col">
-  <div class="copy">{_bill_body("สำหรับลูกค้า")}</div>
-  <div class="vcut"></div>
-  <div class="copy">{_bill_body("สำหรับร้าน")}</div>
-</div>"""
-    _height = 750
+    _body = _bill_body("")
+    _height = 550
 
     bill_html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>{_css}</style></head><body>

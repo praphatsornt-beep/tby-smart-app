@@ -164,39 +164,48 @@ def render(tab5, products, customers):
                         # ── ใบรับของ popup ───────────────────────────────────
                         _rp = st.session_state.get("_recv_popup")
                         if _rp and _rp.get("customer_name") == customer_name:
+                            def _prod_label(it):
+                                code = it.get("product_code", "")
+                                return f"[{code}] {it['product']}" if code else it["product"]
                             _recv_rows_html = "".join(
-                                f"<tr><td>{it['product']}</td><td style='text-align:center'>{it['qty']}</td></tr>"
+                                f"<tr><td>{_prod_label(it)}</td><td style='text-align:center'>{it['qty']}</td></tr>"
                                 for it in _rp["received"]
                             )
                             _pend_rows_html = "".join(
-                                f"<tr><td>{it['product']}</td><td style='text-align:center'>{it['qty']}</td></tr>"
+                                f"<tr><td>{_prod_label(it)}</td><td style='text-align:center'>{it['qty']}</td></tr>"
                                 for it in _rp["pending"]
                             ) or "<tr><td colspan='2' style='color:#888'>ไม่มีค้างรับ</td></tr>"
                             _recv_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
     <style>
+    *{{box-sizing:border-box;margin:0;padding:0}}
     html,body{{background:#fff!important;color:#000!important}}
-    body{{font-family:'Sarabun',sans-serif;padding:12px 16px;font-size:13px}}
-    h3{{margin:0 0 6px;font-size:15px;color:#000}}
-    .info{{margin-bottom:10px;font-size:13px;color:#000}}
-    b{{color:#000}}
-    table{{width:100%;border-collapse:collapse;margin:6px 0}}
-    th{{background:#333;color:#fff;padding:4px 8px;font-size:12px;text-align:left}}
-    td{{padding:4px 8px;border-bottom:1px solid #ccc;color:#000}}
+    body{{font-family:'Sarabun',sans-serif;padding:16px;font-size:13px}}
+    .header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
+    .header h1{{font-size:16px;font-weight:700}}
+    .header h2{{font-size:14px;font-weight:600;margin-top:2px}}
+    .header-right{{text-align:right;font-size:13px;font-weight:600}}
     .section{{margin:10px 0}}
-    .sig{{margin-top:28px;display:inline-block;border-top:1px solid #000;padding-top:4px;min-width:180px;text-align:center;font-size:12px;color:#000}}
-    .btn{{display:block;margin:0 0 10px;padding:5px 18px;background:#333;color:#fff;border:none;cursor:pointer;border-radius:4px;font-size:12px}}
-    @media print{{.btn{{display:none}}@page{{size:A6 portrait;margin:8mm}}}}
-    </style></head><body style="background:#fff;color:#000">
+    .section b{{font-size:13px}}
+    table{{width:100%;border-collapse:collapse;margin:6px 0;border:1px solid #000}}
+    th{{background:#000;color:#fff;padding:5px 6px;font-size:12px;text-align:left;border:1px solid #000}}
+    td{{padding:4px 6px;border:1px solid #aaa;font-size:12px;color:#000}}
+    tr:nth-child(even) td{{background:#f0f0f0}}
+    .sig{{margin-top:32px;border-top:1px solid #000;padding-top:4px;min-width:200px;display:inline-block;text-align:center;font-size:12px}}
+    .btn{{display:block;margin:0 0 12px;padding:6px 22px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:13px}}
+    @media print{{.btn{{display:none}}@page{{size:A5 portrait;margin:10mm}}*{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}th{{background:#000!important;color:#fff!important}}tr:nth-child(even) td{{background:#eee!important}}}}
+    </style></head><body>
     <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบรับของ</button>
-    <h3>ใบรับของ</h3>
-    <div class='info'>วันที่: {_rp['date']}<br>ลูกค้า: <b>{_rp['customer_name']}</b></div>
+    <div class='header'>
+      <div><h1>ใบรับของ ZHULIAN TBY</h1><h2>ลูกค้า: {_rp['customer_name']}</h2></div>
+      <div class='header-right'>วันที่: {_rp['date']}</div>
+    </div>
     <div class='section'><b>รายการที่รับวันนี้:</b>
-    <table><tr><th>สินค้า</th><th>จำนวนรับ</th></tr>{_recv_rows_html}</table></div>
-    <div class='section'><b>ยังค้างรับ:</b>
-    <table><tr><th>สินค้า</th><th>ค้างรับ</th></tr>{_pend_rows_html}</table></div>
-    <div class='sig'>ลายเซ็นผู้รับ</div>
+    <table><tr><th>รหัส / สินค้า</th><th style='text-align:center;width:80px'>จำนวนรับ</th></tr>{_recv_rows_html}</table></div>
+    <div class='section' style='margin-top:14px'><b>ยังค้างรับ:</b>
+    <table><tr><th>รหัส / สินค้า</th><th style='text-align:center;width:80px'>ค้างรับ</th></tr>{_pend_rows_html}</table></div>
+    <div style='margin-top:24px'><div class='sig'>ลายเซ็นผู้รับ</div></div>
     </body></html>"""
-                            components.html(_recv_html, height=360, scrolling=False)
+                            components.html(_recv_html, height=430, scrolling=False)
                             if st.button("✕ ปิดใบรับของ", key=f"close_recv_{customer_name}"):
                                 del st.session_state["_recv_popup"]
                                 st.rerun()
@@ -415,11 +424,11 @@ def render(tab5, products, customers):
                                                 if _rr["id"] == txn_id:
                                                     _pq = max(0, _pq - int(qty_received))
                                                 if _pq > 0:
-                                                    _rp_pending.append({"product": _rr["สินค้า"], "qty": _pq})
+                                                    _rp_pending.append({"product": _rr["สินค้า"], "qty": _pq, "product_code": _rr.get("รหัส", "")})
                                             st.session_state["_recv_popup"] = {
                                                 "customer_name": customer_name,
                                                 "date": str(event_date),
-                                                "received": [{"product": txn["product_name"], "qty": int(qty_received)}],
+                                                "received": [{"product": txn["product_name"], "qty": int(qty_received), "product_code": txn.get("product_id", "")}],
                                                 "pending": _rp_pending,
                                             }
                                         if _luid and line_api.is_configured() and (qty_received > 0 or amount_paid > 0.01):
@@ -571,7 +580,7 @@ def render(tab5, products, customers):
                                     })
                                     if _actual_qty > 0:
                                         _saved_r += 1
-                                        _mrp_received.append({"product": row["สินค้า"], "qty": _actual_qty})
+                                        _mrp_received.append({"product": row["สินค้า"], "qty": _actual_qty, "product_code": row.get("รหัส", "")})
                                         _mrp_id_qty[row["_id"]] = _actual_qty
                                     if _actual_amt > 0.01:
                                         _saved_p += 1
@@ -589,7 +598,7 @@ def render(tab5, products, customers):
                                         if _rr["id"] in _mrp_id_qty:
                                             _pq = max(0, _pq - _mrp_id_qty[_rr["id"]])
                                         if _pq > 0:
-                                            _mrp_pending.append({"product": _rr["สินค้า"], "qty": _pq})
+                                            _mrp_pending.append({"product": _rr["สินค้า"], "qty": _pq, "product_code": _rr.get("รหัส", "")})
                                     st.session_state["_recv_popup"] = {
                                         "customer_name": customer_name,
                                         "date":          str(mc_date),
