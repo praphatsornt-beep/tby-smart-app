@@ -666,7 +666,12 @@ def render(tab5, products, customers):
             db._clear_transaction_caches()
             st.rerun()
         _l_customers = db.get_customers()
-        _l_opts = ["— เลือกลูกค้า —"] + sorted([c["name"] for c in _l_customers], key=str.casefold)
+        _l_all_names_df = db.get_all_transactions_df()
+        _l_cust_with_txn = set(_l_all_names_df["ลูกค้า"].dropna().unique()) if not _l_all_names_df.empty else set()
+        _l_opts = ["— เลือกลูกค้า —"] + sorted(
+            [c["name"] for c in _l_customers if c["name"] in _l_cust_with_txn],
+            key=str.casefold,
+        )
         _lx1, _lx2 = st.columns([3, 2])
         _l_sel = _lx1.selectbox("👤 ลูกค้า", _l_opts, key="t5_ledger_cust")
         if _l_sel != "— เลือกลูกค้า —":
