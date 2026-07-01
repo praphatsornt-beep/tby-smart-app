@@ -87,11 +87,12 @@ def push_outstanding(line_user_id: str, customer_name: str,
 def push_partial_receipt(line_user_id: str, product_name: str,
                          qty_received: float, amount_paid: float,
                          remaining_qty: float, remaining_amount: float,
-                         group_id: str = "") -> dict:
+                         product_code: str = "", group_id: str = "") -> dict:
     """แจ้งลูกค้าเมื่อรับของ/จ่ายเงินบางส่วน"""
     lines = ["รับของวันนี้ค่ะ 📦"]
     if qty_received > 0:
-        lines.append(f"• {product_name} ×{int(qty_received)}")
+        _prod_label = f"[{product_code}] {product_name}" if product_code else product_name
+        lines.append(f"• {_prod_label} ×{int(qty_received)}")
     if amount_paid > 0.01:
         lines.append(f"💰 จ่ายวันนี้: {amount_paid:,.0f} บาท")
     lines.append("")

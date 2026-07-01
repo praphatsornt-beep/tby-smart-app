@@ -215,6 +215,7 @@ def render(tab5, products, customers):
                                     _pr["line_user_id"], _pr["product_name"],
                                     _pr["qty_received"], _pr["amount_paid"],
                                     _pr["remaining_qty"], _pr["remaining_amount"],
+                                    product_code=_pr.get("product_code", ""),
                                     group_id=_pr.get("group_id", ""),
                                 )
                                 if _pr_res.get("ok"):
@@ -431,6 +432,7 @@ def render(tab5, products, customers):
                                                 "line_user_id":  _luid,
                                                 "group_id":      _gid,
                                                 "product_name":  txn["product_name"],
+                                                "product_code":  txn.get("product_id", ""),
                                                 "qty_received":  qty_received,
                                                 "amount_paid":   amount_paid,
                                                 "remaining_qty": _rem_qty,
