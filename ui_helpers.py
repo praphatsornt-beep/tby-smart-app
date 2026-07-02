@@ -720,6 +720,27 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     _t7_tids = show_p["id"].tolist()
     _t7_single = len(bill_nos) == 1 and bill_nos[0]
 
+    # ── ปุ่มแจ้ง LINE หลังบันทึกรับเงิน ─────────────────────────
+    _pay_line = st.session_state.get(f"{key_prefix}_pay_line")
+    if _pay_line and _t7_line_uid:
+        _pl1, _pl2, _pl3 = st.columns([3, 1, 1])
+        _pl1.info(f"💰 บันทึกรับเงิน {_pay_line['amount_paid']:,.0f} ฿ แล้ว")
+        if _pl2.button("📨 แจ้ง LINE", key=f"{key_prefix}_pay_line_btn", type="primary", use_container_width=True):
+            _lr = line_api.push_partial_receipt(
+                _t7_line_uid, "", 0, _pay_line["amount_paid"],
+                0, _pay_line.get("remaining_amount", 0),
+                group_id=_t7_gid,
+                items=_pay_line.get("items"),
+            )
+            if _lr.get("ok"):
+                del st.session_state[f"{key_prefix}_pay_line"]
+                st.success("✅ ส่ง LINE แล้ว")
+            else:
+                st.error(_lr.get("error"))
+        if _pl3.button("✕", key=f"{key_prefix}_pay_line_cls", use_container_width=True):
+            del st.session_state[f"{key_prefix}_pay_line"]
+            st.rerun()
+
     with st.expander("💰 บันทึกรับเงิน"):
         _t7_owed = float(show_p["ค้างจ่าย"].sum())
         _t7_paid_so_far = float(show_p["จ่ายแล้ว"].sum())
@@ -764,6 +785,14 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                 if float(_t7_pay_amt) >= _t7_owed - 0.01:
                     for _tid in _t7_tids:
                         db.update_transaction_status(_tid, pay_status="จ่ายแล้ว")
+                if _t7_line_uid and line_api.is_configured():
+                    _rem_after = max(0.0, _t7_owed - float(_t7_pay_amt))
+                    st.session_state[f"{key_prefix}_pay_line"] = {
+                        "amount_paid": float(_t7_pay_amt),
+                        "remaining_amount": _rem_after,
+                        "items": [{"product_name": r["สินค้า"], "product_code": r.get("รหัส", ""), "qty_received": 0}
+                                  for _, r in show_p.iterrows()],
+                    }
                 st.success(f"✅ บันทึกรับเงิน {_t7_pay_amt:,.0f} ฿ แล้ว")
                 st.rerun()
 

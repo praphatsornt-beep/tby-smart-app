@@ -215,17 +215,30 @@ def render(tab5, products, customers):
                         _pr = st.session_state.get("_partial_recv_line")
                         if _pr and _pr.get("customer_name") == customer_name:
                             _pr_c1, _pr_c2 = st.columns([3, 1])
+                            _pr_items = _pr.get("items")
+                            if _pr_items:
+                                _pr_summary = " + ".join(
+                                    (f"[{it['product_code']}] " if it.get("product_code") else "")
+                                    + it.get("product_name", "")
+                                    + (f" ×{it['qty_received']}" if it.get("qty_received", 0) > 0 else "")
+                                    for it in _pr_items
+                                )
+                            else:
+                                _pr_summary = (f"📦 {_pr['product_name']}" if _pr.get("product_name") else "")
+                                if _pr.get("qty_received", 0) > 0:
+                                    _pr_summary += f" ×{int(_pr['qty_received'])}"
                             _pr_c1.info(
-                                f"📦 {_pr['product_name']} ×{int(_pr['qty_received'])}"
-                                + (f" · จ่าย {_pr['amount_paid']:,.0f} ฿" if _pr['amount_paid'] > 0.01 else "")
+                                _pr_summary
+                                + (f" · จ่าย {_pr['amount_paid']:,.0f} ฿" if _pr.get("amount_paid", 0) > 0.01 else "")
                             )
                             if _pr_c2.button("📨 แจ้ง LINE", key=f"pr_line_{customer_name}", type="primary", use_container_width=True):
                                 _pr_res = line_api.push_partial_receipt(
-                                    _pr["line_user_id"], _pr["product_name"],
-                                    _pr["qty_received"], _pr["amount_paid"],
+                                    _pr["line_user_id"], _pr.get("product_name", ""),
+                                    _pr.get("qty_received", 0), _pr["amount_paid"],
                                     _pr["remaining_qty"], _pr["remaining_amount"],
                                     product_code=_pr.get("product_code", ""),
                                     group_id=_pr.get("group_id", ""),
+                                    items=_pr_items,
                                 )
                                 if _pr_res.get("ok"):
                                     st.success("✅ ส่ง LINE แล้ว")
@@ -556,6 +569,7 @@ def render(tab5, products, customers):
                                          use_container_width=True, key=f"multi_all_{customer_name}"):
                                 _saved_r, _saved_p = 0, 0
                                 _mrp_received, _mrp_id_qty = [], {}
+                                _total_paid_actual = 0.0
                                 for i, row in _combo_df.iterrows():
                                     _qty   = int(_combo_edit.iloc[i]["รับจริง"])
                                     _amt   = float(_combo_edit.iloc[i]["จ่ายจริง"])
@@ -583,6 +597,7 @@ def render(tab5, products, customers):
                                         _mrp_received.append({"product": row["สินค้า"], "qty": _actual_qty, "product_code": row.get("รหัส", "")})
                                         _mrp_id_qty[row["_id"]] = _actual_qty
                                     if _actual_amt > 0.01:
+                                        _total_paid_actual += _actual_amt
                                         _saved_p += 1
                                         if _actual_amt >= _owed - 0.01:
                                             db.update_transaction_status(row["_id"], pay_status="จ่ายแล้ว")
@@ -590,20 +605,39 @@ def render(tab5, products, customers):
                                     for i, row in _combo_df.iterrows():
                                         if row["สถานะบิล"] == "ยังไม่เปิดบิล":
                                             db.update_transaction_status(row["_id"], bill_status="เปิดบิลแล้ว")
-                                # popup รับของ
+                                # popup รับของ + LINE notification
+                                _mrp_pending = []
+                                for _, _rr in grp.iterrows():
+                                    _pq = int(_rr["ค้างรับ"])
+                                    if _rr["id"] in _mrp_id_qty:
+                                        _pq = max(0, _pq - _mrp_id_qty[_rr["id"]])
+                                    if _pq > 0:
+                                        _mrp_pending.append({"product": _rr["สินค้า"], "qty": _pq, "product_code": _rr.get("รหัส", "")})
                                 if _mrp_received:
-                                    _mrp_pending = []
-                                    for _, _rr in grp.iterrows():
-                                        _pq = int(_rr["ค้างรับ"])
-                                        if _rr["id"] in _mrp_id_qty:
-                                            _pq = max(0, _pq - _mrp_id_qty[_rr["id"]])
-                                        if _pq > 0:
-                                            _mrp_pending.append({"product": _rr["สินค้า"], "qty": _pq, "product_code": _rr.get("รหัส", "")})
                                     st.session_state["_recv_popup"] = {
                                         "customer_name": customer_name,
                                         "date":          str(mc_date),
                                         "received":      _mrp_received,
                                         "pending":       _mrp_pending,
+                                    }
+                                if _luid and line_api.is_configured() and (_mrp_received or _total_paid_actual > 0.01):
+                                    _rem_qty_all = sum(_pq for _, _rr in grp.iterrows()
+                                                       for _pq in [max(0, int(_rr["ค้างรับ"]) - _mrp_id_qty.get(_rr["id"], 0))])
+                                    _rem_amt_all = max(0.0, float(grp["ค้างจ่าย"].sum()) - _total_paid_actual)
+                                    st.session_state["_partial_recv_line"] = {
+                                        "customer_name":    customer_name,
+                                        "line_user_id":     _luid,
+                                        "group_id":         _gid,
+                                        "product_name":     "",
+                                        "product_code":     "",
+                                        "qty_received":     sum(it["qty"] for it in _mrp_received),
+                                        "amount_paid":      _total_paid_actual,
+                                        "remaining_qty":    _rem_qty_all,
+                                        "remaining_amount": _rem_amt_all,
+                                        "items": [
+                                            {"product_name": it["product"], "product_code": it.get("product_code", ""), "qty_received": it["qty"]}
+                                            for it in _mrp_received
+                                        ],
                                     }
                                 _parts = []
                                 if _saved_r:

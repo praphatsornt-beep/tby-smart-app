@@ -1,6 +1,7 @@
 import os
 import requests
 import streamlit as st
+from datetime import date
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 
@@ -87,13 +88,26 @@ def push_outstanding(line_user_id: str, customer_name: str,
 def push_partial_receipt(line_user_id: str, product_name: str,
                          qty_received: float, amount_paid: float,
                          remaining_qty: float, remaining_amount: float,
-                         product_code: str = "", group_id: str = "") -> dict:
-    """แจ้งลูกค้าเมื่อรับของ/จ่ายเงินบางส่วน"""
-    lines = ["รับของวันนี้ค่ะ 📦"]
-    _prod_label = f"[{product_code}] {product_name}" if product_code else product_name
-    if _prod_label:
-        _qty_suffix = f" ×{int(qty_received)}" if qty_received > 0 else ""
-        lines.append(f"• {_prod_label}{_qty_suffix}")
+                         product_code: str = "", group_id: str = "",
+                         items: list = None) -> dict:
+    """แจ้งลูกค้าเมื่อรับของ/จ่ายเงินบางส่วน
+    items: [{"product_name", "product_code", "qty_received"}] สำหรับหลายรายการ
+    """
+    _today = date.today().strftime("%d.%m.%Y")
+    lines = [f"รายการวันนี้ {_today} 📦"]
+    if items:
+        for it in items:
+            _pc = it.get("product_code", "")
+            _pn = it.get("product_name", "")
+            _lbl = f"[{_pc}] {_pn}" if _pc else _pn
+            _qs = f" ×{int(it.get('qty_received', 0))}" if it.get("qty_received", 0) > 0 else ""
+            if _lbl:
+                lines.append(f"• {_lbl}{_qs}")
+    else:
+        _prod_label = f"[{product_code}] {product_name}" if product_code else product_name
+        if _prod_label:
+            _qty_suffix = f" ×{int(qty_received)}" if qty_received > 0 else ""
+            lines.append(f"• {_prod_label}{_qty_suffix}")
     if amount_paid > 0.01:
         lines.append(f"💰 จ่ายวันนี้: {amount_paid:,.0f} บาท")
     lines.append("")
