@@ -90,9 +90,10 @@ def push_partial_receipt(line_user_id: str, product_name: str,
                          product_code: str = "", group_id: str = "") -> dict:
     """แจ้งลูกค้าเมื่อรับของ/จ่ายเงินบางส่วน"""
     lines = ["รับของวันนี้ค่ะ 📦"]
-    if qty_received > 0:
-        _prod_label = f"[{product_code}] {product_name}" if product_code else product_name
-        lines.append(f"• {_prod_label} ×{int(qty_received)}")
+    _prod_label = f"[{product_code}] {product_name}" if product_code else product_name
+    if _prod_label:
+        _qty_suffix = f" ×{int(qty_received)}" if qty_received > 0 else ""
+        lines.append(f"• {_prod_label}{_qty_suffix}")
     if amount_paid > 0.01:
         lines.append(f"💰 จ่ายวันนี้: {amount_paid:,.0f} บาท")
     lines.append("")
