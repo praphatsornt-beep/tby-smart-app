@@ -49,8 +49,173 @@ if "code" in _qp and "shop_id" in _qp:
 
 st.markdown("""
 <style>
-[data-testid="stMetricValue"] { font-size: 1.4rem; }
-[data-testid="stMetricLabel"] { font-size: 0.8rem; }
+/* ===== TBY SMART APP — THEME: FOREST GREEN + ORANGE ===== */
+
+/* ── App header bar ── */
+header[data-testid="stHeader"] {
+    background: linear-gradient(90deg, #1B4332 0%, #2D6A4F 100%);
+    box-shadow: 0 2px 8px rgba(27,67,50,0.25);
+}
+
+/* ── Page title ── */
+h1 {
+    color: #1B4332 !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.5px;
+    padding-bottom: 0.4rem;
+    border-bottom: 3px solid #E07B39;
+    margin-bottom: 1rem !important;
+}
+h2 { color: #2D6A4F !important; font-weight: 700 !important; }
+h3 { color: #2D6A4F !important; font-weight: 600 !important; }
+
+/* ── Tabs ── */
+.stTabs [data-baseweb="tab-list"] {
+    background: #1B4332;
+    border-radius: 10px;
+    padding: 5px 6px;
+    gap: 3px;
+    box-shadow: 0 2px 8px rgba(27,67,50,0.2);
+}
+.stTabs [data-baseweb="tab"] {
+    color: rgba(255,255,255,0.6) !important;
+    background: transparent !important;
+    border-radius: 7px !important;
+    font-weight: 500;
+    font-size: 0.84rem;
+    padding: 6px 13px !important;
+    border: none !important;
+    transition: background 0.18s, color 0.18s;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    background: rgba(255,255,255,0.1) !important;
+    color: rgba(255,255,255,0.9) !important;
+}
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+    background: #E07B39 !important;
+    color: #fff !important;
+    font-weight: 700 !important;
+    box-shadow: 0 2px 8px rgba(224,123,57,0.4);
+}
+.stTabs [data-baseweb="tab-highlight"] { display: none !important; }
+.stTabs [data-baseweb="tab-border"] { display: none !important; }
+
+/* ── Primary buttons (orange) ── */
+button[data-testid="baseButton-primary"] {
+    background: linear-gradient(135deg, #E07B39 0%, #C86A2A 100%) !important;
+    color: #fff !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 600 !important;
+    box-shadow: 0 2px 8px rgba(224,123,57,0.35) !important;
+    transition: box-shadow 0.18s, transform 0.18s !important;
+}
+button[data-testid="baseButton-primary"]:hover {
+    box-shadow: 0 4px 16px rgba(224,123,57,0.5) !important;
+    transform: translateY(-1px) !important;
+}
+button[data-testid="baseButton-primary"]:active {
+    transform: translateY(0) !important;
+    box-shadow: 0 2px 6px rgba(224,123,57,0.3) !important;
+}
+
+/* ── Secondary buttons (green outline) ── */
+button[data-testid="baseButton-secondary"] {
+    border: 1.5px solid #2D6A4F !important;
+    color: #2D6A4F !important;
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+    background: white !important;
+    transition: all 0.18s !important;
+}
+button[data-testid="baseButton-secondary"]:hover {
+    background: #EAF2EC !important;
+    border-color: #1B4332 !important;
+    color: #1B4332 !important;
+}
+
+/* ── Metrics ── */
+[data-testid="stMetric"] {
+    background: white;
+    border-radius: 12px;
+    padding: 1rem 1.25rem !important;
+    border-left: 4px solid #E07B39;
+    box-shadow: 0 2px 10px rgba(27,67,50,0.08);
+}
+[data-testid="stMetricValue"] {
+    font-size: 1.5rem !important;
+    font-weight: 700 !important;
+    color: #1B4332 !important;
+}
+[data-testid="stMetricLabel"] {
+    font-size: 0.78rem !important;
+    font-weight: 600 !important;
+    color: #2D6A4F !important;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+/* ── Expanders ── */
+[data-testid="stExpander"] {
+    border: 1px solid #C8DDD0 !important;
+    border-radius: 10px !important;
+    overflow: hidden;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+}
+[data-testid="stExpander"] summary {
+    background: #EAF2EC !important;
+    color: #1B4332 !important;
+    font-weight: 600 !important;
+    padding: 0.55rem 1rem !important;
+}
+[data-testid="stExpander"] summary:hover {
+    background: #D8F3DC !important;
+}
+
+/* ── Text/Number inputs ── */
+.stTextInput input,
+.stNumberInput input,
+.stTextArea textarea {
+    border-radius: 8px !important;
+    border: 1.5px solid #C8DDD0 !important;
+    transition: border-color 0.18s, box-shadow 0.18s !important;
+}
+.stTextInput input:focus,
+.stNumberInput input:focus,
+.stTextArea textarea:focus {
+    border-color: #40916C !important;
+    box-shadow: 0 0 0 3px rgba(64,145,108,0.18) !important;
+}
+
+/* ── Select boxes ── */
+[data-baseweb="select"] > div:first-child {
+    border-radius: 8px !important;
+    border: 1.5px solid #C8DDD0 !important;
+    transition: border-color 0.18s !important;
+}
+[data-baseweb="select"] > div:first-child:focus-within {
+    border-color: #40916C !important;
+    box-shadow: 0 0 0 3px rgba(64,145,108,0.18) !important;
+}
+
+/* ── DataFrame / Data editor ── */
+[data-testid="stDataFrame"],
+[data-testid="stDataEditor"] {
+    border-radius: 10px !important;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* ── Block container padding ── */
+.block-container {
+    padding-top: 1.5rem !important;
+}
+
+/* ── Dividers ── */
+hr {
+    border-color: #C8DDD0 !important;
+    margin: 0.75rem 0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
