@@ -222,6 +222,66 @@ hr {
     border-color: #C8DDD0 !important;
     margin: 0.75rem 0 !important;
 }
+
+/* ── Typography / Readability ── */
+html { font-size: 15.5px; }
+
+/* Body text & markdown */
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stMarkdownContainer"] li,
+[data-testid="stText"] p {
+    font-size: 0.95rem !important;
+    line-height: 1.7 !important;
+    color: #111111 !important;
+}
+
+/* Widget labels */
+label,
+[data-testid="stWidgetLabel"] p {
+    font-size: 0.88rem !important;
+    font-weight: 600 !important;
+    color: #111111 !important;
+    letter-spacing: 0.01em;
+    line-height: 1.5 !important;
+}
+
+/* Input / textarea text */
+.stTextInput input,
+.stNumberInput input,
+.stTextArea textarea {
+    font-size: 0.95rem !important;
+    color: #111111 !important;
+}
+
+/* Selectbox value text */
+[data-baseweb="select"] span,
+[data-baseweb="select"] div[class*="placeholder"] {
+    font-size: 0.93rem !important;
+    color: #111111 !important;
+}
+
+/* st.info / st.success / st.warning / st.error */
+[data-testid="stAlert"] p {
+    font-size: 0.9rem !important;
+    line-height: 1.65 !important;
+    color: #111111 !important;
+}
+
+/* Caption / small text */
+[data-testid="stCaptionContainer"] p {
+    font-size: 0.8rem !important;
+    color: #555 !important;
+    line-height: 1.6 !important;
+}
+
+/* Dataframe cells */
+[data-testid="stDataFrame"] td,
+[data-testid="stDataFrame"] th,
+[data-testid="stDataEditor"] td,
+[data-testid="stDataEditor"] th {
+    font-size: 0.88rem !important;
+    line-height: 1.5 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
