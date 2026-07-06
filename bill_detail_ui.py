@@ -17,13 +17,16 @@ from ui_helpers import (
 import carriers as carr
 
 
-def render(tab5, products, customers):
-    with tab5:
-        _t5_out, _t5_ledger, _t5_txn, _t5_ship = st.tabs([
-            "💰 ยอดค้าง / จัดการบิล", "👤 บัตรลูกค้า", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"
-        ])
+_T5_TABS = ["💰 ยอดค้าง / จัดการบิล", "👤 บัตรลูกค้า", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"]
 
-    with _t5_out:
+
+def render(products, customers):
+    try:
+        _t5_active = st.pills("", _T5_TABS, key="_t5_active_sub", label_visibility="collapsed") or _T5_TABS[0]
+    except AttributeError:
+        _t5_active = st.radio("", _T5_TABS, horizontal=True, key="_t5_active_sub", label_visibility="collapsed")
+
+    if _t5_active == _T5_TABS[0]:
         _out_h1, _out_h2 = st.columns([5, 1])
         _out_h1.subheader("ยอดค้างลูกค้า")
         if _out_h2.button("🔄 รีเฟรชยอด", key="t5_out_refresh", help="กดก่อนบันทึกรับเงิน/รับของ เผื่อลูกค้าจ่าย/รับของผ่าน LINE มาแล้ว"):
@@ -61,7 +64,6 @@ def render(tab5, products, customers):
                 st.info("ไม่มีบิลในระบบ")
         st.divider()
 
-        customers = db.get_customers()
         if not customers:
             st.info("ยังไม่มีข้อมูล")
         else:
@@ -693,13 +695,13 @@ def render(tab5, products, customers):
                                     st.rerun()
 
 
-    with _t5_ledger:
+    elif _t5_active == _T5_TABS[1]:
         _led_h1, _led_h2 = st.columns([5, 1])
         _led_h1.subheader("บัตรลูกค้า")
         if _led_h2.button("🔄 รีเฟรชยอด", key="t5_ledger_refresh", help="กดก่อนบันทึกรับเงิน/รับของ เผื่อลูกค้าจ่าย/รับของผ่าน LINE มาแล้ว"):
             db._clear_transaction_caches()
             st.rerun()
-        _l_customers = db.get_customers()
+        _l_customers = customers
         _l_all_names_df = db.get_all_transactions_df()
         _l_cust_with_txn = set(_l_all_names_df["ลูกค้า"].dropna().unique()) if not _l_all_names_df.empty else set()
         _l_opts = ["— เลือกลูกค้า —"] + sorted(
@@ -1076,10 +1078,10 @@ def render(tab5, products, customers):
                 else:
                     st.caption("ไม่มีประวัติ")
 
-    with _t5_txn:
+    elif _t5_active == _T5_TABS[2]:
         st.subheader("รายละเอียดบิล")
 
-        customers_h = db.get_customers()
+        customers_h = customers
         h_col1, h_col2 = st.columns(2)
         with h_col1:
             h_filter_cust = st.selectbox(
@@ -1332,7 +1334,7 @@ def render(tab5, products, customers):
             st.divider()
             with st.expander("✏️ แก้ไขรายการ"):
                 all_products_e = db.get_products()
-                all_customers_e = db.get_customers()
+                all_customers_e = customers
                 product_map_e = {p["name"]: p for p in all_products_e}
                 customer_map_e = {c["name"]: c for c in all_customers_e}
 
@@ -1445,7 +1447,7 @@ def render(tab5, products, customers):
                 st.dataframe(_ship_df_h, hide_index=True, use_container_width=True)
 
 
-    with _t5_ship:
+    elif _t5_active == _T5_TABS[3]:
         st.subheader("ประวัติการส่งของ")
 
         _sh_cod_col, _sh_status_col, _sh_sync_col = st.columns([4, 2, 2])
@@ -1520,7 +1522,7 @@ def render(tab5, products, customers):
             _sh_cod_col.caption(f"✅ COD โอนแล้ว {len(_sh_cod_map)} tracking")
 
         # ── filter ลูกค้า ─────────────────────────────────────────────────
-        _sh_customers = db.get_customers()
+        _sh_customers = customers
         _sh_cust_map  = {c["name"]: c["id"] for c in _sh_customers}
         _sh_cust_opts = ["— ทั้งหมด —"] + sorted(_sh_cust_map.keys(), key=str.casefold)
         _sh_cust_sel  = st.selectbox("ลูกค้า", _sh_cust_opts, key="sh_cust_filter",

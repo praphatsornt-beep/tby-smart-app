@@ -659,7 +659,7 @@ if _active_tab == _TAB_NAMES[0]:
 elif _active_tab == _TAB_NAMES[1]:
     record_ui.render(st.container(), _products, _customers, {c["name"]: c for c in _customers})
 elif _active_tab == _TAB_NAMES[2]:
-    bill_detail_ui.render(st.container(), _products, _customers)
+    bill_detail_ui.render(_products, _customers)
 elif _active_tab == _TAB_NAMES[3]:
     stock_ui.render()
 elif _active_tab == _TAB_NAMES[4]:

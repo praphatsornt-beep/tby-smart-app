@@ -20,12 +20,18 @@ from ui_helpers import (
 import carriers as carr
 
 
+_T1_TABS = ["📝 บันทึกขาย", "📦 ส่งของ", "🔢 คำนวณยอด"]
+
+
 def render(tab1, products, customers, customer_map):
     """Render tab1: บันทึกรายการ (sub_calc, sub_ship, sub_sale)."""
     with tab1:
-        _sub_calc, _sub_ship, _sub_sale = st.tabs(["🔢 คำนวณยอด", "📦 ส่งของ", "📝 บันทึกขาย"])
+        try:
+            _sub_active = st.pills("", _T1_TABS, key="_t1_active_sub", label_visibility="collapsed") or _T1_TABS[0]
+        except AttributeError:
+            _sub_active = st.radio("", _T1_TABS, horizontal=True, key="_t1_active_sub", label_visibility="collapsed")
 
-        with _sub_sale:
+        if _sub_active == "📝 บันทึกขาย":
             _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
                           "m_bill","m_pay","m_delivery","m_cod","m_partial_amount",
                           "_cart_base","m_postcode","m_carrier","m_zone","m_iship_note",
@@ -59,9 +65,6 @@ def render(tab1, products, customers, customer_map):
                 st.session_state.pop(_cart_key, None)
                 st.session_state["_cart_version"] = _cart_ver + 1
                 st.rerun()
-
-            products = db.get_products()
-            customers = db.get_customers()
 
             if not products:
                 st.warning("⚠️ ยังไม่มีข้อมูลสินค้า กรุณาเพิ่มสินค้าใน Tab ⚙️ ก่อน")
@@ -990,7 +993,7 @@ def render(tab1, products, customers, customer_map):
 
         # ─────────────────────────────────────────────────────────────────────────────
 
-        with _sub_ship:
+        elif _sub_active == "📦 ส่งของ":
             _sp_av   = st.session_state.get("_sp_addr_ver", 0)
             _sp_keys = [f"sp_rname_v{_sp_av}",f"sp_rphone_v{_sp_av}",f"sp_al_v{_sp_av}",
                         f"sp_dt_v{_sp_av}",f"sp_am_v{_sp_av}",f"sp_pv_v{_sp_av}",
@@ -1029,8 +1032,8 @@ def render(tab1, products, customers, customer_map):
                 st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
                 st.rerun()
 
-            _sp = db.get_products()
-            _sc = db.get_customers()
+            _sp = products
+            _sc = customers
             _sc_map = {c["name"]: c for c in _sc}
 
             # ── เลือกลูกค้า + วันที่ ─────────────────────────────────────────
@@ -1436,14 +1439,14 @@ def render(tab1, products, customers, customer_map):
                     del st.session_state["_sp_iship_pending"]
                     st.rerun()
 
-        with _sub_calc:
+        elif _sub_active == "🔢 คำนวณยอด":
             st.subheader("คำนวณยอด")
             st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ เช่น `TF2581-2 RB2306-1 SH-kg12170 COD`")
 
             _parse_calc_order = calc_logic.parse_calc_order
 
-            _calc_products  = db.get_products()
-            _calc_customers = db.get_customers()
+            _calc_products  = products
+            _calc_customers = customers
             _calc_cust_map  = {c["name"]: c for c in _calc_customers}
 
             _calc_ver = st.session_state.get("_calc_ver", 0)
