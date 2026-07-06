@@ -1,8 +1,18 @@
-var CHANNEL_ACCESS_TOKEN = 'OIh78V9+ndk5UfBUdOdSLY1jCVFLKQ4cRzBToKI0IJRlZ/zDrNhCliun3WN45m9g8WQZ1yMlOUyXGl5bYFnLEB1cztMgM2NxwG/yVZTWEEwGbSzuakH/Yn/qn4uheph2DvO3jpKWUeNTCFDEkNg4PQdB04t89/1O/w1cDnyilFU=';
-var QR_IMAGE_URL = 'https://i.postimg.cc/x1QKRxsh/E2A8A0F2-2BEA-40A8-805C-49273D6A23D9.jpg';
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚙️  Script Properties — วิธีตั้งค่า
+//    GAS Editor > ⚙️ Project Settings > Script Properties > Add property:
+//      CHANNEL_ACCESS_TOKEN  — LINE OA Channel Access Token (LINE Developers Console)
+//      CHANNEL_SECRET        — LINE OA Channel Secret (สำหรับ verify webhook signature)
+//      SUPABASE_URL          — https://xxxx.supabase.co
+//      SUPABASE_KEY          — anon key จาก Supabase > Settings > API
+// ─────────────────────────────────────────────────────────────────────────────
 
-var SUPABASE_URL = 'https://vpvpcdtpysfbatkugfzs.supabase.co';
-var SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZwdnBjZHRweXNmYmF0a3VnZnpzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY3NzY3MTAsImV4cCI6MjA5MjM1MjcxMH0.PndMvCduruClArolKh56vS5fMkMPt8zWbgnYEex5Qk8';
+var _scriptProps         = PropertiesService.getScriptProperties();
+var CHANNEL_ACCESS_TOKEN = _scriptProps.getProperty('CHANNEL_ACCESS_TOKEN');
+var QR_IMAGE_URL         = 'https://i.postimg.cc/x1QKRxsh/E2A8A0F2-2BEA-40A8-805C-49273D6A23D9.jpg';
+
+var SUPABASE_URL = _scriptProps.getProperty('SUPABASE_URL');
+var SUPABASE_KEY = _scriptProps.getProperty('SUPABASE_KEY');
 
 // คำสั่งเก่า/เบิก/เบิกจ่าย/จ่าย/check ต้องมี #ชื่อผู้บันทึก ที่อยู่ในลิสต์นี้
 // (กันลูกค้าพิมพ์โดนคำสั่งโดยไม่ตั้งใจ — ถ้าไม่มี # ในลิสต์นี้ จะไม่ทำงานเลย)
@@ -44,6 +54,17 @@ function _getProducts() {
 // ─── doPost ──────────────────────────────────────────────────────────────────
 
 function doPost(e) {
+  // ── LINE webhook signature verification (HMAC-SHA256) ─────────────────────
+  var _channelSecret = _scriptProps.getProperty('CHANNEL_SECRET');
+  if (_channelSecret) {
+    var _sig      = (e.headers && e.headers['X-Line-Signature']) || '';
+    var _computed = Utilities.base64Encode(
+      Utilities.computeHmacSha256Signature(e.postData.contents, _channelSecret)
+    );
+    if (_sig !== _computed) return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   var contents = JSON.parse(e.postData.contents);
   var event = contents.events[0];
 

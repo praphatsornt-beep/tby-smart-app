@@ -8,10 +8,16 @@ from datetime import date
 import database as db
 
 
-def render():
-    t6a, t6b = st.tabs(["📦 สต๊อก", "📋 ของฝาก"])
+_T6_TABS = ["📦 สต๊อก", "📋 ของฝาก"]
 
-    with t6b:
+
+def render():
+    try:
+        _t6_active = st.pills("", _T6_TABS, key="_t6_active_sub", label_visibility="collapsed") or _T6_TABS[0]
+    except AttributeError:
+        _t6_active = st.radio("", _T6_TABS, horizontal=True, key="_t6_active_sub", label_visibility="collapsed")
+
+    if _t6_active == "📋 ของฝาก":
         st.subheader("ของที่ลูกค้าฝากไว้")
         _dep_src = db.get_outstanding_df()
         if _dep_src.empty:
@@ -49,7 +55,7 @@ def render():
                         _det = _pgrp[["ลูกค้า","เลขที่บิล","วันที่","ค้างรับ"]].reset_index(drop=True)
                         st.dataframe(_det, hide_index=True, use_container_width=True)
 
-    with t6a:
+    elif _t6_active == "📦 สต๊อก":
         st.subheader("สรุปสต๊อก")
 
         products = db.get_products()

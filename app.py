@@ -26,25 +26,31 @@ _qp = st.query_params
 if "code" in _qp and "shop_id" in _qp:
     _code    = _qp["code"]
     _shop_id = int(_qp["shop_id"])
-    try:
-        _tok = shopee_api.exchange_token(_shop_id, _code)
-        if "access_token" in _tok:
-            import datetime as _dt
-            expiry = _dt.datetime.utcnow() + _dt.timedelta(seconds=_tok.get("expire_in", 14400))
-            db.upsert_ecommerce_shop({
-                "id":            str(_shop_id),
-                "platform":      "shopee",
-                "shop_name":     f"Shopee-{_shop_id}",
-                "shop_id":       _shop_id,
-                "access_token":  _tok["access_token"],
-                "refresh_token": _tok["refresh_token"],
-                "token_expiry":  expiry.isoformat(),
-            })
-            st.success(f"✅ เชื่อมต่อร้าน shop_id={_shop_id} สำเร็จ")
-        else:
-            st.error(f"❌ ได้รับ code แต่ token ผิดพลาด: {_tok.get('message','')}")
-    except Exception as _e:
-        st.error(f"❌ OAuth error: {_e}")
+    _cb_state      = _qp.get("state", "")
+    _expected_state = st.session_state.get("_shopee_oauth_state", "")
+    if _expected_state and _cb_state != _expected_state:
+        st.error("❌ OAuth state ไม่ตรง — request อาจถูก CSRF โจมตี กรุณาลองใหม่")
+    else:
+        try:
+            _tok = shopee_api.exchange_token(_shop_id, _code)
+            if "access_token" in _tok:
+                import datetime as _dt
+                expiry = _dt.datetime.utcnow() + _dt.timedelta(seconds=_tok.get("expire_in", 14400))
+                db.upsert_ecommerce_shop({
+                    "id":            str(_shop_id),
+                    "platform":      "shopee",
+                    "shop_name":     f"Shopee-{_shop_id}",
+                    "shop_id":       _shop_id,
+                    "access_token":  _tok["access_token"],
+                    "refresh_token": _tok["refresh_token"],
+                    "token_expiry":  expiry.isoformat(),
+                })
+                st.session_state.pop("_shopee_oauth_state", None)
+                st.success(f"✅ เชื่อมต่อร้าน shop_id={_shop_id} สำเร็จ")
+            else:
+                st.error(f"❌ ได้รับ code แต่ token ผิดพลาด: {_tok.get('message','')}")
+        except Exception as _e:
+            st.error(f"❌ OAuth error: {_e}")
     st.query_params.clear()
 
 st.markdown("""
@@ -326,6 +332,25 @@ label,
 
 st.title("🛍️ TBY SMART APP")
 
+# ── Login guard ──────────────────────────────────────────────────────────────
+_APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
+_DEBUG_MODE   = bool(st.secrets.get("DEBUG_MODE", False))
+if _APP_PASSWORD and not st.session_state.get("_authenticated"):
+    _lc1, _lc2, _lc3 = st.columns([1, 2, 1])
+    with _lc2:
+        st.markdown("### 🔐 เข้าสู่ระบบ")
+        with st.form("_login_form"):
+            _pw_input = st.text_input("รหัสผ่าน", type="password", placeholder="กรอกรหัสผ่าน")
+            _login_btn = st.form_submit_button("เข้าสู่ระบบ", type="primary", use_container_width=True)
+        if _login_btn:
+            if _pw_input == _APP_PASSWORD:
+                st.session_state["_authenticated"] = True
+                st.rerun()
+            else:
+                st.error("❌ รหัสผ่านไม่ถูกต้อง")
+    st.stop()
+
+
 @st.dialog("🚚 เลือกขนส่ง", width="large")
 def _show_carrier_select():
     info = st.session_state.get("_iship_carrier_select", {})
@@ -513,8 +538,9 @@ def _show_carrier_select():
                 st.rerun()
             else:
                 st.error(f"❌ {_cs_resp.get('message', str(_cs_resp))}")
-                with st.expander("🔍 debug"):
-                    st.json(_cs_resp)
+                if _DEBUG_MODE:
+                    with st.expander("🔍 debug"):
+                        st.json(_cs_resp)
 
         if _btn2.button("ข้าม (ไม่ส่ง iShip)", use_container_width=True, key="_cs_skip"):
             st.session_state.pop("_iship_carrier_select", None)
@@ -568,7 +594,7 @@ def _show_iship_success_dialog():
                 else:
                     st.warning(f"⚠️ {_label.get('error','')}")
         _dbg_resp = st.session_state.get("_iship_debug_resp")
-        if _dbg_resp:
+        if _dbg_resp and _DEBUG_MODE:
             with st.expander("🔍 iShip response (หา order_id)"):
                 st.json(_dbg_resp)
 
@@ -641,7 +667,7 @@ if _active_tab == _TAB_NAMES[0]:
 elif _active_tab == _TAB_NAMES[1]:
     record_ui.render(st.container(), _products, _customers, {c["name"]: c for c in _customers})
 elif _active_tab == _TAB_NAMES[2]:
-    bill_detail_ui.render(st.container(), _products, _customers)
+    bill_detail_ui.render(_products, _customers)
 elif _active_tab == _TAB_NAMES[3]:
     stock_ui.render()
 elif _active_tab == _TAB_NAMES[4]:
