@@ -326,6 +326,24 @@ label,
 
 st.title("🛍️ TBY SMART APP")
 
+# ── Login guard ──────────────────────────────────────────────────────────────
+_APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
+if _APP_PASSWORD and not st.session_state.get("_authenticated"):
+    _lc1, _lc2, _lc3 = st.columns([1, 2, 1])
+    with _lc2:
+        st.markdown("### 🔐 เข้าสู่ระบบ")
+        with st.form("_login_form"):
+            _pw_input = st.text_input("รหัสผ่าน", type="password", placeholder="กรอกรหัสผ่าน")
+            _login_btn = st.form_submit_button("เข้าสู่ระบบ", type="primary", use_container_width=True)
+        if _login_btn:
+            if _pw_input == _APP_PASSWORD:
+                st.session_state["_authenticated"] = True
+                st.rerun()
+            else:
+                st.error("❌ รหัสผ่านไม่ถูกต้อง")
+    st.stop()
+
+
 @st.dialog("🚚 เลือกขนส่ง", width="large")
 def _show_carrier_select():
     info = st.session_state.get("_iship_carrier_select", {})
