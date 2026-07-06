@@ -943,13 +943,14 @@ def mark_cod_transferred(tracking_nos: list[str]) -> None:
 
 def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
     """เมื่อ COD ของ tracking ใน tracking_no_to_date ถูกโอนเข้าระบบแล้ว
-    ให้ mark ทุก transaction ที่ pay_status='COD' ของลูกค้าเจ้าของ shipment นั้น
-    เป็น 'COD จ่ายแล้ว' พร้อมบันทึก partial_event วันที่โอน คืนจำนวน transaction ที่ mark"""
+    mark เฉพาะ transactions ที่ผูกกับ shipment นั้น (จับคู่ผ่าน product_id ใน items)
+    ถ้า shipment ไม่มีข้อมูล items → fallback mark ทุก COD ของลูกค้า (legacy)
+    คืนจำนวน transaction ที่ mark"""
     if not tracking_no_to_date:
         return 0
     db = get_supabase()
     ships = (db.table("shipments")
-             .select("customer_id, tracking_no")
+             .select("customer_id, tracking_no, items")
              .in_("tracking_no", list(tracking_no_to_date.keys()))
              .execute().data) or []
     count = 0
@@ -962,11 +963,26 @@ def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
         if not transfer_date:
             from datetime import datetime, timezone
             transfer_date = datetime.now(timezone.utc).date().isoformat()
-        txns = (db.table("transactions")
-                .select("id, total_amount")
-                .eq("customer_id", cust_id)
-                .eq("pay_status", "COD")
-                .execute().data) or []
+
+        # ดึง COD transactions ทั้งหมดของลูกค้านี้ที่ยังค้างอยู่
+        all_txns = (db.table("transactions")
+                    .select("id, total_amount, product_id")
+                    .eq("customer_id", cust_id)
+                    .eq("pay_status", "COD")
+                    .execute().data) or []
+
+        # จับคู่ด้วย product_id จาก items ของ shipment นี้
+        ship_pids = {it.get("product_id") for it in (s.get("items") or [])
+                     if it.get("product_id")}
+        if ship_pids:
+            txns = [t for t in all_txns if t.get("product_id") in ship_pids]
+            if not txns:
+                # product_id ใน items ไม่ match (ข้อมูลเก่า/ไม่สมบูรณ์) → fallback
+                txns = all_txns
+        else:
+            # shipment เก่าไม่มี items data → fallback เหมือนเดิม
+            txns = all_txns
+
         for t in txns:
             db.table("partial_events").insert({
                 "id":             str(uuid.uuid4()),
