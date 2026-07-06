@@ -60,15 +60,20 @@ def render():
         sync_to   = sc2.date_input("ถึง", value=date.today(), key="sync_to")
 
         if st.button("🔄 Sync Orders", type="primary", use_container_width=True, key="ecom_sync"):
-            prod_map  = db.get_ecommerce_product_map()
-            new_items  = []
+            prod_map     = db.get_ecommerce_product_map()
+            new_items    = []
             new_unmapped = []
             from_ts = int(_dt.datetime.combine(sync_from, _dt.time.min).timestamp())
             to_ts   = int(_dt.datetime.combine(sync_to,   _dt.time.max).timestamp())
+            total   = len(sel_shops)
 
-            for shop_name in sel_shops:
-                shop = shop_options[shop_name]
-                with st.spinner(f"ดึง {shop_name}..."):
+            _prog = st.progress(0, text=f"เตรียม sync {total} ร้าน...")
+            with st.status(f"กำลัง sync {total} ร้าน...", expanded=True) as _sync_status:
+                for idx, shop_name in enumerate(sel_shops):
+                    _prog.progress(idx / total, text=f"กำลังดึง {shop_name} ({idx+1}/{total})...")
+                    st.write(f"⏳ **{shop_name}** ({idx+1}/{total})...")
+                    shop = shop_options[shop_name]
+
                     # refresh token ถ้าใกล้หมดอายุ
                     if shop.get("token_expiry"):
                         exp = _dt.datetime.fromisoformat(shop["token_expiry"].replace("Z", ""))
@@ -83,9 +88,13 @@ def render():
 
                     orders = shopee_api.get_orders(shop["shop_id"], shop["access_token"], from_ts, to_ts)
                     if not orders:
+                        st.write(f"⚪ **{shop_name}**: ไม่มี order ในช่วงนี้")
+                        _prog.progress((idx + 1) / total, text=f"ดึง {shop_name} เสร็จ ({idx+1}/{total})")
                         continue
+
                     order_sns = [o["order_sn"] for o in orders]
                     details   = shopee_api.get_order_details(shop["shop_id"], shop["access_token"], order_sns)
+                    shop_count = 0
 
                     for order in details:
                         order_date = str(_dt.date.fromtimestamp(order.get("create_time", 0)))
@@ -107,9 +116,18 @@ def render():
                             })
                             if not mapped_pid:
                                 new_unmapped.append((item_id, item.get("item_name", ""), shop_name))
+                            shop_count += 1
+
+                    st.write(f"✅ **{shop_name}**: {len(orders)} orders / {shop_count} items")
+                    _prog.progress((idx + 1) / total, text=f"ดึง {shop_name} เสร็จ ({idx+1}/{total})")
+
+                if new_items:
+                    db.insert_ecommerce_sales(new_items)
+                _prog.progress(1.0, text="✅ Sync เสร็จสิ้น")
+                _final = f"✅ Sync เสร็จสิ้น — {len(new_items)} รายการ" if new_items else "ℹ️ Sync เสร็จสิ้น — ไม่มี order ใหม่"
+                _sync_status.update(label=_final, state="complete", expanded=False)
 
             if new_items:
-                db.insert_ecommerce_sales(new_items)
                 st.success(f"✅ Sync แล้ว {len(new_items)} รายการ")
             else:
                 st.info("ไม่มี order ใหม่ในช่วงเวลานี้")
