@@ -82,6 +82,24 @@ def _web_session():
         return None, f"Exception: {e}"
 
 
+_WEB_SESSION_TTL_S = 480  # 8 minutes — iShip "remember=1" sessions live much longer
+
+def _get_cached_web_session():
+    """Return (session, debug_msg). Reuses authenticated session for up to 8 min.
+    Saves 2 HTTP round-trips (GET csrf + POST login) on every iShip web call."""
+    _now = _dt.datetime.now().timestamp()
+    _cached = st.session_state.get("_iship_web_sess")
+    if _cached:
+        _s, _ts = _cached
+        if _now - _ts < _WEB_SESSION_TTL_S:
+            return _s, "session cache hit"
+    # Stale or missing — login fresh
+    _s, _msg = _web_session()
+    if _s:
+        st.session_state["_iship_web_sess"] = (_s, _now)
+    return _s, _msg
+
+
 def _src() -> dict:
     return {k: (os.environ.get(k) or st.secrets.get(k, "")) for k in _SRC_KEYS}
 
@@ -95,7 +113,7 @@ def get_cod_transfers(days_back: int = 60) -> dict:
     ดึงสถานะ COD transfer จาก iShip
     คืน: {"transfers": {track_no: {"wd_id","date","cod_amount","net","status"}}, "error": str|None}
     """
-    sess, login_msg = _web_session()
+    sess, login_msg = _get_cached_web_session()
     if not sess:
         return {"transfers": {}, "error": login_msg}
 
@@ -224,7 +242,7 @@ def get_shipment_statuses(days_back: int = 60) -> dict:
     ดึงสถานะการจัดส่งจาก iShip
     คืน: {"statuses": {track_no: status_text}, "error": str|None}
     """
-    sess, login_msg = _web_session()
+    sess, login_msg = _get_cached_web_session()
     if not sess:
         return {"statuses": {}, "error": login_msg}
 
@@ -371,7 +389,7 @@ def create_order(
         })
         form_data = {k: str(v) for k, v in payload.items()}
         form_data["product_lists"] = json.dumps(_prod_list, ensure_ascii=False)
-        _sess, _login_msg = _web_session()
+        _sess, _login_msg = _get_cached_web_session()
         if _sess:
             r_csrf = _sess.get(f"{WEB_BASE}/shipment/create", timeout=10)
             _m = re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', r_csrf.text)
@@ -410,7 +428,7 @@ def get_label_url(tracking_no: str) -> dict:
     """หา order ID จาก tracking number แล้วคืน URL สำหรับปริ้นใบปะหน้า
     คืน: {"url": str|None, "order_id": str|None, "error": str|None}
     """
-    sess, login_msg = _web_session()
+    sess, login_msg = _get_cached_web_session()
     if not sess:
         return {"url": None, "error": f"Login failed: {login_msg}"}
 
