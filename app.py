@@ -69,7 +69,46 @@ h1 {
 h2 { color: #2D6A4F !important; font-weight: 700 !important; }
 h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 
-/* ── Tabs — modern underline ── */
+/* ── Main nav (st.pills) — looks identical to underline tabs ── */
+[data-testid="stPills"] {
+    background: #ffffff;
+    border-bottom: 2px solid #D4E8DA;
+    border-radius: 12px 12px 0 0;
+    padding: 4px 8px 0;
+    box-shadow: 0 2px 12px rgba(27,67,50,0.07);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0;
+    margin-bottom: 0 !important;
+}
+[data-testid="stPills"] button {
+    background: transparent !important;
+    color: #7A9E85 !important;
+    border: none !important;
+    border-radius: 8px 8px 0 0 !important;
+    border-bottom: 3px solid transparent !important;
+    font-size: 0.84rem !important;
+    font-weight: 500 !important;
+    padding: 8px 13px !important;
+    margin-bottom: -2px;
+    white-space: nowrap;
+    box-shadow: none !important;
+    transition: color 0.2s, background 0.2s !important;
+}
+[data-testid="stPills"] button[aria-checked="true"] {
+    color: #1B4332 !important;
+    font-weight: 700 !important;
+    background: transparent !important;
+    border-bottom: 3px solid #E07B39 !important;
+    box-shadow: none !important;
+}
+[data-testid="stPills"] button:hover {
+    color: #1B4332 !important;
+    background: #F0F9F4 !important;
+    border-bottom: 3px solid transparent !important;
+}
+
+/* ── Sub-tabs inside each page (st.tabs) — modern underline ── */
 .stTabs [data-baseweb="tab-list"] {
     background: #ffffff;
     border-bottom: 2px solid #D4E8DA;
@@ -570,37 +609,44 @@ if st.session_state.get("_iship_success_info"):
     _show_iship_success_dialog()
 
 
-tab_dash, tab1, tab5, tab6, tab_fin, tab_ecom, tab4 = st.tabs([
-    "🏠 หน้าแรก",
-    "📋 บันทึกรายการ",
-    "🗂️ รายละเอียดบิล",
-    "📦 สต๊อก",
-    "💵 การเงิน",
-    "🛒 E-commerce",
-    "⚙️ จัดการข้อมูล",
-])
+# ── Lazy tab navigation ──────────────────────────────────────────────────────
+_TAB_NAMES = [
+    "🏠 หน้าแรก", "📋 บันทึกรายการ", "🗂️ รายละเอียดบิล",
+    "📦 สต๊อก", "💵 การเงิน", "🛒 E-commerce", "⚙️ จัดการข้อมูล",
+]
+if "active_tab" not in st.session_state:
+    st.session_state["active_tab"] = _TAB_NAMES[0]
 
-with tab_dash:
-    dashboard_ui.render()
+try:
+    # st.pills (Streamlit ≥ 1.36) — looks like tabs, single-select
+    _active_tab = st.pills(
+        "เมนู", _TAB_NAMES,
+        key="active_tab",
+        label_visibility="collapsed",
+    ) or _TAB_NAMES[0]
+except AttributeError:
+    _active_tab = st.radio(
+        "เมนู", _TAB_NAMES,
+        horizontal=True,
+        key="active_tab",
+        label_visibility="collapsed",
+    )
 
 _products = db.get_products()
 _customers = db.get_customers()
 
-# Tab 1: render
-record_ui.render(tab1, _products, _customers,
-                 {c['name']: c for c in _customers})
-
-# Tab 5: render
-bill_detail_ui.render(tab5, _products, _customers)
-
-with tab4:
-    master_data_ui.render()
-
-with tab6:
+# ── Render only the active tab — ไม่รัน render() ของแท็บอื่น ─────────────────
+if _active_tab == _TAB_NAMES[0]:
+    dashboard_ui.render()
+elif _active_tab == _TAB_NAMES[1]:
+    record_ui.render(st.container(), _products, _customers, {c["name"]: c for c in _customers})
+elif _active_tab == _TAB_NAMES[2]:
+    bill_detail_ui.render(st.container(), _products, _customers)
+elif _active_tab == _TAB_NAMES[3]:
     stock_ui.render()
-
-with tab_ecom:
-    ecom_ui.render()
-
-with tab_fin:
+elif _active_tab == _TAB_NAMES[4]:
     fin_ui.render()
+elif _active_tab == _TAB_NAMES[5]:
+    ecom_ui.render()
+elif _active_tab == _TAB_NAMES[6]:
+    master_data_ui.render()
