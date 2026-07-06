@@ -554,8 +554,11 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
         q = q.eq("bill_no", bill_no)
     txns = _retry(lambda: q.order("bill_no", desc=True, nullsfirst=False).order("date", desc=True).execute().data)
 
+    _TXN_COLS = ["id","วันที่","ลูกค้า","รหัส","สินค้า","สั่ง","รับแล้ว","ยอดรวม",
+                 "จ่ายแล้ว","ค้างจ่าย","ค้างรับ","สถานะบิล","สถานะจ่าย","หมายเหตุ",
+                 "PV รวม","เลขที่บิล","เคลียร์แล้ว","last_payment_date"]
     if not txns:
-        return pd.DataFrame()
+        return pd.DataFrame(columns=_TXN_COLS)
 
     txn_ids = [t["id"] for t in txns]
     all_events: list = []
@@ -603,7 +606,7 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
             "last_payment_date": max(paid_dates) if paid_dates else "",
         })
 
-    return pd.DataFrame(rows) if rows else pd.DataFrame()
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=_TXN_COLS)
 
 
 # ─── Finance ─────────────────────────────────────────────────────────────────

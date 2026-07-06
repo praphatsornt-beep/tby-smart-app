@@ -474,6 +474,9 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             all_txn_cache = db.get_all_transactions_df(customer_id=_cid)
 
     if preselected_bill:
+        if all_txn_cache.empty or "เลขที่บิล" not in all_txn_cache.columns:
+            st.warning(f"ไม่พบบิล {preselected_bill}")
+            return
         all_df_p = all_txn_cache[all_txn_cache["เลขที่บิล"] == preselected_bill]
         if all_df_p.empty:
             st.warning(f"ไม่พบบิล {preselected_bill}")
