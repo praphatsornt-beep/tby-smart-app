@@ -26,17 +26,20 @@ def _sign(path: str, timestamp: int, access_token: str = "", shop_id: int = 0) -
     return hmac.new(partner_key.encode(), base.encode(), hashlib.sha256).hexdigest()
 
 
-def get_auth_url(redirect_url: str) -> str:
+def get_auth_url(redirect_url: str, state: str = "") -> str:
     """URL สำหรับ redirect ให้ร้านค้า authorize (ไม่ต้องใส่ shop_id ล่วงหน้า)"""
     ts = int(time.time())
     partner_id, _ = _get_credentials()
     path = "/api/v2/shop/auth_partner"
     sign = _sign(path, ts)
-    return (
+    url = (
         f"{BASE_URL}{path}"
         f"?partner_id={partner_id}&timestamp={ts}&sign={sign}"
         f"&redirect={redirect_url}"
     )
+    if state:
+        url += f"&state={state}"
+    return url
 
 
 def exchange_token(shop_id: int, code: str) -> dict:

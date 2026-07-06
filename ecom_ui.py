@@ -1,5 +1,6 @@
 """UI สำหรับแท็บ E-commerce (Shopee) — แยกจาก app.py"""
 import datetime as _dt
+import secrets as _sec
 import uuid
 
 import streamlit as st
@@ -24,7 +25,9 @@ def render():
         "Redirect URL (URL ของแอปนี้)", value="https://your-app.streamlit.app",
         key="ecom_redirect", help="ต้องตรงกับที่ลงทะเบียนใน Shopee Open Platform"
     )
-    auth_url = shopee_api.get_auth_url(redirect_url)
+    _oauth_state = st.session_state.get("_shopee_oauth_state") or _sec.token_urlsafe(16)
+    st.session_state["_shopee_oauth_state"] = _oauth_state
+    auth_url = shopee_api.get_auth_url(redirect_url, state=_oauth_state)
     st.link_button("🔗 Authorize ร้านใหม่", url=auth_url)
     st.caption("กดปุ่มด้านบน → เข้า Shopee → เลือกร้าน → ระบบจะ redirect กลับมาพร้อม token อัตโนมัติ")
 

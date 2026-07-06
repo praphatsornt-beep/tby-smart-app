@@ -1635,8 +1635,9 @@ def render(tab1, products, customers, customer_map):
                                         st.success(f"✅ ส่ง iShip สำเร็จ! Tracking: **{_ic_track}**")
                                     else:
                                         st.error(f"❌ {_ic_resp.get('message', str(_ic_resp))}")
-                                        with st.expander("🔍 debug"):
-                                            st.json(_ic_resp)
+                                        if st.secrets.get("DEBUG_MODE"):
+                                            with st.expander("🔍 debug"):
+                                                st.json(_ic_resp)
                             else:
                                 st.caption("ยังไม่มีที่อยู่บันทึกสำหรับลูกค้านี้")
 
