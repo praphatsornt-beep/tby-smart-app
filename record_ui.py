@@ -13,7 +13,7 @@ import iship_api
 from flash_zones import carrier_fees
 from ui_helpers import (
     _PROVINCES, BOX_WEIGHT_G, _tambon_selectbox, _postcode_suggest,
-    _warn_duplicate_phone, calc_shipping, _parse_iship_address,
+    _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
 )
@@ -475,8 +475,7 @@ def render(tab1, products, customers, customer_map):
 
                 # auto-select carrier จาก weight + location (รันทุกครั้งที่ items หรือ postcode เปลี่ยน)
                 if m_delivery == "ส่งพัสดุ" and len(m_postcode.strip()) == 5:
-                    _w_kg = (sum(float(p.get("weight_grams") or 0) * q
-                                 for p, q, _ in valid_items) + _rx_extra_weight_g + BOX_WEIGHT_G) / 1000
+                    _w_kg = (raw_weight_g(valid_items, _rx_extra_weight_g) + BOX_WEIGHT_G) / 1000
                     _optimal = _pick_carrier(m_postcode.strip(), _w_kg)
                     _sig = (m_postcode.strip(), round(_w_kg, 2))
                     if _sig != st.session_state.get("_carrier_sig"):
@@ -494,15 +493,16 @@ def render(tab1, products, customers, customer_map):
                 if valid_items or (_has_rx_action and m_delivery == "ส่งพัสดุ"):
                     total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
                     total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
-                    total_weight = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items) + _rx_extra_weight_g + BOX_WEIGHT_G
+                    _raw_weight  = raw_weight_g(valid_items, _rx_extra_weight_g)
+                    total_weight = _raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
                     if valid_items:
                         st.success("🛒 " + "  |  ".join(f"**{p['id']}** ×{q}" for p, q, _ in valid_items))
                     if _rx_old_items and valid_items:
                         _old_label = "  +  ".join(f"{it['name']} ×{it['qty']}" for it in _rx_old_items)
                         st.info(f"📦 ของเก่า: {_old_label}  ·  ยอดค้างที่จะจ่าย **{_rx_total_pay:,.0f}฿**  ·  รวมยอดทั้งหมด **{total_amt + _rx_total_pay:,.0f}฿**")
                     if m_delivery == "ส่งพัสดุ":
-                        fees_all  = carrier_fees(total_weight, m_postcode)
-                        ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(total_weight, m_postcode)
+                        fees_all  = carrier_fees(_raw_weight, m_postcode)
+                        ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(_raw_weight, m_postcode)
                         _base     = total_amt + ship_fee
                         cod_fee   = round(_base * COD_FEE_RATE, 2) if m_cod else 0
                         collect   = _base + cod_fee if m_cod else _base
@@ -576,9 +576,10 @@ def render(tab1, products, customers, customer_map):
                              disabled=bool(m_errors)):
                     customer     = customer_map[m_customer]
                     is_shipping  = m_delivery == "ส่งพัสดุ"
-                    total_w_g    = sum(float(p.get("weight_grams") or 0) * q for p, q, _ in valid_items) + _rx_extra_weight_g + BOX_WEIGHT_G
+                    _raw_w_save  = raw_weight_g(valid_items, _rx_extra_weight_g)
+                    total_w_g    = _raw_w_save + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
                     if is_shipping:
-                        fees_save = carrier_fees(total_w_g, m_postcode)
+                        fees_save = carrier_fees(_raw_w_save, m_postcode)
                         ship_fee  = fees_save[m_carrier]["total"]
                         zone_name = fees_save[m_carrier]["zone"]
                         zone_tag  = f"|{zone_name}" if zone_name else ""
@@ -761,8 +762,8 @@ def render(tab1, products, customers, customer_map):
                     if st.button("🚚 รับแต่ของเก่า", type="primary", use_container_width=True,
                                  key="m_rxonly_submit", disabled=bool(_rxo_errors)):
                         _rxo_customer   = customer_map[m_customer]
-                        _rxo_weight_g   = _rx_extra_weight_g + BOX_WEIGHT_G
-                        _rxo_fees       = carrier_fees(_rxo_weight_g, m_postcode)
+                        _rxo_weight_g   = _rx_extra_weight_g + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
+                        _rxo_fees       = carrier_fees(_rx_extra_weight_g, m_postcode)
                         _rxo_ship_fee   = _rxo_fees[m_carrier]["total"]
                         _rxo_zone       = _rxo_fees[m_carrier]["zone"]
                         _rxo_zone_tag   = f"|{_rxo_zone}" if _rxo_zone else ""
@@ -1116,11 +1117,13 @@ def render(tab1, products, customers, customer_map):
                 for _, r in _sp_cart_edit.iterrows()
                 if str(r.get("สินค้า","")) in _sp_prod_map and int(r.get("จำนวน") or 0) > 0
             ]
-            _sp_total_weight = sum(
-                float(_sp_prod_map.get(r["สินค้า"], {}).get("weight_grams") or 0) * int(r["จำนวน"] or 0)
+            _sp_valid_items = [
+                (_sp_prod_map[r["สินค้า"]], int(r["จำนวน"] or 0), None)
                 for _, r in _sp_cart_edit.iterrows()
                 if str(r.get("สินค้า","")) in _sp_prod_map
-            ) + BOX_WEIGHT_G
+            ]
+            _sp_raw_weight   = raw_weight_g(_sp_valid_items)
+            _sp_total_weight = _sp_raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
             _sp_total_amt = sum(
                 float(_sp_prod_map.get(r["สินค้า"], {}).get("price") or 0) * int(r["จำนวน"] or 0)
                 for _, r in _sp_cart_edit.iterrows()
@@ -1243,7 +1246,7 @@ def render(tab1, products, customers, customer_map):
 
             # ── ค่าส่ง + metrics ─────────────────────────────────────────────
             _sp_fc1, _sp_fc2 = st.columns(2)
-            _sp_fees = carrier_fees(_sp_total_weight, _sp_pc.strip()) if len((_sp_pc or "").strip()) == 5 else None
+            _sp_fees = carrier_fees(_sp_raw_weight, _sp_pc.strip()) if len((_sp_pc or "").strip()) == 5 else None
             if _sp_fees:
                 _sp_fc1.caption(f"Flash: {_sp_fees['Flash Express']['zone'] or 'ปกติ'} | +{_sp_fees['Flash Express']['surcharge']} ฿")
                 _sp_fc2.caption(f"SPX:   {_sp_fees['SPX Express']['zone']   or 'ปกติ'} | +{_sp_fees['SPX Express']['surcharge']} ฿")

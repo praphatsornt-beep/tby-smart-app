@@ -351,6 +351,15 @@ def calc_shipping(weight_grams: float, postcode: str = "") -> float:
     return fee + zone_surcharge(postcode)
 
 
+def raw_weight_g(items, extra_g: float = 0) -> float:
+    """รวมน้ำหนักสินค้า (กรัม) จาก [(product, qty, note), ...] — ไม่รวมน้ำหนักกล่อง
+
+    ค่านี้ส่งเข้า calc_shipping()/carrier_fees() ได้โดยตรง — ฟังก์ชันทั้งสองบวก
+    BOX_WEIGHT_G ให้เองแล้ว ห้ามบวก BOX_WEIGHT_G ซ้ำก่อนส่งเข้าไป
+    """
+    return sum(float(p.get("weight_grams") or 0) * q for p, q, _ in items) + extra_g
+
+
 def _style_status(val):
     colors = {
         "เปิดบิลแล้ว":   "background-color:#1a5c2e;color:white",
