@@ -113,6 +113,24 @@ _FLASH_PRO_OK = {
     49:(627,587),50:(642,596),
 }
 
+_JT_EXPRESS = {  # (กรุงเทพ, ต่างจังหวัด) — ตารางที่ให้มามีถึง 40kg เท่านั้น (จริงรองรับถึง 100kg)
+    1:(25,25),2:(29,29),3:(32,32),4:(46,51),5:(57,60),6:(71,71),7:(80,80),
+    8:(113,113),9:(125,125),10:(136,136),11:(145,145),12:(156,156),13:(165,165),
+    14:(176,176),15:(186,186),16:(202,202),17:(213,213),18:(223,223),19:(234,234),
+    20:(242,242),21:(261,261),22:(279,279),23:(297,297),24:(315,315),25:(334,334),
+    26:(351,351),27:(370,370),28:(388,388),29:(406,406),30:(424,424),31:(443,443),
+    32:(460,460),33:(479,479),34:(497,497),35:(515,515),36:(533,533),37:(552,552),
+    38:(569,569),39:(588,588),40:(605,605),
+}
+
+_INTER_EXPRESS = {  # เหมาตามขนาดกล่อง (A1/A2/B1/B2) เรทเดียวทั่วประเทศ ไม่รับ COD
+    1:110,2:110,3:110,4:110,5:110,6:110,7:110,8:110,9:110,10:110,
+    11:110,12:110,13:110,14:110,15:110,   # กล่อง A1 ≤15kg
+    16:130,17:130,18:130,19:130,20:130,   # กล่อง A2 ≤20kg
+    21:150,22:150,23:150,24:150,25:150,   # กล่อง B1 ≤25kg
+    26:170,27:170,28:170,29:170,30:170,   # กล่อง B2 ≤30kg
+}
+
 _FLASH_100CM = {
     1:(22,24),2:(26,28),3:(31,33),4:(45,50),5:(55,59),6:(72,72),7:(81,81),
     8:(96,96),9:(105,105),10:(122,122),11:(142,142),12:(153,153),
@@ -173,6 +191,18 @@ def _thai_post_sur(pc: str, _kg: float) -> tuple[int, str]:
 def _no_sur(_pc: str, _kg: float) -> tuple[int, str]:
     return 0, ""
 
+def _jt_sur(pc: str, kg: float) -> tuple[int, str]:
+    """J&T: ห่างไกล 0.1-50kg=50, 50.1-70kg=100, >70kg=200 | ท่องเที่ยว(รวมเกาะ) 0.1-7kg=30, >7kg=100"""
+    zone = lookup_zone(pc)
+    if zone == "remote":
+        if kg <= 50: return 50, "ห่างไกล"
+        if kg <= 70: return 100, "ห่างไกล"
+        return 200, "ห่างไกล"
+    if zone in ("tourist", "tourist_island"):
+        sur = 30 if kg <= 7 else 100
+        return sur, ("เกาะ" if zone == "tourist_island" else "ท่องเที่ยว")
+    return 0, ""
+
 
 # ── Base price lookup ─────────────────────────────────────────────────────────
 
@@ -185,20 +215,22 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 
 
 # ── Carrier definitions ───────────────────────────────────────────────────────
-# (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm)
-# max_cm: กว้าง+ยาว+สูง รวมต้องไม่เกินค่านี้ (0 = ไม่จำกัด)
+# (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt)
+# max_cm: กว้าง+ยาว+สูง รวมต้องไม่เกินค่านี้ (0 = ไม่จำกัด) | max_cod_amt: วงเงิน COD สูงสุด (0 = ไม่จำกัด)
 _CARRIER_DEFS = [
-    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,    60),
-    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,    60),
-    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,    60),
-    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   100),
-    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01,  0),
-    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,     0),
-    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,     0),
-    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,     0),
-    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,     0),
-    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,     0),
-    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,     0),
+    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,    60, True,  0),
+    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,    60, True,  0),
+    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,    60, True,  0),
+    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   100, True,  0),
+    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01,  0, True,  0),
+    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,     0, True,  0),
+    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,     0, True,  0),
+    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,     0, True,  0),
+    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,     0, True,  0),
+    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0),
+    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0),
+    ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0),
+    ("jt_express",        "J&T Express",        _JT_EXPRESS,          40,  _jt_sur,                 0, 2.675,False, 0,   600, True,  10000),
 ]
 
 
@@ -214,9 +246,13 @@ def get_shipping_options(weight_kg: float, postcode: str,
     bkk = _is_bkk(pc)
     results = []
 
-    for cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm in _CARRIER_DEFS:
+    for cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt in _CARRIER_DEFS:
         if weight_kg < min_kg:
             continue  # ไม่แสดงถ้าน้ำหนักต่ำกว่าขั้นต่ำ (เช่น Flash Pro DD Bulky ต้อง >5kg)
+        if is_cod and not supports_cod:
+            continue  # ขนส่งนี้ไม่รับ COD
+        if is_cod and max_cod_amt and cod_amount > max_cod_amt:
+            continue  # เกินวงเงิน COD สูงสุดของขนส่งนี้
         exceeds = weight_kg > max_kg
         lookup_kg = min(weight_kg, max_kg) if exceeds else weight_kg
         base = _lookup(table, lookup_kg, bkk)
@@ -240,6 +276,7 @@ def get_shipping_options(weight_kg: float, postcode: str,
             "min_kg":        min_kg,
             "return_free":   return_free,
             "max_cm":        max_cm,
+            "max_cod_amt":   max_cod_amt,
         })
 
     results.sort(key=lambda x: (x["exceeds_max"], x["total"]))
