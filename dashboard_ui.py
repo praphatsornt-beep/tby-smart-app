@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import date, datetime, timezone, timedelta
 
 import database as db
+import iship_api
 
 _BKK = timezone(timedelta(hours=7))
 
@@ -185,7 +186,40 @@ def render():
         # ── แสดง COD ─────────────────────────────────────────────────────
         if _cod_rows:
             st.divider()
-            st.markdown(f"**💛 COD — ติดตามสถานะ ({len(_cod_rows)} รายการ)**")
+            _cod_h1, _cod_h2 = st.columns([5, 1.4])
+            _cod_h1.markdown(f"**💛 COD — ติดตามสถานะ ({len(_cod_rows)} รายการ)**")
+            if _cod_h2.button("🔄 อัปเดตยอด COD", key="dash_cod_sync", use_container_width=True):
+                try:
+                    _pending = db.get_pending_cod_tracking()
+                except Exception:
+                    _pending = None  # column ยังไม่มี — ดึงทั้งหมด
+                if _pending is not None and len(_pending) == 0:
+                    st.info("✅ COD ทุกรายการโอนแล้ว ไม่ต้องดึงข้อมูลใหม่")
+                else:
+                    with st.spinner("กำลังดึงข้อมูลจาก iShip..."):
+                        _r = iship_api.get_cod_transfers(days_back=90)
+                    if _r.get("error"):
+                        st.error(f"❌ {_r['error']}")
+                    else:
+                        _cod_transfers = _r.get("transfers", {})
+                        if _cod_transfers:
+                            try:
+                                db.mark_cod_transferred(list(_cod_transfers.keys()))
+                            except Exception as _mct_e:
+                                st.warning(f"⚠️ บันทึกสถานะ COD โอนแล้วไม่สำเร็จ: {_mct_e}")
+                            try:
+                                _pending_set = set(_pending or [])
+                                _newly = {tn: info.get("date", "")
+                                          for tn, info in _cod_transfers.items()
+                                          if tn in _pending_set}
+                                _n_marked = db.mark_cod_paid(_newly)
+                                if _n_marked:
+                                    st.success(f"✅ บันทึก COD จ่ายแล้ว {_n_marked} รายการ")
+                            except Exception as _mcp_e:
+                                st.error(f"❌ อัปเดตสถานะจ่าย COD ไม่สำเร็จ: {_mcp_e}")
+                            st.rerun()
+                        else:
+                            st.info("ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
             _cod_df = pd.DataFrame(_cod_rows)
             st.dataframe(_cod_df.style.format({"COD (฿)": "{:,.0f}"}),
                          use_container_width=True, hide_index=True,
