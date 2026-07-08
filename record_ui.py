@@ -1843,6 +1843,23 @@ def render(tab1, products, customers, customer_map):
                                                   "_lbl_dt_searchbox", "_lbl_pc_suggest",
                                                   stage_dt="_lbl_fr_dt", stage_am="_lbl_fr_am", stage_pv="_lbl_fr_pv")
 
+                                if _lbl_cust_id:
+                                    if st.button("💾 บันทึกที่อยู่นี้", key="_lbl_save_addr_btn"):
+                                        db.upsert_customer_address({
+                                            "id":             str(uuid.uuid4()),
+                                            "customer_id":    _lbl_cust_id,
+                                            "recipient_name": _lbl_name,
+                                            "phone":          _lbl_phone,
+                                            "address_line":   _lbl_addr_line,
+                                            "district":       _lbl_district,
+                                            "amphure":        _lbl_amphure,
+                                            "province":       _lbl_province,
+                                            "postal_code":    _lbl_zip,
+                                        })
+                                        st.success("✅ บันทึกแล้ว — เลือกจากที่อยู่ที่บันทึกไว้ได้ครั้งถัดไป")
+                                else:
+                                    st.caption("เลือกลูกค้าด้านบนก่อน จึงจะบันทึกที่อยู่นี้ไว้ใช้ครั้งถัดไปได้")
+
                                 st.markdown("**ขนาดกล่อง — เพิ่มได้หลายขนาดในใบเดียว**")
                                 if "_lbl_box_rows" not in st.session_state:
                                     st.session_state["_lbl_box_rows"] = []
