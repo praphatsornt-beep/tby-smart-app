@@ -1808,7 +1808,10 @@ def render(tab1, products, customers, customer_map):
                                 _lbl_province = _la3.text_input("จังหวัด", value=_lbl_seed.get("province", ""), key="_lbl_province")
                                 _lbl_zip      = _la4.text_input("รหัสไปรษณีย์", value=_lbl_seed.get("postal_code", ""), key="_lbl_zip")
 
-                                st.markdown("**ขนาดกล่อง**")
+                                st.markdown("**ขนาดกล่อง — เพิ่มได้หลายขนาดในใบเดียว**")
+                                if "_lbl_box_rows" not in st.session_state:
+                                    st.session_state["_lbl_box_rows"] = []
+
                                 _lbl_presets = []
                                 for _ln in st.session_state.get("_bulky_presets_txt", "").splitlines():
                                     if ":" not in _ln:
@@ -1830,26 +1833,47 @@ def render(tab1, products, customers, customer_map):
                                 )
                                 _lbl_pm = next((p for p in _lbl_presets if p["name"] == _lbl_preset_sel), None)
                                 _lbl_def_l, _lbl_def_w, _lbl_def_h = (_lbl_pm["l"], _lbl_pm["w"], _lbl_pm["h"]) if _lbl_pm else (30, 30, 20)
-                                _lb1, _lb2, _lb3 = st.columns(3)
+                                _lb1, _lb2, _lb3, _lb4, _lb5 = st.columns(5)
                                 _lbl_len = _lb1.number_input("ยาว (cm)", 1, 300, _lbl_def_l, key=f"_lbl_len_{_lbl_preset_sel}")
                                 _lbl_wid = _lb2.number_input("กว้าง (cm)", 1, 300, _lbl_def_w, key=f"_lbl_wid_{_lbl_preset_sel}")
                                 _lbl_hgt = _lb3.number_input("สูง (cm)", 1, 300, _lbl_def_h, key=f"_lbl_hgt_{_lbl_preset_sel}")
+                                _lbl_row_weight = _lb4.number_input("น้ำหนัก/กล่อง (kg)", 0.0, 200.0, 25.0, key="_lbl_row_weight")
+                                _lbl_row_qty    = _lb5.number_input("จำนวน", 1, 100, 1, key="_lbl_row_qty")
 
-                                _lbl_def_weight = round(_sel_plan["boxes"][0]["weight_kg"] + 0.5, 2) if _sel_plan.get("boxes") else 0.0
-                                _lbl_def_qty    = _sel_plan.get("box_count", 1)
-                                _lw1, _lw2 = st.columns(2)
-                                _lbl_weight = _lw1.number_input("น้ำหนัก/กล่อง (kg)", 0.0, 200.0, float(_lbl_def_weight), key="_lbl_weight")
-                                _lbl_qty    = _lw2.number_input("จำนวนกล่อง", 1, 100, int(_lbl_def_qty), key="_lbl_qty")
+                                if st.button("➕ เพิ่มกล่อง", key="_lbl_add_row_btn"):
+                                    st.session_state["_lbl_box_rows"].append({
+                                        "l": int(_lbl_len), "w": int(_lbl_wid), "h": int(_lbl_hgt),
+                                        "weight_kg": float(_lbl_row_weight), "qty": int(_lbl_row_qty),
+                                    })
+                                    st.rerun()
 
-                                _lt1, _lt2 = st.columns(2)
-                                _lbl_tracking = _lt1.text_input("เลขพัสดุ (ถ้ามี — เว้นว่างได้)", key="_lbl_tracking")
-                                _lbl_cod_chk  = _lt2.checkbox("COD", key="_lbl_cod_chk")
-                                _lbl_cod_amt  = st.number_input("ยอดเก็บ COD (บาท)", min_value=0.0, step=1.0, key="_lbl_cod_amt") if _lbl_cod_chk else 0.0
-                                _lbl_notes    = st.text_input("หมายเหตุ", key="_lbl_notes")
+                                _lbl_rows = st.session_state["_lbl_box_rows"]
+                                if _lbl_rows:
+                                    st.markdown("**รายการกล่องที่เพิ่มแล้ว**")
+                                    _rows_df = pd.DataFrame([{
+                                        "ขนาด (ซม.)":         f"{r['l']}×{r['w']}×{r['h']}",
+                                        "น้ำหนัก/กล่อง (kg)": r["weight_kg"],
+                                        "จำนวน":              r["qty"],
+                                    } for r in _lbl_rows])
+                                    st.dataframe(_rows_df, hide_index=True, use_container_width=True)
+                                    _lbl_total_boxes  = sum(r["qty"] for r in _lbl_rows)
+                                    _lbl_total_weight = sum(r["weight_kg"] * r["qty"] for r in _lbl_rows)
+                                    st.caption(f"รวม {_lbl_total_boxes} กล่อง &nbsp;|&nbsp; น้ำหนักรวม {_lbl_total_weight:.2f} kg")
+                                    if st.button("🗑️ ล้างรายการกล่องทั้งหมด", key="_lbl_clear_rows_btn"):
+                                        st.session_state["_lbl_box_rows"] = []
+                                        st.rerun()
+                                else:
+                                    st.caption("ยังไม่มีกล่องในรายการ — กด \"➕ เพิ่มกล่อง\" อย่างน้อย 1 ครั้งก่อนพิมพ์")
+
+                                _lbl_cod_chk = st.checkbox("COD", key="_lbl_cod_chk")
+                                _lbl_cod_amt = st.number_input("ยอดเก็บ COD (บาท)", min_value=0.0, step=1.0, key="_lbl_cod_amt") if _lbl_cod_chk else 0.0
+                                _lbl_notes   = st.text_input("หมายเหตุ", key="_lbl_notes")
 
                                 if st.button("🖨️ พิมพ์ใบปะหน้า + บันทึกประวัติ", type="primary", key="_lbl_print_btn"):
                                     if not _lbl_name or not _lbl_addr_line:
                                         st.error("กรุณากรอกชื่อผู้รับและที่อยู่ก่อน")
+                                    elif not _lbl_rows:
+                                        st.error("กรุณาเพิ่มกล่องอย่างน้อย 1 รายการก่อนพิมพ์")
                                     else:
                                         _src = iship_api._src()
                                         _label_items: dict = {}
@@ -1857,27 +1881,16 @@ def render(tab1, products, customers, customer_map):
                                             for _code, _qty in _box["items"].items():
                                                 _label_items[_code] = _label_items.get(_code, 0) + _qty
 
+                                        _lbl_total_boxes  = sum(r["qty"] for r in _lbl_rows)
+                                        _lbl_total_weight = sum(r["weight_kg"] * r["qty"] for r in _lbl_rows)
+                                        _box_rows_html = "".join(
+                                            f"<tr><td>{r['l']}×{r['w']}×{r['h']} ซม.</td>"
+                                            f"<td style='text-align:center'>{r['weight_kg']:.2f} kg</td>"
+                                            f"<td style='text-align:center'>{r['qty']}</td></tr>"
+                                            for r in _lbl_rows
+                                        )
                                         _cod_line = f"&nbsp;|&nbsp; <b>COD:</b> {_lbl_cod_amt:,.0f} ฿" if _lbl_cod_chk else ""
                                         _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_lbl_notes}</div>' if _lbl_notes else ""
-                                        _pages = []
-                                        for _pi in range(1, int(_lbl_qty) + 1):
-                                            _pages.append(f"""
-                                            <div class="label-page">
-                                                <div class="header">
-                                                    <div><h1>ใบปะหน้า — {_sel_plan['name']}</h1>
-                                                    <h2>กล่องที่ {_pi}/{int(_lbl_qty)}</h2></div>
-                                                    <div class="header-right">วันที่: {date.today().strftime('%d/%m/%Y')}</div>
-                                                </div>
-                                                <div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · {_src.get('ISHIP_SRC_PHONE','')}<br>
-                                                {_src.get('ISHIP_SRC_ADDRESS','')} {_src.get('ISHIP_SRC_DISTRICT','')} {_src.get('ISHIP_SRC_AMPHURE','')} {_src.get('ISHIP_SRC_PROVINCE','')} {_src.get('ISHIP_SRC_ZIPCODE','')}</div>
-                                                <div class="section"><b>ผู้รับ:</b> {_lbl_name} · {_lbl_phone}<br>
-                                                {_lbl_addr_line} {_lbl_district} {_lbl_amphure} {_lbl_province} {_lbl_zip}</div>
-                                                <div class="section"><b>ขนาด:</b> {_lbl_len}×{_lbl_wid}×{_lbl_hgt} ซม. &nbsp;|&nbsp;
-                                                <b>น้ำหนัก:</b> {_lbl_weight:.2f} กก. &nbsp;|&nbsp;
-                                                <b>Tracking:</b> {_lbl_tracking or '-'} {_cod_line}</div>
-                                                {_notes_line}
-                                            </div>
-                                            """)
                                         _label_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -1885,17 +1898,36 @@ html,body{{background:#fff!important;color:#000!important}}
 body{{font-family:'Sarabun',sans-serif;padding:16px;font-size:13px}}
 .header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
 .header h1{{font-size:16px;font-weight:700}}
-.header h2{{font-size:14px;font-weight:600;margin-top:2px}}
 .header-right{{text-align:right;font-size:13px;font-weight:600}}
 .section{{margin:10px 0;font-size:13px;line-height:1.6}}
-.label-page{{padding-bottom:16px}}
+table{{width:100%;border-collapse:collapse;margin:6px 0;border:1px solid #000}}
+th{{background:#000;color:#fff;padding:5px 6px;font-size:12px;text-align:left;border:1px solid #000}}
+td{{padding:4px 6px;border:1px solid #aaa;font-size:12px;color:#000}}
+tr:nth-child(even) td{{background:#f0f0f0}}
 .btn{{display:block;margin:0 0 12px;padding:6px 22px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:13px}}
-@media print{{.btn{{display:none}} .label-page{{page-break-after:always}} @page{{size:A5 portrait;margin:10mm}} *{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+@media print{{.btn{{display:none}} @page{{size:A5 portrait;margin:10mm}} *{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} th{{background:#000!important;color:#fff!important}} tr:nth-child(even) td{{background:#eee!important}}}}
 </style></head><body>
-<button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้า ({int(_lbl_qty)} กล่อง)</button>
-{''.join(_pages)}
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้า</button>
+<div class="header">
+    <div><h1>ใบปะหน้า — {_sel_plan['name']}</h1></div>
+    <div class="header-right">วันที่: {date.today().strftime('%d/%m/%Y')}</div>
+</div>
+<div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · {_src.get('ISHIP_SRC_PHONE','')}<br>
+{_src.get('ISHIP_SRC_ADDRESS','')} {_src.get('ISHIP_SRC_DISTRICT','')} {_src.get('ISHIP_SRC_AMPHURE','')} {_src.get('ISHIP_SRC_PROVINCE','')} {_src.get('ISHIP_SRC_ZIPCODE','')}</div>
+<div class="section"><b>ผู้รับ:</b> {_lbl_name} · {_lbl_phone}<br>
+{_lbl_addr_line} {_lbl_district} {_lbl_amphure} {_lbl_province} {_lbl_zip}</div>
+<div class="section"><b>รายการกล่อง:</b>
+<table><tr><th>ขนาด</th><th>น้ำหนัก/กล่อง</th><th>จำนวน</th></tr>{_box_rows_html}</table>
+รวม {_lbl_total_boxes} กล่อง &nbsp;|&nbsp; น้ำหนักรวม {_lbl_total_weight:.2f} kg {_cod_line}</div>
+{_notes_line}
 </body></html>"""
-                                        components.html(_label_html, height=500, scrolling=True)
+                                        components.html(_label_html, height=600, scrolling=True)
+
+                                        _box_summary_txt = "; ".join(
+                                            f"{r['l']}x{r['w']}x{r['h']}cm {r['weight_kg']:.1f}kg x{r['qty']}"
+                                            for r in _lbl_rows
+                                        )
+                                        _full_notes = f"[กล่อง: {_box_summary_txt}]" + (f" {_lbl_notes}" if _lbl_notes else "")
 
                                         db.create_shipment({
                                             "id":            str(uuid.uuid4()),
@@ -1911,10 +1943,11 @@ body{{font-family:'Sarabun',sans-serif;padding:16px;font-size:13px}}
                                             "shipping_cost": _sel_plan["total_cost"],
                                             "items":         [{"product_id": code, "name": code, "qty": qty}
                                                                for code, qty in _label_items.items()],
-                                            "tracking_no":   _lbl_tracking,
+                                            "tracking_no":   "",
                                             "cod_amount":    _lbl_cod_amt,
-                                            "notes":         _lbl_notes,
+                                            "notes":         _full_notes,
                                             "source":        "manual",
                                         })
+                                        st.session_state["_lbl_box_rows"] = []
                                         st.success("✅ บันทึกประวัติการส่งแล้ว — ดูได้ที่แท็บ 🚚 ประวัติการส่ง")
 
