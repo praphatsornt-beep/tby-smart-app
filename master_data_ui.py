@@ -84,13 +84,18 @@ def render():
     with sub1:
         products = db.get_products()
 
-        prod_cols = ["id", "name", "price", "points_per_unit", "bv_per_unit", "weight_grams"]
+        prod_cols = ["id", "name", "price", "points_per_unit", "bv_per_unit", "weight_grams", "max_units_per_box"]
         col_rename = {
             "id": "รหัส", "name": "ชื่อสินค้า", "price": "ราคา (บาท)",
             "points_per_unit": "PV/หน่วย", "bv_per_unit": "BV/หน่วย", "weight_grams": "น้ำหนัก (g)",
+            "max_units_per_box": "จำนวนสูงสุด/กล่อง",
         }
         if products:
-            prod_df = pd.DataFrame(products)[prod_cols].rename(columns=col_rename)
+            prod_df = pd.DataFrame(products)
+            for _c in prod_cols:
+                if _c not in prod_df.columns:
+                    prod_df[_c] = None
+            prod_df = prod_df[prod_cols].rename(columns=col_rename)
         else:
             prod_df = pd.DataFrame(columns=list(col_rename.values()))
 
@@ -107,6 +112,10 @@ def render():
                 "PV/หน่วย":    st.column_config.NumberColumn("PV/หน่วย",   min_value=0, step=1.0,  format="%.2f"),
                 "BV/หน่วย":    st.column_config.NumberColumn("BV/หน่วย",   min_value=0, step=1.0,  format="%.2f"),
                 "น้ำหนัก (g)": st.column_config.NumberColumn("น้ำหนัก (g)", min_value=0, step=10.0, format="%.0f"),
+                "จำนวนสูงสุด/กล่อง": st.column_config.NumberColumn(
+                    "จำนวนสูงสุด/กล่อง", min_value=0, step=1, format="%d",
+                    help="จำนวนชิ้นสูงสุดต่อกล่อง (ทางกายภาพ) — เว้นว่าง = ไม่จำกัด ใช้น้ำหนักกล่องเป็นตัวจำกัดแทน",
+                ),
             },
         )
         if st.button("💾 บันทึกทั้งหมด", key="save_prod_editor", use_container_width=True, type="primary"):
@@ -116,13 +125,15 @@ def render():
                 st.error("ไม่มีข้อมูลที่จะบันทึก")
             else:
                 for _, row in valid.iterrows():
+                    _max_units = row["จำนวนสูงสุด/กล่อง"]
                     db.upsert_product({
-                        "id":              str(row["รหัส"]).strip(),
-                        "name":            str(row["ชื่อสินค้า"]).strip(),
-                        "price":           float(row["ราคา (บาท)"]  or 0),
-                        "points_per_unit": float(row["PV/หน่วย"]    or 0),
-                        "bv_per_unit":     float(row["BV/หน่วย"]    or 0),
-                        "weight_grams":    float(row["น้ำหนัก (g)"] or 0),
+                        "id":                str(row["รหัส"]).strip(),
+                        "name":              str(row["ชื่อสินค้า"]).strip(),
+                        "price":             float(row["ราคา (บาท)"]  or 0),
+                        "points_per_unit":   float(row["PV/หน่วย"]    or 0),
+                        "bv_per_unit":       float(row["BV/หน่วย"]    or 0),
+                        "weight_grams":      float(row["น้ำหนัก (g)"] or 0),
+                        "max_units_per_box": (int(_max_units) if pd.notna(_max_units) and float(_max_units) > 0 else None),
                     })
                 st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
                 st.rerun()

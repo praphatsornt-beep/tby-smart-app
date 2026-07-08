@@ -43,5 +43,42 @@ class TestGetShippingOptions(unittest.TestCase):
         self.assertEqual(ft["surcharge"], 50)
 
 
+class TestBracketBreakpoints(unittest.TestCase):
+    def test_inter_express_flat_brackets(self):
+        # ราคาเหมาเป็นช่วง 5kg (110/130/150/170) -> จุดตัดคือ kg สุดท้ายของแต่ละช่วง
+        points = carriers._bracket_breakpoints(carriers._INTER_EXPRESS, 30)
+        self.assertEqual(points, [15, 20, 25, 30])
+
+    def test_smooth_pricing_falls_back_to_max_kg(self):
+        # ราคาไหลลื่นเกือบทุก kg -> ไม่มีประโยชน์ลองหลายจุด คืน [max_kg] ค่าเดียว
+        points = carriers._bracket_breakpoints(carriers._FLASH_THUNDER, 50)
+        self.assertEqual(points, [50])
+
+
+class TestPlanBoxes(unittest.TestCase):
+    def test_matches_hand_calculated_inter_total(self):
+        # ผงซักฟอก: 1 ลัง = 24 ชิ้น, 27 กก. -> 1.125 กก./ชิ้น
+        detergent = {"id": "DET1KG", "weight_grams": 1125, "max_units_per_box": 24}
+        # กาแฟ 84 ซอง: ยัดได้สูงสุด 12 ห่อ, 24 กก. -> 2 กก./ห่อ
+        coffee84 = {"id": "CF84", "weight_grams": 2000, "max_units_per_box": 12}
+        items = [{"product": detergent, "qty": 210}, {"product": coffee84, "qty": 13}]
+
+        plans = carriers.plan_boxes(items, "50210")
+        inter = next(p for p in plans if p["id"] == "inter_express")
+
+        self.assertEqual(inter["box_count"], 10)
+        self.assertEqual(inter["total_cost"], 1660)
+        # ไม่มีกล่องไหนน้ำหนักส่งจริง (สินค้า + 0.5 กก. กล่อง) เกินเพดานที่เลือกใช้
+        for box in inter["boxes"]:
+            self.assertLessEqual(box["weight_kg"] + 0.5, inter["ceiling_used"] + 1e-9)
+
+    def test_results_sorted_cheapest_first(self):
+        product = {"id": "TF2581", "weight_grams": 200, "max_units_per_box": 20}
+        items = [{"product": product, "qty": 50}]
+        plans = carriers.plan_boxes(items, "10110")
+        totals = [p["total_cost"] for p in plans]
+        self.assertEqual(totals, sorted(totals))
+
+
 if __name__ == "__main__":
     unittest.main()

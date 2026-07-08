@@ -79,3 +79,56 @@ def pack_boxes(items: list, max_kg: float) -> list:
         if not placed:
             boxes.append({"weight_kg": w, "items": {code: 1}})
     return boxes
+
+
+def pack_boxes_grouped(items: list, max_kg: float) -> list:
+    """จัดกล่องแบบเก็บสินค้าเดียวกันไว้ด้วยกันก่อน — เหมาะกับขนส่งที่คิดราคาเป็นช่วงน้ำหนัก
+    (เช่น Inter, J&T) ที่อยากลดการปนสินค้าหลายชนิดในกล่องเดียวโดยไม่จำเป็น
+
+    แต่ละสินค้าเต็มกล่องเดี่ยวๆ ของตัวเองก่อน ตาม max_units_per_box (จำนวนชิ้นสูงสุดต่อกล่อง
+    ทางกายภาพ ถ้าตั้งไว้) หรือน้ำหนักกล่อง max_kg แล้วแต่ค่าไหนถึงก่อน (กันไม่ให้เกินน้ำหนักเสมอ)
+    ส่วนเศษที่เหลือของแต่ละสินค้า (ย่อมน้อยกว่า cap ของสินค้านั้นเสมอ เพราะเป็นเศษจาก modulo)
+    เอามารวมกันข้ามสินค้าด้วย First-Fit Decreasing ใส่กล่อง "เศษรวม" ใหม่แยกต่างหาก
+    (ไม่ยุ่งกับกล่องเต็มของสินค้าอื่นที่จัดไว้แล้ว)
+
+    Returns list of boxes [{weight_kg, items:{code:qty}}] — shape เดียวกับ pack_boxes()
+    """
+    by_code: dict = {}
+    for it in items:
+        p    = it["product"]
+        code = p["id"].upper()
+        w    = p.get("weight_grams", 0) / 1000
+        max_units = p.get("max_units_per_box") or None
+        entry = by_code.setdefault(code, {"weight": w, "max_units": max_units, "qty": 0})
+        entry["qty"] += int(it["qty"])
+
+    boxes: list[dict] = []
+    leftover_units: list[tuple] = []  # (code, weight_kg) รอรวมข้ามสินค้า
+
+    for code, info in by_code.items():
+        w, max_units, qty = info["weight"], info["max_units"], info["qty"]
+        if qty <= 0:
+            continue
+        weight_cap = int(max_kg / w) if w > 0 else qty
+        cap = min(max_units, weight_cap) if max_units else weight_cap
+        cap = max(1, min(cap, qty))
+        full_boxes, remainder = divmod(qty, cap)
+        for _ in range(full_boxes):
+            boxes.append({"weight_kg": round(cap * w, 6), "items": {code: cap}})
+        if remainder > 0:
+            leftover_units.extend([(code, w)] * remainder)
+
+    leftover_units.sort(key=lambda x: -x[1])
+    mixed_boxes: list[dict] = []
+    for code, w in leftover_units:
+        placed = False
+        for box in mixed_boxes:
+            if box["weight_kg"] + w <= max_kg + 1e-9:
+                box["weight_kg"] += w
+                box["items"][code] = box["items"].get(code, 0) + 1
+                placed = True
+                break
+        if not placed:
+            mixed_boxes.append({"weight_kg": w, "items": {code: 1}})
+
+    return boxes + mixed_boxes

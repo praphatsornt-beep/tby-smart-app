@@ -70,5 +70,43 @@ class TestPackBoxes(unittest.TestCase):
         self.assertEqual(total_units, 3)
 
 
+class TestPackBoxesGrouped(unittest.TestCase):
+    def test_caps_at_max_units_not_weight(self):
+        # TF2581 = 0.2kg/unit; max_kg=5 alone would allow 25/box, but max_units_per_box=3 caps it
+        product = {**PRODUCTS[0], "max_units_per_box": 3}
+        items = [{"product": product, "qty": 7}]
+        boxes = calc_logic.pack_boxes_grouped(items, max_kg=5)
+        # 7 // 3 = 2 full boxes of 3, remainder 1 -> own leftover box (nothing else to combine with)
+        self.assertEqual(len(boxes), 3)
+        full = [b for b in boxes if b["items"].get("TF2581") == 3]
+        self.assertEqual(len(full), 2)
+        for b in full:
+            self.assertAlmostEqual(b["weight_kg"], 0.6)
+        leftover = [b for b in boxes if b["items"].get("TF2581") == 1]
+        self.assertEqual(len(leftover), 1)
+
+    def test_leftovers_from_different_products_combine(self):
+        prod_a = {**PRODUCTS[0], "max_units_per_box": 2}  # 0.2kg/unit
+        prod_b = {**PRODUCTS[1], "max_units_per_box": 2}  # 0.3kg/unit
+        items = [{"product": prod_a, "qty": 5}, {"product": prod_b, "qty": 3}]
+        boxes = calc_logic.pack_boxes_grouped(items, max_kg=5)
+        # prod_a: 2 full boxes of 2 + remainder 1 | prod_b: 1 full box of 2 + remainder 1
+        full_a = [b for b in boxes if b["items"] == {"TF2581": 2}]
+        full_b = [b for b in boxes if b["items"] == {"RB2306": 2}]
+        mixed  = [b for b in boxes if len(b["items"]) > 1]
+        self.assertEqual(len(full_a), 2)
+        self.assertEqual(len(full_b), 1)
+        self.assertEqual(len(mixed), 1)
+        self.assertEqual(mixed[0]["items"], {"RB2306": 1, "TF2581": 1})
+        self.assertAlmostEqual(mixed[0]["weight_kg"], 0.5)
+
+    def test_no_max_units_falls_back_to_weight_cap_like_pack_boxes(self):
+        items = [{"product": PRODUCTS[0], "qty": 3}]  # no max_units_per_box set
+        boxes = calc_logic.pack_boxes_grouped(items, max_kg=0.4)
+        self.assertEqual(len(boxes), 2)
+        total_units = sum(sum(b["items"].values()) for b in boxes)
+        self.assertEqual(total_units, 3)
+
+
 if __name__ == "__main__":
     unittest.main()

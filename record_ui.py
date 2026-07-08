@@ -1710,27 +1710,10 @@ def render(tab1, products, customers, customer_map):
                 st.session_state["_show_boxcalc"] = not st.session_state.get("_show_boxcalc", False)
             if st.session_state.get("_show_boxcalc"):
                 st.subheader("📦 คำนวณการแบ่งกล่อง")
-                st.caption("ดึงน้ำหนักจาก tab 🔢 คำนวณยอด — กดคำนวณที่นั่นก่อน")
+                st.caption("ดึงน้ำหนักจาก tab 🔢 คำนวณยอด — กดคำนวณที่นั่นก่อน "
+                           "ระบบจะเก็บสินค้าเดียวกันไว้ด้วยกันก่อน แล้วหาเพดานน้ำหนัก/กล่องที่คุ้มสุด "
+                           "ของแต่ละขนส่งให้เองอัตโนมัติ")
 
-                # ── ตั้งค่า preset กล่อง ──────────────────────────────────────────
-                with st.expander("⚙️ ตั้งค่าขนาดกล่อง", expanded=False):
-                    _box_str_input = st.text_input(
-                        "น้ำหนักสูงสุดต่อกล่อง (kg) คั่นด้วยลูกน้ำ",
-                        value=st.session_state.get("_box_presets_str", "5, 10, 20"),
-                        key="_box_presets_input",
-                    )
-                    st.session_state["_box_presets_str"] = _box_str_input
-                _box_str = st.session_state.get("_box_presets_str", "5, 10, 20")
-
-                def _safe_float_box(s: str) -> float:
-                    try: return float(s.strip())
-                    except: return 0.0
-
-                _pack_boxes = calc_logic.pack_boxes
-
-                _box_sizes = sorted({v for s in _box_str.split(",") if (v := _safe_float_box(s)) > 0})
-
-                # ── ดึงข้อมูลจาก calc result ──────────────────────────────────────
                 _bx_cr = st.session_state.get("_calc_result")
                 if not _bx_cr or not _bx_cr.get("items"):
                     st.info("กรุณาคำนวณยอดใน tab 🔢 คำนวณยอด ก่อน")
@@ -1740,89 +1723,38 @@ def render(tab1, products, customers, customer_map):
                     st.markdown(f"⚖️ น้ำหนักสินค้ารวม: **{_bx_prod_kg:.3f} kg**"
                                 + (f"  |  📮 **{_bx_postcode}**" if _bx_postcode else ""))
 
-                    if not _box_sizes:
-                        st.warning("กรุณาตั้งค่าขนาดกล่องก่อน")
+                    if not _bx_postcode:
+                        st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อวางแผนกล่อง+เทียบค่าส่ง")
                     else:
-                        # ── สรุปทุก config (เปรียบเทียบ) ──────────────────────────
-                        _summary_rows = []
-                        _config_data  = {}   # bmax → {boxes, carrier_totals}
-                        _all_carrier_names = []
-
-                        for _bmax in _box_sizes:
-                            _boxes = _pack_boxes(_bx_cr["items"], _bmax)
-                            _n     = len(_boxes)
-                            _total_ship_kg = _bx_prod_kg + _n * 0.5
-
-                            # ค่าส่งทุกขนส่ง — ต้องรองรับทุกกล่อง จึงจะแสดง
-                            _carrier_totals: dict[str, int] = {}
-                            _carrier_ok: dict[str, bool] = {}
-                            if _bx_postcode:
-                                for _box in _boxes:
-                                    _bopts = carr.get_shipping_options(_box["weight_kg"] + 0.5, _bx_postcode)
-                                    for _o in _bopts:
-                                        _cn = _o["name"]
-                                        if _o["exceeds_max"]:
-                                            _carrier_ok[_cn] = False
-                                        else:
-                                            if _cn not in _carrier_ok:
-                                                _carrier_ok[_cn] = True
-                                            if _carrier_ok.get(_cn):
-                                                _carrier_totals[_cn] = _carrier_totals.get(_cn, 0) + _o["total"]
-                                            if _cn not in _all_carrier_names:
-                                                _all_carrier_names.append(_cn)
-                                # ลบขนส่งที่รองรับไม่ครบทุกกล่อง
-                                _carrier_totals = {k: v for k, v in _carrier_totals.items() if _carrier_ok.get(k)}
-
-                            _cheapest_cost = min(_carrier_totals.values()) if _carrier_totals else None
-                            _cheapest_name = next((k for k,v in _carrier_totals.items() if v == _cheapest_cost), "-") if _cheapest_cost else "-"
-
-                            _config_data[_bmax] = {"boxes": _boxes, "carrier_totals": _carrier_totals}
-                            _row = {"กล่อง max": f"{_bmax:.0f} kg", "จำนวนกล่อง": _n,
-                                    "น้ำหนักส่งรวม (kg)": f"{_total_ship_kg:.2f}",
-                                    "ขนส่งถูกสุด": _cheapest_name}
-                            if _cheapest_cost:
-                                _row["ค่าส่งรวม (฿)"] = _cheapest_cost
-                            _summary_rows.append(_row)
-
-                        _sum_df = pd.DataFrame(_summary_rows)
-                        if "ค่าส่งรวม (฿)" in _sum_df.columns:
-                            _ci_min = _sum_df["ค่าส่งรวม (฿)"].idxmin()
-                            _sum_df["กล่อง max"] = _sum_df.apply(
-                                lambda r: ("⭐ " if r.name == _ci_min else "") + r["กล่อง max"], axis=1)
-                            st.dataframe(_sum_df, hide_index=True, use_container_width=True,
-                                         column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
-                            st.caption("⭐ = ค่าส่งรวมถูกสุด")
+                        _bx_plans = carr.plan_boxes(_bx_cr["items"], _bx_postcode)
+                        if not _bx_plans:
+                            st.warning("ไม่มีขนส่งไหนรองรับออร์เดอร์นี้ได้เลย")
                         else:
-                            st.dataframe(_sum_df, hide_index=True, use_container_width=True)
+                            # ── สรุปทุกขนส่ง (เรียงถูกสุดก่อน) ────────────────────
+                            _plan_rows = [{
+                                "ขนส่ง":         ("⭐ " if i == 0 else "") + p["name"],
+                                "จำนวนกล่อง":    p["box_count"],
+                                "เพดานกล่อง":    f"{p['ceiling_used']} kg",
+                                "ค่าส่งรวม (฿)":  p["total_cost"],
+                            } for i, p in enumerate(_bx_plans)]
+                            st.dataframe(pd.DataFrame(_plan_rows), hide_index=True, use_container_width=True,
+                                         column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%.0f ฿")})
+                            st.caption("⭐ = ค่าส่งรวมถูกสุด — ระบบลองแพ็คที่จุดตัดราคาของแต่ละขนส่งให้เองแล้ว")
 
-                        # ── รายละเอียด config ที่เลือก ─────────────────────────────
-                        st.divider()
-                        _sel_label = st.selectbox(
-                            "ดูรายละเอียด — เลือก config กล่อง",
-                            [f"{b:.0f} kg" for b in _box_sizes],
-                            key="_bx_sel_config",
-                        )
-                        _sel_bmax  = next((b for b in _box_sizes if f"{b:.0f} kg" == _sel_label), _box_sizes[0])
-                        _sel_data  = _config_data[_sel_bmax]
-                        _sel_boxes = _sel_data["boxes"]
-
-                        # ① สินค้าในแต่ละกล่อง
-                        st.markdown(f"**📦 การจัดสินค้า ({len(_sel_boxes)} กล่อง)**")
-                        for _bi, _box in enumerate(_sel_boxes, 1):
-                            _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
-                            _bkg = _box["weight_kg"] + 0.5
-                            st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`")
-
-                        # ② ตารางเปรียบเทียบทุกขนส่ง
-                        if _bx_postcode and _sel_data["carrier_totals"]:
+                            # ── รายละเอียด — เลือกขนส่ง ───────────────────────────
                             st.divider()
-                            st.markdown("**🚚 เปรียบเทียบค่าส่งทุกขนส่ง**")
-                            _ct = _sel_data["carrier_totals"]
-                            _ct_min = min(_ct.values())
-                            _ct_rows = [{"ขนส่ง": ("🥇 " if v == _ct_min else "") + k, "ค่าส่งรวม (฿)": v}
-                                        for k, v in sorted(_ct.items(), key=lambda x: x[1])]
-                            st.dataframe(pd.DataFrame(_ct_rows), hide_index=True, use_container_width=True,
-                                         column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%d ฿")})
-                        elif not _bx_postcode:
-                            st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อดูค่าส่งเปรียบเทียบ")
+                            _bx_idx = st.selectbox(
+                                "ดูรายละเอียด — เลือกขนส่ง",
+                                list(range(len(_bx_plans))),
+                                format_func=lambda i: _bx_plans[i]["name"],
+                                key="_bx_sel_carrier",
+                            )
+                            _sel_plan = _bx_plans[_bx_idx]
+
+                            st.markdown(f"**📦 การจัดสินค้า ({_sel_plan['box_count']} กล่อง — เพดาน {_sel_plan['ceiling_used']} kg)**")
+                            for _bi, _box in enumerate(_sel_plan["boxes"], 1):
+                                _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
+                                _bkg = _box["weight_kg"] + 0.5
+                                st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`")
+                            st.markdown(f"**ค่าส่งรวม: {_sel_plan['total_cost']:.0f} ฿**")
 

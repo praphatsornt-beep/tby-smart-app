@@ -1,6 +1,7 @@
 """Carrier rate cards and multi-carrier shipping comparison."""
 from math import ceil
 from flash_zones import lookup_zone, zone_surcharge_by_weight, spx_surcharge
+import calc_logic
 
 # ── Bangkok zone detection ────────────────────────────────────────────────────
 _BKK_SET = {str(i).zfill(5) for i in range(10000, 11000)}  # กรุงเทพฯ + สมุทรปราการ
@@ -236,48 +237,125 @@ _CARRIER_DEFS = [
 
 # ── Main comparison function ──────────────────────────────────────────────────
 
+def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
+                    is_cod: bool = False, cod_amount: float = 0) -> dict | None:
+    """คิดราคา 1 ขนส่ง (tuple จาก _CARRIER_DEFS) สำหรับน้ำหนัก/รหัสไปรษณีย์ที่กำหนด
+    คืน None ถ้าขนส่งนี้ใช้ไม่ได้เลย (ต่ำกว่าขั้นต่ำ, ไม่รับ COD, เกินวงเงิน COD, หรือหาราคาไม่เจอ)
+    """
+    cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt = carrier_def
+    if weight_kg < min_kg:
+        return None  # ไม่แสดงถ้าน้ำหนักต่ำกว่าขั้นต่ำ (เช่น Flash Pro DD Bulky ต้อง >5kg)
+    if is_cod and not supports_cod:
+        return None  # ขนส่งนี้ไม่รับ COD
+    if is_cod and max_cod_amt and cod_amount > max_cod_amt:
+        return None  # เกินวงเงิน COD สูงสุดของขนส่งนี้
+
+    pc  = str(postcode).strip()
+    bkk = _is_bkk(pc)
+    exceeds = weight_kg > max_kg
+    lookup_kg = min(weight_kg, max_kg) if exceeds else weight_kg
+    base = _lookup(table, lookup_kg, bkk)
+    if base is None:
+        return None
+    sur, sur_label = sur_fn(pc, weight_kg)
+    subtotal = base + sur + fuel
+    cod_fee = ceil(max(subtotal, cod_amount) * cod_pct / 100) if is_cod else 0
+    return {
+        "id":            cid,
+        "name":          name,
+        "base":          base,
+        "surcharge":     sur,
+        "sur_label":     sur_label,
+        "fuel":          fuel,
+        "total":         subtotal,
+        "cod_fee":       cod_fee,
+        "cod_pct":       cod_pct,
+        "exceeds_max":   exceeds,
+        "max_kg":        max_kg,
+        "min_kg":        min_kg,
+        "return_free":   return_free,
+        "max_cm":        max_cm,
+        "max_cod_amt":   max_cod_amt,
+    }
+
+
 def get_shipping_options(weight_kg: float, postcode: str,
                          is_cod: bool = False, cod_amount: float = 0) -> list[dict]:
     """
     คำนวณค่าส่งทุกขนส่งสำหรับน้ำหนักและรหัสไปรษณีย์ที่กำหนด
     คืน list ของ dict เรียงจากถูกไปแพง (เกินน้ำหนักสูงสุดอยู่ท้าย)
     """
-    pc  = str(postcode).strip()
-    bkk = _is_bkk(pc)
     results = []
-
-    for cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt in _CARRIER_DEFS:
-        if weight_kg < min_kg:
-            continue  # ไม่แสดงถ้าน้ำหนักต่ำกว่าขั้นต่ำ (เช่น Flash Pro DD Bulky ต้อง >5kg)
-        if is_cod and not supports_cod:
-            continue  # ขนส่งนี้ไม่รับ COD
-        if is_cod and max_cod_amt and cod_amount > max_cod_amt:
-            continue  # เกินวงเงิน COD สูงสุดของขนส่งนี้
-        exceeds = weight_kg > max_kg
-        lookup_kg = min(weight_kg, max_kg) if exceeds else weight_kg
-        base = _lookup(table, lookup_kg, bkk)
-        if base is None:
-            continue
-        sur, sur_label = sur_fn(pc, weight_kg)
-        subtotal = base + sur + fuel
-        cod_fee = ceil(max(subtotal, cod_amount) * cod_pct / 100) if is_cod else 0
-        results.append({
-            "id":            cid,
-            "name":          name,
-            "base":          base,
-            "surcharge":     sur,
-            "sur_label":     sur_label,
-            "fuel":          fuel,
-            "total":         subtotal,
-            "cod_fee":       cod_fee,
-            "cod_pct":       cod_pct,
-            "exceeds_max":   exceeds,
-            "max_kg":        max_kg,
-            "min_kg":        min_kg,
-            "return_free":   return_free,
-            "max_cm":        max_cm,
-            "max_cod_amt":   max_cod_amt,
-        })
-
+    for carrier_def in _CARRIER_DEFS:
+        r = _price_one_box(carrier_def, weight_kg, postcode, is_cod, cod_amount)
+        if r is not None:
+            results.append(r)
     results.sort(key=lambda x: (x["exceeds_max"], x["total"]))
     return results
+
+
+# ── Bracket-aware auto box planning ───────────────────────────────────────────
+
+def _bracket_breakpoints(table: dict, max_kg: int, threshold: int = 8) -> list[int]:
+    """คืนน้ำหนัก (kg) ที่เป็นจุดตัดราคาของตารางนี้ (kg สุดท้ายก่อนราคาจะเปลี่ยน)
+
+    ถ้าจุดตัดที่เจอมากกว่า threshold จุด (ราคาไหลลื่นเกือบทุก kg แบบ Flash/J&T ไม่ใช่ราคาเหมา
+    เป็นช่วงแบบ Inter) คืน [max_kg] ค่าเดียวพอ เพราะยิ่งแพ็คเต็มยิ่งคุ้มอยู่แล้วสำหรับราคาที่ไหลลื่น
+    ไม่มีประโยชน์ที่จะลองหลายจุด
+    """
+    def _val(w):
+        entry = table.get(w)
+        if entry is None:
+            return None
+        return entry[0] if isinstance(entry, tuple) else entry
+
+    points = []
+    for w in range(1, int(max_kg) + 1):
+        if w == max_kg or _val(w) != _val(w + 1):
+            points.append(w)
+    if not points or len(points) > threshold:
+        return [int(max_kg)]
+    return points
+
+
+def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: float = 0,
+               box_weight_g: int = 500) -> list[dict]:
+    """วางแผนกล่องที่คุ้มค่าส่งสุดสำหรับทุกขนส่ง — หาจุดตัดราคาของแต่ละขนส่งเอง (ไม่ต้องตั้งค่าเอง)
+    แล้วแพ็คด้วย calc_logic.pack_boxes_grouped() ที่จุดตัดนั้นๆ (เก็บสินค้าเดียวกันไว้ด้วยกันก่อน)
+    เลือกจุดตัดที่รวมค่าส่งถูกสุดต่อขนส่ง
+
+    Returns list เรียงถูกสุดก่อน: [{id, name, boxes, total_cost, ceiling_used, box_count}, ...]
+    ข้ามขนส่งที่ใช้ไม่ได้เลย (ไม่รับ COD, มีกล่องเกิน max_kg ทุกจุดตัดที่ลอง ฯลฯ)
+    """
+    box_weight_kg = box_weight_g / 1000
+    plans = []
+
+    for carrier_def in _CARRIER_DEFS:
+        cid, name, table, max_kg = carrier_def[0], carrier_def[1], carrier_def[2], carrier_def[3]
+        best = None
+        for ceiling in _bracket_breakpoints(table, max_kg):
+            pack_cap = max(0.1, ceiling - box_weight_kg)
+            boxes = calc_logic.pack_boxes_grouped(items, pack_cap)
+            if not boxes:
+                continue
+            total = 0.0
+            ok = True
+            for box in boxes:
+                ship_kg = box["weight_kg"] + box_weight_kg
+                priced = _price_one_box(carrier_def, ship_kg, postcode, is_cod, cod_amount)
+                if priced is None or priced["exceeds_max"]:
+                    ok = False
+                    break
+                total += priced["total"] + priced["cod_fee"]
+            if not ok:
+                continue
+            if best is None or total < best["total_cost"]:
+                best = {
+                    "id": cid, "name": name, "boxes": boxes,
+                    "total_cost": total, "ceiling_used": ceiling, "box_count": len(boxes),
+                }
+        if best is not None:
+            plans.append(best)
+
+    plans.sort(key=lambda x: x["total_cost"])
+    return plans
