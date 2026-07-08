@@ -103,6 +103,7 @@ def update_customer_address(customer_id: str, data: dict) -> None:
 
 def _clear_transaction_caches() -> None:
     get_all_transactions_df.clear()
+    get_customer_ids_with_transactions.clear()
     get_outstanding_df.clear()
     get_unbilled_pv_summary.clear()
     get_customer_ledger.clear()
@@ -647,6 +648,14 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
         })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=_TXN_COLS)
+
+
+@st.cache_data(ttl=300)
+def get_customer_ids_with_transactions() -> set:
+    """customer_id ที่เคยมีรายการใน transactions อย่างน้อย 1 รายการ — ใช้กรอง dropdown
+    ลูกค้าในหน้าประวัติ ไม่ต้องดึงทั้งตาราง transactions มาแค่เพื่อเช็คว่ามีข้อมูลมั้ย"""
+    rows = _retry(lambda: get_supabase().table("transactions").select("customer_id").execute().data)
+    return {r["customer_id"] for r in rows if r.get("customer_id")}
 
 
 # ─── Finance ─────────────────────────────────────────────────────────────────

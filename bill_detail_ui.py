@@ -1087,7 +1087,14 @@ def render(products, customers):
     elif _t5_active == _T5_TABS[2]:
         st.subheader("รายละเอียดบิล")
 
-        customers_h = customers
+        try:
+            _hist_cids_with_txn = db.get_customer_ids_with_transactions()
+        except Exception:
+            _hist_cids_with_txn = None  # ดึงไม่ได้ — แสดงลูกค้าทั้งหมดแทน
+        customers_h = (
+            [c for c in customers if c["id"] in _hist_cids_with_txn]
+            if _hist_cids_with_txn is not None else customers
+        )
         h_col1, h_col2 = st.columns(2)
         with h_col1:
             h_filter_cust = st.selectbox(
