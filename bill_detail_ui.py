@@ -1138,13 +1138,6 @@ def render(products, customers):
                 key="dl_hist",
             )
 
-            display_cols_h = ["เลขที่บิล", "วันที่", "ลูกค้า", "รหัส", "สินค้า", "สั่ง", "รับแล้ว",
-                              "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ",
-                              "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
-            show_df = all_df[display_cols_h].reset_index(drop=True)
-            show_df["หมายเหตุ"] = show_df["หมายเหตุ"].fillna("").apply(_fmt_note)
-            id_map  = all_df["id"].reset_index(drop=True)
-
             chk_df = show_df.copy()
             chk_df.insert(0, "🗑️", False)
             _cleared_mask = all_df["เคลียร์แล้ว"].reset_index(drop=True)

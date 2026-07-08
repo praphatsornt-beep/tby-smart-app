@@ -881,8 +881,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
         )
         if st.button("🗑️ ลบรายการ", disabled=not (_t7_del_item_chk and _t7_del_item_labels),
                      type="secondary", key=f"{key_prefix}_del_item_btn"):
-            for _lbl in _t7_del_item_labels:
-                db.delete_transaction(_t7_item_opts[_lbl])
+            db.delete_transactions_batch([_t7_item_opts[_lbl] for _lbl in _t7_del_item_labels])
             st.success(f"✅ ลบ {len(_t7_del_item_labels)} รายการแล้ว")
             if not preselected_bill:
                 st.session_state.pop(_pk, None)
