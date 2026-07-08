@@ -37,7 +37,7 @@ def parse_calc_order(text: str, products: list) -> dict:
                 try:
                     manual_ship = float(val)
                 except Exception:
-                    pass
+                    errors.append(f"ค่าส่งไม่ถูกต้อง: {token}")
         else:
             try:
                 qty = float(val)
@@ -47,7 +47,7 @@ def parse_calc_order(text: str, products: list) -> dict:
                     else:
                         errors.append(f"ไม่พบรหัส {code}")
             except Exception:
-                pass
+                errors.append(f"จำนวนไม่ถูกต้อง: {token}")
         i += 1
     return {"items": items, "ship_zip": ship_zip,
             "manual_ship": manual_ship, "is_cod": is_cod, "errors": errors}

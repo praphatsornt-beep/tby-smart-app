@@ -371,8 +371,9 @@ def render(tab1, products, customers, customer_map):
                             if m_customer != "— เลือกลูกค้า —":
                                 try:
                                     _saved_addrs = db.get_customer_addresses(customer_id=_cid)
-                                except Exception:
+                                except Exception as _sa_load_e:
                                     _saved_addrs = []
+                                    st.caption(f"⚠️ โหลดที่อยู่เดิมไม่สำเร็จ: {_sa_load_e}")
                                 if _saved_addrs:
                                     with st.expander(f"⚡ เลือกที่อยู่เดิม ({len(_saved_addrs)})", expanded=False):
                                         for _sa in _saved_addrs:
@@ -1143,8 +1144,9 @@ def render(tab1, products, customers, customer_map):
             if _sp_cid:
                 try:
                     _sp_saved = db.get_customer_addresses(customer_id=_sp_cid)
-                except Exception:
+                except Exception as _sp_load_e:
                     _sp_saved = []
+                    st.caption(f"⚠️ โหลดที่อยู่เดิมไม่สำเร็จ: {_sp_load_e}")
                 if _sp_saved:
                     with st.expander(f"⚡ ที่อยู่เดิม ({len(_sp_saved)} รายการ)", expanded=False):
                         for _sa in _sp_saved:

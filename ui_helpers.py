@@ -351,8 +351,9 @@ def _warn_duplicate_phone(phone: str, current_cid: str):
         return
     try:
         addr = db.get_address_by_phone(phone)
-    except Exception:
-        addr = None
+    except Exception as _e:
+        st.caption(f"⚠️ ตรวจสอบเบอร์ซ้ำไม่สำเร็จ ({_e}) — บันทึกที่อยู่ด้วยความระมัดระวัง")
+        return
     if addr and addr.get("customer_id") and addr.get("customer_id") != current_cid:
         other_name = (addr.get("customers") or {}).get("name", "")
         other_addr = f"{addr.get('address_line','')} {addr.get('district','')} {addr.get('amphure','')} {addr.get('province','')}".strip()

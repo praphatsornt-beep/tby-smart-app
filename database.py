@@ -554,10 +554,12 @@ def delete_customer(customer_id: str) -> None:
 def get_unbilled_pv_summary() -> dict:
     """สรุป PV และยอดเงินของรายการที่ยังไม่เปิดบิล"""
     try:
-        rows = get_supabase().table("transactions").select(
+        rows = _retry(lambda: get_supabase().table("transactions").select(
             "qty, points_per_unit, total_amount, customers(name)"
-        ).eq("bill_status", "ยังไม่เปิดบิล").execute().data
+        ).eq("bill_status", "ยังไม่เปิดบิล").execute().data)
     except Exception:
+        # ลอง _retry แล้วยังไม่สำเร็จ — คืนศูนย์เพื่อไม่ให้หน้าแรก crash
+        # (ค่า 0 อาจไม่ตรงความจริงถ้า query ล้มเหลวจริง ไม่ใช่แค่ไม่มีรายการ)
         return {"count": 0, "total_pv": 0.0, "total_amount": 0.0}
 
     total_pv = sum(float(r["points_per_unit"]) * r["qty"] for r in rows)

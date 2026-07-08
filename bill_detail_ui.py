@@ -133,8 +133,9 @@ def render(products, customers):
                 # pre-fetch shipments ครั้งเดียวแทนการเรียงใน loop (N+1 fix)
                 try:
                     _all_ships = db.get_shipments()
-                except Exception:
+                except Exception as _as_e:
                     _all_ships = []
+                    st.caption(f"⚠️ โหลดข้อมูลการส่งไม่สำเร็จ (อาจไม่เห็น tracking บางรายการ): {_as_e}")
                 _ship_by_cust: dict = {}
                 for _s in _all_ships:
                     _ship_by_cust.setdefault(_s.get("customer_id", ""), []).append(_s)
