@@ -1823,7 +1823,9 @@ def render(tab1, products, customers, customer_map):
                                     st.session_state["_lbl_fr_am"]    = _lbl_seed.get("amphure", "") or ""
                                     st.session_state["_lbl_fr_pv"]    = _lbl_seed.get("province", "") or ""
                                     st.session_state["_lbl_fr_zip"]   = _lbl_seed.get("postal_code", "") or ""
-                                    st.session_state.pop("_lbl_dt_searchbox", None)
+                                    # ตั้งค่า searchbox ของตำบลตรงๆ (ไม่ใช้ value= เฉยๆ เพราะถ้า
+                                    # key นี้เคยมีอยู่แล้ว Streamlit จะไม่ยอมอัปเดตค่าที่แสดงให้)
+                                    st.session_state["_lbl_dt_searchbox"] = _lbl_seed.get("district", "") or ""
                                     st.rerun()
 
                                 _lc1, _lc2 = st.columns(2)
