@@ -1780,10 +1780,23 @@ def render(tab1, products, customers, customer_map):
                             if st.session_state.get("_show_manual_label"):
                                 st.markdown("**🖨️ ปริ้นใบปะหน้า (แบบ manual — ไม่ผ่าน iShip)**")
 
+                                # เติมค่าที่ staged ไว้ (เลือกที่อยู่เดิม / รหัสไปรษณีย์ auto-fill)
+                                # ก่อน render widget เสมอ — ห้ามตั้งค่า session_state ของ widget
+                                # ที่ render ไปแล้วในรอบเดียวกัน (Streamlit จะ error)
+                                for _lfk, _lwk in [
+                                    ("_lbl_fr_name", "_lbl_name"), ("_lbl_fr_phone", "_lbl_phone"),
+                                    ("_lbl_fr_al", "_lbl_addr_line"), ("_lbl_fr_dt", "_lbl_district"),
+                                    ("_lbl_fr_am", "_lbl_amphure"), ("_lbl_fr_pv", "_lbl_province"),
+                                    ("_lbl_fr_zip", "_lbl_zip"),
+                                ]:
+                                    if _lfk in st.session_state:
+                                        st.session_state[_lwk] = st.session_state.pop(_lfk)
+
                                 _lbl_cust_opts = ["-- พิมพ์เอง --"] + sorted(customer_map.keys(), key=str.casefold)
                                 _lbl_cust_sel  = st.selectbox("ลูกค้า/ผู้รับ", _lbl_cust_opts, key="_lbl_cust_sel")
-                                _lbl_seed    = {}
-                                _lbl_cust_id = None
+                                _lbl_cust_id  = None
+                                _lbl_addr_sig = None
+                                _lbl_seed     = {}
                                 if _lbl_cust_sel != "-- พิมพ์เอง --":
                                     _lbl_cust_obj = customer_map[_lbl_cust_sel]
                                     _lbl_cust_id  = _lbl_cust_obj["id"]
@@ -1795,19 +1808,40 @@ def render(tab1, products, customers, customer_map):
                                             for a in _lbl_addrs
                                         ]
                                         _lbl_addr_sel = st.selectbox("ที่อยู่ที่บันทึกไว้", _lbl_addr_labels, key="_lbl_addr_sel")
-                                        _lbl_seed = _lbl_addrs[_lbl_addr_labels.index(_lbl_addr_sel)]
+                                        _lbl_seed     = _lbl_addrs[_lbl_addr_labels.index(_lbl_addr_sel)]
+                                        _lbl_addr_sig = (_lbl_cust_id, _lbl_addr_sel)
                                     else:
                                         st.caption("ลูกค้านี้ยังไม่มีที่อยู่บันทึกไว้ — กรอกเองด้านล่าง")
 
+                                # ที่อยู่ที่เลือกเปลี่ยนไปจากเดิม → stage แล้ว rerun เพื่อเติมให้ widget ด้านล่าง
+                                if _lbl_addr_sig is not None and _lbl_addr_sig != st.session_state.get("_lbl_addr_applied"):
+                                    st.session_state["_lbl_addr_applied"] = _lbl_addr_sig
+                                    st.session_state["_lbl_fr_name"]  = _lbl_seed.get("recipient_name", "") or ""
+                                    st.session_state["_lbl_fr_phone"] = _lbl_seed.get("phone", "") or ""
+                                    st.session_state["_lbl_fr_al"]    = _lbl_seed.get("address_line", "") or ""
+                                    st.session_state["_lbl_fr_dt"]    = _lbl_seed.get("district", "") or ""
+                                    st.session_state["_lbl_fr_am"]    = _lbl_seed.get("amphure", "") or ""
+                                    st.session_state["_lbl_fr_pv"]    = _lbl_seed.get("province", "") or ""
+                                    st.session_state["_lbl_fr_zip"]   = _lbl_seed.get("postal_code", "") or ""
+                                    st.session_state.pop("_lbl_dt_searchbox", None)
+                                    st.rerun()
+
                                 _lc1, _lc2 = st.columns(2)
-                                _lbl_name  = _lc1.text_input("ชื่อผู้รับ", value=_lbl_seed.get("recipient_name", ""), key="_lbl_name")
-                                _lbl_phone = _lc2.text_input("เบอร์โทร", value=_lbl_seed.get("phone", ""), key="_lbl_phone")
-                                _lbl_addr_line = st.text_input("ที่อยู่ (บ้านเลขที่/ถนน)", value=_lbl_seed.get("address_line", ""), key="_lbl_addr_line")
+                                _lbl_name  = _lc1.text_input("ชื่อผู้รับ", key="_lbl_name")
+                                _lbl_phone = _lc2.text_input("เบอร์โทร", key="_lbl_phone")
+                                _lbl_addr_line = st.text_input("ที่อยู่ (บ้านเลขที่/ถนน)", key="_lbl_addr_line")
                                 _la1, _la2, _la3, _la4 = st.columns(4)
-                                _lbl_district = _la1.text_input("ตำบล/แขวง", value=_lbl_seed.get("district", ""), key="_lbl_district")
-                                _lbl_amphure  = _la2.text_input("อำเภอ/เขต", value=_lbl_seed.get("amphure", ""), key="_lbl_amphure")
-                                _lbl_province = _la3.text_input("จังหวัด", value=_lbl_seed.get("province", ""), key="_lbl_province")
-                                _lbl_zip      = _la4.text_input("รหัสไปรษณีย์", value=_lbl_seed.get("postal_code", ""), key="_lbl_zip")
+                                with _la1:
+                                    _lbl_district = _tambon_selectbox(
+                                        "_lbl_district", "_lbl_amphure", "_lbl_province", "_lbl_zip",
+                                        "_lbl_dt_searchbox",
+                                    )
+                                _lbl_amphure  = _la2.text_input("อำเภอ/เขต", key="_lbl_amphure")
+                                _lbl_province = _la3.selectbox("จังหวัด", [""] + _PROVINCES, key="_lbl_province")
+                                _lbl_zip      = _la4.text_input("รหัสไปรษณีย์", max_chars=5, key="_lbl_zip")
+                                _postcode_suggest(_lbl_zip, "_lbl_district", "_lbl_amphure", "_lbl_province",
+                                                  "_lbl_dt_searchbox", "_lbl_pc_suggest",
+                                                  stage_dt="_lbl_fr_dt", stage_am="_lbl_fr_am", stage_pv="_lbl_fr_pv")
 
                                 st.markdown("**ขนาดกล่อง — เพิ่มได้หลายขนาดในใบเดียว**")
                                 if "_lbl_box_rows" not in st.session_state:
