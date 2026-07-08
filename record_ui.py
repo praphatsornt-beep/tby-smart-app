@@ -16,6 +16,7 @@ from ui_helpers import (
     _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
+    BULKY_BOX_PRESETS_DEFAULT,
 )
 import carriers as carr
 
@@ -1811,6 +1812,8 @@ def render(tab1, products, customers, customer_map):
                                 st.markdown("**ขนาดกล่อง — เพิ่มได้หลายขนาดในใบเดียว**")
                                 if "_lbl_box_rows" not in st.session_state:
                                     st.session_state["_lbl_box_rows"] = []
+                                if "_bulky_presets_txt" not in st.session_state:
+                                    st.session_state["_bulky_presets_txt"] = BULKY_BOX_PRESETS_DEFAULT
 
                                 _lbl_presets = []
                                 for _ln in st.session_state.get("_bulky_presets_txt", "").splitlines():

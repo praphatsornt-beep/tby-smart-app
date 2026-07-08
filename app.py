@@ -15,7 +15,7 @@ import stock_ui
 import master_data_ui
 import record_ui
 import bill_detail_ui
-from ui_helpers import _extract_tracking, _extract_iship_order_id, _build_success_info
+from ui_helpers import _extract_tracking, _extract_iship_order_id, _build_success_info, BULKY_BOX_PRESETS_DEFAULT
 
 thai_address._load_db()  # pre-warm cache
 
@@ -457,19 +457,8 @@ def _show_carrier_select():
             st.markdown("**📐 ขนาดกล่อง (จำเป็นสำหรับ Bulky)**")
 
             # ── preset กล่อง ──────────────────────────────────────────────
-            _BULKY_DEFAULT = (
-                "ผงเล็ก: 55×33×28\n"
-                "ผงใหญ่: 40×45×23\n"
-                "กาแฟใหญ่: 60×43×25\n"
-                "pana: 23×35×16\n"
-                "โปรตีน: 33×22×20\n"
-                "สระผม: 24×30×20\n"
-                "อาบน้ำ: 32×26×25\n"
-                "XTRA: 30×42×26\n"
-                "น้ำผลไม้: 44×28×29"
-            )
             if "_bulky_presets_txt" not in st.session_state:
-                st.session_state["_bulky_presets_txt"] = _BULKY_DEFAULT
+                st.session_state["_bulky_presets_txt"] = BULKY_BOX_PRESETS_DEFAULT
             with st.expander("⚙️ ตั้งค่า preset กล่อง"):
                 st.text_area(
                     "ชื่อ: ยาว×กว้าง×สูง — บรรทัดละ 1 ขนาด",
