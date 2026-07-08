@@ -1677,6 +1677,71 @@ def render(products, customers):
                             else:
                                 st.warning(f"⚠️ {_pr_result.get('error','หา order ไม่ได้')}")
 
+            # ── ปริ้นใบปะหน้าซ้ำ (รายการที่บันทึกแบบ manual — ไม่ผ่าน iShip) ──
+            _pr_manual_rows = [r for r in _sh_all if r.get("source") == "manual"]
+            if _pr_manual_rows:
+                with st.expander("🖨️ ปริ้นใบปะหน้าซ้ำ (ขนส่งที่ไม่ผ่าน iShip)"):
+                    _pr_m_labels = [
+                        f"{_to_bkk(r.get('created_at') or '')} · {r.get('recipient_name','')} · {r.get('carrier','')}"
+                        for r in _pr_manual_rows
+                    ]
+                    _pr_m_sel = st.selectbox("เลือกรายการ", _pr_m_labels, key="sh_print_manual_sel")
+                    if st.button("🖨️ ปริ้นซ้ำ", key="sh_print_manual_btn", type="primary"):
+                        _pr_m_row = _pr_manual_rows[_pr_m_labels.index(_pr_m_sel)]
+                        _src   = iship_api._src()
+                        _notes = _pr_m_row.get("notes") or ""
+                        _box_rows = []
+                        _bm = re.search(r"\[กล่อง:\s*(.*?)\]", _notes)
+                        if _bm:
+                            for _part in _bm.group(1).split(";"):
+                                _pm = re.match(r"\s*(\d+)x(\d+)x(\d+)cm\s+([\d.]+)kg\s+x(\d+)", _part)
+                                if _pm:
+                                    _l, _w, _h, _wt, _qty = _pm.groups()
+                                    _box_rows.append({"l": int(_l), "w": int(_w), "h": int(_h),
+                                                       "weight_kg": float(_wt), "qty": int(_qty)})
+                        _extra_notes = _notes.split("]", 1)[1].strip() if "]" in _notes else ""
+                        _total_boxes = sum(r["qty"] for r in _box_rows)
+                        _box_rows_html = "".join(
+                            f"<tr><td>{r['l']}×{r['w']}×{r['h']} ซม.</td>"
+                            f"<td style='text-align:center'>{r['weight_kg']:.2f} kg</td>"
+                            f"<td style='text-align:center'>{r['qty']}</td></tr>"
+                            for r in _box_rows
+                        )
+                        _cod_amt  = float(_pr_m_row.get("cod_amount") or 0)
+                        _cod_line = f"&nbsp;|&nbsp; <b>COD:</b> {_cod_amt:,.0f} ฿" if _cod_amt > 0 else ""
+                        _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_extra_notes}</div>' if _extra_notes else ""
+                        _label_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+html,body{{background:#fff!important;color:#000!important}}
+body{{font-family:'Sarabun',sans-serif;padding:16px;font-size:13px}}
+.header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
+.header h1{{font-size:16px;font-weight:700}}
+.header-right{{text-align:right;font-size:13px;font-weight:600}}
+.section{{margin:10px 0;font-size:13px;line-height:1.6}}
+table{{width:100%;border-collapse:collapse;margin:6px 0;border:1px solid #000}}
+th{{background:#000;color:#fff;padding:5px 6px;font-size:12px;text-align:left;border:1px solid #000}}
+td{{padding:4px 6px;border:1px solid #aaa;font-size:12px;color:#000}}
+tr:nth-child(even) td{{background:#f0f0f0}}
+.btn{{display:block;margin:0 0 12px;padding:6px 22px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:13px}}
+@media print{{.btn{{display:none}} @page{{size:A5 portrait;margin:10mm}} *{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} th{{background:#000!important;color:#fff!important}} tr:nth-child(even) td{{background:#eee!important}}}}
+</style></head><body>
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้า</button>
+<div class="header">
+    <div><h1>ใบปะหน้า — {_pr_m_row.get('carrier','')}</h1></div>
+    <div class="header-right">วันที่: {date.today().strftime('%d/%m/%Y')}</div>
+</div>
+<div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · โทร. {_src.get('ISHIP_SRC_PHONE','')}<br>
+{_src.get('ISHIP_SRC_ADDRESS','')} {_src.get('ISHIP_SRC_DISTRICT','')} {_src.get('ISHIP_SRC_AMPHURE','')} {_src.get('ISHIP_SRC_PROVINCE','')} {_src.get('ISHIP_SRC_ZIPCODE','')}</div>
+<div class="section"><b>ผู้รับ:</b> {_pr_m_row.get('recipient_name','')} · โทร. {_pr_m_row.get('phone','')}<br>
+{_pr_m_row.get('address_line','')} {_pr_m_row.get('district','')} {_pr_m_row.get('amphure','')} {_pr_m_row.get('province','')} {_pr_m_row.get('postal_code','')}</div>
+<div class="section"><b>รายการกล่อง:</b>
+<table><tr><th>ขนาด</th><th>น้ำหนัก/กล่อง</th><th>จำนวน</th></tr>{_box_rows_html}</table>
+รวม {_total_boxes} กล่อง {_cod_line}</div>
+{_notes_line}
+</body></html>"""
+                        components.html(_label_html, height=600, scrolling=True)
+
             _sh_to_resend = [i for i, v in enumerate(_sh_edit["📤"]) if v]
             if len(_sh_to_resend) > 1:
                 st.warning("เลือกได้ทีละ 1 รายการสำหรับส่ง iShip ใหม่")
@@ -1690,7 +1755,8 @@ def render(products, customers):
                     for it in _rs_items
                 )
                 _rs_w_def = max(0.5, round((_rs_total_g + BOX_WEIGHT_G) / 1000, 2))
-                _rs_w   = st.number_input("น้ำหนักรวมกล่อง (kg)", 0.1, 100.0, _rs_w_def, 0.1, key=f"sh_resend_w_{_rs_i}")
+                _rs_w_max = max(100.0, _rs_w_def)
+                _rs_w   = st.number_input("น้ำหนักรวมกล่อง (kg)", 0.1, _rs_w_max, _rs_w_def, 0.1, key=f"sh_resend_w_{_rs_i}")
                 if st.button("📤 ส่ง iShip ใหม่", type="primary", key="sh_resend_btn"):
                     _old_tn = (_rs_row.get("tracking_no") or "").strip()
                     st.session_state.pop("_cs_carrier_sel", None)
