@@ -277,15 +277,15 @@ def render(tab1, products, customers, customer_map):
                         })
                     else:
                         cart_df = pd.DataFrame({
-                            "สินค้า": pd.Series([""] * 3, dtype="object"),
-                            "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
+                            "สินค้า": pd.Series([""] * 8, dtype="object"),
+                            "จำนวน":  pd.Series([0]  * 8, dtype="int64"),
                         })
                     st.session_state["_cart_base"] = cart_df
                 else:
                     # rerun กลาง session — ใช้ base เดิมเสมอ
                     cart_df = st.session_state.get("_cart_base", pd.DataFrame({
-                        "สินค้า": pd.Series([""] * 3, dtype="object"),
-                        "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
+                        "สินค้า": pd.Series([""] * 8, dtype="object"),
+                        "จำนวน":  pd.Series([0]  * 8, dtype="int64"),
                     }))
                 with st.container(border=True):
                     edited_cart = st.data_editor(
@@ -1103,13 +1103,13 @@ def render(tab1, products, customers, customer_map):
                         "จำนวน":  pd.array([it["qty"] for it in _sp_qi], dtype="int64"),
                     })
                 else:
-                    _sp_cart_df = pd.DataFrame({"สินค้า": pd.Series([""] * 3, dtype="object"),
-                                                 "จำนวน":  pd.Series([0] * 3, dtype="int64")})
+                    _sp_cart_df = pd.DataFrame({"สินค้า": pd.Series([""] * 8, dtype="object"),
+                                                 "จำนวน":  pd.Series([0] * 8, dtype="int64")})
                 st.session_state["_sp_cart_base"] = _sp_cart_df
             else:
                 _sp_cart_df = st.session_state.get("_sp_cart_base", pd.DataFrame({
-                    "สินค้า": pd.Series([""] * 3, dtype="object"),
-                    "จำนวน":  pd.Series([0] * 3, dtype="int64"),
+                    "สินค้า": pd.Series([""] * 8, dtype="object"),
+                    "จำนวน":  pd.Series([0] * 8, dtype="int64"),
                 }))
             with st.container(border=True):
                 _sp_cart_edit = st.data_editor(
