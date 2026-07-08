@@ -629,6 +629,7 @@ def render(tab1, products, customers, customer_map):
                             st.stop()
                         if m_pay == "จ่ายบางส่วน" and m_partial_amount > 0:
                             _alloc_left = m_partial_amount
+                            _pe_rows, _paid_full_ids = [], []
                             for _i, _row in enumerate(_m_batch):
                                 if _i == len(_m_batch) - 1:
                                     _alloc = round(_alloc_left, 2)
@@ -636,7 +637,7 @@ def render(tab1, products, customers, customer_map):
                                     _alloc = round(m_partial_amount * _row["total_amount"] / total_amt, 2)
                                     _alloc_left -= _alloc
                                 if _alloc > 0:
-                                    db.insert_partial_event({
+                                    _pe_rows.append({
                                         "id": str(uuid.uuid4()),
                                         "date": str(m_date),
                                         "transaction_id": _row["id"],
@@ -645,7 +646,9 @@ def render(tab1, products, customers, customer_map):
                                         "event_type": "จ่ายเงิน",
                                     })
                                     if _alloc >= _row["total_amount"] - 0.01:
-                                        db.update_transaction_status(_row["id"], pay_status="จ่ายแล้ว")
+                                        _paid_full_ids.append(_row["id"])
+                            db.insert_partial_events_batch(_pe_rows)
+                            db.update_transaction_statuses_batch(_paid_full_ids, pay_status="จ่ายแล้ว")
                         msg = f"✅ บันทึก {len(valid_items)} รายการ"
                         if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
                         if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"

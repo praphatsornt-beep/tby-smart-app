@@ -248,6 +248,7 @@ def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,
     saved_count = 0
     total_pay   = 0.0
     ship_items  = []
+    _pe_rows, _paid_full_ids = [], []
     for _ri, _rrow in rx_edit.iterrows():
         _delta      = int(_rrow["รับวันนี้"] or 0)
         _owed_this  = float(rx_df.iloc[_ri]["_owed"])
@@ -261,7 +262,7 @@ def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,
         else:
             _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
         _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
-        db.insert_partial_event({
+        _pe_rows.append({
             "id":             str(uuid.uuid4()),
             "date":           event_date,
             "transaction_id": rx_df.iloc[_ri]["_tid"],
@@ -272,13 +273,15 @@ def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,
         saved_count += 1
         total_pay   += _apply_pay
         if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:
-            db.update_transaction_status(rx_df.iloc[_ri]["_tid"], pay_status="จ่ายแล้ว")
+            _paid_full_ids.append(rx_df.iloc[_ri]["_tid"])
         if collect_ship_items:
             ship_items.append({
                 "product_id": pending_rx[_ri]["product_id"],
                 "name":       str(_rrow["สินค้า"]),
                 "qty":        _actual_qty,
             })
+    db.insert_partial_events_batch(_pe_rows)
+    db.update_transaction_statuses_batch(_paid_full_ids, pay_status="จ่ายแล้ว")
     return saved_count, total_pay, ship_items
 
 
@@ -765,6 +768,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                 _row_owed  = _owed_rows["ค้างจ่าย"].tolist()
                 _total_row_owed = sum(_row_owed)
                 _remaining = float(_t7_pay_amt)
+                _pe_rows = []
                 for _pi, (_tid_p, _row_o) in enumerate(zip(_owed_ids, _row_owed)):
                     if _remaining <= 0:
                         break
@@ -773,7 +777,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                     else:
                         _share = round(_row_o / _total_row_owed * float(_t7_pay_amt), 2)
                         _share = min(_share, _remaining)
-                    db.insert_partial_event({
+                    _pe_rows.append({
                         "id":             str(uuid.uuid4()),
                         "date":           str(_t7_pay_date),
                         "transaction_id": _tid_p,
@@ -782,9 +786,9 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                         "event_type":     "จ่ายเงิน",
                     })
                     _remaining -= _share
+                db.insert_partial_events_batch(_pe_rows)
                 if float(_t7_pay_amt) >= _t7_owed - 0.01:
-                    for _tid in _t7_tids:
-                        db.update_transaction_status(_tid, pay_status="จ่ายแล้ว")
+                    db.update_transaction_statuses_batch(_t7_tids, pay_status="จ่ายแล้ว")
                 if _t7_line_uid and line_api.is_configured():
                     _rem_after = max(0.0, _t7_owed - float(_t7_pay_amt))
                     st.session_state[f"{key_prefix}_pay_line"] = {
@@ -812,13 +816,14 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             )
             if st.button("💾 บันทึกรับของ", key=f"{key_prefix}_save_recv"):
                 _saved_r = 0
+                _pe_rows = []
                 for _ri, _rrow in _recv_edit.iterrows():
                     _delta = int(_rrow["รับเพิ่ม"] or 0)
                     if _delta <= 0:
                         continue
                     _cap = int(_recv_base.iloc[_ri]["ค้างรับ"])
                     _delta = min(_delta, _cap)
-                    db.insert_partial_event({
+                    _pe_rows.append({
                         "id":             str(uuid.uuid4()),
                         "date":           str(date.today()),
                         "transaction_id": _recv_ids.iloc[_ri],
@@ -827,6 +832,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                         "event_type":     "รับของ",
                     })
                     _saved_r += 1
+                db.insert_partial_events_batch(_pe_rows)
                 if _saved_r:
                     st.success(f"✅ บันทึกรับของ {_saved_r} รายการ")
                     st.rerun()
@@ -905,16 +911,12 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                     _clr_sel.append(_clr_bno)
             if _clr_sel:
                 if st.button(f"✅ เคลียร์ {len(_clr_sel)} บิล", type="primary", key=f"{key_prefix}_clear_bills"):
-                    for _clr_bno in _clr_sel:
-                        _clr_tids = _t7_all_cust_df[
-                            _t7_all_cust_df["เลขที่บิล"] == _clr_bno
-                        ]["id"].tolist()
-                        for _clr_tid in _clr_tids:
-                            db.update_transaction_status(
-                                _clr_tid,
-                                pay_status="จ่ายแล้ว",
-                                bill_status="เปิดบิลแล้ว",
-                            )
+                    _clr_all_tids = _t7_all_cust_df[
+                        _t7_all_cust_df["เลขที่บิล"].isin(_clr_sel)
+                    ]["id"].tolist()
+                    db.update_transaction_statuses_batch(
+                        _clr_all_tids, pay_status="จ่ายแล้ว", bill_status="เปิดบิลแล้ว",
+                    )
                     st.success(f"✅ เคลียร์ {len(_clr_sel)} บิลแล้ว")
                     st.rerun()
 

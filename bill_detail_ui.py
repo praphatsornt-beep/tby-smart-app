@@ -2,7 +2,7 @@ import re
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-from datetime import date
+from datetime import date, timedelta
 from math import floor
 import uuid
 
@@ -575,6 +575,7 @@ def render(products, customers):
                                 _saved_r, _saved_p = 0, 0
                                 _mrp_received, _mrp_id_qty = [], {}
                                 _total_paid_actual = 0.0
+                                _pe_rows, _paid_full_ids = [], []
                                 for i, row in _combo_df.iterrows():
                                     _qty   = int(_combo_edit.iloc[i]["รับจริง"])
                                     _amt   = float(_combo_edit.iloc[i]["จ่ายจริง"])
@@ -588,7 +589,7 @@ def render(products, customers):
                                         "ทั้งคู่"   if _actual_qty > 0 and _actual_amt > 0.01
                                         else ("รับของ" if _actual_qty > 0 else "จ่ายเงิน")
                                     )
-                                    db.insert_partial_event({
+                                    _pe_rows.append({
                                         "id":             str(uuid.uuid4()),
                                         "date":           str(mc_date),
                                         "transaction_id": row["_id"],
@@ -605,11 +606,13 @@ def render(products, customers):
                                         _total_paid_actual += _actual_amt
                                         _saved_p += 1
                                         if _actual_amt >= _owed - 0.01:
-                                            db.update_transaction_status(row["_id"], pay_status="จ่ายแล้ว")
+                                            _paid_full_ids.append(row["_id"])
+                                db.insert_partial_events_batch(_pe_rows)
+                                db.update_transaction_statuses_batch(_paid_full_ids, pay_status="จ่ายแล้ว")
                                 if _do_open_bill:
-                                    for i, row in _combo_df.iterrows():
-                                        if row["สถานะบิล"] == "ยังไม่เปิดบิล":
-                                            db.update_transaction_status(row["_id"], bill_status="เปิดบิลแล้ว")
+                                    _open_bill_ids = [row["_id"] for _, row in _combo_df.iterrows()
+                                                       if row["สถานะบิล"] == "ยังไม่เปิดบิล"]
+                                    db.update_transaction_statuses_batch(_open_bill_ids, bill_status="เปิดบิลแล้ว")
                                 # popup รับของ + LINE notification
                                 _mrp_pending = []
                                 for _, _rr in grp.iterrows():
@@ -1099,11 +1102,25 @@ def render(products, customers):
                 key="hist_status",
             )
 
+        h_all_time = st.checkbox(
+            "ดูทั้งหมดตั้งแต่เปิดร้าน (อาจโหลดช้าถ้าข้อมูลเยอะ)",
+            key="hist_all_time",
+        )
+        h_date_from = h_date_to = None
+        if not h_all_time:
+            h_col3, h_col4 = st.columns(2)
+            h_date_from = h_col3.date_input("ตั้งแต่วันที่", value=date.today() - timedelta(days=90), key="hist_date_from")
+            h_date_to   = h_col4.date_input("ถึงวันที่", value=date.today(), key="hist_date_to")
+
         h_cid = None
         if h_filter_cust != "ทั้งหมด":
             h_cid = next(c["id"] for c in customers_h if c["name"] == h_filter_cust)
 
-        all_df = db.get_all_transactions_df(customer_id=h_cid)
+        all_df = db.get_all_transactions_df(
+            customer_id=h_cid,
+            date_from=str(h_date_from) if h_date_from else None,
+            date_to=str(h_date_to) if h_date_to else None,
+        )
 
         if not all_df.empty:
             if h_filter_status == "ค้างจ่าย":
@@ -1205,8 +1222,8 @@ def render(products, customers):
                     if ob2.button(f"📄 เปิดบิล {len(_sel_unbilled)} รายการ",
                                    type="primary", use_container_width=True,
                                    key="hist_open_bill_btn"):
-                        for i in _sel_unbilled:
-                            db.update_transaction_status(id_map.iloc[i], bill_status="เปิดบิลแล้ว")
+                        db.update_transaction_statuses_batch(
+                            [id_map.iloc[i] for i in _sel_unbilled], bill_status="เปิดบิลแล้ว")
                         st.success(f"✅ เปิดบิล {len(_sel_unbilled)} รายการแล้ว")
                         st.session_state.pop("hist_table", None)
                         st.rerun()

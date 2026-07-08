@@ -144,8 +144,7 @@ def get_next_bill_no(date_str: str) -> str:
     return f"{prefix}-{max(nums, default=0) + 1:03d}"
 
 
-def insert_partial_event(data: dict) -> None:
-    get_supabase().table("partial_events").insert(data).execute()
+def _clear_partial_event_caches() -> None:
     get_all_transactions_df.clear()
     get_outstanding_df.clear()
     get_unbilled_pv_summary.clear()
@@ -155,6 +154,39 @@ def insert_partial_event(data: dict) -> None:
     get_unbilled_received_qty_by_product.clear()
     get_billed_not_received_qty_by_product.clear()
     get_today_transactions.clear()
+
+
+def insert_partial_event(data: dict) -> None:
+    get_supabase().table("partial_events").insert(data).execute()
+    _clear_partial_event_caches()
+
+
+def insert_partial_events_batch(rows: list[dict]) -> None:
+    """บันทึกหลาย partial_events พร้อมกัน — batch แทนการลูปทีละรายการ (ลด round-trip)"""
+    if not rows:
+        return
+    db = get_supabase()
+    for i in range(0, len(rows), 50):
+        db.table("partial_events").insert(rows[i:i + 50]).execute()
+    _clear_partial_event_caches()
+
+
+def update_transaction_statuses_batch(transaction_ids: list[str],
+                                       bill_status: str = None, pay_status: str = None) -> None:
+    """อัปเดต bill_status/pay_status ให้หลาย transaction พร้อมกัน (ค่าเดียวกันทุกแถว)
+    batch แทนการลูปทีละรายการ (ลด round-trip)"""
+    updates = {}
+    if bill_status:
+        updates["bill_status"] = bill_status
+    if pay_status:
+        updates["pay_status"] = pay_status
+    if not updates or not transaction_ids:
+        return
+    db = get_supabase()
+    for i in range(0, len(transaction_ids), 50):
+        chunk = transaction_ids[i:i + 50]
+        db.table("transactions").update(updates).in_("id", chunk).execute()
+    _clear_transaction_caches()
 
 
 def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
@@ -543,8 +575,12 @@ def get_today_transactions() -> list[dict]:
 
 
 @st.cache_data(ttl=300)
-def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.DataFrame:
-    """รายการทั้งหมด รวมที่เคลียร์แล้ว"""
+def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
+                             date_from: str = None, date_to: str = None) -> pd.DataFrame:
+    """รายการทั้งหมด รวมที่เคลียร์แล้ว
+    date_from/date_to (YYYY-MM-DD) กรองที่ระดับ query — ใช้เฉพาะหน้าที่ไม่ต้องการประวัติทั้งหมด
+    (เช่นแท็บ "ประวัติทั้งหมด") ส่วนยอดค้าง/ledger ยังต้องเห็นย้อนหลังไม่จำกัดจึงไม่ส่งพารามิเตอร์นี้
+    """
     db = get_supabase()
 
     q = db.table("transactions").select("*, customers(name)")
@@ -552,6 +588,10 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None) -> pd.
         q = q.eq("customer_id", customer_id)
     if bill_no:
         q = q.eq("bill_no", bill_no)
+    if date_from:
+        q = q.gte("date", date_from)
+    if date_to:
+        q = q.lte("date", date_to)
     txns = _retry(lambda: q.order("bill_no", desc=True, nullsfirst=False).order("date", desc=True).execute().data)
 
     _TXN_COLS = ["id","วันที่","ลูกค้า","รหัส","สินค้า","สั่ง","รับแล้ว","ยอดรวม",
