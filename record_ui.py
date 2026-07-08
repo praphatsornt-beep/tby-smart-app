@@ -1967,9 +1967,9 @@ tr:nth-child(even) td{{background:#f0f0f0}}
     <div><h1>ใบปะหน้า — {_sel_plan['name']}</h1></div>
     <div class="header-right">วันที่: {date.today().strftime('%d/%m/%Y')}</div>
 </div>
-<div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · {_src.get('ISHIP_SRC_PHONE','')}<br>
+<div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · โทร. {_src.get('ISHIP_SRC_PHONE','')}<br>
 {_src.get('ISHIP_SRC_ADDRESS','')} {_src.get('ISHIP_SRC_DISTRICT','')} {_src.get('ISHIP_SRC_AMPHURE','')} {_src.get('ISHIP_SRC_PROVINCE','')} {_src.get('ISHIP_SRC_ZIPCODE','')}</div>
-<div class="section"><b>ผู้รับ:</b> {_lbl_name} · {_lbl_phone}<br>
+<div class="section"><b>ผู้รับ:</b> {_lbl_name} · โทร. {_lbl_phone}<br>
 {_lbl_addr_line} {_lbl_district} {_lbl_amphure} {_lbl_province} {_lbl_zip}</div>
 <div class="section"><b>รายการกล่อง:</b>
 <table><tr><th>ขนาด</th><th>น้ำหนัก/กล่อง</th><th>จำนวน</th></tr>{_box_rows_html}</table>
