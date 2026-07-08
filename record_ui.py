@@ -1918,8 +1918,7 @@ def render(tab1, products, customers, customer_map):
                                             for _code, _qty in _box["items"].items():
                                                 _label_items[_code] = _label_items.get(_code, 0) + _qty
 
-                                        _lbl_total_boxes  = sum(r["qty"] for r in _lbl_rows)
-                                        _lbl_total_weight = sum(r["weight_kg"] * r["qty"] for r in _lbl_rows)
+                                        _lbl_total_boxes = sum(r["qty"] for r in _lbl_rows)
                                         _box_rows_html = "".join(
                                             f"<tr><td>{r['l']}×{r['w']}×{r['h']} ซม.</td>"
                                             f"<td style='text-align:center'>{r['weight_kg']:.2f} kg</td>"
@@ -1955,7 +1954,7 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 {_lbl_addr_line} {_lbl_district} {_lbl_amphure} {_lbl_province} {_lbl_zip}</div>
 <div class="section"><b>รายการกล่อง:</b>
 <table><tr><th>ขนาด</th><th>น้ำหนัก/กล่อง</th><th>จำนวน</th></tr>{_box_rows_html}</table>
-รวม {_lbl_total_boxes} กล่อง &nbsp;|&nbsp; น้ำหนักรวม {_lbl_total_weight:.2f} kg {_cod_line}</div>
+รวม {_lbl_total_boxes} กล่อง {_cod_line}</div>
 {_notes_line}
 </body></html>"""
                                         components.html(_label_html, height=600, scrolling=True)
