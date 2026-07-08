@@ -285,6 +285,14 @@ button[data-testid="baseButton-secondary"]:hover {
     font-weight: 700 !important;
 }
 
+/* ── Bordered containers (st.container(border=True)) — card style ── */
+[data-testid="stVerticalBlockBorderWrapper"] {
+    background: #ffffff;
+    border: 1px solid #E5EFE8 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+}
+
 /* ── DataFrame / Data editor ── */
 [data-testid="stDataFrame"],
 [data-testid="stDataEditor"] {

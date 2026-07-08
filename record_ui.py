@@ -286,17 +286,18 @@ def render(tab1, products, customers, customer_map):
                         "สินค้า": pd.Series([""] * 3, dtype="object"),
                         "จำนวน":  pd.Series([0]  * 3, dtype="int64"),
                     }))
-                edited_cart = st.data_editor(
-                    cart_df,
-                    num_rows="dynamic",
-                    use_container_width=False,
-                    hide_index=True,
-                    column_config={
-                        "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False, width="large"),
-                        "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
-                    },
-                    key=_cart_key,
-                )
+                with st.container(border=True):
+                    edited_cart = st.data_editor(
+                        cart_df,
+                        num_rows="dynamic",
+                        use_container_width=False,
+                        hide_index=True,
+                        column_config={
+                            "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False, width="large"),
+                            "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
+                        },
+                        key=_cart_key,
+                    )
 
                 valid_items = [
                     (product_display[row["สินค้า"]], int(row["จำนวน"]), "")
@@ -1105,14 +1106,15 @@ def render(tab1, products, customers, customer_map):
                     "สินค้า": pd.Series([""] * 3, dtype="object"),
                     "จำนวน":  pd.Series([0] * 3, dtype="int64"),
                 }))
-            _sp_cart_edit = st.data_editor(
-                _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=False,
-                key=_sp_cart_key,
-                column_config={
-                    "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=_sp_prod_keys, required=False, width="large"),
-                    "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
-                },
-            )
+            with st.container(border=True):
+                _sp_cart_edit = st.data_editor(
+                    _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=False,
+                    key=_sp_cart_key,
+                    column_config={
+                        "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=_sp_prod_keys, required=False, width="large"),
+                        "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
+                    },
+                )
             _sp_items = [
                 {"product_id": _sp_prod_map[r["สินค้า"]]["id"],
                  "name":       _sp_prod_map[r["สินค้า"]]["name"],
