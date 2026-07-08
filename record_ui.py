@@ -289,7 +289,7 @@ def render(tab1, products, customers, customer_map):
                 edited_cart = st.data_editor(
                     cart_df,
                     num_rows="dynamic",
-                    use_container_width=True,
+                    use_container_width=False,
                     hide_index=True,
                     column_config={
                         "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False, width="large"),
@@ -1106,7 +1106,7 @@ def render(tab1, products, customers, customer_map):
                     "จำนวน":  pd.Series([0] * 3, dtype="int64"),
                 }))
             _sp_cart_edit = st.data_editor(
-                _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=True,
+                _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=False,
                 key=_sp_cart_key,
                 column_config={
                     "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=_sp_prod_keys, required=False, width="large"),

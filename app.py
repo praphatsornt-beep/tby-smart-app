@@ -249,6 +249,42 @@ button[data-testid="baseButton-secondary"]:hover {
     box-shadow: 0 0 0 3px rgba(64,145,108,0.18) !important;
 }
 
+/* ── Radio groups → card + pill/segmented style ── */
+[data-testid="stRadio"] {
+    background: #ffffff;
+    border: 1px solid #E5EFE8;
+    border-radius: 12px;
+    padding: 10px 14px 12px !important;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.04);
+}
+[data-testid="stRadio"] > div[role="radiogroup"] {
+    gap: 8px !important;
+    flex-wrap: wrap;
+}
+[data-testid="stRadio"] label {
+    background: #F0F9F4 !important;
+    border: 1.5px solid #C8DDD0 !important;
+    border-radius: 20px !important;
+    padding: 6px 16px !important;
+    margin: 0 !important;
+    cursor: pointer;
+    transition: background 0.18s, border-color 0.18s, box-shadow 0.18s !important;
+}
+[data-testid="stRadio"] label:hover {
+    border-color: #40916C !important;
+    background: #E3F3E9 !important;
+}
+[data-testid="stRadio"] label:has(input:checked) {
+    background: linear-gradient(135deg, #2D6A4F 0%, #1B4332 100%) !important;
+    border-color: #1B4332 !important;
+    box-shadow: 0 2px 8px rgba(27,67,50,0.3) !important;
+}
+[data-testid="stRadio"] label:has(input:checked) p,
+[data-testid="stRadio"] label:has(input:checked) div {
+    color: #ffffff !important;
+    font-weight: 700 !important;
+}
+
 /* ── DataFrame / Data editor ── */
 [data-testid="stDataFrame"],
 [data-testid="stDataEditor"] {
