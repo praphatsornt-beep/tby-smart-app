@@ -1582,6 +1582,7 @@ def render(products, customers):
                 s = r.get("source", "")
                 if s == "sale": return "💰"
                 if s == "ship": return "📦"
+                if s == "manual": return "🖨️"
                 return "—"
 
             _sh_df   = pd.DataFrame([{

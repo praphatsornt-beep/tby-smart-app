@@ -1772,3 +1772,149 @@ def render(tab1, products, customers, customer_map):
                                 st.dataframe(pd.DataFrame(_cand_rows), hide_index=True, use_container_width=True)
                                 st.caption("✅ = เพดานที่เลือกใช้ (ถูกสุดหรือเท่ากับตัวอื่น)")
 
+                            # ── ปริ้นใบปะหน้า (manual — ไม่ผ่าน iShip เช่น Inter/J&T) ──────
+                            st.divider()
+                            if st.button("🖨️ ปริ้นใบปะหน้า", key="toggle_manual_label"):
+                                st.session_state["_show_manual_label"] = not st.session_state.get("_show_manual_label", False)
+                            if st.session_state.get("_show_manual_label"):
+                                st.markdown("**🖨️ ปริ้นใบปะหน้า (แบบ manual — ไม่ผ่าน iShip)**")
+
+                                _lbl_cust_opts = ["-- พิมพ์เอง --"] + sorted(customer_map.keys(), key=str.casefold)
+                                _lbl_cust_sel  = st.selectbox("ลูกค้า/ผู้รับ", _lbl_cust_opts, key="_lbl_cust_sel")
+                                _lbl_seed    = {}
+                                _lbl_cust_id = None
+                                if _lbl_cust_sel != "-- พิมพ์เอง --":
+                                    _lbl_cust_obj = customer_map[_lbl_cust_sel]
+                                    _lbl_cust_id  = _lbl_cust_obj["id"]
+                                    _lbl_addrs = db.get_customer_addresses(_lbl_cust_id)
+                                    if _lbl_addrs:
+                                        _lbl_addr_labels = [
+                                            f"{a.get('recipient_name','')} · {a.get('phone','')} · "
+                                            f"{a.get('address_line','')} {a.get('district','')} {a.get('amphure','')} {a.get('province','')} {a.get('postal_code','')}"
+                                            for a in _lbl_addrs
+                                        ]
+                                        _lbl_addr_sel = st.selectbox("ที่อยู่ที่บันทึกไว้", _lbl_addr_labels, key="_lbl_addr_sel")
+                                        _lbl_seed = _lbl_addrs[_lbl_addr_labels.index(_lbl_addr_sel)]
+                                    else:
+                                        st.caption("ลูกค้านี้ยังไม่มีที่อยู่บันทึกไว้ — กรอกเองด้านล่าง")
+
+                                _lc1, _lc2 = st.columns(2)
+                                _lbl_name  = _lc1.text_input("ชื่อผู้รับ", value=_lbl_seed.get("recipient_name", ""), key="_lbl_name")
+                                _lbl_phone = _lc2.text_input("เบอร์โทร", value=_lbl_seed.get("phone", ""), key="_lbl_phone")
+                                _lbl_addr_line = st.text_input("ที่อยู่ (บ้านเลขที่/ถนน)", value=_lbl_seed.get("address_line", ""), key="_lbl_addr_line")
+                                _la1, _la2, _la3, _la4 = st.columns(4)
+                                _lbl_district = _la1.text_input("ตำบล/แขวง", value=_lbl_seed.get("district", ""), key="_lbl_district")
+                                _lbl_amphure  = _la2.text_input("อำเภอ/เขต", value=_lbl_seed.get("amphure", ""), key="_lbl_amphure")
+                                _lbl_province = _la3.text_input("จังหวัด", value=_lbl_seed.get("province", ""), key="_lbl_province")
+                                _lbl_zip      = _la4.text_input("รหัสไปรษณีย์", value=_lbl_seed.get("postal_code", ""), key="_lbl_zip")
+
+                                st.markdown("**ขนาดกล่อง**")
+                                _lbl_presets = []
+                                for _ln in st.session_state.get("_bulky_presets_txt", "").splitlines():
+                                    if ":" not in _ln:
+                                        continue
+                                    _pn, _pd = _ln.split(":", 1)
+                                    _pd_parts = re.split(r"[×xX*]", _pd.strip())
+                                    if len(_pd_parts) == 3:
+                                        try:
+                                            _lbl_presets.append({
+                                                "name": _pn.strip(),
+                                                "l": int(_pd_parts[0]), "w": int(_pd_parts[1]), "h": int(_pd_parts[2]),
+                                            })
+                                        except ValueError:
+                                            pass
+                                _lbl_preset_opts = ["กรอกเอง"] + [p["name"] for p in _lbl_presets]
+                                _lbl_preset_sel = st.selectbox(
+                                    "เลือกขนาดกล่อง (จาก preset ที่ตั้งไว้ในหน้าเลือกขนส่ง iShip)",
+                                    _lbl_preset_opts, key="_lbl_preset_sel",
+                                )
+                                _lbl_pm = next((p for p in _lbl_presets if p["name"] == _lbl_preset_sel), None)
+                                _lbl_def_l, _lbl_def_w, _lbl_def_h = (_lbl_pm["l"], _lbl_pm["w"], _lbl_pm["h"]) if _lbl_pm else (30, 30, 20)
+                                _lb1, _lb2, _lb3 = st.columns(3)
+                                _lbl_len = _lb1.number_input("ยาว (cm)", 1, 300, _lbl_def_l, key=f"_lbl_len_{_lbl_preset_sel}")
+                                _lbl_wid = _lb2.number_input("กว้าง (cm)", 1, 300, _lbl_def_w, key=f"_lbl_wid_{_lbl_preset_sel}")
+                                _lbl_hgt = _lb3.number_input("สูง (cm)", 1, 300, _lbl_def_h, key=f"_lbl_hgt_{_lbl_preset_sel}")
+
+                                _lbl_def_weight = round(_sel_plan["boxes"][0]["weight_kg"] + 0.5, 2) if _sel_plan.get("boxes") else 0.0
+                                _lbl_def_qty    = _sel_plan.get("box_count", 1)
+                                _lw1, _lw2 = st.columns(2)
+                                _lbl_weight = _lw1.number_input("น้ำหนัก/กล่อง (kg)", 0.0, 200.0, float(_lbl_def_weight), key="_lbl_weight")
+                                _lbl_qty    = _lw2.number_input("จำนวนกล่อง", 1, 100, int(_lbl_def_qty), key="_lbl_qty")
+
+                                _lt1, _lt2 = st.columns(2)
+                                _lbl_tracking = _lt1.text_input("เลขพัสดุ (ถ้ามี — เว้นว่างได้)", key="_lbl_tracking")
+                                _lbl_cod_chk  = _lt2.checkbox("COD", key="_lbl_cod_chk")
+                                _lbl_cod_amt  = st.number_input("ยอดเก็บ COD (บาท)", min_value=0.0, step=1.0, key="_lbl_cod_amt") if _lbl_cod_chk else 0.0
+                                _lbl_notes    = st.text_input("หมายเหตุ", key="_lbl_notes")
+
+                                if st.button("🖨️ พิมพ์ใบปะหน้า + บันทึกประวัติ", type="primary", key="_lbl_print_btn"):
+                                    if not _lbl_name or not _lbl_addr_line:
+                                        st.error("กรุณากรอกชื่อผู้รับและที่อยู่ก่อน")
+                                    else:
+                                        _src = iship_api._src()
+                                        _label_items: dict = {}
+                                        for _box in _sel_plan.get("boxes", []):
+                                            for _code, _qty in _box["items"].items():
+                                                _label_items[_code] = _label_items.get(_code, 0) + _qty
+
+                                        _cod_line = f"&nbsp;|&nbsp; <b>COD:</b> {_lbl_cod_amt:,.0f} ฿" if _lbl_cod_chk else ""
+                                        _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_lbl_notes}</div>' if _lbl_notes else ""
+                                        _pages = []
+                                        for _pi in range(1, int(_lbl_qty) + 1):
+                                            _pages.append(f"""
+                                            <div class="label-page">
+                                                <div class="header">
+                                                    <div><h1>ใบปะหน้า — {_sel_plan['name']}</h1>
+                                                    <h2>กล่องที่ {_pi}/{int(_lbl_qty)}</h2></div>
+                                                    <div class="header-right">วันที่: {date.today().strftime('%d/%m/%Y')}</div>
+                                                </div>
+                                                <div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · {_src.get('ISHIP_SRC_PHONE','')}<br>
+                                                {_src.get('ISHIP_SRC_ADDRESS','')} {_src.get('ISHIP_SRC_DISTRICT','')} {_src.get('ISHIP_SRC_AMPHURE','')} {_src.get('ISHIP_SRC_PROVINCE','')} {_src.get('ISHIP_SRC_ZIPCODE','')}</div>
+                                                <div class="section"><b>ผู้รับ:</b> {_lbl_name} · {_lbl_phone}<br>
+                                                {_lbl_addr_line} {_lbl_district} {_lbl_amphure} {_lbl_province} {_lbl_zip}</div>
+                                                <div class="section"><b>ขนาด:</b> {_lbl_len}×{_lbl_wid}×{_lbl_hgt} ซม. &nbsp;|&nbsp;
+                                                <b>น้ำหนัก:</b> {_lbl_weight:.2f} กก. &nbsp;|&nbsp;
+                                                <b>Tracking:</b> {_lbl_tracking or '-'} {_cod_line}</div>
+                                                {_notes_line}
+                                            </div>
+                                            """)
+                                        _label_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+html,body{{background:#fff!important;color:#000!important}}
+body{{font-family:'Sarabun',sans-serif;padding:16px;font-size:13px}}
+.header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
+.header h1{{font-size:16px;font-weight:700}}
+.header h2{{font-size:14px;font-weight:600;margin-top:2px}}
+.header-right{{text-align:right;font-size:13px;font-weight:600}}
+.section{{margin:10px 0;font-size:13px;line-height:1.6}}
+.label-page{{padding-bottom:16px}}
+.btn{{display:block;margin:0 0 12px;padding:6px 22px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:13px}}
+@media print{{.btn{{display:none}} .label-page{{page-break-after:always}} @page{{size:A5 portrait;margin:10mm}} *{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}}}
+</style></head><body>
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้า ({int(_lbl_qty)} กล่อง)</button>
+{''.join(_pages)}
+</body></html>"""
+                                        components.html(_label_html, height=500, scrolling=True)
+
+                                        db.create_shipment({
+                                            "id":            str(uuid.uuid4()),
+                                            "customer_id":   _lbl_cust_id,
+                                            "recipient_name": _lbl_name,
+                                            "phone":         _lbl_phone,
+                                            "address_line":  _lbl_addr_line,
+                                            "district":      _lbl_district,
+                                            "amphure":       _lbl_amphure,
+                                            "province":      _lbl_province,
+                                            "postal_code":   _lbl_zip,
+                                            "carrier":       _sel_plan["name"],
+                                            "shipping_cost": _sel_plan["total_cost"],
+                                            "items":         [{"product_id": code, "name": code, "qty": qty}
+                                                               for code, qty in _label_items.items()],
+                                            "tracking_no":   _lbl_tracking,
+                                            "cod_amount":    _lbl_cod_amt,
+                                            "notes":         _lbl_notes,
+                                            "source":        "manual",
+                                        })
+                                        st.success("✅ บันทึกประวัติการส่งแล้ว — ดูได้ที่แท็บ 🚚 ประวัติการส่ง")
+
