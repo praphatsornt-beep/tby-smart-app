@@ -37,8 +37,7 @@ _PROVINCES = [
 
 BOX_WEIGHT_G = 500  # น้ำหนักกล่อง 0.5 kg (ไม่แสดงในระบบ)
 
-_TAMBON_PREFIXES   = ["ตำบล", "ต.", "แขวง"]
-_PROVINCE_PREFIXES = ["จังหวัด", "จ."]
+_TAMBON_PREFIXES = ["ตำบล", "ต.", "แขวง"]
 
 
 # ── Functions ────────────────────────────────────────────────────────────────
@@ -84,67 +83,56 @@ def _strip_admin_prefix(s: str, prefixes: list) -> str:
     return s
 
 
+def _tambon_search(query: str, limit: int = 40) -> list:
+    """ค้นหาตำบลที่ชื่อมีคำนี้เป็นส่วนหนึ่ง (case-insensitive) จำกัดจำนวนผลลัพธ์
+    เพื่อไม่ให้ selectbox ต้องขึ้น dropdown ตำบลทั้งประเทศ (~7,500 รายการ) ซึ่งทำให้เบราว์เซอร์หน่วงมาก
+    """
+    q = _strip_admin_prefix(query, _TAMBON_PREFIXES).strip().lower()
+    if len(q) < 2:
+        return []
+    return [o for o in _tambon_select_options() if q in o["tambon"].lower()][:limit]
+
+
 def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
                        selectbox_key: str, label: str = "ตำบล/แขวง"):
-    """ช่อง ตำบล/แขวง แบบ dropdown ค้นหา (st.selectbox มาตรฐาน — พิมพ์กรองรายการได้ทันที)
-    เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย ถ้ายังไม่เลือก จะแสดงเป็นช่องว่างพร้อม placeholder
+    """ช่อง ตำบล/แขวง แบบพิมพ์ค้นหา — พิมพ์อย่างน้อย 2 ตัวอักษรแล้วเลือกจากรายการที่กรองไว้
+    (กรองฝั่งเซิร์ฟเวอร์ก่อนแสดง selectbox เพื่อไม่ให้เบราว์เซอร์ต้องแสดงตำบลทั้งประเทศทีเดียว)
+    เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย
     """
-    options = _tambon_select_options()
-
     cur_val = st.session_state.get(value_key, "")
-    cur_am  = st.session_state.get(am_key, "")
-    cur_pv  = st.session_state.get(pv_key, "")
-    cur_pc  = st.session_state.get(pc_key, "")
-    cur_sig = (cur_val, cur_pv)
 
-    _sig_key = f"_{selectbox_key}_sig"
-    if st.session_state.get(_sig_key) != cur_sig:
-        st.session_state.pop(selectbox_key, None)
-        st.session_state[_sig_key] = cur_sig
+    query = st.text_input(label, value=cur_val, key=selectbox_key, placeholder="พิมพ์ชื่อตำบล เช่น บางรัก")
 
-    _norm_val = _strip_admin_prefix(cur_val, _TAMBON_PREFIXES)
-    _norm_pv  = _strip_admin_prefix(cur_pv, _PROVINCE_PREFIXES)
+    if not query.strip() or query.strip() == cur_val.strip():
+        return cur_val
 
-    match_idx = None
-    if _norm_val:
-        for i, opt in enumerate(options):
-            if opt["tambon"] == _norm_val and (not _norm_pv or opt["province"] == _norm_pv):
-                match_idx = i
-                break
+    matches = _tambon_search(query)
+    if not matches:
+        if len(query.strip()) >= 2:
+            st.caption("ไม่พบตำบลที่ตรงกับคำค้นหา")
+        return cur_val
 
-    # ถ้าค่าที่บันทึกไว้ไม่ตรงกับรายชื่อตำบลในฐานข้อมูล (เช่น สะกดต่างกัน)
-    # ให้แสดงค่าเดิมเป็นตัวเลือกแรกไว้ก่อน เพื่อไม่ให้ช่องว่างเปล่า
-    if cur_val and match_idx is None:
-        options = [{"tambon": cur_val, "amphure": cur_am, "province": cur_pv, "zipcode": cur_pc}] + options
-        match_idx = 0
+    pick_key = f"_{selectbox_key}_pick"
+    idx_options = list(range(len(matches)))
+    _label = lambda i: f"{matches[i]['tambon']} / {matches[i]['amphure']} / {matches[i]['province']} ({matches[i]['zipcode']})"
 
-    # บังคับค่า widget ให้ตรงกับ match_idx ตรงๆ — ไม่พึ่ง `index=` ของ st.selectbox อย่างเดียว
-    # (กรณี rerun ซ้อน rerun เช่นกดเลือก "ที่อยู่เดิม" แล้ว auto-fill จากเบอร์โทรต่อ)
-    if match_idx is not None and selectbox_key not in st.session_state:
-        st.session_state[selectbox_key] = match_idx
-
-    idx_options = list(range(len(options)))
-    _short_label = lambda opt: f"{opt['tambon']} ({opt['zipcode']})"
-    label_map = {_short_label(opt): i for i, opt in enumerate(options)}
-
-    def _on_change():
-        raw = st.session_state.get(selectbox_key)
-        i = raw if isinstance(raw, int) else label_map.get(raw)
+    def _on_pick():
+        i = st.session_state.get(pick_key)
         if i is not None:
-            sel = options[i]
+            sel = matches[i]
             st.session_state[value_key] = sel["tambon"]
             st.session_state[am_key]    = sel["amphure"]
             st.session_state[pv_key]    = sel["province"]
             st.session_state[pc_key]    = sel["zipcode"]
-            st.session_state[_sig_key]  = (sel["tambon"], sel["province"])
+            st.session_state.pop(selectbox_key, None)
+            st.session_state.pop(pick_key, None)
 
     st.selectbox(
-        label, idx_options, index=match_idx, placeholder="พิมพ์ค้นหาตำบล",
-        format_func=lambda i: _short_label(options[i]),
-        key=selectbox_key, on_change=_on_change,
+        "ผลการค้นหา — เลือกตำบล", idx_options, index=None,
+        format_func=_label, key=pick_key, on_change=_on_pick,
     )
 
-    return st.session_state.get(value_key, cur_val)
+    return cur_val
 
 
 def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
