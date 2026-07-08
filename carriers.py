@@ -318,11 +318,41 @@ def _bracket_breakpoints(table: dict, max_kg: int, threshold: int = 8) -> list[i
     return points
 
 
+def _pack_and_price(items: list, carrier_def: tuple, pack_cap: float, box_weight_kg: float,
+                     postcode: str, is_cod: bool, cod_amount: float):
+    """แพ็ค + คิดราคาที่ pack_cap หนึ่งค่า ลองทั้ง even_distribute=False/True แล้วคืนแบบที่ถูกกว่า
+    (อัดเต็มแล้วเหลือเศษก้อนเดียว บางทีก้อนเบาหลุดไปเรทถูกกว่า — กระจายเท่าๆ กัน บางทีจับคู่กับ
+    สินค้าอื่นได้ทั่วถึงกว่า — ไม่มีใครดีกว่าเสมอ เลยต้องลองทั้งคู่)
+    คืน (boxes, total_cost, ok) — ok=False ถ้ามีกล่องไหนเกิน max_kg ของขนส่งนี้
+    """
+    best_result = None
+    for even in (False, True):
+        boxes = calc_logic.pack_boxes_grouped(items, pack_cap, even_distribute=even)
+        if not boxes:
+            continue
+        total = 0.0
+        ok = True
+        for box in boxes:
+            ship_kg = box["weight_kg"] + box_weight_kg
+            priced = _price_one_box(carrier_def, ship_kg, postcode, is_cod, cod_amount)
+            if priced is None or priced["exceeds_max"]:
+                ok = False
+                break
+            total += priced["total"] + priced["cod_fee"]
+        if not ok:
+            if best_result is None:
+                best_result = (boxes, total, False)
+            continue
+        if best_result is None or not best_result[2] or total < best_result[1]:
+            best_result = (boxes, total, True)
+    return best_result if best_result is not None else ([], 0.0, False)
+
+
 def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: float = 0,
                box_weight_g: int = 500) -> list[dict]:
     """วางแผนกล่องที่คุ้มค่าส่งสุดสำหรับทุกขนส่ง — หาจุดตัดราคาของแต่ละขนส่งเอง (ไม่ต้องตั้งค่าเอง)
-    แล้วแพ็คด้วย calc_logic.pack_boxes_grouped() ที่จุดตัดนั้นๆ (เก็บสินค้าเดียวกันไว้ด้วยกันก่อน)
-    เลือกจุดตัดที่รวมค่าส่งถูกสุดต่อขนส่ง
+    แล้วแพ็คด้วย calc_logic.pack_boxes_grouped() ที่จุดตัดนั้นๆ (เก็บสินค้าเดียวกันไว้ด้วยกันก่อน
+    ลองทั้งแบบอัดเต็ม/กระจายเท่าๆ กัน) เลือกจุดตัด+วิธีแพ็คที่รวมค่าส่งถูกสุดต่อขนส่ง
 
     Returns list เรียงถูกสุดก่อน: [{id, name, boxes, total_cost, ceiling_used, box_count,
     candidates: [{ceiling, total_cost, box_count} ...]}, ...] — candidates คือทุกจุดตัดที่ลอง
@@ -338,18 +368,8 @@ def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: flo
         candidates = []
         for ceiling in _bracket_breakpoints(table, max_kg):
             pack_cap = max(0.1, ceiling - box_weight_kg)
-            boxes = calc_logic.pack_boxes_grouped(items, pack_cap)
-            if not boxes:
-                continue
-            total = 0.0
-            ok = True
-            for box in boxes:
-                ship_kg = box["weight_kg"] + box_weight_kg
-                priced = _price_one_box(carrier_def, ship_kg, postcode, is_cod, cod_amount)
-                if priced is None or priced["exceeds_max"]:
-                    ok = False
-                    break
-                total += priced["total"] + priced["cod_fee"]
+            boxes, total, ok = _pack_and_price(items, carrier_def, pack_cap, box_weight_kg,
+                                                postcode, is_cod, cod_amount)
             candidates.append({
                 "ceiling": ceiling,
                 "total_cost": total if ok else None,

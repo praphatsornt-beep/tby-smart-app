@@ -81,16 +81,23 @@ def pack_boxes(items: list, max_kg: float) -> list:
     return boxes
 
 
-def pack_boxes_grouped(items: list, max_kg: float) -> list:
+def pack_boxes_grouped(items: list, max_kg: float, even_distribute: bool = False) -> list:
     """จัดกล่องแบบเก็บสินค้าเดียวกันไว้ด้วยกันก่อน — เหมาะกับขนส่งที่คิดราคาเป็นช่วงน้ำหนัก
     (เช่น Inter, J&T) ที่อยากลดการปนสินค้าหลายชนิดในกล่องเดียวโดยไม่จำเป็น
 
     แบ่งแต่ละสินค้าเป็น "ก้อน" (chunk) ตาม max_units_per_box (จำนวนชิ้นสูงสุดต่อกล่องทางกายภาพ
-    ถ้าตั้งไว้) หรือน้ำหนักกล่อง max_kg แล้วแต่ค่าไหนถึงก่อน (กันไม่ให้เกินน้ำหนักเสมอ) แล้วเอา
-    ก้อนทั้งหมดจากทุกสินค้ามาทำ First-Fit Decreasing ตามน้ำหนักก้อน — ก้อนของสินค้าเดียวกัน
-    จะไม่ยัดรวมกล่องเดียวกันเอง (คงข้อจำกัดต่อกล่องไว้เสมอ) แต่ก้อนเล็กจากสินค้าคนละตัวที่มี
-    น้ำหนักเหลือไม่พอเต็มกล่อง จะถูกจับรวมกล่องเดียวกันได้ ไม่ปล่อยให้กล่องน้ำหนักน้อยค้างเดี่ยวๆ
-    ทั้งที่ยังมีที่ว่างพอใส่สินค้าอื่นได้
+    ถ้าตั้งไว้) หรือน้ำหนักกล่อง max_kg แล้วแต่ค่าไหนถึงก่อน (กันไม่ให้เกินน้ำหนักเสมอ)
+
+    even_distribute=False (ค่าเริ่มต้น): อัดเต็ม cap ทุกก้อน เหลือเศษไว้ก้อนสุดท้ายก้อนเดียว —
+    บางครั้งก้อนเศษที่เบากว่าจะหลุดไปอยู่ช่วงราคาที่ถูกกว่าได้
+    even_distribute=True: กระจายจำนวนให้เท่าๆ กันในทุกก้อน ทำให้ทุกก้อนมีที่ว่างเหลือใกล้เคียงกัน
+    ช่วยให้จับคู่รวมกับสินค้าอื่นได้ทั่วถึงกว่า (แต่บางครั้งก้อนที่กระจายเท่าๆ กันอาจหนักพอที่จะ
+    ตกช่วงราคาแพงกว่าทั้งหมด) — สองแบบนี้ไม่มีใครดีกว่าเสมอ ผู้เรียกควรลองทั้งคู่แล้วเทียบราคาเอา
+    (ดู carriers.plan_boxes() ที่ลองทั้งสองแบบให้ทุกจุดตัดราคาอยู่แล้ว)
+
+    ไม่ว่าโหมดไหน ก้อนทั้งหมดจากทุกสินค้าจะเอามาทำ First-Fit Decreasing ตามน้ำหนักก้อนรวมกัน —
+    ก้อนของสินค้าเดียวกันจะไม่ยัดรวมกล่องเดียวกันเอง (คงข้อจำกัดต่อกล่องไว้เสมอ) แต่ก้อนจากสินค้า
+    คนละตัวที่มีน้ำหนักเหลือพอ จะถูกจับรวมกล่องเดียวกันได้ ไม่ปล่อยให้กล่องน้ำหนักน้อยค้างเดี่ยวๆ
 
     Returns list of boxes [{weight_kg, items:{code:qty}}] — shape เดียวกับ pack_boxes()
     """
@@ -111,11 +118,18 @@ def pack_boxes_grouped(items: list, max_kg: float) -> list:
         weight_cap = int(max_kg / w) if w > 0 else qty
         cap = min(max_units, weight_cap) if max_units else weight_cap
         cap = max(1, min(cap, qty))
-        remaining = qty
-        while remaining > 0:
-            take = min(cap, remaining)
-            chunks.append((code, take, round(take * w, 6)))
-            remaining -= take
+        if even_distribute:
+            n_boxes = -(-qty // cap)  # ceil division
+            base, extra = divmod(qty, n_boxes)
+            for i in range(n_boxes):
+                take = base + (1 if i < extra else 0)
+                chunks.append((code, take, round(take * w, 6)))
+        else:
+            remaining = qty
+            while remaining > 0:
+                take = min(cap, remaining)
+                chunks.append((code, take, round(take * w, 6)))
+                remaining -= take
 
     chunks.sort(key=lambda c: -c[2])
     boxes: list[dict] = []

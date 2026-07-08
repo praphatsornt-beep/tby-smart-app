@@ -85,6 +85,18 @@ class TestPackBoxesGrouped(unittest.TestCase):
         leftover = [b for b in boxes if b["items"].get("TF2581") == 1]
         self.assertEqual(len(leftover), 1)
 
+    def test_even_distribute_spreads_qty_across_all_chunks(self):
+        # เหมือนเทสต์บน แต่ even_distribute=True -> กระจายเท่าๆ กันแทนอัดเต็มแล้วเหลือเศษ
+        product = {**PRODUCTS[0], "max_units_per_box": 3}
+        items = [{"product": product, "qty": 7}]
+        boxes = calc_logic.pack_boxes_grouped(items, max_kg=5, even_distribute=True)
+        self.assertEqual(len(boxes), 3)
+        counts = sorted(b["items"]["TF2581"] for b in boxes)
+        self.assertEqual(counts, [2, 2, 3])
+        self.assertEqual(sum(counts), 7)
+        for b in boxes:
+            self.assertLessEqual(b["items"]["TF2581"], 3)  # ไม่มีกล่องไหนเกิน cap
+
     def test_chunks_from_different_products_combine_to_avoid_wasted_space(self):
         # แม้แต่ "ก้อนเต็ม" ตาม max_units_per_box (ไม่ใช่แค่เศษ) ก็ควรถูกจับรวมกล่องกับสินค้า
         # อื่นได้ ถ้ายังมีที่ว่างพอ — ไม่ปล่อยให้กล่องน้ำหนักน้อยค้างเดี่ยวๆ ทั้งที่ยังใส่เพิ่มได้
