@@ -1755,7 +1755,9 @@ def render(tab1, products, customers, customer_map):
                             for _bi, _box in enumerate(_sel_plan["boxes"], 1):
                                 _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
                                 _bkg = _box["weight_kg"] + 0.5
-                                st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`")
+                                _bprice = _box.get("price")
+                                _price_str = f" &nbsp;·&nbsp; **{_bprice:.0f} ฿**" if _bprice is not None else ""
+                                st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`{_price_str}")
                             st.markdown(f"**ค่าส่งรวม: {_sel_plan['total_cost']:.0f} ฿**")
 
                             # ── เทียบทุกจุดตัดที่ลอง (ให้เห็นว่าลองครบจริง ไม่ใช่แค่ค่าที่เลือก)

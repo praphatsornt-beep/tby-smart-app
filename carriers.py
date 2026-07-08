@@ -338,7 +338,8 @@ def _pack_and_price(items: list, carrier_def: tuple, pack_cap: float, box_weight
             if priced is None or priced["exceeds_max"]:
                 ok = False
                 break
-            total += priced["total"] + priced["cod_fee"]
+            box["price"] = priced["total"] + priced["cod_fee"]
+            total += box["price"]
         if not ok:
             if best_result is None:
                 best_result = (boxes, total, False)
