@@ -112,6 +112,16 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
             st.caption("ไม่พบตำบลที่ตรงกับคำค้นหา")
         return cur_val
 
+    if len(matches) == 1:
+        # ตรงกันรายการเดียว → เติมให้อัตโนมัติเลย ไม่ต้องกดเลือกซ้ำ
+        sel = matches[0]
+        st.session_state[value_key] = sel["tambon"]
+        st.session_state[am_key]    = sel["amphure"]
+        st.session_state[pv_key]    = sel["province"]
+        st.session_state[pc_key]    = sel["zipcode"]
+        st.session_state.pop(selectbox_key, None)
+        st.rerun()
+
     pick_key = f"_{selectbox_key}_pick"
     idx_options = list(range(len(matches)))
     _label = lambda i: f"{matches[i]['tambon']} / {matches[i]['amphure']} / {matches[i]['province']} ({matches[i]['zipcode']})"
