@@ -523,156 +523,178 @@ def render(products, customers):
                                         st.rerun()
 
                             else:
-                                # Multi: ทำทุกอย่างพร้อมกันในตารางเดียว
+                                # Multi: เลือกโหมดก่อน แล้วตารางปรับให้ตรงโหมด
                                 sel_rows      = grp[grp["id"].isin(selected_ids)].copy()
                                 total_owed    = float(sel_rows["ค้างจ่าย"].sum())
-                                _combo_rows = [{
-                                    "_id":       r["id"],
-                                    "สินค้า":    r["สินค้า"],
-                                    "เลขที่บิล": r["เลขที่บิล"] or "—",
-                                    "ค้างรับ":   int(r["ค้างรับ"]),
-                                    "รับจริง":   int(r["ค้างรับ"]),
-                                    "ค้างจ่าย":  float(r["ค้างจ่าย"]),
-                                    "จ่ายจริง":  float(r["ค้างจ่าย"]),
-                                    "สถานะบิล":  r["สถานะบิล"],
-                                } for _, r in sel_rows.iterrows()]
-                                _combo_df = pd.DataFrame(_combo_rows)
-
-                                _combo_edit = st.data_editor(
-                                    _combo_df[["สินค้า","เลขที่บิล","ค้างรับ","รับจริง","ค้างจ่าย","จ่ายจริง","สถานะบิล"]],
-                                    column_config={
-                                        "สินค้า":    st.column_config.TextColumn(disabled=True),
-                                        "เลขที่บิล": st.column_config.TextColumn(disabled=True),
-                                        "ค้างรับ":   st.column_config.NumberColumn(disabled=True),
-                                        "รับจริง":   st.column_config.NumberColumn("รับจริง ✏️", min_value=0, format="%d"),
-                                        "ค้างจ่าย":  st.column_config.NumberColumn(disabled=True, format="%.0f"),
-                                        "จ่ายจริง":  st.column_config.NumberColumn("จ่ายจริง ✏️", min_value=0, format="%.0f"),
-                                        "สถานะบิล":  st.column_config.TextColumn(disabled=True),
-                                    },
-                                    hide_index=True, use_container_width=True,
-                                    key=f"multi_combo_{customer_name}",
-                                )
 
                                 _unbilled_mask = sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล"
                                 _any_unbilled  = _unbilled_mask.any()
                                 _unbilled_cnt  = int(_unbilled_mask.sum())
                                 _unbilled_pv   = sel_rows.loc[_unbilled_mask, "PV รวม"].sum() if "PV รวม" in sel_rows.columns else 0
-                                _do_open_bill  = False
+
+                                _mc_mode_opts = ["💵+📦 ทำพร้อมกัน (ปรับเองได้)", "💵 จ่ายเงินอย่างเดียว", "📦 รับของอย่างเดียว"]
                                 if _any_unbilled:
+                                    _mc_mode_opts.append("📄 เปิดบิลอย่างเดียว")
+                                _mc_mode = st.radio("โหมด", _mc_mode_opts, horizontal=True, key=f"multi_mode_{customer_name}")
+
+                                if _mc_mode == "📄 เปิดบิลอย่างเดียว":
                                     _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
-                                    st.markdown(
-                                        "<style>[data-testid='stCheckbox'] > label > div:last-child "
-                                        "{ font-size: 1.15rem; font-weight: 700; }</style>",
-                                        unsafe_allow_html=True,
-                                    )
-                                    _do_open_bill = st.checkbox(
-                                        f"📄 เปิดบิลด้วย ({_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str})",
-                                        key=f"multi_open_chk_{customer_name}",
-                                    )
-
-                                _mc_c1, _mc_c2 = st.columns([2, 1])
-                                mc_notes = _mc_c1.text_input("หมายเหตุ", key=f"mc_notes_{customer_name}")
-                                mc_date  = _mc_c2.date_input("วันที่", value=date.today(), key=f"mc_date_{customer_name}")
-
-                                _mc_recv = int(_combo_edit["รับจริง"].sum())
-                                _mc_pay  = float(_combo_edit["จ่ายจริง"].sum())
-                                _ms1, _ms2 = st.columns(2)
-                                if _mc_recv > 0:
-                                    _ms1.metric("รับของรวม", f"{_mc_recv} ชิ้น")
-                                if _mc_pay > 0.01:
-                                    _ms2.metric("ยอดจ่ายรวม", f"{_mc_pay:,.0f} ฿")
-
-                                if st.button("💾 บันทึกทั้งหมด", type="primary",
-                                             use_container_width=True, key=f"multi_all_{customer_name}"):
-                                    _saved_r, _saved_p = 0, 0
-                                    _mrp_received, _mrp_id_qty = [], {}
-                                    _total_paid_actual = 0.0
-                                    _pe_rows, _paid_full_ids = [], []
-                                    for i, row in _combo_df.iterrows():
-                                        _qty   = int(_combo_edit.iloc[i]["รับจริง"])
-                                        _amt   = float(_combo_edit.iloc[i]["จ่ายจริง"])
-                                        _owed  = float(row["ค้างจ่าย"])
-                                        _cap_r = int(row["ค้างรับ"])
-                                        _actual_qty = min(_qty, _cap_r) if _qty > 0 else 0
-                                        _actual_amt = min(_amt, _owed) if _amt > 0.01 else 0.0
-                                        if _actual_qty <= 0 and _actual_amt <= 0.01:
-                                            continue
-                                        _etype = (
-                                            "ทั้งคู่"   if _actual_qty > 0 and _actual_amt > 0.01
-                                            else ("รับของ" if _actual_qty > 0 else "จ่ายเงิน")
-                                        )
-                                        _pe_rows.append({
-                                            "id":             str(uuid.uuid4()),
-                                            "date":           str(mc_date),
-                                            "transaction_id": row["_id"],
-                                            "qty_received":   _actual_qty,
-                                            "amount_paid":    round(_actual_amt, 2),
-                                            "event_type":     _etype,
-                                            "notes":          mc_notes,
-                                        })
-                                        if _actual_qty > 0:
-                                            _saved_r += 1
-                                            _mrp_received.append({"product": row["สินค้า"], "qty": _actual_qty, "product_code": row.get("รหัส", "")})
-                                            _mrp_id_qty[row["_id"]] = _actual_qty
-                                        if _actual_amt > 0.01:
-                                            _total_paid_actual += _actual_amt
-                                            _saved_p += 1
-                                            if _actual_amt >= _owed - 0.01:
-                                                _paid_full_ids.append(row["_id"])
-                                    db.insert_partial_events_batch(_pe_rows)
-                                    db.update_transaction_statuses_batch(_paid_full_ids, pay_status="จ่ายแล้ว")
-                                    if _do_open_bill:
-                                        _open_bill_ids = [row["_id"] for _, row in _combo_df.iterrows()
-                                                           if row["สถานะบิล"] == "ยังไม่เปิดบิล"]
+                                    st.info(f"จะเปิดบิล {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str}")
+                                    if st.button("📄 เปิดบิล", type="primary",
+                                                 use_container_width=True, key=f"multi_openonly_{customer_name}"):
+                                        _open_bill_ids = sel_rows.loc[_unbilled_mask, "id"].tolist()
                                         db.update_transaction_statuses_batch(_open_bill_ids, bill_status="เปิดบิลแล้ว")
-                                    # popup รับของ + LINE notification
-                                    _mrp_pending = []
-                                    for _, _rr in grp.iterrows():
-                                        _pq = int(_rr["ค้างรับ"])
-                                        if _rr["id"] in _mrp_id_qty:
-                                            _pq = max(0, _pq - _mrp_id_qty[_rr["id"]])
-                                        if _pq > 0:
-                                            _mrp_pending.append({"product": _rr["สินค้า"], "qty": _pq, "product_code": _rr.get("รหัส", "")})
-                                    if _mrp_received:
-                                        st.session_state["_recv_popup"] = {
-                                            "customer_name": customer_name,
-                                            "date":          str(mc_date),
-                                            "received":      _mrp_received,
-                                            "pending":       _mrp_pending,
-                                        }
-                                    if _luid and line_api.is_configured() and (_mrp_received or _total_paid_actual > 0.01):
-                                        _rem_qty_all = sum(_pq for _, _rr in grp.iterrows()
-                                                           for _pq in [max(0, int(_rr["ค้างรับ"]) - _mrp_id_qty.get(_rr["id"], 0))])
-                                        _rem_amt_all = max(0.0, float(grp["ค้างจ่าย"].sum()) - _total_paid_actual)
-                                        st.session_state["_partial_recv_line"] = {
-                                            "customer_name":    customer_name,
-                                            "line_user_id":     _luid,
-                                            "group_id":         _gid,
-                                            "product_name":     "",
-                                            "product_code":     "",
-                                            "qty_received":     sum(it["qty"] for it in _mrp_received),
-                                            "amount_paid":      _total_paid_actual,
-                                            "remaining_qty":    _rem_qty_all,
-                                            "remaining_amount": _rem_amt_all,
-                                            "items": [
-                                                {"product_name": it["product"], "product_code": it.get("product_code", ""), "qty_received": it["qty"]}
-                                                for it in _mrp_received
-                                            ],
-                                        }
-                                    _parts = []
-                                    if _saved_r:
-                                        _parts.append(f"รับของ {_saved_r} รายการ")
-                                    if _saved_p:
-                                        _parts.append(f"จ่าย ฿{_mc_pay:,.0f}")
-                                    if _do_open_bill:
-                                        _parts.append(f"เปิดบิล {len(selected_ids)} รายการ")
-                                    if _parts:
-                                        st.success("✅ บันทึก: " + " + ".join(_parts))
+                                        st.success(f"✅ เปิดบิลแล้ว {len(_open_bill_ids)} รายการ")
                                         for tid in txn_ids:
                                             st.session_state[f"chk_{tid}"] = False
                                         st.rerun()
-                                    else:
-                                        st.warning("ไม่มีรายการที่ต้องบันทึก (ทุกช่องเป็น 0)")
+                                else:
+                                    _recv_disabled = _mc_mode == "💵 จ่ายเงินอย่างเดียว"
+                                    _pay_disabled  = _mc_mode == "📦 รับของอย่างเดียว"
+
+                                    _combo_rows = [{
+                                        "_id":       r["id"],
+                                        "สินค้า":    r["สินค้า"],
+                                        "เลขที่บิล": r["เลขที่บิล"] or "—",
+                                        "ค้างรับ":   int(r["ค้างรับ"]),
+                                        "รับจริง":   0 if _recv_disabled else int(r["ค้างรับ"]),
+                                        "ค้างจ่าย":  float(r["ค้างจ่าย"]),
+                                        "จ่ายจริง":  0.0 if _pay_disabled else float(r["ค้างจ่าย"]),
+                                        "สถานะบิล":  r["สถานะบิล"],
+                                    } for _, r in sel_rows.iterrows()]
+                                    _combo_df = pd.DataFrame(_combo_rows)
+
+                                    _combo_edit = st.data_editor(
+                                        _combo_df[["สินค้า","เลขที่บิล","ค้างรับ","รับจริง","ค้างจ่าย","จ่ายจริง","สถานะบิล"]],
+                                        column_config={
+                                            "สินค้า":    st.column_config.TextColumn(disabled=True),
+                                            "เลขที่บิล": st.column_config.TextColumn(disabled=True),
+                                            "ค้างรับ":   st.column_config.NumberColumn(disabled=True),
+                                            "รับจริง":   st.column_config.NumberColumn("รับจริง ✏️", min_value=0, format="%d", disabled=_recv_disabled),
+                                            "ค้างจ่าย":  st.column_config.NumberColumn(disabled=True, format="%.0f"),
+                                            "จ่ายจริง":  st.column_config.NumberColumn("จ่ายจริง ✏️", min_value=0, format="%.0f", disabled=_pay_disabled),
+                                            "สถานะบิล":  st.column_config.TextColumn(disabled=True),
+                                        },
+                                        hide_index=True, use_container_width=True,
+                                        key=f"multi_combo_{customer_name}_{_mc_mode}",
+                                    )
+
+                                    _do_open_bill = False
+                                    if _any_unbilled:
+                                        _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
+                                        st.markdown(
+                                            "<style>[data-testid='stCheckbox'] > label > div:last-child "
+                                            "{ font-size: 1.15rem; font-weight: 700; }</style>",
+                                            unsafe_allow_html=True,
+                                        )
+                                        _do_open_bill = st.checkbox(
+                                            f"📄 เปิดบิลด้วย ({_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str})",
+                                            key=f"multi_open_chk_{customer_name}",
+                                        )
+
+                                    _mc_c1, _mc_c2 = st.columns([2, 1])
+                                    mc_notes = _mc_c1.text_input("หมายเหตุ", key=f"mc_notes_{customer_name}")
+                                    mc_date  = _mc_c2.date_input("วันที่", value=date.today(), key=f"mc_date_{customer_name}")
+
+                                    _mc_recv = int(_combo_edit["รับจริง"].sum())
+                                    _mc_pay  = float(_combo_edit["จ่ายจริง"].sum())
+                                    _ms1, _ms2 = st.columns(2)
+                                    if _mc_recv > 0:
+                                        _ms1.metric("รับของรวม", f"{_mc_recv} ชิ้น")
+                                    if _mc_pay > 0.01:
+                                        _ms2.metric("ยอดจ่ายรวม", f"{_mc_pay:,.0f} ฿")
+
+                                    if st.button("💾 บันทึกทั้งหมด", type="primary",
+                                                 use_container_width=True, key=f"multi_all_{customer_name}"):
+                                        _saved_r, _saved_p = 0, 0
+                                        _mrp_received, _mrp_id_qty = [], {}
+                                        _total_paid_actual = 0.0
+                                        _pe_rows, _paid_full_ids = [], []
+                                        for i, row in _combo_df.iterrows():
+                                            _qty   = int(_combo_edit.iloc[i]["รับจริง"])
+                                            _amt   = float(_combo_edit.iloc[i]["จ่ายจริง"])
+                                            _owed  = float(row["ค้างจ่าย"])
+                                            _cap_r = int(row["ค้างรับ"])
+                                            _actual_qty = min(_qty, _cap_r) if _qty > 0 else 0
+                                            _actual_amt = min(_amt, _owed) if _amt > 0.01 else 0.0
+                                            if _actual_qty <= 0 and _actual_amt <= 0.01:
+                                                continue
+                                            _etype = (
+                                                "ทั้งคู่"   if _actual_qty > 0 and _actual_amt > 0.01
+                                                else ("รับของ" if _actual_qty > 0 else "จ่ายเงิน")
+                                            )
+                                            _pe_rows.append({
+                                                "id":             str(uuid.uuid4()),
+                                                "date":           str(mc_date),
+                                                "transaction_id": row["_id"],
+                                                "qty_received":   _actual_qty,
+                                                "amount_paid":    round(_actual_amt, 2),
+                                                "event_type":     _etype,
+                                                "notes":          mc_notes,
+                                            })
+                                            if _actual_qty > 0:
+                                                _saved_r += 1
+                                                _mrp_received.append({"product": row["สินค้า"], "qty": _actual_qty, "product_code": row.get("รหัส", "")})
+                                                _mrp_id_qty[row["_id"]] = _actual_qty
+                                            if _actual_amt > 0.01:
+                                                _total_paid_actual += _actual_amt
+                                                _saved_p += 1
+                                                if _actual_amt >= _owed - 0.01:
+                                                    _paid_full_ids.append(row["_id"])
+                                        db.insert_partial_events_batch(_pe_rows)
+                                        db.update_transaction_statuses_batch(_paid_full_ids, pay_status="จ่ายแล้ว")
+                                        if _do_open_bill:
+                                            _open_bill_ids = [row["_id"] for _, row in _combo_df.iterrows()
+                                                               if row["สถานะบิล"] == "ยังไม่เปิดบิล"]
+                                            db.update_transaction_statuses_batch(_open_bill_ids, bill_status="เปิดบิลแล้ว")
+                                        # popup รับของ + LINE notification
+                                        _mrp_pending = []
+                                        for _, _rr in grp.iterrows():
+                                            _pq = int(_rr["ค้างรับ"])
+                                            if _rr["id"] in _mrp_id_qty:
+                                                _pq = max(0, _pq - _mrp_id_qty[_rr["id"]])
+                                            if _pq > 0:
+                                                _mrp_pending.append({"product": _rr["สินค้า"], "qty": _pq, "product_code": _rr.get("รหัส", "")})
+                                        if _mrp_received:
+                                            st.session_state["_recv_popup"] = {
+                                                "customer_name": customer_name,
+                                                "date":          str(mc_date),
+                                                "received":      _mrp_received,
+                                                "pending":       _mrp_pending,
+                                            }
+                                        if _luid and line_api.is_configured() and (_mrp_received or _total_paid_actual > 0.01):
+                                            _rem_qty_all = sum(_pq for _, _rr in grp.iterrows()
+                                                               for _pq in [max(0, int(_rr["ค้างรับ"]) - _mrp_id_qty.get(_rr["id"], 0))])
+                                            _rem_amt_all = max(0.0, float(grp["ค้างจ่าย"].sum()) - _total_paid_actual)
+                                            st.session_state["_partial_recv_line"] = {
+                                                "customer_name":    customer_name,
+                                                "line_user_id":     _luid,
+                                                "group_id":         _gid,
+                                                "product_name":     "",
+                                                "product_code":     "",
+                                                "qty_received":     sum(it["qty"] for it in _mrp_received),
+                                                "amount_paid":      _total_paid_actual,
+                                                "remaining_qty":    _rem_qty_all,
+                                                "remaining_amount": _rem_amt_all,
+                                                "items": [
+                                                    {"product_name": it["product"], "product_code": it.get("product_code", ""), "qty_received": it["qty"]}
+                                                    for it in _mrp_received
+                                                ],
+                                            }
+                                        _parts = []
+                                        if _saved_r:
+                                            _parts.append(f"รับของ {_saved_r} รายการ")
+                                        if _saved_p:
+                                            _parts.append(f"จ่าย ฿{_mc_pay:,.0f}")
+                                        if _do_open_bill:
+                                            _parts.append(f"เปิดบิล {len(selected_ids)} รายการ")
+                                        if _parts:
+                                            st.success("✅ บันทึก: " + " + ".join(_parts))
+                                            for tid in txn_ids:
+                                                st.session_state[f"chk_{tid}"] = False
+                                            st.rerun()
+                                        else:
+                                            st.warning("ไม่มีรายการที่ต้องบันทึก (ทุกช่องเป็น 0)")
 
                                 # ── ลบบิล (multi) ────────────────────────────────
                                 _del_bnos = sorted({
