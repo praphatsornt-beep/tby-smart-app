@@ -72,6 +72,9 @@ def get_address_by_phone(phone: str) -> dict | None:
 
 def upsert_customer_address(data: dict) -> None:
     db = get_supabase()
+    # ลบแถวเดิมที่มี id เดียวกันก่อนเสมอ (กรณีแก้ไขที่อยู่เดิม) — ถ้าใช้แค่ eq("phone", ...)
+    # แล้ว phone ว่าง แถวเดิมจะไม่ถูกลบ ทำให้ insert ชนกับ primary key เดิม
+    db.table("customer_addresses").delete().eq("id", data["id"]).execute()
     if data.get("phone"):
         db.table("customer_addresses").delete().eq("phone", data["phone"].strip()).execute()
     db.table("customer_addresses").insert(data).execute()
