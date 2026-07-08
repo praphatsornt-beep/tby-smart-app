@@ -39,6 +39,16 @@ def render():
                 dm3.metric("จำนวนสินค้า", f"{_total_prod} รายการ")
                 st.divider()
 
+                # สรุปต่อลูกค้า — ลูกค้าที่ยังรับของไม่ครบ
+                _cust_sum = (_dep_df.groupby("ลูกค้า", as_index=False)
+                              .agg(ค้างรับรวม=("ค้างรับ", "sum"),
+                                   จำนวนสินค้า=("สินค้า", "nunique"),
+                                   จำนวนบิล=("เลขที่บิล", "nunique"))
+                              .sort_values("ค้างรับรวม", ascending=False))
+                st.markdown("**สรุปต่อลูกค้า — ลูกค้าที่ยังรับของไม่ครบ**")
+                st.dataframe(_cust_sum, hide_index=True, use_container_width=True)
+                st.divider()
+
                 # สรุปต่อสินค้า
                 _prod_sum = (_dep_df.groupby(["รหัส","สินค้า"], as_index=False)["ค้างรับ"]
                               .sum().rename(columns={"ค้างรับ": "ค้างรับรวม"})
@@ -47,13 +57,22 @@ def render():
                 st.dataframe(_prod_sum, hide_index=True, use_container_width=True)
                 st.divider()
 
-                # รายละเอียดต่อลูกค้า แยกตามสินค้า
-                st.markdown("**รายละเอียดต่อลูกค้า**")
-                for _pname, _pgrp in _dep_df.groupby("สินค้า"):
-                    _ptotal = int(_pgrp["ค้างรับ"].sum())
-                    with st.expander(f"**{_pname}** — รวม {_ptotal} ชิ้น  ({_pgrp['ลูกค้า'].nunique()} คน)"):
-                        _det = _pgrp[["ลูกค้า","เลขที่บิล","วันที่","ค้างรับ"]].reset_index(drop=True)
-                        st.dataframe(_det, hide_index=True, use_container_width=True)
+                # รายละเอียด — เลือกดูแยกตามลูกค้า หรือแยกตามสินค้า
+                st.markdown("**รายละเอียด**")
+                _dep_view = st.radio("แยกตาม", ["ลูกค้า", "สินค้า"], horizontal=True,
+                                      key="_dep_detail_view", label_visibility="collapsed")
+                if _dep_view == "ลูกค้า":
+                    for _cname, _cgrp in _dep_df.groupby("ลูกค้า"):
+                        _ctotal = int(_cgrp["ค้างรับ"].sum())
+                        with st.expander(f"**{_cname}** — ค้างรับรวม {_ctotal} ชิ้น ({_cgrp['สินค้า'].nunique()} รายการสินค้า)"):
+                            _det = _cgrp[["สินค้า","เลขที่บิล","วันที่","ค้างรับ"]].reset_index(drop=True)
+                            st.dataframe(_det, hide_index=True, use_container_width=True)
+                else:
+                    for _pname, _pgrp in _dep_df.groupby("สินค้า"):
+                        _ptotal = int(_pgrp["ค้างรับ"].sum())
+                        with st.expander(f"**{_pname}** — รวม {_ptotal} ชิ้น  ({_pgrp['ลูกค้า'].nunique()} คน)"):
+                            _det = _pgrp[["ลูกค้า","เลขที่บิล","วันที่","ค้างรับ"]].reset_index(drop=True)
+                            st.dataframe(_det, hide_index=True, use_container_width=True)
 
     elif _t6_active == "📦 สต๊อก":
         st.subheader("สรุปสต๊อก")
