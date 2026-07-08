@@ -129,6 +129,7 @@ def render(products, customers):
                 _all_txn_cache = db.get_all_transactions_df()
 
                 single_cust = (_t2_search.strip() != "" or _t2_bill_search.strip() != "") and outstanding_df["ลูกค้า"].nunique() == 1
+                _active_cust = st.session_state.get("_t5_out_active_cust", "")
                 # pre-fetch shipments ครั้งเดียวแทนการเรียงใน loop (N+1 fix)
                 try:
                     _all_ships = db.get_shipments()
@@ -152,7 +153,7 @@ def render(products, customers):
                                  + f" | ค้างรับ {pending} ชิ้น"
                                  + (f" | ⭐ PV ค้างเปิดบิล {_unbilled_pv:,.0f}" if _unbilled_pv > 0 else ""))
 
-                    with st.expander(exp_label, expanded=single_cust):
+                    with st.expander(exp_label, expanded=(single_cust or customer_name == _active_cust)):
                         # ── 🖨️ พิมพ์ / จัดการบิล ───────────────────────────────
                         with st.expander("🖨️ พิมพ์ / จัดการบิล"):
                             _cust_obj_bp = _cust_map_all.get(customer_name)
@@ -305,6 +306,8 @@ def render(products, customers):
                         selected_ids = [_id_map.iloc[i] for i in _sel_idx if i < len(_id_map)]
 
                         if selected_ids:
+                            # จำไว้ว่ากำลังจัดการลูกค้าคนนี้อยู่ เพื่อให้แผงนี้เปิดค้างไว้หลัง rerun (เช่นกดบันทึก)
+                            st.session_state["_t5_out_active_cust"] = customer_name
                             sel_rows       = grp[grp["id"].isin(selected_ids)]
                             total_selected = sel_rows["ค้างจ่าย"].sum()
                             _sel_pv = sel_rows["PV รวม"].sum() if "PV รวม" in sel_rows.columns else 0
