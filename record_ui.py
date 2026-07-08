@@ -460,18 +460,21 @@ def render(tab1, products, customers, customer_map):
                                               stage_dt="_fr_dt", stage_am="_fr_am", stage_pv="_fr_pv")
                             if m_customer != "— เลือกลูกค้า —":
                                 if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
-                                    db.upsert_customer_address({
-                                        "id":             str(uuid.uuid4()),
-                                        "customer_id":    _cid,
-                                        "recipient_name": r_name,
-                                        "phone":          r_phone,
-                                        "address_line":   r_addr_line,
-                                        "district":       r_district,
-                                        "amphure":        r_amphure,
-                                        "province":       r_province,
-                                        "postal_code":    m_postcode,
-                                    })
-                                    st.success("✅ บันทึกแล้ว — ค้นหาจากเบอร์ได้เลยครั้งถัดไป")
+                                    try:
+                                        db.upsert_customer_address({
+                                            "id":             str(uuid.uuid4()),
+                                            "customer_id":    _cid,
+                                            "recipient_name": r_name,
+                                            "phone":          r_phone,
+                                            "address_line":   r_addr_line,
+                                            "district":       r_district,
+                                            "amphure":        r_amphure,
+                                            "province":       r_province,
+                                            "postal_code":    m_postcode,
+                                        })
+                                        st.success("✅ บันทึกแล้ว — ค้นหาจากเบอร์ได้เลยครั้งถัดไป")
+                                    except Exception as _sa_e:
+                                        st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_sa_e}")
                 else:
                     r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
 
@@ -1847,18 +1850,21 @@ def render(tab1, products, customers, customer_map):
 
                                 if _lbl_cust_id:
                                     if st.button("💾 บันทึกที่อยู่นี้", key="_lbl_save_addr_btn"):
-                                        db.upsert_customer_address({
-                                            "id":             str(uuid.uuid4()),
-                                            "customer_id":    _lbl_cust_id,
-                                            "recipient_name": _lbl_name,
-                                            "phone":          _lbl_phone,
-                                            "address_line":   _lbl_addr_line,
-                                            "district":       _lbl_district,
-                                            "amphure":        _lbl_amphure,
-                                            "province":       _lbl_province,
-                                            "postal_code":    _lbl_zip,
-                                        })
-                                        st.success("✅ บันทึกแล้ว — เลือกจากที่อยู่ที่บันทึกไว้ได้ครั้งถัดไป")
+                                        try:
+                                            db.upsert_customer_address({
+                                                "id":             str(uuid.uuid4()),
+                                                "customer_id":    _lbl_cust_id,
+                                                "recipient_name": _lbl_name,
+                                                "phone":          _lbl_phone,
+                                                "address_line":   _lbl_addr_line,
+                                                "district":       _lbl_district,
+                                                "amphure":        _lbl_amphure,
+                                                "province":       _lbl_province,
+                                                "postal_code":    _lbl_zip,
+                                            })
+                                            st.success("✅ บันทึกแล้ว — เลือกจากที่อยู่ที่บันทึกไว้ได้ครั้งถัดไป")
+                                        except Exception as _lbl_sa_e:
+                                            st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_lbl_sa_e}")
                                 else:
                                     st.caption("เลือกลูกค้าด้านบนก่อน จึงจะบันทึกที่อยู่นี้ไว้ใช้ครั้งถัดไปได้")
 

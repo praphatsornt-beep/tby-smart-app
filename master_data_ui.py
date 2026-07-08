@@ -326,16 +326,20 @@ def render():
                     if not _ea_cust_id:
                         st.error("กรุณาเลือกลูกค้าก่อนบันทึก")
                         st.stop()
-                    db.upsert_customer_address({
-                        "id":             _ea.get("id") or str(uuid.uuid4()),
-                        "customer_id":    _ea_cust_id,
-                        "recipient_name": ea3_rn,
-                        "phone":          ea3_rp,
-                        "address_line":   ea3_al,
-                        "district":       ea3_dt,
-                        "amphure":        ea3_am,
-                        "province":       ea3_pv,
-                        "postal_code":    ea3_pc,
-                    })
+                    try:
+                        db.upsert_customer_address({
+                            "id":             _ea.get("id") or str(uuid.uuid4()),
+                            "customer_id":    _ea_cust_id,
+                            "recipient_name": ea3_rn,
+                            "phone":          ea3_rp,
+                            "address_line":   ea3_al,
+                            "district":       ea3_dt,
+                            "amphure":        ea3_am,
+                            "province":       ea3_pv,
+                            "postal_code":    ea3_pc,
+                        })
+                    except Exception as _ea_e:
+                        st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_ea_e}")
+                        st.stop()
                     st.success("✅ บันทึกแล้ว")
                     st.rerun()
