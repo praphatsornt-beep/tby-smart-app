@@ -1758,3 +1758,15 @@ def render(tab1, products, customers, customer_map):
                                 st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`")
                             st.markdown(f"**ค่าส่งรวม: {_sel_plan['total_cost']:.0f} ฿**")
 
+                            # ── เทียบทุกจุดตัดที่ลอง (ให้เห็นว่าลองครบจริง ไม่ใช่แค่ค่าที่เลือก)
+                            if len(_sel_plan.get("candidates", [])) > 1:
+                                st.divider()
+                                st.markdown("**⚖️ เทียบทุกเพดานที่ลองของขนส่งนี้**")
+                                _cand_rows = [{
+                                    "เพดาน":       ("✅ " if c["ceiling"] == _sel_plan["ceiling_used"] else "") + f"{c['ceiling']} kg",
+                                    "จำนวนกล่อง":  c["box_count"] if c["box_count"] is not None else "—",
+                                    "ค่าส่งรวม (฿)": c["total_cost"] if c["total_cost"] is not None else "เกินน้ำหนัก",
+                                } for c in _sel_plan["candidates"]]
+                                st.dataframe(pd.DataFrame(_cand_rows), hide_index=True, use_container_width=True)
+                                st.caption("✅ = เพดานที่เลือกใช้ (ถูกสุดหรือเท่ากับตัวอื่น)")
+

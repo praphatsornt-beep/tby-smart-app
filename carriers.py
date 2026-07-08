@@ -324,7 +324,9 @@ def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: flo
     แล้วแพ็คด้วย calc_logic.pack_boxes_grouped() ที่จุดตัดนั้นๆ (เก็บสินค้าเดียวกันไว้ด้วยกันก่อน)
     เลือกจุดตัดที่รวมค่าส่งถูกสุดต่อขนส่ง
 
-    Returns list เรียงถูกสุดก่อน: [{id, name, boxes, total_cost, ceiling_used, box_count}, ...]
+    Returns list เรียงถูกสุดก่อน: [{id, name, boxes, total_cost, ceiling_used, box_count,
+    candidates: [{ceiling, total_cost, box_count} ...]}, ...] — candidates คือทุกจุดตัดที่ลอง
+    (รวมที่ไม่ได้เลือก) ใช้โชว์เทียบให้เห็นว่าลองครบจริง ไม่ใช่แค่ค่าที่เลือก
     ข้ามขนส่งที่ใช้ไม่ได้เลย (ไม่รับ COD, มีกล่องเกิน max_kg ทุกจุดตัดที่ลอง ฯลฯ)
     """
     box_weight_kg = box_weight_g / 1000
@@ -333,6 +335,7 @@ def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: flo
     for carrier_def in _CARRIER_DEFS:
         cid, name, table, max_kg = carrier_def[0], carrier_def[1], carrier_def[2], carrier_def[3]
         best = None
+        candidates = []
         for ceiling in _bracket_breakpoints(table, max_kg):
             pack_cap = max(0.1, ceiling - box_weight_kg)
             boxes = calc_logic.pack_boxes_grouped(items, pack_cap)
@@ -347,6 +350,11 @@ def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: flo
                     ok = False
                     break
                 total += priced["total"] + priced["cod_fee"]
+            candidates.append({
+                "ceiling": ceiling,
+                "total_cost": total if ok else None,
+                "box_count": len(boxes) if ok else None,
+            })
             if not ok:
                 continue
             if best is None or total < best["total_cost"]:
@@ -355,6 +363,7 @@ def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: flo
                     "total_cost": total, "ceiling_used": ceiling, "box_count": len(boxes),
                 }
         if best is not None:
+            best["candidates"] = candidates
             plans.append(best)
 
     plans.sort(key=lambda x: x["total_cost"])
