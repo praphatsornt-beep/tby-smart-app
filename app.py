@@ -249,7 +249,7 @@ button[data-testid="baseButton-secondary"]:hover {
     box-shadow: 0 0 0 3px rgba(64,145,108,0.18) !important;
 }
 
-/* ── Radio groups → card + pill/segmented style ── */
+/* ── Radio groups → segmented control style (ต่อเนื่องในแทร็คเดียว) ── */
 [data-testid="stRadio"] {
     background: #ffffff;
     border: 1px solid #E5EFE8;
@@ -258,26 +258,36 @@ button[data-testid="baseButton-secondary"]:hover {
     box-shadow: 0 1px 5px rgba(0,0,0,0.04);
 }
 [data-testid="stRadio"] > div[role="radiogroup"] {
-    gap: 8px !important;
+    display: flex !important;
+    gap: 0 !important;
     flex-wrap: wrap;
+    background: #F0F9F4;
+    border: 1.5px solid #C8DDD0 !important;
+    border-radius: 10px;
+    padding: 3px;
+    overflow: hidden;
+}
+/* ซ่อนวงกลม radio เดิม — โชว์แค่ segment ที่ไฮไลต์แทน */
+[data-testid="stRadio"] label > div:first-child {
+    display: none !important;
 }
 [data-testid="stRadio"] label {
-    background: #F0F9F4 !important;
-    border: 1.5px solid #C8DDD0 !important;
-    border-radius: 20px !important;
-    padding: 6px 16px !important;
+    background: transparent !important;
+    border: none !important;
+    border-radius: 8px !important;
+    padding: 7px 16px !important;
     margin: 0 !important;
+    flex: 1 1 auto;
+    justify-content: center;
     cursor: pointer;
-    transition: background 0.18s, border-color 0.18s, box-shadow 0.18s !important;
+    transition: background 0.18s, box-shadow 0.18s !important;
 }
-[data-testid="stRadio"] label:hover {
-    border-color: #40916C !important;
+[data-testid="stRadio"] label:not(:has(input:checked)):hover {
     background: #E3F3E9 !important;
 }
 [data-testid="stRadio"] label:has(input:checked) {
     background: linear-gradient(135deg, #2D6A4F 0%, #1B4332 100%) !important;
-    border-color: #1B4332 !important;
-    box-shadow: 0 2px 8px rgba(27,67,50,0.3) !important;
+    box-shadow: 0 2px 6px rgba(27,67,50,0.3) !important;
 }
 [data-testid="stRadio"] label:has(input:checked) p,
 [data-testid="stRadio"] label:has(input:checked) div {
