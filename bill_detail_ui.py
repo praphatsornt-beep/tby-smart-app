@@ -532,10 +532,11 @@ def render(products, customers):
                                 _unbilled_cnt  = int(_unbilled_mask.sum())
                                 _unbilled_pv   = sel_rows.loc[_unbilled_mask, "PV รวม"].sum() if "PV รวม" in sel_rows.columns else 0
 
-                                _mc_mode_opts = ["💵+📦 ทำพร้อมกัน (ปรับเองได้)", "💵 จ่ายเงินอย่างเดียว", "📦 รับของอย่างเดียว"]
+                                _mc_mode_opts = ["🛠️ กำหนดเอง", "💵 จ่ายเงินอย่างเดียว", "📦 รับของอย่างเดียว"]
                                 if _any_unbilled:
                                     _mc_mode_opts.append("📄 เปิดบิลอย่างเดียว")
-                                _mc_mode = st.radio("โหมด", _mc_mode_opts, horizontal=True, key=f"multi_mode_{customer_name}")
+                                _mc_mode = st.radio("โหมด", _mc_mode_opts, horizontal=True,
+                                                     key=f"multi_mode_{customer_name}", label_visibility="collapsed")
 
                                 if _mc_mode == "📄 เปิดบิลอย่างเดียว":
                                     _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
