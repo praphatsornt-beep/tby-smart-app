@@ -760,6 +760,29 @@ def upsert_company_info(data: dict) -> None:
     get_company_info.clear()
 
 
+# ─── Box presets (ขนาดกล่อง — จัดการข้อมูล) ───────────────────────────────────
+
+@st.cache_data(ttl=300)
+def get_box_presets() -> list[dict]:
+    return get_supabase().table("box_presets").select("*").order("name").execute().data
+
+
+def replace_box_presets(presets: list[dict]) -> None:
+    """แทนที่ preset ขนาดกล่องทั้งหมดด้วยรายการใหม่ (ลบของเดิมทั้งหมดแล้วใส่ใหม่)"""
+    db = get_supabase()
+    db.table("box_presets").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    if presets:
+        rows = [{
+            "id":         str(uuid.uuid4()),
+            "name":       p["name"],
+            "length_cm":  p["length_cm"],
+            "width_cm":   p["width_cm"],
+            "height_cm":  p["height_cm"],
+        } for p in presets]
+        db.table("box_presets").insert(rows).execute()
+    get_box_presets.clear()
+
+
 # ─── Stock ───────────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=120)

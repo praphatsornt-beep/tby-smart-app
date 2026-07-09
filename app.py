@@ -1,4 +1,3 @@
-import re
 import streamlit as st
 import pandas as pd
 
@@ -15,7 +14,7 @@ import stock_ui
 import master_data_ui
 import record_ui
 import bill_detail_ui
-from ui_helpers import _extract_tracking, _extract_iship_order_id, _build_success_info, BULKY_BOX_PRESETS_DEFAULT
+from ui_helpers import _extract_tracking, _extract_iship_order_id, _build_success_info, get_bulky_presets
 
 thai_address._load_db()  # pre-warm cache
 
@@ -55,7 +54,12 @@ if "code" in _qp and "shop_id" in _qp:
 
 st.markdown("""
 <style>
-/* ===== TBY SMART APP — THEME: FOREST GREEN + ORANGE ===== */
+/* ===== TBY SMART APP — THEME: FOREST GREEN + ORANGE (soft-card / pill style) ===== */
+
+/* ── App canvas — soft cream-sage instead of flat white, so white cards pop ── */
+.stApp {
+    background: #EEF3EC;
+}
 
 /* ── App header bar ── */
 header[data-testid="stHeader"] {
@@ -75,50 +79,49 @@ h1 {
 h2 { color: #2D6A4F !important; font-weight: 700 !important; }
 h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 
-/* ── Main nav (st.pills) — looks identical to underline tabs ── */
-[data-testid="stPills"] {
+/* ── Main nav (st.pills) — solid rounded pill segmented control ──
+   NOTE: modern Streamlit renders st.pills as a stButtonGroup container of
+   stBaseButton-pills / stBaseButton-pillsActive buttons — NOT a "stPills"
+   testid with aria-checked (that was true on older Streamlit only). */
+[data-testid="stButtonGroup"] {
     background: #ffffff;
-    border-bottom: 2px solid #D4E8DA;
-    border-radius: 12px 12px 0 0;
-    padding: 4px 8px 0;
-    box-shadow: 0 2px 12px rgba(27,67,50,0.07);
+    border: 1px solid #E5EFE8;
+    border-radius: 16px;
+    padding: 6px;
+    box-shadow: 0 4px 16px rgba(27,67,50,0.08);
     display: flex;
     flex-wrap: wrap;
-    gap: 0;
-    margin-bottom: 0 !important;
+    gap: 4px;
+    margin-bottom: 1.25rem !important;
 }
-[data-testid="stPills"] button {
+[data-testid="stButtonGroup"] button {
     background: transparent !important;
-    color: #7A9E85 !important;
+    color: #5C8069 !important;
     border: none !important;
-    border-radius: 8px 8px 0 0 !important;
-    border-bottom: 3px solid transparent !important;
+    border-radius: 12px !important;
     font-size: 0.84rem !important;
-    font-weight: 500 !important;
-    padding: 8px 13px !important;
-    margin-bottom: -2px;
+    font-weight: 600 !important;
+    padding: 9px 16px !important;
     white-space: nowrap;
     box-shadow: none !important;
     transition: color 0.2s, background 0.2s !important;
 }
-[data-testid="stPills"] button[aria-checked="true"] {
-    color: #1B4332 !important;
+button[data-testid="stBaseButton-pillsActive"] {
+    color: #ffffff !important;
     font-weight: 700 !important;
-    background: transparent !important;
-    border-bottom: 3px solid #E07B39 !important;
-    box-shadow: none !important;
+    background: linear-gradient(135deg, #2D6A4F 0%, #1B4332 100%) !important;
+    box-shadow: 0 2px 8px rgba(27,67,50,0.3) !important;
 }
-[data-testid="stPills"] button:hover {
+[data-testid="stButtonGroup"] button[data-testid="stBaseButton-pills"]:hover {
     color: #1B4332 !important;
     background: #F0F9F4 !important;
-    border-bottom: 3px solid transparent !important;
 }
 
 /* ── Sub-tabs inside each page (st.tabs) — modern underline ── */
 .stTabs [data-baseweb="tab-list"] {
     background: #ffffff;
     border-bottom: 2px solid #D4E8DA;
-    border-radius: 12px 12px 0 0;
+    border-radius: 14px 14px 0 0;
     padding: 0 6px;
     gap: 0;
     box-shadow: 0 2px 12px rgba(27,67,50,0.07);
@@ -151,47 +154,47 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 }
 .stTabs [data-baseweb="tab-border"] { display: none !important; }
 
-/* ── Primary buttons (orange) ── */
-button[data-testid="baseButton-primary"] {
+/* ── Primary buttons (orange, softly rounded like the mockup's gold pill CTAs) ── */
+button[data-testid="stBaseButton-primary"] {
     background: linear-gradient(135deg, #E07B39 0%, #C86A2A 100%) !important;
     color: #fff !important;
     border: none !important;
-    border-radius: 8px !important;
+    border-radius: 12px !important;
     font-weight: 600 !important;
     box-shadow: 0 2px 8px rgba(224,123,57,0.35) !important;
     transition: box-shadow 0.18s, transform 0.18s !important;
 }
-button[data-testid="baseButton-primary"]:hover {
+button[data-testid="stBaseButton-primary"]:hover {
     box-shadow: 0 4px 16px rgba(224,123,57,0.5) !important;
     transform: translateY(-1px) !important;
 }
-button[data-testid="baseButton-primary"]:active {
+button[data-testid="stBaseButton-primary"]:active {
     transform: translateY(0) !important;
     box-shadow: 0 2px 6px rgba(224,123,57,0.3) !important;
 }
 
 /* ── Secondary buttons (green outline) ── */
-button[data-testid="baseButton-secondary"] {
+button[data-testid="stBaseButton-secondary"] {
     border: 1.5px solid #2D6A4F !important;
     color: #2D6A4F !important;
-    border-radius: 8px !important;
+    border-radius: 12px !important;
     font-weight: 500 !important;
     background: white !important;
     transition: all 0.18s !important;
 }
-button[data-testid="baseButton-secondary"]:hover {
+button[data-testid="stBaseButton-secondary"]:hover {
     background: #EAF2EC !important;
     border-color: #1B4332 !important;
     color: #1B4332 !important;
 }
 
-/* ── Metrics ── */
+/* ── Metrics — rounded stat cards ── */
 [data-testid="stMetric"] {
     background: white;
-    border-radius: 12px;
+    border-radius: 16px;
     padding: 1rem 1.25rem !important;
     border-left: 4px solid #E07B39;
-    box-shadow: 0 2px 10px rgba(27,67,50,0.08);
+    box-shadow: 0 4px 14px rgba(27,67,50,0.08);
 }
 [data-testid="stMetricValue"] {
     font-size: 1.5rem !important;
@@ -206,12 +209,12 @@ button[data-testid="baseButton-secondary"]:hover {
     letter-spacing: 0.4px;
 }
 
-/* ── Expanders ── */
+/* ── Expanders — rounded cards ── */
 [data-testid="stExpander"] {
     border: 1px solid #C8DDD0 !important;
-    border-radius: 10px !important;
+    border-radius: 14px !important;
     overflow: hidden;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.05);
+    box-shadow: 0 3px 10px rgba(27,67,50,0.06);
 }
 [data-testid="stExpander"] summary {
     background: #EAF2EC !important;
@@ -223,11 +226,11 @@ button[data-testid="baseButton-secondary"]:hover {
     background: #D8F3DC !important;
 }
 
-/* ── Text/Number inputs ── */
+/* ── Text/Number inputs — softly rounded like the mockup's chip fields ── */
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea {
-    border-radius: 8px !important;
+    border-radius: 10px !important;
     border: 1.5px solid #C8DDD0 !important;
     transition: border-color 0.18s, box-shadow 0.18s !important;
 }
@@ -240,7 +243,7 @@ button[data-testid="baseButton-secondary"]:hover {
 
 /* ── Select boxes ── */
 [data-baseweb="select"] > div:first-child {
-    border-radius: 8px !important;
+    border-radius: 10px !important;
     border: 1.5px solid #C8DDD0 !important;
     transition: border-color 0.18s !important;
 }
@@ -253,9 +256,9 @@ button[data-testid="baseButton-secondary"]:hover {
 [data-testid="stRadio"] {
     background: #ffffff;
     border: 1px solid #E5EFE8;
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 10px 14px 12px !important;
-    box-shadow: 0 1px 5px rgba(0,0,0,0.04);
+    box-shadow: 0 3px 10px rgba(27,67,50,0.05);
 }
 [data-testid="stRadio"] > div[role="radiogroup"] {
     display: flex !important;
@@ -295,20 +298,20 @@ button[data-testid="baseButton-secondary"]:hover {
     font-weight: 700 !important;
 }
 
-/* ── Bordered containers (st.container(border=True)) — card style ── */
+/* ── Bordered containers (st.container(border=True)) — soft floating card style ── */
 [data-testid="stVerticalBlockBorderWrapper"] {
     background: #ffffff;
     border: 1px solid #E5EFE8 !important;
-    border-radius: 12px !important;
-    box-shadow: 0 1px 6px rgba(0,0,0,0.05);
+    border-radius: 16px !important;
+    box-shadow: 0 4px 14px rgba(27,67,50,0.07);
 }
 
 /* ── DataFrame / Data editor ── */
 [data-testid="stDataFrame"],
 [data-testid="stDataEditor"] {
-    border-radius: 10px !important;
+    border-radius: 14px !important;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    box-shadow: 0 3px 10px rgba(27,67,50,0.06);
 }
 
 /* ── Block container padding ── */
@@ -466,30 +469,10 @@ def _show_carrier_select():
         if _cs_is_bulky:
             st.markdown("**📐 ขนาดกล่อง (จำเป็นสำหรับ Bulky)**")
 
-            # ── preset กล่อง ──────────────────────────────────────────────
-            if "_bulky_presets_txt" not in st.session_state:
-                st.session_state["_bulky_presets_txt"] = BULKY_BOX_PRESETS_DEFAULT
-            with st.expander("⚙️ ตั้งค่า preset กล่อง"):
-                st.text_area(
-                    "ชื่อ: ยาว×กว้าง×สูง — บรรทัดละ 1 ขนาด",
-                    height=160, key="_bulky_presets_txt",
-                )
-
-            # parse
-            _bulky_presets: list[dict] = []
-            for _ln in st.session_state["_bulky_presets_txt"].splitlines():
-                if ":" not in _ln:
-                    continue
-                _pn, _pd = _ln.split(":", 1)
-                _pd_parts = re.split(r"[×xX*]", _pd.strip())
-                if len(_pd_parts) == 3:
-                    try:
-                        _bulky_presets.append({
-                            "name": _pn.strip(),
-                            "l": int(_pd_parts[0]), "w": int(_pd_parts[1]), "h": int(_pd_parts[2]),
-                        })
-                    except ValueError:
-                        pass
+            # ── preset กล่อง (จัดการที่แท็บ ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง) ──────
+            _bulky_presets = get_bulky_presets()
+            if not _bulky_presets:
+                st.caption("ℹ️ ยังไม่มี preset ขนาดกล่อง — ไปเพิ่มได้ที่แท็บ ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง")
 
             # dropdown เลือกขนาด
             _preset_opts = ["-- เลือกขนาดกล่อง --"] + [p["name"] for p in _bulky_presets] + ["กรอกเอง"]

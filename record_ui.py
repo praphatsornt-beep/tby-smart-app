@@ -1,4 +1,3 @@
-import re
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
@@ -16,7 +15,7 @@ from ui_helpers import (
     _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
-    BULKY_BOX_PRESETS_DEFAULT,
+    get_bulky_presets,
 )
 import carriers as carr
 
@@ -1873,26 +1872,11 @@ def render(tab1, products, customers, customer_map):
                                 st.markdown("**ขนาดกล่อง — เพิ่มได้หลายขนาดในใบเดียว**")
                                 if "_lbl_box_rows" not in st.session_state:
                                     st.session_state["_lbl_box_rows"] = []
-                                if "_bulky_presets_txt" not in st.session_state:
-                                    st.session_state["_bulky_presets_txt"] = BULKY_BOX_PRESETS_DEFAULT
 
-                                _lbl_presets = []
-                                for _ln in st.session_state.get("_bulky_presets_txt", "").splitlines():
-                                    if ":" not in _ln:
-                                        continue
-                                    _pn, _pd = _ln.split(":", 1)
-                                    _pd_parts = re.split(r"[×xX*]", _pd.strip())
-                                    if len(_pd_parts) == 3:
-                                        try:
-                                            _lbl_presets.append({
-                                                "name": _pn.strip(),
-                                                "l": int(_pd_parts[0]), "w": int(_pd_parts[1]), "h": int(_pd_parts[2]),
-                                            })
-                                        except ValueError:
-                                            pass
+                                _lbl_presets = get_bulky_presets()
                                 _lbl_preset_opts = ["กรอกเอง"] + [p["name"] for p in _lbl_presets]
                                 _lbl_preset_sel = st.selectbox(
-                                    "เลือกขนาดกล่อง (จาก preset ที่ตั้งไว้ในหน้าเลือกขนส่ง iShip)",
+                                    "เลือกขนาดกล่อง (จัดการ preset ได้ที่แท็บ ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง)",
                                     _lbl_preset_opts, key="_lbl_preset_sel",
                                 )
                                 _lbl_pm = next((p for p in _lbl_presets if p["name"] == _lbl_preset_sel), None)

@@ -78,7 +78,7 @@ def render():
                     )
     st.divider()
 
-    sub1, sub2, sub3 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่"])
+    sub1, sub2, sub3, sub4 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "📐 ขนาดกล่อง"])
 
 
     with sub1:
@@ -343,3 +343,58 @@ def render():
                         st.stop()
                     st.success("✅ บันทึกแล้ว")
                     st.rerun()
+
+    with sub4:
+        st.write("**preset ขนาดกล่อง** — ใช้ตอนเลือกขนส่งแบบ Bulky และหน้าปริ้นใบปะหน้า manual "
+                 "แก้ในตารางได้โดยตรง กด `+` ที่มุมล่างขวาเพื่อเพิ่มแถวใหม่ แล้วกด **บันทึกทั้งหมด** "
+                 "ค่าที่บันทึกจะเก็บถาวรและใช้ได้ทุกครั้งที่เปิดแอป")
+        try:
+            box_presets = db.get_box_presets()
+        except Exception:
+            st.warning("⚙️ ยังไม่ได้สร้างตาราง `box_presets` ใน Supabase — รัน SQL นี้ก่อน")
+            st.code("""CREATE TABLE IF NOT EXISTS box_presets (
+  id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name       TEXT NOT NULL,
+  length_cm  NUMERIC NOT NULL,
+  width_cm   NUMERIC NOT NULL,
+  height_cm  NUMERIC NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+ALTER TABLE box_presets DISABLE ROW LEVEL SECURITY;""", language="sql")
+            box_presets = []
+
+        _box_cols = ["name", "length_cm", "width_cm", "height_cm"]
+        _box_rename = {"name": "ชื่อกล่อง", "length_cm": "ยาว (ซม.)", "width_cm": "กว้าง (ซม.)", "height_cm": "สูง (ซม.)"}
+        if box_presets:
+            box_df = pd.DataFrame(box_presets)[_box_cols].rename(columns=_box_rename)
+        else:
+            box_df = pd.DataFrame(columns=list(_box_rename.values()))
+
+        edited_box_df = st.data_editor(
+            box_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            hide_index=True,
+            key="box_preset_editor",
+            column_config={
+                "ชื่อกล่อง":  st.column_config.TextColumn("ชื่อกล่อง", required=True),
+                "ยาว (ซม.)":  st.column_config.NumberColumn("ยาว (ซม.)",  min_value=1, step=1, format="%d"),
+                "กว้าง (ซม.)": st.column_config.NumberColumn("กว้าง (ซม.)", min_value=1, step=1, format="%d"),
+                "สูง (ซม.)":  st.column_config.NumberColumn("สูง (ซม.)",  min_value=1, step=1, format="%d"),
+            },
+        )
+        if st.button("💾 บันทึกทั้งหมด", key="save_box_preset_editor", use_container_width=True, type="primary"):
+            valid = edited_box_df.dropna(subset=["ชื่อกล่อง", "ยาว (ซม.)", "กว้าง (ซม.)", "สูง (ซม.)"])
+            valid = valid[valid["ชื่อกล่อง"].astype(str).str.strip() != ""]
+            _new_presets = [{
+                "name":      str(row["ชื่อกล่อง"]).strip(),
+                "length_cm": float(row["ยาว (ซม.)"]),
+                "width_cm":  float(row["กว้าง (ซม.)"]),
+                "height_cm": float(row["สูง (ซม.)"]),
+            } for _, row in valid.iterrows()]
+            try:
+                db.replace_box_presets(_new_presets)
+                st.success(f"✅ บันทึก {len(_new_presets)} ขนาดกล่องแล้ว")
+                st.rerun()
+            except Exception as _box_e:
+                st.error(f"❌ บันทึกไม่สำเร็จ: {_box_e}")
