@@ -1171,18 +1171,33 @@ def _parse_iship_address(text: str) -> dict:
 
 
 def _parse_quick_order(text: str, products: list) -> tuple:
+    """แยกข้อความเป็น token คั่นด้วยเว้นวรรค แต่ละ token = รหัสสินค้า (เต็มหรือแค่บางส่วน
+    ก็ได้ — จะจับคู่แบบขึ้นต้นด้วยให้ถ้าไม่เจอรหัสตรงเป๊ะ) ตามด้วย -จำนวน ได้ (ไม่ใส่ = 1 ชิ้น)
+    เช่น "tf2581-2 rb2306 tu33" → tf2581 ×2, rb2306 ×1, และ tu33 จะ match รหัสที่ขึ้นต้นด้วย
+    TU33 ถ้ามีตัวเดียว ถ้าเจอมากกว่า 1 ตัวหรือไม่เจอเลย จะติด unknown พร้อมเหตุผล
+    """
     product_by_id = {p["id"].upper(): p for p in products}
     found, unknown = [], []
     for token in text.strip().split():
+        qty = 1
+        code_part = token
         parts = token.rsplit("-", 1)
-        if len(parts) == 2:
-            code, qty_str = parts[0].upper(), parts[1]
-            if qty_str.isdigit() and int(qty_str) > 0:
-                p = product_by_id.get(code)
-                if p:
-                    found.append({"product": p, "qty": int(qty_str)})
-                else:
-                    unknown.append(code)
+        if len(parts) == 2 and parts[1].isdigit() and int(parts[1]) > 0:
+            code_part, qty = parts[0], int(parts[1])
+        code_up = code_part.upper()
+
+        p = product_by_id.get(code_up)
+        if p:
+            found.append({"product": p, "qty": qty})
+            continue
+
+        _matches = [pr for pr in products if pr["id"].upper().startswith(code_up)]
+        if len(_matches) == 1:
+            found.append({"product": _matches[0], "qty": qty})
+        elif len(_matches) > 1:
+            unknown.append(f"{code_part} (พบ {len(_matches)} รายการ ระบุให้ชัดเจนขึ้น)")
+        else:
+            unknown.append(code_part)
     return found, unknown
 
 

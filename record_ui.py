@@ -263,17 +263,20 @@ def render(tab1, products, customers, customer_map):
                         st.markdown("**เพิ่มสินค้า**")
                         q_text = st.text_input(
                             "รหัสสินค้า",
-                            placeholder="พิมพ์รหัสสินค้า-จำนวน เช่น tf2581-2 rb2306-1",
+                            placeholder="พิมพ์รหัสสินค้า (เต็มหรือบางส่วนก็ได้) เช่น tf2581 — Enter เพื่อเพิ่มเลย",
                             key=_qtext_key, label_visibility="collapsed",
                         )
-                        if st.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", use_container_width=True):
+                        _q_submit = st.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", use_container_width=True)
+                        if _q_submit or q_text.strip():
                             _qf, _qu = _parse_quick_order(q_text or "", products)
-                            if _qu:
-                                st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
                             if _qf:
                                 _cart_add_items(_cart_key, _qf)
                                 st.session_state["_qtext_ver"] = _qtext_ver + 1
                                 st.rerun()
+                            elif _qu:
+                                # ไม่เจอ/ไม่ชัดเจน — ไม่ rerun เพื่อให้ error ค้างให้เห็น
+                                # (ไม่ bump version ด้วย เพื่อให้ข้อความเดิมยังอยู่ให้แก้ไขต่อได้)
+                                st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_qu)}")
 
                     with st.container(border=True):
                         st.markdown("**สถานะรายการ**")
@@ -290,9 +293,11 @@ def render(tab1, products, customers, customer_map):
                     with st.container(border=True):
                         _sum_total = sum(float(p.get("price") or 0) * q for p, q, _ in valid_items)
                         _sum_pv    = sum(float(p.get("points_per_unit") or 0) * q for p, q, _ in valid_items)
-                        st.markdown(f"ยอดรวมสินค้า &nbsp; **฿{_sum_total:,.0f}**")
-                        if _sum_pv > 0:
-                            st.markdown(f"⭐ คะแนนสะสมที่จะได้รับ &nbsp; **+{_sum_pv:,.0f}**")
+                        if valid_items:
+                            st.success("🛒 " + "  |  ".join(f"**{p['id']}** ×{q}" for p, q, _ in valid_items))
+                        st.markdown(f"ยอดรวม &nbsp; **฿{_sum_total:,.0f}**")
+                        st.markdown(f"⭐ PV รวม &nbsp; **{_sum_pv:,.0f}**")
+                        st.markdown(f"รายการ &nbsp; **{len(valid_items)} สินค้า**")
 
                 if not valid_items and _has_rx_action:
                     st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
@@ -1049,17 +1054,18 @@ def render(tab1, products, customers, customer_map):
             _sqc1, _sqc2 = _sp_add_box.columns([4, 1])
             _sp_q_text = _sqc1.text_input(
                 "รหัสสินค้า",
-                placeholder="พิมพ์รหัสสินค้า-จำนวน เช่น tf2581-2 rb2306-1",
+                placeholder="พิมพ์รหัสสินค้า (เต็มหรือบางส่วนก็ได้) เช่น tf2581 — Enter เพื่อเพิ่มเลย",
                 key=_sp_qtext_key, label_visibility="collapsed",
             )
-            if _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", use_container_width=True):
+            _sp_q_submit = _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", use_container_width=True)
+            if _sp_q_submit or _sp_q_text.strip():
                 _sp_qf, _sp_qu = _parse_quick_order(_sp_q_text or "", _sp)
-                if _sp_qu:
-                    st.error(f"❌ รหัสไม่พบ: {', '.join(_sp_qu)}")
                 if _sp_qf:
                     _cart_add_items(_sp_cart_key, _sp_qf)
                     st.session_state["_sp_qtext_ver"] = _sp_qtext_ver + 1
                     st.rerun()
+                elif _sp_qu:
+                    st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_sp_qu)}")
 
             st.divider()
 
