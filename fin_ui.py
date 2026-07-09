@@ -12,6 +12,8 @@ import database as db
 _THAI_MONTHS = ["", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
                 "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
 
+_FIN_TABS = ["💰 ยอดขาย", "📑 ใบเสร็จ/เคลม VAT"]
+
 
 def _parse_date(s):
     if not s:
@@ -209,9 +211,12 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 
 def render():
     st.subheader("💵 การเงิน")
-    _tab_sales, _tab_wht = st.tabs(["💰 ยอดขาย", "📑 ใบเสร็จ/เคลม VAT"])
+    try:
+        _fin_active = st.pills("", _FIN_TABS, key="_fin_active_sub", label_visibility="collapsed") or _FIN_TABS[0]
+    except AttributeError:
+        _fin_active = st.radio("", _FIN_TABS, horizontal=True, key="_fin_active_sub", label_visibility="collapsed")
 
-    with _tab_sales:
+    if _fin_active == _FIN_TABS[0]:
         fin_summary = db.get_finance_summary()
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("🚩 ยอดค้างโอน (฿)", f"{fin_summary['outstanding']:,.2f}")
@@ -379,7 +384,7 @@ def render():
 
         st.divider()
 
-    with _tab_wht:
+    elif _fin_active == _FIN_TABS[1]:
         # ── ค่าคอมมิชชั่น & ใบเสร็จรับเงิน/ใบกำกับภาษี / เคลม VAT ──────────────────
         st.markdown("### 📑 ค่าคอมมิชชั่น & ใบเสร็จรับเงิน/ใบกำกับภาษี")
 

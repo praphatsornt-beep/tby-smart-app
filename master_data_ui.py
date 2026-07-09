@@ -10,6 +10,8 @@ from datetime import date
 
 import database as db
 
+_MD_TABS = ["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "📐 ขนาดกล่อง"]
+
 
 def render():
     st.subheader("จัดการข้อมูลหลัก")
@@ -78,10 +80,12 @@ def render():
                     )
     st.divider()
 
-    sub1, sub2, sub3, sub4 = st.tabs(["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "📐 ขนาดกล่อง"])
+    try:
+        _md_active = st.pills("", _MD_TABS, key="_md_active_sub", label_visibility="collapsed") or _MD_TABS[0]
+    except AttributeError:
+        _md_active = st.radio("", _MD_TABS, horizontal=True, key="_md_active_sub", label_visibility="collapsed")
 
-
-    with sub1:
+    if _md_active == _MD_TABS[0]:
         products = db.get_products()
 
         prod_cols = ["id", "name", "price", "points_per_unit", "bv_per_unit", "weight_grams", "max_units_per_box"]
@@ -157,7 +161,7 @@ def render():
                         except Exception:
                             st.error("❌ ลบไม่ได้ — สินค้านี้มีรายการขายอยู่")
 
-    with sub2:
+    elif _md_active == _MD_TABS[1]:
         customers = db.get_customers()
         if customers:
             cust_df = pd.DataFrame(customers)[["id", "name", "phone"]].rename(
@@ -229,7 +233,7 @@ def render():
                         except Exception:
                             st.error("❌ ลบไม่ได้ — ลูกค้านี้มีรายการขายอยู่")
 
-    with sub3:
+    elif _md_active == _MD_TABS[2]:
         # ── ค้นหาจากเบอร์ ──────────────────────────────────────────────────
         sa_ph, sa_btn = st.columns([3, 1])
         sa_phone = sa_ph.text_input("🔍 ค้นหาจากเบอร์โทร", max_chars=10,
@@ -344,7 +348,7 @@ def render():
                     st.success("✅ บันทึกแล้ว")
                     st.rerun()
 
-    with sub4:
+    elif _md_active == _MD_TABS[3]:
         st.write("**preset ขนาดกล่อง** — ใช้ตอนเลือกขนส่งแบบ Bulky และหน้าปริ้นใบปะหน้า manual "
                  "แก้ในตารางได้โดยตรง กด `+` ที่มุมล่างขวาเพื่อเพิ่มแถวใหม่ แล้วกด **บันทึกทั้งหมด** "
                  "ค่าที่บันทึกจะเก็บถาวรและใช้ได้ทุกครั้งที่เปิดแอป")
