@@ -461,7 +461,7 @@ def render(products, customers):
                                                     "received": [{"product": txn["product_name"], "qty": int(qty_received), "product_code": txn.get("product_id", "")}],
                                                     "pending": _rp_pending,
                                                 }
-                                            if _luid and line_api.is_configured() and (qty_received > 0 or amount_paid > 0.01):
+                                            if (_luid or _gid) and line_api.is_configured() and (qty_received > 0 or amount_paid > 0.01):
                                                 _new_recv_qty = balance["total_received"] + int(qty_received)
                                                 _new_paid_amt = balance["total_paid"] + amount_paid
                                                 _rem_qty = max(0, int(txn["qty"]) - _new_recv_qty)
@@ -663,7 +663,7 @@ def render(products, customers):
                                                 "received":      _mrp_received,
                                                 "pending":       _mrp_pending,
                                             }
-                                        if _luid and line_api.is_configured() and (_mrp_received or _total_paid_actual > 0.01):
+                                        if (_luid or _gid) and line_api.is_configured() and (_mrp_received or _total_paid_actual > 0.01):
                                             _rem_qty_all = sum(_pq for _, _rr in grp.iterrows()
                                                                for _pq in [max(0, int(_rr["ค้างรับ"]) - _mrp_id_qty.get(_rr["id"], 0))])
                                             _rem_amt_all = max(0.0, float(grp["ค้างจ่าย"].sum()) - _total_paid_actual)
@@ -1062,9 +1062,9 @@ def render(products, customers):
                             _bl_gid  = _l_cust.get("group_id") or ""
                             if line_api.is_configured() and not _bill_rows.empty:
                                 if st.button(
-                                    "📨 ส่งสรุปบิล LINE" if _bl_luid else "📨 ไม่มี LINE ID",
+                                    "📨 ส่งสรุปบิล LINE" if (_bl_luid or _bl_gid) else "📨 ไม่มี LINE ID",
                                     key=f"ledger_bill_line_{_bk}_{_l_sel}",
-                                    disabled=not _bl_luid,
+                                    disabled=not (_bl_luid or _bl_gid),
                                 ):
                                     _bl_items = [
                                         {"name": r["สินค้า"], "qty": int(r["สั่ง"]), "total": float(r["ยอดรวม"])}

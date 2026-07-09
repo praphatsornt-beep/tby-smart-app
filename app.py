@@ -790,7 +790,7 @@ def _show_iship_success_dialog():
 
     _dluid = info.get("line_user_id", "")
     _dlgid = info.get("group_id", "")
-    if _dluid and line_api.is_configured():
+    if (_dluid or _dlgid) and line_api.is_configured():
         if st.button("📨 ส่งแจ้งลูกค้าทาง LINE", use_container_width=True):
             _dlr = line_api.push_tracking(
                 _dluid,

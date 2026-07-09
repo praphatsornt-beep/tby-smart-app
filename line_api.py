@@ -19,8 +19,8 @@ def _push(to_id: str, text: str, group_id: str = "") -> dict:
     token = _token()
     if not token:
         return {"ok": False, "error": "ไม่มี LINE_CHANNEL_ACCESS_TOKEN ใน secrets"}
-    if not to_id:
-        return {"ok": False, "error": "ไม่มี line_user_id"}
+    if not to_id and not group_id:
+        return {"ok": False, "error": "ไม่มี line_user_id หรือ group_id"}
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     targets = [group_id] if group_id else [to_id]
     last_err = ""

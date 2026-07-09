@@ -832,9 +832,9 @@ def render(tab1, products, customers, customer_map):
                             )
                         _popup_line_uid, _popup_gid = db.get_customer_line_ids(_pd.get("customer_id", "")) if _pd.get("customer_id") else ("", "")
                         if _pb3.button("📨 LINE", key="popup_line_btn",
-                                       disabled=not bool(_popup_line_uid),
+                                       disabled=not bool(_popup_line_uid or _popup_gid),
                                        use_container_width=True,
-                                       help="ส่งสรุปบิลให้ลูกค้าใน LINE" if _popup_line_uid else "ลูกค้าไม่มี LINE ID"):
+                                       help="ส่งสรุปบิลให้ลูกค้าใน LINE" if (_popup_line_uid or _popup_gid) else "ลูกค้าไม่มี LINE ID"):
                             _line_items = [{"name": f"{it['product_id']} {it['name']}", "qty": it["qty"], "total": it["total"]}
                                            for it in _pd.get("items", [])]
                             _line_items += [{"name": f"{it['product_id']} {it['name']} (เก่า)", "qty": it["qty"], "total": it["amount"]}
@@ -1690,7 +1690,7 @@ def render(tab1, products, customers, customer_map):
                     if _calc_cust_sel != "— ไม่ระบุ —" and line_api.is_configured():
                         _c_cust  = _calc_cust_map.get(_calc_cust_sel, {})
                         _c_luid, _c_gid  = db.get_customer_line_ids(_c_cust.get("id", "")) if _c_cust.get("id") else ("", "")
-                        if _c_luid:
+                        if _c_luid or _c_gid:
                             if _line_btn_slot.button(f"📨 ส่ง LINE ให้คุณ {_calc_cust_sel}", type="primary", key="calc_line_btn", use_container_width=True):
                                 _c_msg_lines = ["📝 รายการสินค้า", ""]
                                 _c_msg_lines += _c_lines
