@@ -286,18 +286,20 @@ def render(tab1, products, customers, customer_map):
                         "สินค้า": pd.Series([""] * 8, dtype="object"),
                         "จำนวน":  pd.Series([0]  * 8, dtype="int64"),
                     }))
-                with st.container(border=True):
-                    edited_cart = st.data_editor(
-                        cart_df,
-                        num_rows="dynamic",
-                        use_container_width=False,
-                        hide_index=True,
-                        column_config={
-                            "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False, width="large"),
-                            "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
-                        },
-                        key=_cart_key,
-                    )
+                _cart_col, _status_col = st.columns([2, 1], gap="medium")
+                with _cart_col:
+                    with st.container(border=True):
+                        edited_cart = st.data_editor(
+                            cart_df,
+                            num_rows="dynamic",
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False, width="large"),
+                                "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
+                            },
+                            key=_cart_key,
+                        )
 
                 valid_items = [
                     (product_display[row["สินค้า"]], int(row["จำนวน"]), "")
@@ -316,11 +318,11 @@ def render(tab1, products, customers, customer_map):
                     st.session_state["_prev_pay"]  = "COD"
                 elif _cur_pay != "COD":
                     st.session_state["_prev_pay"] = _cur_pay
-                ms1, ms2, ms3 = st.columns(3)
                 _delivery_opts = ["ส่งพัสดุ", "ฝากของ", "รับแล้ว"]
-                m_delivery = ms1.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery", index=None)
-                m_pay  = ms2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], horizontal=True, key="m_pay", index=None)
-                m_bill = ms3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
+                with _status_col:
+                    m_delivery = st.radio("การรับ / สถานะของ", _delivery_opts, key="m_delivery", index=None)
+                    m_pay  = st.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
+                    m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], key="m_bill", index=None)
 
                 if not valid_items and _has_rx_action:
                     st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
