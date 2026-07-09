@@ -12,10 +12,6 @@ _BKK = timezone(timedelta(hours=7))
 def render():
     _today = date.today()
     _today_str = _today.strftime("%Y-%m-%d")
-    _thai_days = ["จันทร์","อังคาร","พุธ","พฤหัสบดี","ศุกร์","เสาร์","อาทิตย์"]
-    _thai_months = ["","ม.ค.","ก.พ.","มี.ค.","เม.ย.","พ.ค.","มิ.ย.","ก.ค.","ส.ค.","ก.ย.","ต.ค.","พ.ย.","ธ.ค."]
-    _day_name = _thai_days[_today.weekday()]
-    st.caption(f"📅 วัน{_day_name} {_today.day} {_thai_months[_today.month]} {_today.year + 543}")
 
     # ── โหลด data (ทั้งหมด cached) ──────────────────────────────────────────
     try:

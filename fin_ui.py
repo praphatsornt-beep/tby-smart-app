@@ -210,14 +210,10 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 
 
 def render():
-    _hdr_title, _hdr_tabs = st.columns([2, 5])
-    with _hdr_title:
-        st.markdown("### 💵 การเงิน")
-    with _hdr_tabs:
-        try:
-            _fin_active = st.pills("", _FIN_TABS, key="_fin_active_sub", label_visibility="collapsed") or _FIN_TABS[0]
-        except AttributeError:
-            _fin_active = st.radio("", _FIN_TABS, horizontal=True, key="_fin_active_sub", label_visibility="collapsed")
+    try:
+        _fin_active = st.pills("", _FIN_TABS, key="_fin_active_sub", label_visibility="collapsed") or _FIN_TABS[0]
+    except AttributeError:
+        _fin_active = st.radio("", _FIN_TABS, horizontal=True, key="_fin_active_sub", label_visibility="collapsed")
 
     if _fin_active == _FIN_TABS[0]:
         fin_summary = db.get_finance_summary()
@@ -358,9 +354,9 @@ def render():
 
             def _style_fin(df):
                 return (df.style.format(_fmt)
-                        .map(lambda v: "background-color:#6b1a1a;color:white" if isinstance(v, float) and v > 0.01 else "",
+                        .map(lambda v: "background-color:oklch(0.94 0.03 25);color:oklch(0.5 0.15 25);font-weight:600" if isinstance(v, float) and v > 0.01 else "",
                              subset=["ค้างโอน"])
-                        .map(lambda v: "background-color:#6b1a1a;color:white" if isinstance(v, float) and v < -0.01 else "",
+                        .map(lambda v: "background-color:oklch(0.94 0.03 25);color:oklch(0.5 0.15 25);font-weight:600" if isinstance(v, float) and v < -0.01 else "",
                              subset=["สิทธิ์สั่งของ"]))
 
             _periods = sorted(display_fin["วันที่"].dt.to_period("M").unique(), reverse=True)

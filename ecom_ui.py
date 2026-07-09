@@ -12,8 +12,6 @@ import shopee_api
 
 
 def render():
-    st.subheader("🛒 E-commerce — Shopee")
-
     if not shopee_api.is_configured():
         st.warning("⚙️ ยังไม่ได้ตั้งค่า Shopee Partner ID/Key — กรอกใน `.streamlit/secrets.toml` ก่อนครับ")
         st.code('SHOPEE_PARTNER_ID = "12345"\nSHOPEE_PARTNER_KEY = "xxxxx"', language="toml")

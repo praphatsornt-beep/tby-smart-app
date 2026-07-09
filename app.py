@@ -1,3 +1,5 @@
+from datetime import date
+
 import streamlit as st
 import pandas as pd
 
@@ -52,42 +54,95 @@ if "code" in _qp and "shop_id" in _qp:
             st.error(f"❌ OAuth error: {_e}")
     st.query_params.clear()
 
+st.markdown(
+    '<link rel="preconnect" href="https://fonts.googleapis.com">'
+    '<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">',
+    unsafe_allow_html=True,
+)
+
 st.markdown("""
 <style>
-/* ===== TBY SMART APP — THEME: FOREST GREEN + ORANGE (soft-card / pill style) ===== */
+/* ===== TBY SMART APP — design system ported from the "Back Office App"
+   reference mockup: oklch palette, Kanit (headings/numbers) + Sarabun
+   (body) fonts, flat bordered cards (no drop shadows), pill badges. ===== */
+:root {
+    --tby-bg:            oklch(0.975 0.012 95);
+    --tby-text:          oklch(0.24 0.02 155);
+    --tby-sidebar-1:     oklch(0.30 0.06 155);
+    --tby-sidebar-2:     oklch(0.20 0.045 160);
+    --tby-sidebar-inact: oklch(0.88 0.02 155);
+    --tby-sidebar-cap:   oklch(0.85 0.02 155);
+    --tby-accent:        oklch(0.68 0.17 45);
+    --tby-accent-hover:  oklch(0.60 0.17 45);
+    --tby-green:         oklch(0.55 0.13 155);
+    --tby-green-dark:    oklch(0.4 0.1 155);
+    --tby-border:        oklch(0.93 0.012 100);
+    --tby-row-border:    oklch(0.96 0.008 100);
+    --tby-table-head-bg: oklch(0.98 0.008 100);
+    --tby-input-border:  oklch(0.88 0.012 100);
+    --tby-muted:         oklch(0.55 0.02 150);
+    --tby-muted2:        oklch(0.5 0.02 150);
+    --tby-badge-good-bg: oklch(0.94 0.03 155);
+    --tby-badge-good-fg: oklch(0.4 0.1 155);
+    --tby-badge-warn-bg: oklch(0.94 0.04 55);
+    --tby-badge-warn-fg: oklch(0.5 0.14 50);
+    --tby-badge-bad-bg:  oklch(0.94 0.03 25);
+    --tby-badge-bad-fg:  oklch(0.5 0.15 25);
+}
 
-/* ── App canvas — soft cream-sage instead of flat white, so white cards pop ── */
+/* ── App canvas ── */
 .stApp {
-    background: #EEF3EC;
+    background: var(--tby-bg);
+    font-family: 'Sarabun', sans-serif;
 }
 
-/* ── App header bar ── */
+/* ── Streamlit's own header bar ── */
 header[data-testid="stHeader"] {
-    background: linear-gradient(90deg, #1B4332 0%, #2D6A4F 100%);
-    box-shadow: 0 2px 8px rgba(27,67,50,0.25);
+    background: linear-gradient(90deg, var(--tby-sidebar-1) 0%, var(--tby-sidebar-2) 100%);
 }
 
-/* ── Page title ── */
-h1 {
-    color: #1B4332 !important;
-    font-weight: 800 !important;
-    letter-spacing: -0.5px;
-    padding-bottom: 0.4rem;
-    border-bottom: 3px solid #E07B39;
-    margin-bottom: 1rem !important;
+/* ── Headings — Kanit, flat (no decorative underline/shadow) ── */
+h1, h2, h3 {
+    font-family: 'Kanit', sans-serif !important;
+    color: var(--tby-text) !important;
 }
-h2 { color: #2D6A4F !important; font-weight: 700 !important; }
-h3 { color: #2D6A4F !important; font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
+h1 { font-weight: 700 !important; margin-bottom: 0.6rem !important; }
+h2 { font-weight: 600 !important; }
+h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
+
+/* ── Global top bar (page title + date), rendered once per page in app.py ── */
+.tby-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #ffffff;
+    border: 1px solid var(--tby-border);
+    border-radius: 14px;
+    padding: 18px 24px;
+    margin-bottom: 20px;
+}
+.tby-topbar-title {
+    font-family: 'Kanit', sans-serif;
+    font-weight: 700;
+    font-size: 1.35rem;
+    color: var(--tby-text);
+}
+.tby-topbar-date {
+    font-family: 'Sarabun', sans-serif;
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--tby-muted);
+}
 
 /* ── Sidebar — main nav lives here as a dark vertical menu ── */
 [data-testid="stSidebar"] {
-    background: linear-gradient(180deg, #1B4332 0%, #2D6A4F 100%) !important;
+    background: linear-gradient(190deg, var(--tby-sidebar-1) 0%, var(--tby-sidebar-2) 100%) !important;
 }
 [data-testid="stSidebar"] h3 {
     color: #ffffff !important;
 }
 [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
-    color: #B8D4C2 !important;
+    color: var(--tby-sidebar-cap) !important;
 }
 [data-testid="stSidebar"] hr {
     border-color: rgba(255,255,255,0.15) !important;
@@ -95,15 +150,15 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; margin: 0 0 0.3rem 
 /* main nav = one plain st.button per row (flat list, no nesting) — stacks
    vertically automatically since each is its own Streamlit element. Every
    nav button gets type="primary" (active page) or type="secondary"
-   (inactive); text forced to bold white on both so it stays readable
-   against the dark green background regardless of active state. */
+   (inactive). */
 [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
     width: 100% !important;
     justify-content: flex-start !important;
     text-align: left !important;
     border-radius: 10px !important;
-    padding: 10px 14px !important;
+    padding: 11px 14px !important;
     font-size: 1rem !important;
+    font-family: 'Sarabun', sans-serif !important;
 }
 /* force left-align all the way down — Streamlit centers button labels by
    default via inner wrapper divs/p, which otherwise wins over the button's
@@ -123,9 +178,9 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; margin: 0 0 0.3rem 
 [data-testid="stSidebar"] button[kind="secondary"] {
     background: transparent !important;
     border: none !important;
-    color: #ffffff !important;
+    color: var(--tby-sidebar-inact) !important;
     box-shadow: none !important;
-    font-weight: 700 !important;
+    font-weight: 500 !important;
 }
 [data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"]:hover,
 [data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover,
@@ -137,191 +192,187 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; margin: 0 0 0.3rem 
 [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"],
 [data-testid="stSidebar"] button[data-testid="baseButton-primary"],
 [data-testid="stSidebar"] button[kind="primary"] {
+    background: var(--tby-accent) !important;
     color: #ffffff !important;
-    font-weight: 700 !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
 }
 
-/* ── Main nav (st.pills) — solid rounded pill segmented control ──
-   NOTE: Streamlit's st.pills DOM/testid scheme differs by version — see the
-   comment in the sidebar section above. Every selector duplicated for both
-   the older ("stPills" + aria-checked) and newer ("stButtonGroup" +
-   stBaseButton-pillsActive) schemes so this works regardless of which one
-   Streamlit Cloud actually has deployed. */
+/* ── In-page sub-nav (st.pills, used at the top of most pages) — same flat
+   underline treatment as st.tabs below, for one consistent "sub tabs" look
+   site-wide instead of two different widgets looking different. NOTE:
+   Streamlit's st.pills DOM/testid scheme differs by version (older:
+   "stPills" + aria-checked; newer: "stButtonGroup" + stBaseButton-
+   pillsActive) — every selector duplicated for both so this holds
+   regardless of which one is actually deployed. ── */
 [data-testid="stButtonGroup"],
 [data-testid="stPills"] {
-    background: #ffffff;
-    border: 1px solid #E5EFE8;
-    border-radius: 16px;
-    padding: 6px;
-    box-shadow: 0 4px 16px rgba(27,67,50,0.08);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid var(--tby-border);
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    margin-top: 0.35rem !important;
+    margin-top: 0 !important;
     margin-bottom: 1.25rem !important;
 }
 [data-testid="stButtonGroup"] button,
 [data-testid="stPills"] button {
     background: transparent !important;
-    color: #5C8069 !important;
+    color: var(--tby-muted) !important;
     border: none !important;
-    border-radius: 12px !important;
-    font-size: 0.84rem !important;
-    font-weight: 600 !important;
-    padding: 9px 16px !important;
+    border-bottom: 3px solid transparent !important;
+    border-radius: 0 !important;
+    font-family: 'Sarabun', sans-serif !important;
+    font-size: 0.92rem !important;
+    font-weight: 500 !important;
+    padding: 12px 16px 10px !important;
     white-space: nowrap;
     box-shadow: none !important;
-    transition: color 0.2s, background 0.2s !important;
+    transition: color 0.18s, border-color 0.18s !important;
 }
 button[data-testid="stBaseButton-pillsActive"],
 button[aria-checked="true"],
 button[kind="pillsActive"] {
-    color: #ffffff !important;
-    font-weight: 700 !important;
-    background: linear-gradient(135deg, #2D6A4F 0%, #1B4332 100%) !important;
-    box-shadow: 0 2px 8px rgba(27,67,50,0.3) !important;
+    color: var(--tby-accent) !important;
+    font-weight: 600 !important;
+    background: transparent !important;
+    border-bottom: 3px solid var(--tby-accent) !important;
+    box-shadow: none !important;
 }
 [data-testid="stButtonGroup"] button[data-testid="stBaseButton-pills"]:hover,
 [data-testid="stPills"] button:hover {
-    color: #1B4332 !important;
-    background: #F0F9F4 !important;
+    color: var(--tby-text) !important;
+    background: transparent !important;
 }
 
-/* ── Sub-tabs inside each page (st.tabs) — modern underline, sized up for
-   more visual weight/proportion (bigger padding + font than a cramped bar) ── */
+/* ── Sub-tabs inside each page (st.tabs) — flat underline, matching pills ── */
 .stTabs [data-baseweb="tab-list"] {
-    background: #ffffff;
-    border-bottom: 2px solid #D4E8DA;
-    border-radius: 14px 14px 0 0;
-    padding: 4px 10px 0;
+    background: transparent;
+    border-bottom: 2px solid var(--tby-border);
+    border-radius: 0;
+    padding: 0;
     gap: 4px;
-    box-shadow: 0 2px 12px rgba(27,67,50,0.07);
+    box-shadow: none;
 }
 .stTabs [data-baseweb="tab"] {
-    color: #7A9E85 !important;
+    color: var(--tby-muted) !important;
     background: transparent !important;
-    border-radius: 8px 8px 0 0 !important;
-    font-weight: 600;
-    font-size: 0.95rem;
-    padding: 14px 22px !important;
+    border-radius: 0 !important;
+    font-family: 'Sarabun', sans-serif;
+    font-weight: 500;
+    font-size: 0.92rem;
+    padding: 14px 18px 12px !important;
     border: none !important;
-    transition: color 0.2s, background 0.2s;
+    transition: color 0.18s;
     white-space: nowrap;
 }
 .stTabs [data-baseweb="tab"]:hover {
-    color: #1B4332 !important;
-    background: #F0F9F4 !important;
-}
-.stTabs [data-baseweb="tab"][aria-selected="true"] {
-    color: #1B4332 !important;
-    font-weight: 700 !important;
+    color: var(--tby-text) !important;
     background: transparent !important;
 }
-/* Animated orange underline indicator */
+.stTabs [data-baseweb="tab"][aria-selected="true"] {
+    color: var(--tby-accent) !important;
+    font-weight: 600 !important;
+    background: transparent !important;
+}
 .stTabs [data-baseweb="tab-highlight"] {
-    background-color: #E07B39 !important;
+    background-color: var(--tby-accent) !important;
     height: 3px !important;
-    border-radius: 3px 3px 0 0;
+    border-radius: 0;
 }
 .stTabs [data-baseweb="tab-border"] { display: none !important; }
 
-/* ── Primary buttons (orange, softly rounded like the mockup's gold pill CTAs) ──
-   Same cross-version testid caveat as st.pills above — cover both naming
-   schemes (stBaseButton-primary is current; baseButton-primary is older). */
+/* ── Primary buttons — flat accent-orange (no gradient/shadow), matching
+   the mockup's checkout/CTA button style ── */
 button[data-testid="stBaseButton-primary"],
 button[data-testid="baseButton-primary"],
 button[kind="primary"] {
-    background: linear-gradient(135deg, #E07B39 0%, #C86A2A 100%) !important;
+    background: var(--tby-accent) !important;
     color: #fff !important;
     border: none !important;
-    border-radius: 12px !important;
+    border-radius: 10px !important;
+    font-family: 'Kanit', sans-serif !important;
     font-weight: 600 !important;
-    box-shadow: 0 2px 8px rgba(224,123,57,0.35) !important;
-    transition: box-shadow 0.18s, transform 0.18s !important;
+    box-shadow: none !important;
+    transition: background 0.15s !important;
 }
 button[data-testid="stBaseButton-primary"]:hover,
 button[data-testid="baseButton-primary"]:hover,
 button[kind="primary"]:hover {
-    box-shadow: 0 4px 16px rgba(224,123,57,0.5) !important;
-    transform: translateY(-1px) !important;
-}
-button[data-testid="stBaseButton-primary"]:active,
-button[data-testid="baseButton-primary"]:active,
-button[kind="primary"]:active {
-    transform: translateY(0) !important;
-    box-shadow: 0 2px 6px rgba(224,123,57,0.3) !important;
+    background: var(--tby-accent-hover) !important;
 }
 
-/* ── Secondary buttons (green outline) ── */
+/* ── Secondary buttons — plain bordered ── */
 button[data-testid="stBaseButton-secondary"],
 button[data-testid="baseButton-secondary"],
 button[kind="secondary"] {
-    border: 1.5px solid #2D6A4F !important;
-    color: #2D6A4F !important;
-    border-radius: 12px !important;
+    border: 1.5px solid var(--tby-green) !important;
+    color: var(--tby-green) !important;
+    border-radius: 10px !important;
     font-weight: 500 !important;
     background: white !important;
-    transition: all 0.18s !important;
+    box-shadow: none !important;
+    transition: background 0.15s !important;
 }
 button[data-testid="stBaseButton-secondary"]:hover,
 button[data-testid="baseButton-secondary"]:hover,
 button[kind="secondary"]:hover {
-    background: #EAF2EC !important;
-    border-color: #1B4332 !important;
-    color: #1B4332 !important;
+    background: var(--tby-badge-good-bg) !important;
+    border-color: var(--tby-green-dark) !important;
+    color: var(--tby-green-dark) !important;
 }
 
-/* ── Metrics — rounded stat cards ── */
+/* ── Metrics — flat bordered stat cards, no shadow/accent bar ── */
 [data-testid="stMetric"] {
     background: white;
-    border-radius: 16px;
-    padding: 1rem 1.25rem !important;
-    border-left: 4px solid #E07B39;
-    box-shadow: 0 4px 14px rgba(27,67,50,0.08);
+    border-radius: 14px;
+    padding: 20px !important;
+    border: 1px solid var(--tby-border);
+    box-shadow: none;
 }
 [data-testid="stMetricValue"] {
-    font-size: 1.5rem !important;
+    font-family: 'Kanit', sans-serif !important;
+    font-size: 1.7rem !important;
     font-weight: 700 !important;
-    color: #1B4332 !important;
+    color: var(--tby-text) !important;
 }
 [data-testid="stMetricLabel"] {
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    color: #2D6A4F !important;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
+    font-size: 0.8rem !important;
+    font-weight: 500 !important;
+    color: var(--tby-muted) !important;
 }
 
-/* ── Expanders — rounded cards ── */
+/* ── Expanders — flat bordered cards ── */
 [data-testid="stExpander"] {
-    border: 1px solid #C8DDD0 !important;
+    border: 1px solid var(--tby-border) !important;
     border-radius: 14px !important;
     overflow: hidden;
-    box-shadow: 0 3px 10px rgba(27,67,50,0.06);
+    box-shadow: none;
 }
 [data-testid="stExpander"] summary {
-    background: #EAF2EC !important;
-    color: #1B4332 !important;
+    background: var(--tby-table-head-bg) !important;
+    color: var(--tby-text) !important;
     font-weight: 600 !important;
-    padding: 0.55rem 1rem !important;
+    padding: 0.6rem 1rem !important;
 }
 [data-testid="stExpander"] summary:hover {
-    background: #D8F3DC !important;
+    background: var(--tby-border) !important;
 }
 
-/* ── Text/Number inputs — roomier, softly rounded like the mockup's chip
-   fields (taller + more side padding than a cramped default input). Plain
-   white background — Streamlit's theme secondaryBackgroundColor (used as
-   the default input fill) is a pale mint that makes fields nearly invisible
-   against this app's cream/mint page background. ── */
+/* ── Text/Number inputs — roomy, flat, plain white background ── */
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea {
     background-color: #ffffff !important;
-    border-radius: 10px !important;
-    border: 1.5px solid #C8DDD0 !important;
+    border-radius: 9px !important;
+    border: 1.5px solid var(--tby-input-border) !important;
     padding: 10px 14px !important;
     min-height: 44px;
+    font-family: 'Sarabun', sans-serif !important;
     transition: border-color 0.18s, box-shadow 0.18s !important;
 }
 .stTextArea textarea {
@@ -330,42 +381,41 @@ button[kind="secondary"]:hover {
 .stTextInput input:focus,
 .stNumberInput input:focus,
 .stTextArea textarea:focus {
-    border-color: #40916C !important;
-    box-shadow: 0 0 0 3px rgba(64,145,108,0.18) !important;
+    border-color: var(--tby-accent) !important;
+    box-shadow: 0 0 0 3px oklch(0.68 0.17 45 / 0.2) !important;
 }
 
-/* ── Select boxes — same roomier treatment + white background ── */
+/* ── Select boxes — same roomy treatment + white background ── */
 [data-baseweb="select"] > div:first-child {
     background-color: #ffffff !important;
-    border-radius: 10px !important;
-    border: 1.5px solid #C8DDD0 !important;
+    border-radius: 9px !important;
+    border: 1.5px solid var(--tby-input-border) !important;
     min-height: 44px;
     transition: border-color 0.18s !important;
 }
 [data-baseweb="select"] > div:first-child:focus-within {
-    border-color: #40916C !important;
-    box-shadow: 0 0 0 3px rgba(64,145,108,0.18) !important;
+    border-color: var(--tby-accent) !important;
+    box-shadow: 0 0 0 3px oklch(0.68 0.17 45 / 0.2) !important;
 }
 
-/* ── Radio groups → segmented control style (ต่อเนื่องในแทร็คเดียว) ── */
+/* ── Radio groups → segmented control, accent-orange selected state ── */
 [data-testid="stRadio"] {
     background: #ffffff;
-    border: 1px solid #E5EFE8;
+    border: 1px solid var(--tby-border);
     border-radius: 14px;
     padding: 10px 14px 12px !important;
-    box-shadow: 0 3px 10px rgba(27,67,50,0.05);
+    box-shadow: none;
 }
 [data-testid="stRadio"] > div[role="radiogroup"] {
     display: flex !important;
     gap: 0 !important;
     flex-wrap: wrap;
-    background: #F0F9F4;
-    border: 1.5px solid #C8DDD0 !important;
+    background: var(--tby-table-head-bg);
+    border: 1.5px solid var(--tby-border) !important;
     border-radius: 10px;
     padding: 3px;
     overflow: hidden;
 }
-/* ซ่อนวงกลม radio เดิม — โชว์แค่ segment ที่ไฮไลต์แทน */
 [data-testid="stRadio"] label > div:first-child {
     display: none !important;
 }
@@ -378,35 +428,44 @@ button[kind="secondary"]:hover {
     flex: 1 1 auto;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.18s, box-shadow 0.18s !important;
+    transition: background 0.18s !important;
 }
 [data-testid="stRadio"] label:not(:has(input:checked)):hover {
-    background: #E3F3E9 !important;
+    background: var(--tby-border) !important;
 }
 [data-testid="stRadio"] label:has(input:checked) {
-    background: linear-gradient(135deg, #2D6A4F 0%, #1B4332 100%) !important;
-    box-shadow: 0 2px 6px rgba(27,67,50,0.3) !important;
+    background: var(--tby-accent) !important;
+    box-shadow: none !important;
 }
 [data-testid="stRadio"] label:has(input:checked) p,
 [data-testid="stRadio"] label:has(input:checked) div {
     color: #ffffff !important;
-    font-weight: 700 !important;
+    font-weight: 600 !important;
 }
 
-/* ── Bordered containers (st.container(border=True)) — soft floating card style ── */
+/* ── Bordered containers (st.container(border=True)) — flat card ── */
 [data-testid="stVerticalBlockBorderWrapper"] {
     background: #ffffff;
-    border: 1px solid #E5EFE8 !important;
-    border-radius: 16px !important;
-    box-shadow: 0 4px 14px rgba(27,67,50,0.07);
+    border: 1px solid var(--tby-border) !important;
+    border-radius: 14px !important;
+    box-shadow: none;
 }
 
-/* ── DataFrame / Data editor ── */
+/* ── DataFrame / Data editor — flat card, muted header row ── */
 [data-testid="stDataFrame"],
 [data-testid="stDataEditor"] {
     border-radius: 14px !important;
     overflow: hidden;
-    box-shadow: 0 3px 10px rgba(27,67,50,0.06);
+    border: 1px solid var(--tby-border);
+    box-shadow: none;
+}
+[data-testid="stDataFrame"] thead tr,
+[data-testid="stDataEditor"] thead tr,
+[data-testid="stDataFrame"] [role="columnheader"],
+[data-testid="stDataEditor"] [role="columnheader"] {
+    background: var(--tby-table-head-bg) !important;
+    color: var(--tby-muted) !important;
+    font-weight: 600 !important;
 }
 
 /* ── Block container padding ── */
@@ -416,28 +475,30 @@ button[kind="secondary"]:hover {
 
 /* ── Dividers ── */
 hr {
-    border-color: #C8DDD0 !important;
+    border-color: var(--tby-border) !important;
     margin: 0.75rem 0 !important;
 }
 
 /* ── Typography / Readability ── */
-html { font-size: 15.5px; }
+html { font-size: 15px; }
 
 /* Body text & markdown */
 [data-testid="stMarkdownContainer"] p,
 [data-testid="stMarkdownContainer"] li,
 [data-testid="stText"] p {
-    font-size: 0.95rem !important;
-    line-height: 1.7 !important;
-    color: #111111 !important;
+    font-family: 'Sarabun', sans-serif !important;
+    font-size: 0.93rem !important;
+    line-height: 1.65 !important;
+    color: var(--tby-text) !important;
 }
 
 /* Widget labels */
 label,
 [data-testid="stWidgetLabel"] p {
-    font-size: 0.88rem !important;
+    font-family: 'Sarabun', sans-serif !important;
+    font-size: 0.86rem !important;
     font-weight: 600 !important;
-    color: #111111 !important;
+    color: var(--tby-text) !important;
     letter-spacing: 0.01em;
     line-height: 1.5 !important;
 }
@@ -446,28 +507,28 @@ label,
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea {
-    font-size: 0.95rem !important;
-    color: #111111 !important;
+    font-size: 0.93rem !important;
+    color: var(--tby-text) !important;
 }
 
 /* Selectbox value text */
 [data-baseweb="select"] span,
 [data-baseweb="select"] div[class*="placeholder"] {
-    font-size: 0.93rem !important;
-    color: #111111 !important;
+    font-size: 0.91rem !important;
+    color: var(--tby-text) !important;
 }
 
 /* st.info / st.success / st.warning / st.error */
 [data-testid="stAlert"] p {
-    font-size: 0.9rem !important;
-    line-height: 1.65 !important;
-    color: #111111 !important;
+    font-size: 0.88rem !important;
+    line-height: 1.6 !important;
+    color: var(--tby-text) !important;
 }
 
 /* Caption / small text */
 [data-testid="stCaptionContainer"] p {
-    font-size: 0.8rem !important;
-    color: #555 !important;
+    font-size: 0.79rem !important;
+    color: var(--tby-muted) !important;
     line-height: 1.6 !important;
 }
 
@@ -476,7 +537,7 @@ label,
 [data-testid="stDataFrame"] th,
 [data-testid="stDataEditor"] td,
 [data-testid="stDataEditor"] th {
-    font-size: 0.88rem !important;
+    font-size: 0.87rem !important;
     line-height: 1.5 !important;
 }
 </style>
@@ -783,6 +844,23 @@ with st.sidebar:
             st.rerun()
 
 _active_tab = st.session_state["active_tab"]
+
+# ── Global top bar — page title (left) + today's date (right), shown on
+#    every page (mirrors the reference mockup's top bar; replaces the old
+#    per-page "title + sub-tabs in one row" layout, since every page now
+#    gets a title bar here regardless of whether it has sub-tabs) ─────────
+_TB_DAYS = ["จันทร์", "อังคาร", "พุธ", "พฤหัสบดี", "ศุกร์", "เสาร์", "อาทิตย์"]
+_TB_MONTHS = ["", "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+              "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+_tb_today = date.today()
+_tb_date_str = f"วัน{_TB_DAYS[_tb_today.weekday()]} {_tb_today.day} {_TB_MONTHS[_tb_today.month]} {_tb_today.year + 543}"
+st.markdown(
+    f"""<div class="tby-topbar">
+    <div class="tby-topbar-title">{_active_tab}</div>
+    <div class="tby-topbar-date">{_tb_date_str}</div>
+    </div>""",
+    unsafe_allow_html=True,
+)
 
 _products = db.get_products()
 _customers = db.get_customers()

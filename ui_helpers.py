@@ -380,13 +380,19 @@ def raw_weight_g(items, extra_g: float = 0) -> float:
 
 
 def _style_status(val):
+    """Pill-badge colors (light bg + dark text, matching the good/warn/bad
+    badge language used across the reference design) instead of the old
+    solid-dark-bg-white-text look."""
+    _good = "background-color:oklch(0.94 0.03 155);color:oklch(0.4 0.1 155);font-weight:600"
+    _warn = "background-color:oklch(0.94 0.04 55);color:oklch(0.5 0.14 50);font-weight:600"
+    _bad  = "background-color:oklch(0.94 0.03 25);color:oklch(0.5 0.15 25);font-weight:600"
     colors = {
-        "เปิดบิลแล้ว":   "background-color:#1a5c2e;color:white",
-        "ยังไม่เปิดบิล": "background-color:#7c4a00;color:white",
-        "จ่ายแล้ว":      "background-color:#1a5c2e;color:white",
-        "ค้างจ่าย":      "background-color:#6b1a1a;color:white",
-        "COD":          "background-color:#7a5c00;color:white",
-        "COD จ่ายแล้ว":  "background-color:#1a5c2e;color:white",
+        "เปิดบิลแล้ว":   _good,
+        "ยังไม่เปิดบิล": _warn,
+        "จ่ายแล้ว":      _good,
+        "ค้างจ่าย":      _bad,
+        "COD":          _warn,
+        "COD จ่ายแล้ว":  _good,
     }
     return colors.get(val, "")
 
