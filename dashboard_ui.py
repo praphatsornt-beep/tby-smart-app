@@ -5,11 +5,9 @@ from datetime import date, datetime, timezone, timedelta
 
 import database as db
 import iship_api
+from ui_helpers import _style_status
 
 _BKK = timezone(timedelta(hours=7))
-
-
-_LOW_STOCK_THRESHOLD = 5  # นับจริง (qty_physical) ต่ำกว่านี้ = ใกล้หมด
 
 
 def render():
@@ -23,8 +21,6 @@ def render():
         _dash_ships = db.get_shipments()
         _dash_pv    = db.get_unbilled_pv_summary()
         _dash_fin   = db.get_finance_summary()
-        _dash_stock = db.get_latest_stock_counts()
-        _dash_prods = db.get_products()
     except Exception as _de:
         st.error(f"โหลดข้อมูลไม่ได้: {_de}")
         st.stop()
@@ -46,13 +42,14 @@ def render():
     _pv_count = _dash_pv.get("count", 0)
     _pv_total = _dash_pv.get("total_pv", 0.0)
 
-    # ── สินค้าใกล้หมด (นับจริงจากนับสต๊อกล่าสุด <= threshold) ──────────────
-    _low_stock = []
-    for _p in _dash_prods:
-        _sc = _dash_stock.get(_p["id"])
-        if _sc and int(_sc.get("qty_physical") or 0) <= _LOW_STOCK_THRESHOLD:
-            _low_stock.append({"name": _p["name"], "qty": int(_sc.get("qty_physical") or 0)})
-    _low_stock.sort(key=lambda x: x["qty"])
+    # ── สินค้าที่ลูกค้าฝาก (เปิดบิลแล้ว + ค้างรับ > 0) ──────────────────────
+    _deposits = []
+    if not _dash_outs.empty:
+        _dep_df = _dash_outs[(_dash_outs["สถานะบิล"] == "เปิดบิลแล้ว") & (_dash_outs["ค้างรับ"] > 0)]
+        if not _dep_df.empty:
+            _dep_sum = (_dep_df.groupby("สินค้า", as_index=False)["ค้างรับ"].sum()
+                        .sort_values("ค้างรับ", ascending=False))
+            _deposits = [{"name": r["สินค้า"], "qty": int(r["ค้างรับ"])} for _, r in _dep_sum.iterrows()]
 
     # ── ยอดขาย 7 วันล่าสุด ──────────────────────────────────────────────────
     _week_start = (_today - timedelta(days=6)).strftime("%Y-%m-%d")
@@ -68,18 +65,14 @@ def render():
         "ยอดขาย": [float(_daily_sales.get(d, 0)) for d in _week_days],
     }).set_index("วัน")
 
-    # ── แจ้งเตือนสินค้าใกล้หมด ───────────────────────────────────────────────
-    if _low_stock:
-        st.warning(f"⚠️ มีสินค้าใกล้หมดหรือหมดสต๊อก {len(_low_stock)} รายการ — ควรสั่งซื้อเพิ่มเพื่อไม่ให้ขาดสต๊อก")
-
     # ── Metric cards ─────────────────────────────────────────────────────────
     _dc1, _dc2, _dc3, _dc4 = st.columns(4)
     _dc1.metric("💵 ยอดขายวันนี้",   f"{_today_sales:,.0f} ฿",
                 delta=f"{_today_count} รายการ", delta_color="off")
     _dc2.metric("🧾 จำนวนบิลวันนี้", f"{_today_bills}",
                 delta=f"{_today_count} รายการสินค้า", delta_color="off")
-    _dc3.metric("📦 สินค้าใกล้หมด",  f"{len(_low_stock)} รายการ",
-                delta="ควรสั่งเพิ่มด่วน" if _low_stock else "ปกติ", delta_color="off")
+    _dc3.metric("📋 สินค้าที่ลูกค้าฝาก", f"{len(_deposits)} รายการ",
+                delta=f"{sum(d['qty'] for d in _deposits)} ชิ้น" if _deposits else "ไม่มี", delta_color="off")
     _dc4.metric("⚠️ ค้างจ่ายรวม",    f"{_total_owed:,.0f} ฿",
                 delta=f"{_total_custs} ลูกค้า", delta_color="off")
 
@@ -97,17 +90,17 @@ def render():
 
     st.divider()
 
-    # ── ยอดขาย 7 วันล่าสุด + สินค้าใกล้หมด ──────────────────────────────────
+    # ── ยอดขาย 7 วันล่าสุด + สินค้าที่ลูกค้าฝาก ─────────────────────────────
     _dch1, _dch2 = st.columns([3, 2])
     with _dch1:
         st.markdown("**📊 ยอดขาย 7 วันล่าสุด**")
         st.bar_chart(_chart_df, color="#D9822B", use_container_width=True)
     with _dch2:
-        st.markdown("**📦 สินค้าใกล้หมด**")
-        if not _low_stock:
-            st.caption("ไม่มีสินค้าใกล้หมด")
+        st.markdown("**📋 สินค้าที่ลูกค้าฝาก**")
+        if not _deposits:
+            st.caption("ไม่มีสินค้าฝาก")
         else:
-            for _it in _low_stock[:8]:
+            for _it in _deposits[:8]:
                 _lc1, _lc2 = st.columns([3, 1])
                 _lc1.markdown(_it["name"])
                 _lc2.markdown(f"**{_it['qty']} ชิ้น**")
@@ -149,6 +142,30 @@ def render():
                 _top5.style.format({"ค้างจ่าย": "{:,.0f}", "ค้างรับ": "{:.0f}"}),
                 use_container_width=True, hide_index=True,
             )
+
+    st.divider()
+
+    # ── บิลล่าสุด (จากช่วง 7 วันล่าสุดที่โหลดไว้แล้วสำหรับกราฟ) ──────────────
+    st.markdown("**🧾 บิลล่าสุด**")
+    _recent_bills = pd.DataFrame()
+    if not _week_df.empty:
+        _recent_bills = (_week_df[_week_df["เลขที่บิล"].notna()]
+                          .groupby("เลขที่บิล", as_index=False)
+                          .agg(วันที่=("วันที่", "max"), ลูกค้า=("ลูกค้า", "first"),
+                               ยอดรวม=("ยอดรวม", "sum"), ค้างจ่าย=("ค้างจ่าย", "sum"))
+                          .sort_values("เลขที่บิล", ascending=False)
+                          .head(8))
+    if _recent_bills.empty:
+        st.caption("ยังไม่มีบิล")
+    else:
+        _recent_bills["สถานะ"] = _recent_bills["ค้างจ่าย"].apply(
+            lambda x: "ชำระแล้ว" if x <= 0.01 else "ค้างชำระ")
+        st.dataframe(
+            _recent_bills[["เลขที่บิล", "วันที่", "ลูกค้า", "ยอดรวม", "สถานะ"]]
+                .style.format({"ยอดรวม": "{:,.0f}"})
+                .map(_style_status, subset=["สถานะ"]),
+            use_container_width=True, hide_index=True,
+        )
 
     # ── helper ───────────────────────────────────────────────────────────────
     def _parse_sdt(s_str):
