@@ -394,6 +394,34 @@ def _cart_add_items(cart_key: str, items: list) -> None:
             cart.append({"product_id": _pid, "qty": int(it["qty"])})
 
 
+def _render_product_grid(cart_key: str, products: list, grid_key: str, cols: int = 2):
+    """กริดสินค้าคลิกเพื่อเพิ่มลงตะกร้าทีละ 1 ชิ้น (ไม่มีรูปสินค้า — ไม่จำเป็น)
+    มีช่องค้นหา (ชื่อ/รหัส) กรองก่อนแสดงกริด
+    """
+    _search = st.text_input(
+        "ค้นหาสินค้า", key=f"{grid_key}_search",
+        label_visibility="collapsed", placeholder="🔍 ค้นหาสินค้าหรือสแกนบาร์โค้ด...",
+    )
+    _filtered = products
+    if _search.strip():
+        _q = _search.strip().lower()
+        _filtered = [p for p in products
+                     if _q in p["name"].lower() or _q in str(p["id"]).lower()]
+    if not _filtered:
+        st.caption("ไม่พบสินค้า")
+        return
+    for _i in range(0, len(_filtered), cols):
+        _grid_cols = st.columns(cols)
+        for _gc, _p in zip(_grid_cols, _filtered[_i:_i + cols]):
+            with _gc:
+                if st.button(
+                    f"**{_p['name']}**  \n฿{float(_p.get('price') or 0):,.0f}",
+                    key=f"{grid_key}_{_p['id']}", use_container_width=True,
+                ):
+                    _cart_add_items(cart_key, [{"product": _p, "qty": 1}])
+                    st.rerun()
+
+
 def _render_cart_card(cart_key: str, products: list, title: str = "บันทึกรายการขาย"):
     """ตะกร้าสไตล์การ์ด (ชื่อ+รหัส/ราคา, ตัวคุมจำนวน −/+, ยอดต่อแถว, ปุ่มลบ ✕)
     แทน st.data_editor เดิม — เก็บสถานะเป็น list ธรรมดาใน session_state[cart_key]

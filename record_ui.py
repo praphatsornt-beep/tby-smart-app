@@ -15,7 +15,7 @@ from ui_helpers import (
     _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
-    get_bulky_presets, _render_cart_card, _cart_add_items,
+    get_bulky_presets, _render_cart_card, _cart_add_items, _render_product_grid,
 )
 import carriers as carr
 
@@ -261,7 +261,9 @@ def render(tab1, products, customers, customer_map):
                         st.session_state["_staged_pc"] = ""
 
                 # ── รายการสินค้า ─────────────────────────────────────────────────
-                _cart_col, _status_col = st.columns([2, 1], gap="medium")
+                _prod_col, _cart_col, _status_col = st.columns([1.6, 1.8, 1.3], gap="medium")
+                with _prod_col:
+                    _render_product_grid(_cart_key, products, grid_key=f"{_cart_key}_grid")
                 with _cart_col:
                     valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
 
@@ -1049,7 +1051,11 @@ def render(tab1, products, customers, customer_map):
             st.divider()
 
             # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
-            _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
+            _sp_prod_col, _sp_cart_col = st.columns([1.6, 1.8], gap="medium")
+            with _sp_prod_col:
+                _render_product_grid(_sp_cart_key, _sp, grid_key=f"{_sp_cart_key}_grid")
+            with _sp_cart_col:
+                _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
             _sp_items = [
                 {"product_id": p["id"], "name": p["name"], "qty": qty}
                 for p, qty, _ in _sp_valid_items
