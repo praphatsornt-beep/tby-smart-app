@@ -96,9 +96,10 @@ st.markdown("""
     font-family: 'Sarabun', sans-serif;
 }
 
-/* ── Streamlit's own header bar ── */
+/* ── Streamlit's own header bar — transparent so it doesn't show as a
+   separate dark strip above the topbar, matching the reference layout ── */
 header[data-testid="stHeader"] {
-    background: linear-gradient(90deg, var(--tby-sidebar-1) 0%, var(--tby-sidebar-2) 100%);
+    background: transparent;
 }
 
 /* ── Headings — Kanit, flat (no decorative underline/shadow) ── */
@@ -134,7 +135,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 .tby-topbar-title {
     font-family: 'Kanit', sans-serif;
     font-weight: 700;
-    font-size: 1.7rem;
+    font-size: 2rem;
     color: var(--tby-text);
     padding-left: 1.5rem;
 }
