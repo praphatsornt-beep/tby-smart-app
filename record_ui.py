@@ -15,7 +15,7 @@ from ui_helpers import (
     _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
-    get_bulky_presets, _render_cart_card, _cart_add_items, _render_product_grid,
+    get_bulky_presets, _render_cart_card, _cart_add_items,
 )
 import carriers as carr
 
@@ -224,20 +224,24 @@ def render(tab1, products, customers, customer_map):
                             _rx_extra_weight_g += _prod_weight_map.get(_pid, 0) * min(_qty_now, int(_rx_df.iloc[_ri]["_max"]))
                             _has_rx_action = True
 
-                # ── วางรหัสสินค้าลงตาราง ─────────────────────────────────────────
-                with st.expander("⚡ วางรหัสสินค้า", expanded=False):
-                    q_text = st.text_area(
-                        "รหัส-จำนวน คั่นด้วยเว้นวรรค",
-                        placeholder="เช่น: tf2581-38 ty2006-1 rb2306-1 tu3315-1",
-                        height=80, key="q_text",
-                    )
-                    if st.button("📋 ใส่ลงตาราง", key="q_to_cart", type="primary", use_container_width=True):
-                        _qf, _qu = _parse_quick_order(q_text or "", products)
-                        if _qu:
-                            st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
-                        if _qf:
-                            _cart_add_items(_cart_key, _qf)
-                            st.rerun()
+                # ── กรอกรหัสสินค้า (แสดงตลอด ไม่ซ่อนใน expander) ──────────────────
+                _qtext_ver = st.session_state.get("_qtext_ver", 0)
+                _qtext_key = f"q_text_{_qtext_ver}"
+                st.markdown("**⚡ กรอกรหัสสินค้า**")
+                _qc1, _qc2 = st.columns([4, 1])
+                q_text = _qc1.text_input(
+                    "รหัส-จำนวน คั่นด้วยเว้นวรรค",
+                    placeholder="เช่น: tf2581-38 ty2006-1 rb2306-1 tu3315-1",
+                    key=_qtext_key, label_visibility="collapsed",
+                )
+                if _qc2.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", use_container_width=True):
+                    _qf, _qu = _parse_quick_order(q_text or "", products)
+                    if _qu:
+                        st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
+                    if _qf:
+                        _cart_add_items(_cart_key, _qf)
+                        st.session_state["_qtext_ver"] = _qtext_ver + 1
+                        st.rerun()
 
                 st.divider()
 
@@ -261,9 +265,7 @@ def render(tab1, products, customers, customer_map):
                         st.session_state["_staged_pc"] = ""
 
                 # ── รายการสินค้า ─────────────────────────────────────────────────
-                _prod_col, _cart_col, _status_col = st.columns([1.6, 1.8, 1.3], gap="medium")
-                with _prod_col:
-                    _render_product_grid(_cart_key, products, grid_key=f"{_cart_key}_grid")
+                _cart_col, _status_col = st.columns([2, 1], gap="medium")
                 with _cart_col:
                     valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
 
@@ -1033,29 +1035,29 @@ def render(tab1, products, customers, customer_map):
             _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
             _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
 
-            # ── ⚡ วางรหัสสินค้า ──────────────────────────────────────────────
-            with st.expander("⚡ วางรหัสสินค้า", expanded=False):
-                _sp_q_text = st.text_area(
-                    "รหัส-จำนวน คั่นด้วยเว้นวรรค",
-                    placeholder="เช่น: tf2581-2 rb2306-1 tu3315-1",
-                    height=80, key="sp_q_text",
-                )
-                if st.button("📋 ใส่ลงตาราง", key="sp_q_to_cart", type="primary", use_container_width=True):
-                    _sp_qf, _sp_qu = _parse_quick_order(_sp_q_text or "", _sp)
-                    if _sp_qu:
-                        st.error(f"❌ รหัสไม่พบ: {', '.join(_sp_qu)}")
-                    if _sp_qf:
-                        _cart_add_items(_sp_cart_key, _sp_qf)
-                        st.rerun()
+            # ── กรอกรหัสสินค้า (แสดงตลอด ไม่ซ่อนใน expander) ──────────────────
+            _sp_qtext_ver = st.session_state.get("_sp_qtext_ver", 0)
+            _sp_qtext_key = f"sp_q_text_{_sp_qtext_ver}"
+            st.markdown("**⚡ กรอกรหัสสินค้า**")
+            _sqc1, _sqc2 = st.columns([4, 1])
+            _sp_q_text = _sqc1.text_input(
+                "รหัส-จำนวน คั่นด้วยเว้นวรรค",
+                placeholder="เช่น: tf2581-2 rb2306-1 tu3315-1",
+                key=_sp_qtext_key, label_visibility="collapsed",
+            )
+            if _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", use_container_width=True):
+                _sp_qf, _sp_qu = _parse_quick_order(_sp_q_text or "", _sp)
+                if _sp_qu:
+                    st.error(f"❌ รหัสไม่พบ: {', '.join(_sp_qu)}")
+                if _sp_qf:
+                    _cart_add_items(_sp_cart_key, _sp_qf)
+                    st.session_state["_sp_qtext_ver"] = _sp_qtext_ver + 1
+                    st.rerun()
 
             st.divider()
 
             # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
-            _sp_prod_col, _sp_cart_col = st.columns([1.6, 1.8], gap="medium")
-            with _sp_prod_col:
-                _render_product_grid(_sp_cart_key, _sp, grid_key=f"{_sp_cart_key}_grid")
-            with _sp_cart_col:
-                _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
+            _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
             _sp_items = [
                 {"product_id": p["id"], "name": p["name"], "qty": qty}
                 for p, qty, _ in _sp_valid_items
