@@ -360,9 +360,10 @@ def render(tab1, products, customers, customer_map):
                     m_carrier = st.session_state.get("m_carrier", "Flash Express")
                     m_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key="m_iship_note")
 
-                    # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────
+                    # ── ที่อยู่ผู้รับ (จำกัดความกว้างตามสัดส่วนจอ ไม่เต็มหน้า) ──────
                     _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
-                    with st.expander("📦 ที่อยู่ผู้รับ", expanded=(m_delivery == "ส่งพัสดุ")):
+                    _addr_col, _ = st.columns([3.1, 1.1], gap="medium")
+                    with _addr_col, st.expander("📦 ที่อยู่ผู้รับ", expanded=(m_delivery == "ส่งพัสดุ")):
                             # ── quick-select ที่อยู่เดิมของลูกค้า ──────────────────
                             if m_customer != "— เลือกลูกค้า —":
                                 try:
