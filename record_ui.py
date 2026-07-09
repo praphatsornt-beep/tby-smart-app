@@ -224,27 +224,6 @@ def render(tab1, products, customers, customer_map):
                             _rx_extra_weight_g += _prod_weight_map.get(_pid, 0) * min(_qty_now, int(_rx_df.iloc[_ri]["_max"]))
                             _has_rx_action = True
 
-                # ── กรอกรหัสสินค้า (แสดงตลอด ไม่ซ่อนใน expander) ──────────────────
-                _qtext_ver = st.session_state.get("_qtext_ver", 0)
-                _qtext_key = f"q_text_{_qtext_ver}"
-                st.markdown("**⚡ กรอกรหัสสินค้า**")
-                _qc1, _qc2 = st.columns([4, 1])
-                q_text = _qc1.text_input(
-                    "รหัส-จำนวน คั่นด้วยเว้นวรรค",
-                    placeholder="เช่น: tf2581-38 ty2006-1 rb2306-1 tu3315-1",
-                    key=_qtext_key, label_visibility="collapsed",
-                )
-                if _qc2.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", use_container_width=True):
-                    _qf, _qu = _parse_quick_order(q_text or "", products)
-                    if _qu:
-                        st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
-                    if _qf:
-                        _cart_add_items(_cart_key, _qf)
-                        st.session_state["_qtext_ver"] = _qtext_ver + 1
-                        st.rerun()
-
-                st.divider()
-
                 # ── Reset recipient fields when customer changes ─────────────────────
                 if m_customer != "— เลือกลูกค้า —":
                     if m_customer not in customer_map:
@@ -264,13 +243,7 @@ def render(tab1, products, customers, customer_map):
                             st.session_state[_k] = _v
                         st.session_state["_staged_pc"] = ""
 
-                # ── รายการสินค้า ─────────────────────────────────────────────────
-                _cart_col, _status_col = st.columns([2, 1], gap="medium")
-                with _cart_col:
-                    valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
-
-                # ── สถานะ + การจัดส่ง ────────────────────────────────────────────
-                # auto-set COD ก่อน render
+                # auto-set COD ก่อน render สถานะ
                 _cur_pay = st.session_state.get("m_pay", "ค้างจ่าย")
                 if _cur_pay == "COD" and st.session_state.get("_prev_pay") != "COD":
                     st.session_state["m_bill"]     = "ยังไม่เปิดบิล"
@@ -279,14 +252,47 @@ def render(tab1, products, customers, customer_map):
                 elif _cur_pay != "COD":
                     st.session_state["_prev_pay"] = _cur_pay
                 _delivery_opts = ["ส่งพัสดุ", "ฝากของ", "รับแล้ว"]
+
+                # ── รายการสินค้า: เพิ่มสินค้า+สถานะ | ตะกร้า | สรุปยอด ──────────────
+                _status_col, _cart_col, _summary_col = st.columns([1.3, 1.8, 1.1], gap="medium")
+
                 with _status_col:
+                    _qtext_ver = st.session_state.get("_qtext_ver", 0)
+                    _qtext_key = f"q_text_{_qtext_ver}"
+                    with st.container(border=True):
+                        st.markdown("**เพิ่มสินค้า**")
+                        q_text = st.text_input(
+                            "รหัสสินค้า",
+                            placeholder="พิมพ์รหัสสินค้า-จำนวน เช่น tf2581-2 rb2306-1",
+                            key=_qtext_key, label_visibility="collapsed",
+                        )
+                        if st.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", use_container_width=True):
+                            _qf, _qu = _parse_quick_order(q_text or "", products)
+                            if _qu:
+                                st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
+                            if _qf:
+                                _cart_add_items(_cart_key, _qf)
+                                st.session_state["_qtext_ver"] = _qtext_ver + 1
+                                st.rerun()
+
                     with st.container(border=True):
                         st.markdown("**สถานะรายการ**")
-                        m_delivery = st.radio("การรับ / สถานะของ", _delivery_opts, horizontal=True, key="m_delivery", index=None)
-                        st.divider()
-                        m_pay  = st.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], horizontal=True, key="m_pay", index=None)
+                        _sc1, _sc2 = st.columns(2)
+                        m_delivery = _sc1.radio("การรับ / สถานะของ", _delivery_opts, key="m_delivery", index=None)
+                        m_pay  = _sc2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
                         st.divider()
                         m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
+
+                with _cart_col:
+                    valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
+
+                with _summary_col:
+                    with st.container(border=True):
+                        _sum_total = sum(float(p.get("price") or 0) * q for p, q, _ in valid_items)
+                        _sum_pv    = sum(float(p.get("points_per_unit") or 0) * q for p, q, _ in valid_items)
+                        st.markdown(f"ยอดรวมสินค้า &nbsp; **฿{_sum_total:,.0f}**")
+                        if _sum_pv > 0:
+                            st.markdown(f"⭐ คะแนนสะสมที่จะได้รับ &nbsp; **+{_sum_pv:,.0f}**")
 
                 if not valid_items and _has_rx_action:
                     st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
@@ -1035,14 +1041,15 @@ def render(tab1, products, customers, customer_map):
             _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
             _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
 
-            # ── กรอกรหัสสินค้า (แสดงตลอด ไม่ซ่อนใน expander) ──────────────────
+            # ── เพิ่มสินค้า (แสดงตลอด ไม่ซ่อนใน expander) ──────────────────
             _sp_qtext_ver = st.session_state.get("_sp_qtext_ver", 0)
             _sp_qtext_key = f"sp_q_text_{_sp_qtext_ver}"
-            st.markdown("**⚡ กรอกรหัสสินค้า**")
-            _sqc1, _sqc2 = st.columns([4, 1])
+            _sp_add_box = st.container(border=True)
+            _sp_add_box.markdown("**เพิ่มสินค้า**")
+            _sqc1, _sqc2 = _sp_add_box.columns([4, 1])
             _sp_q_text = _sqc1.text_input(
-                "รหัส-จำนวน คั่นด้วยเว้นวรรค",
-                placeholder="เช่น: tf2581-2 rb2306-1 tu3315-1",
+                "รหัสสินค้า",
+                placeholder="พิมพ์รหัสสินค้า-จำนวน เช่น tf2581-2 rb2306-1",
                 key=_sp_qtext_key, label_visibility="collapsed",
             )
             if _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", use_container_width=True):
