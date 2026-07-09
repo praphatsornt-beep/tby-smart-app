@@ -293,11 +293,28 @@ def render(tab1, products, customers, customer_map):
                     with st.container(border=True):
                         _sum_total = sum(float(p.get("price") or 0) * q for p, q, _ in valid_items)
                         _sum_pv    = sum(float(p.get("points_per_unit") or 0) * q for p, q, _ in valid_items)
+                        st.markdown("**สรุปยอด**")
                         if valid_items:
-                            st.success("🛒 " + "  |  ".join(f"**{p['id']}** ×{q}" for p, q, _ in valid_items))
-                        st.markdown(f"ยอดรวม &nbsp; **฿{_sum_total:,.0f}**")
-                        st.markdown(f"⭐ PV รวม &nbsp; **{_sum_pv:,.0f}**")
-                        st.markdown(f"รายการ &nbsp; **{len(valid_items)} สินค้า**")
+                            st.caption("🛒 " + "  |  ".join(f"{p['id']} ×{q}" for p, q, _ in valid_items))
+
+                        def _sum_row(label, value, big=False, accent=False):
+                            _val_fs = "1.5rem" if big else "0.95rem"
+                            _val_fw = 800 if big else 700
+                            _val_color = "#E07B39" if accent else "#111111"
+                            st.markdown(
+                                f"<div style='display:flex;justify-content:space-between;align-items:baseline;"
+                                f"margin:{'12px' if big else '6px'} 0 2px'>"
+                                f"<span style='font-size:0.9rem;color:oklch(0.55 0 0)'>{label}</span>"
+                                f"<span style='font-size:{_val_fs};font-weight:{_val_fw};color:{_val_color}'>{value}</span>"
+                                f"</div>",
+                                unsafe_allow_html=True,
+                            )
+
+                        _sum_row("ยอดรวมสินค้า", f"฿{_sum_total:,.0f}")
+                        _sum_row("รายการ", f"{len(valid_items)} สินค้า")
+                        st.divider()
+                        _sum_row("ยอดรวม", f"฿{_sum_total:,.0f}", big=True, accent=True)
+                        _sum_row("⭐ PV ที่จะได้รับ", f"+{_sum_pv:,.0f}", accent=True)
 
                 if not valid_items and _has_rx_action:
                     st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
@@ -477,8 +494,6 @@ def render(tab1, products, customers, customer_map):
                     total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
                     _raw_weight  = raw_weight_g(valid_items, _rx_extra_weight_g)
                     total_weight = _raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
-                    if valid_items:
-                        st.success("🛒 " + "  |  ".join(f"**{p['id']}** ×{q}" for p, q, _ in valid_items))
                     if _rx_old_items and valid_items:
                         _old_label = "  +  ".join(f"{it['name']} ×{it['qty']}" for it in _rx_old_items)
                         st.info(f"📦 ของเก่า: {_old_label}  ·  ยอดค้างที่จะจ่าย **{_rx_total_pay:,.0f}฿**  ·  รวมยอดทั้งหมด **{total_amt + _rx_total_pay:,.0f}฿**")
@@ -519,11 +534,6 @@ def render(tab1, products, customers, customer_map):
                         ship_fee = cod_fee = 0
                         collect  = total_amt
                         net_recv = total_amt
-                        if valid_items:
-                            vm1, vm2, vm3 = st.columns(3)
-                            vm1.metric("ยอดรวม",   f"{total_amt:,.0f} ฿")
-                            vm2.metric("PV รวม",   f"{total_pv:.0f}")
-                            vm3.metric("รายการ",   f"{len(valid_items)} สินค้า")
 
                 if _rx_total_pay > 0:
                     _new_total_disp = total_amt + (ship_fee if m_delivery == "ส่งพัสดุ" else 0)
@@ -542,20 +552,32 @@ def render(tab1, products, customers, customer_map):
                 if valid_items:
                     if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก สถานะจ่าย")
                     if m_bill is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")
-                if m_errors:
-                    st.warning("  \n".join(m_errors))
 
-                if not m_errors and valid_items:
-                    _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡", "จ่ายบางส่วน": "🟣"}.get(m_pay or "", "⚪")
-                    _deliv_color = {"ส่งพัสดุ": "🚚", "ฝากของ": "📦", "รับแล้ว": "✅"}.get(m_delivery or "", "⚪")
-                    _bill_color  = "🟠" if m_bill == "ยังไม่เปิดบิล" else "🟢"
-                    _carrier_tag = f" · {m_carrier}" if m_delivery == "ส่งพัสดุ" else ""
-                    _pay_tag     = f" · {_pay_color} {m_pay}" if m_pay else ""
-                    _bill_tag    = f" · {_bill_color} {m_bill}" if m_bill else ""
-                    st.info(f"📋 **{m_customer}** · {_deliv_color} {m_delivery}{_pay_tag}{_bill_tag}{_carrier_tag}")
+                _msg_col, _btn_col = st.columns([3, 1], gap="medium")
+                with _msg_col:
+                    if m_errors:
+                        st.markdown(
+                            "<div style='color:oklch(0.5 0.14 50);font-size:0.95rem;line-height:1.9'>"
+                            + "<br>".join(m_errors) + "</div>",
+                            unsafe_allow_html=True,
+                        )
+                    elif valid_items:
+                        _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡", "จ่ายบางส่วน": "🟣"}.get(m_pay or "", "⚪")
+                        _deliv_color = {"ส่งพัสดุ": "🚚", "ฝากของ": "📦", "รับแล้ว": "✅"}.get(m_delivery or "", "⚪")
+                        _bill_color  = "🟠" if m_bill == "ยังไม่เปิดบิล" else "🟢"
+                        _carrier_tag = f" · {m_carrier}" if m_delivery == "ส่งพัสดุ" else ""
+                        _pay_tag     = f" · {_pay_color} {m_pay}" if m_pay else ""
+                        _bill_tag    = f" · {_bill_color} {m_bill}" if m_bill else ""
+                        st.markdown(
+                            f"<div style='color:oklch(0.4 0.1 155);font-size:0.95rem'>"
+                            f"📋 <b>{m_customer}</b> · {_deliv_color} {m_delivery}{_pay_tag}{_bill_tag}{_carrier_tag}</div>",
+                            unsafe_allow_html=True,
+                        )
+                with _btn_col:
+                    _submit_clicked = st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True,
+                                                 key="m_submit", disabled=bool(m_errors))
 
-                if st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True, key="m_submit",
-                             disabled=bool(m_errors)):
+                if _submit_clicked:
                     customer     = customer_map[m_customer]
                     is_shipping  = m_delivery == "ส่งพัสดุ"
                     _raw_w_save  = raw_weight_g(valid_items, _rx_extra_weight_g)
@@ -732,8 +754,6 @@ def render(tab1, products, customers, customer_map):
                     st.session_state.pop(_cart_key, None)
                     st.session_state["_cart_version"] = _cart_ver + 1
                     st.rerun()
-                elif m_errors and any(e != "กรอกสินค้าและจำนวนอย่างน้อย 1 รายการ" for e in m_errors):
-                    st.caption("⚠️ " + " | ".join(m_errors))
 
                 # ── ปุ่มรับแต่ของเก่า (เฉพาะ ส่งพัสดุ + ไม่มีสินค้าใหม่) ────────
                 if (m_delivery == "ส่งพัสดุ" and not valid_items and _has_rx_action

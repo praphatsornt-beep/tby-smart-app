@@ -406,6 +406,34 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
     cart = st.session_state.setdefault(cart_key, [])
     _prod_by_id = {p["id"]: p for p in products}
 
+    st.markdown(
+        """
+        <style>
+        [class*="st-key-stepper_"] button[kind="secondary"] {
+            background: oklch(0.94 0.03 155) !important;
+            color: oklch(0.4 0.1 155) !important;
+            border: none !important;
+            border-radius: 8px !important;
+            font-weight: 700 !important;
+        }
+        [class*="st-key-stepper_"] button[kind="secondary"]:hover {
+            background: oklch(0.90 0.05 155) !important;
+        }
+        [class*="st-key-remove_"] button[kind="secondary"] {
+            background: transparent !important;
+            border: none !important;
+            color: oklch(0.6 0.02 30) !important;
+            box-shadow: none !important;
+        }
+        [class*="st-key-remove_"] button[kind="secondary"]:hover {
+            color: oklch(0.5 0.15 25) !important;
+            background: oklch(0.94 0.03 25) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
     with st.container(border=True):
         st.markdown(f"**{title}**")
 
@@ -420,29 +448,34 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
                 _line_total = float(_p.get("price") or 0) * _qty
                 _rc1, _rc2, _rc3, _rc4 = st.columns([3, 2, 1.3, 0.6])
                 with _rc1:
-                    st.markdown(f"**{_p['name']}**")
+                    st.markdown(f"<div style='font-weight:700;font-size:1.02rem'>{_p['name']}</div>", unsafe_allow_html=True)
                     st.caption(
                         f"{_p['id']} · ฿{float(_p.get('price') or 0):,.0f} · "
                         f"{float(_p.get('points_per_unit') or 0):,.0f} PV"
                     )
                 with _rc2:
                     _qc1, _qc2, _qc3 = st.columns([1, 1.4, 1])
-                    if _qc1.button("−", key=f"{cart_key}_dec_{_i}", use_container_width=True):
-                        if _qty - 1 <= 0:
-                            cart.pop(_i)
-                        else:
-                            cart[_i]["qty"] = _qty - 1
-                        st.rerun()
-                    _qc2.markdown(f"<div style='text-align:center;padding-top:8px'>{_qty}</div>", unsafe_allow_html=True)
-                    if _qc3.button("+", key=f"{cart_key}_inc_{_i}", use_container_width=True):
-                        cart[_i]["qty"] = _qty + 1
-                        st.rerun()
+                    with _qc1:
+                        with st.container(key=f"stepper_{cart_key}_dec_{_i}"):
+                            if st.button("−", key=f"{cart_key}_dec_{_i}", use_container_width=True):
+                                if _qty - 1 <= 0:
+                                    cart.pop(_i)
+                                else:
+                                    cart[_i]["qty"] = _qty - 1
+                                st.rerun()
+                    _qc2.markdown(f"<div style='text-align:center;padding-top:8px;font-weight:700'>{_qty}</div>", unsafe_allow_html=True)
+                    with _qc3:
+                        with st.container(key=f"stepper_{cart_key}_inc_{_i}"):
+                            if st.button("+", key=f"{cart_key}_inc_{_i}", use_container_width=True):
+                                cart[_i]["qty"] = _qty + 1
+                                st.rerun()
                 with _rc3:
-                    st.markdown(f"<div style='padding-top:8px'>฿{_line_total:,.0f}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='padding-top:8px;font-weight:700;font-size:1rem'>฿{_line_total:,.0f}</div>", unsafe_allow_html=True)
                 with _rc4:
-                    if st.button("✕", key=f"{cart_key}_rm_{_i}", use_container_width=True):
-                        cart.pop(_i)
-                        st.rerun()
+                    with st.container(key=f"remove_{cart_key}_{_i}"):
+                        if st.button("✕", key=f"{cart_key}_rm_{_i}", use_container_width=True):
+                            cart.pop(_i)
+                            st.rerun()
 
             st.divider()
             _total = sum(float(_prod_by_id.get(r["product_id"], {}).get("price") or 0) * int(r["qty"]) for r in cart)
