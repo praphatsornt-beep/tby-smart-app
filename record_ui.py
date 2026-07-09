@@ -558,27 +558,27 @@ def render(tab1, products, customers, customer_map):
                     if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก สถานะจ่าย")
                     if m_bill is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")
 
-                _msg_col, _btn_col = st.columns([3, 1], gap="medium")
-                with _msg_col:
-                    if m_errors:
-                        st.markdown(
-                            "<div style='color:oklch(0.5 0.14 50);font-size:0.95rem;line-height:1.9'>"
-                            + "<br>".join(m_errors) + "</div>",
-                            unsafe_allow_html=True,
-                        )
-                    elif valid_items:
-                        _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡", "จ่ายบางส่วน": "🟣"}.get(m_pay or "", "⚪")
-                        _deliv_color = {"ส่งพัสดุ": "🚚", "ฝากของ": "📦", "รับแล้ว": "✅"}.get(m_delivery or "", "⚪")
-                        _bill_color  = "🟠" if m_bill == "ยังไม่เปิดบิล" else "🟢"
-                        _carrier_tag = f" · {m_carrier}" if m_delivery == "ส่งพัสดุ" else ""
-                        _pay_tag     = f" · {_pay_color} {m_pay}" if m_pay else ""
-                        _bill_tag    = f" · {_bill_color} {m_bill}" if m_bill else ""
-                        st.markdown(
-                            f"<div style='color:oklch(0.4 0.1 155);font-size:0.95rem'>"
-                            f"📋 <b>{m_customer}</b> · {_deliv_color} {m_delivery}{_pay_tag}{_bill_tag}{_carrier_tag}</div>",
-                            unsafe_allow_html=True,
-                        )
-                with _btn_col:
+                if m_errors:
+                    st.markdown(
+                        "<div style='color:oklch(0.5 0.14 50);font-size:0.95rem;line-height:1.9'>"
+                        + "<br>".join(m_errors) + "</div>",
+                        unsafe_allow_html=True,
+                    )
+                elif valid_items:
+                    _pay_color   = {"ค้างจ่าย": "🔴", "จ่ายแล้ว": "🟢", "COD": "🟡", "จ่ายบางส่วน": "🟣"}.get(m_pay or "", "⚪")
+                    _deliv_color = {"ส่งพัสดุ": "🚚", "ฝากของ": "📦", "รับแล้ว": "✅"}.get(m_delivery or "", "⚪")
+                    _bill_color  = "🟠" if m_bill == "ยังไม่เปิดบิล" else "🟢"
+                    _carrier_tag = f" · {m_carrier}" if m_delivery == "ส่งพัสดุ" else ""
+                    _pay_tag     = f" · {_pay_color} {m_pay}" if m_pay else ""
+                    _bill_tag    = f" · {_bill_color} {m_bill}" if m_bill else ""
+                    st.markdown(
+                        f"<div style='color:oklch(0.4 0.1 155);font-size:0.95rem'>"
+                        f"📋 <b>{m_customer}</b> · {_deliv_color} {m_delivery}{_pay_tag}{_bill_tag}{_carrier_tag}</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                with _summary_box:
+                    st.divider()
                     _submit_clicked = st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True,
                                                  key="m_submit", disabled=bool(m_errors))
 
