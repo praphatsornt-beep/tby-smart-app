@@ -111,17 +111,18 @@ h2 { font-weight: 600 !important; }
 h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 
 /* ── Global top bar (page title + date), rendered once per page in app.py ──
-   Sticky so it (and the sidebar) stay put while only the page content
-   below scrolls, matching the reference layout. ── */
+   Flush with the page (no card/border) — sticky so it (and the sidebar)
+   stay put while only the page content below scrolls. ── */
 .tby-topbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
     background: #ffffff;
-    border: 1px solid var(--tby-border);
-    border-radius: 14px;
-    padding: 18px 24px;
-    margin-bottom: 20px;
+    border: none;
+    border-bottom: 1px solid var(--tby-border);
+    padding: 18px 8px;
+    margin: -1.5rem -2rem 20px -2rem;
+    width: calc(100% + 4rem);
     position: sticky;
     /* Streamlit's own native header (hamburger/menu bar) is fixed at the very
        top of the viewport with a very high z-index of its own — sticking to
@@ -135,12 +136,42 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     font-weight: 700;
     font-size: 1.7rem;
     color: var(--tby-text);
+    padding-left: 1.5rem;
+}
+.tby-topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-right: 1.5rem;
 }
 .tby-topbar-date {
     font-family: 'Sarabun', sans-serif;
     font-weight: 500;
     font-size: 0.95rem;
     color: var(--tby-muted);
+}
+.tby-topbar-bell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--tby-table-head-bg);
+    font-size: 1.1rem;
+}
+.tby-topbar-avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    background: var(--tby-accent);
+    color: #ffffff;
+    font-family: 'Kanit', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
 }
 /* Streamlit wraps every st.markdown() output in a chain of wrapper divs
    that tightly hug its own content (stElementContainer > stMarkdown >
@@ -866,8 +897,17 @@ if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = _TAB_NAMES[0]
 
 with st.sidebar:
-    st.markdown("### 🛍️ TBY SMART APP")
-    st.caption("ระบบจัดการร้าน")
+    st.markdown(
+        """<div style="display:flex;align-items:center;gap:12px;padding:4px 0 12px;">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--tby-accent);
+        display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">🛍️</div>
+        <div>
+        <div style="font-family:'Kanit',sans-serif;font-weight:700;font-size:1.05rem;color:#ffffff;line-height:1.3;">TBY SMART APP</div>
+        <div style="font-family:'Sarabun',sans-serif;font-size:0.8rem;color:var(--tby-sidebar-cap);line-height:1.3;">ระบบจัดการร้าน</div>
+        </div>
+        </div>""",
+        unsafe_allow_html=True,
+    )
     st.divider()
 
     for _nav_i, _nav_label in enumerate(_TAB_NAMES):
@@ -894,7 +934,11 @@ _tb_date_str = f"วัน{_TB_DAYS[_tb_today.weekday()]} {_tb_today.day} {_TB_M
 st.markdown(
     f"""<div class="tby-topbar">
     <div class="tby-topbar-title">{_active_tab}</div>
-    <div class="tby-topbar-date">{_tb_date_str}</div>
+    <div class="tby-topbar-right">
+        <div class="tby-topbar-date">{_tb_date_str}</div>
+        <div class="tby-topbar-bell">🔔</div>
+        <div class="tby-topbar-avatar">TB</div>
+    </div>
     </div>""",
     unsafe_allow_html=True,
 )
