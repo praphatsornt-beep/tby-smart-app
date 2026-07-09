@@ -94,8 +94,14 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 }
 /* main-nav pills, stacked vertically instead of the horizontal bar used
    elsewhere (e.g. stock_ui's สต๊อก/ของฝาก sub-nav still gets the white
-   horizontal bar style further below since it's not inside the sidebar) */
-[data-testid="stSidebar"] [data-testid="stButtonGroup"] {
+   horizontal bar style further below since it's not inside the sidebar).
+   NOTE: st.pills' internal DOM/testid scheme has changed across Streamlit
+   releases (older: [data-testid="stPills"] container + button[aria-checked],
+   newer: [data-testid="stButtonGroup"] + button[data-testid="stBaseButton-
+   pillsActive"]) and we don't control which one Streamlit Cloud has actually
+   deployed, so every rule below is duplicated for both schemes. */
+[data-testid="stSidebar"] [data-testid="stButtonGroup"],
+[data-testid="stSidebar"] [data-testid="stPills"] {
     background: transparent !important;
     border: none !important;
     box-shadow: none !important;
@@ -106,18 +112,24 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
     padding: 0 !important;
     margin-bottom: 0.5rem !important;
 }
-[data-testid="stSidebar"] [data-testid="stButtonGroup"] button {
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] button,
+[data-testid="stSidebar"] [data-testid="stPills"] button {
     justify-content: flex-start !important;
     width: 100% !important;
     color: #D4E8DA !important;
     border-radius: 10px !important;
     padding: 10px 14px !important;
 }
-[data-testid="stSidebar"] button[data-testid="stBaseButton-pills"]:hover {
+[data-testid="stSidebar"] button[data-testid="stBaseButton-pills"]:hover,
+[data-testid="stSidebar"] [data-testid="stPills"] button:hover {
     background: rgba(255,255,255,0.08) !important;
     color: #ffffff !important;
 }
-[data-testid="stSidebar"] button[data-testid="stBaseButton-pillsActive"] {
+[data-testid="stSidebar"] button[data-testid="stBaseButton-pillsActive"],
+[data-testid="stSidebar"] button[aria-checked="true"],
+[data-testid="stSidebar"] button[kind="pillsActive"],
+[data-testid="stSidebar"] button[aria-pressed="true"],
+[data-testid="stSidebar"] button[aria-selected="true"] {
     background: rgba(255,255,255,0.14) !important;
     border-left: 3px solid #E07B39 !important;
     color: #ffffff !important;
@@ -143,10 +155,13 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 }
 
 /* ── Main nav (st.pills) — solid rounded pill segmented control ──
-   NOTE: modern Streamlit renders st.pills as a stButtonGroup container of
-   stBaseButton-pills / stBaseButton-pillsActive buttons — NOT a "stPills"
-   testid with aria-checked (that was true on older Streamlit only). */
-[data-testid="stButtonGroup"] {
+   NOTE: Streamlit's st.pills DOM/testid scheme differs by version — see the
+   comment in the sidebar section above. Every selector duplicated for both
+   the older ("stPills" + aria-checked) and newer ("stButtonGroup" +
+   stBaseButton-pillsActive) schemes so this works regardless of which one
+   Streamlit Cloud actually has deployed. */
+[data-testid="stButtonGroup"],
+[data-testid="stPills"] {
     background: #ffffff;
     border: 1px solid #E5EFE8;
     border-radius: 16px;
@@ -157,7 +172,8 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
     gap: 4px;
     margin-bottom: 1.25rem !important;
 }
-[data-testid="stButtonGroup"] button {
+[data-testid="stButtonGroup"] button,
+[data-testid="stPills"] button {
     background: transparent !important;
     color: #5C8069 !important;
     border: none !important;
@@ -169,13 +185,16 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
     box-shadow: none !important;
     transition: color 0.2s, background 0.2s !important;
 }
-button[data-testid="stBaseButton-pillsActive"] {
+button[data-testid="stBaseButton-pillsActive"],
+button[aria-checked="true"],
+button[kind="pillsActive"] {
     color: #ffffff !important;
     font-weight: 700 !important;
     background: linear-gradient(135deg, #2D6A4F 0%, #1B4332 100%) !important;
     box-shadow: 0 2px 8px rgba(27,67,50,0.3) !important;
 }
-[data-testid="stButtonGroup"] button[data-testid="stBaseButton-pills"]:hover {
+[data-testid="stButtonGroup"] button[data-testid="stBaseButton-pills"]:hover,
+[data-testid="stPills"] button:hover {
     color: #1B4332 !important;
     background: #F0F9F4 !important;
 }
@@ -217,8 +236,12 @@ button[data-testid="stBaseButton-pillsActive"] {
 }
 .stTabs [data-baseweb="tab-border"] { display: none !important; }
 
-/* ── Primary buttons (orange, softly rounded like the mockup's gold pill CTAs) ── */
-button[data-testid="stBaseButton-primary"] {
+/* ── Primary buttons (orange, softly rounded like the mockup's gold pill CTAs) ──
+   Same cross-version testid caveat as st.pills above — cover both naming
+   schemes (stBaseButton-primary is current; baseButton-primary is older). */
+button[data-testid="stBaseButton-primary"],
+button[data-testid="baseButton-primary"],
+button[kind="primary"] {
     background: linear-gradient(135deg, #E07B39 0%, #C86A2A 100%) !important;
     color: #fff !important;
     border: none !important;
@@ -227,17 +250,23 @@ button[data-testid="stBaseButton-primary"] {
     box-shadow: 0 2px 8px rgba(224,123,57,0.35) !important;
     transition: box-shadow 0.18s, transform 0.18s !important;
 }
-button[data-testid="stBaseButton-primary"]:hover {
+button[data-testid="stBaseButton-primary"]:hover,
+button[data-testid="baseButton-primary"]:hover,
+button[kind="primary"]:hover {
     box-shadow: 0 4px 16px rgba(224,123,57,0.5) !important;
     transform: translateY(-1px) !important;
 }
-button[data-testid="stBaseButton-primary"]:active {
+button[data-testid="stBaseButton-primary"]:active,
+button[data-testid="baseButton-primary"]:active,
+button[kind="primary"]:active {
     transform: translateY(0) !important;
     box-shadow: 0 2px 6px rgba(224,123,57,0.3) !important;
 }
 
 /* ── Secondary buttons (green outline) ── */
-button[data-testid="stBaseButton-secondary"] {
+button[data-testid="stBaseButton-secondary"],
+button[data-testid="baseButton-secondary"],
+button[kind="secondary"] {
     border: 1.5px solid #2D6A4F !important;
     color: #2D6A4F !important;
     border-radius: 12px !important;
@@ -245,7 +274,9 @@ button[data-testid="stBaseButton-secondary"] {
     background: white !important;
     transition: all 0.18s !important;
 }
-button[data-testid="stBaseButton-secondary"]:hover {
+button[data-testid="stBaseButton-secondary"]:hover,
+button[data-testid="baseButton-secondary"]:hover,
+button[kind="secondary"]:hover {
     background: #EAF2EC !important;
     border-color: #1B4332 !important;
     color: #1B4332 !important;
