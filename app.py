@@ -150,29 +150,6 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     font-size: 0.95rem;
     color: var(--tby-muted);
 }
-.tby-topbar-bell {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    background: var(--tby-table-head-bg);
-    font-size: 1.1rem;
-}
-.tby-topbar-avatar {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 38px;
-    height: 38px;
-    border-radius: 10px;
-    background: var(--tby-accent);
-    color: #ffffff;
-    font-family: 'Kanit', sans-serif;
-    font-weight: 600;
-    font-size: 0.85rem;
-}
 /* Streamlit wraps every st.markdown() output in a chain of wrapper divs
    that tightly hug its own content (stElementContainer > stMarkdown >
    stMarkdownContainer). That makes those wrappers the sticky element's
@@ -936,8 +913,6 @@ st.markdown(
     <div class="tby-topbar-title">{_active_tab}</div>
     <div class="tby-topbar-right">
         <div class="tby-topbar-date">{_tb_date_str}</div>
-        <div class="tby-topbar-bell">🔔</div>
-        <div class="tby-topbar-avatar">TB</div>
     </div>
     </div>""",
     unsafe_allow_html=True,
