@@ -289,81 +289,10 @@ def render(tab1, products, customers, customer_map):
                 with _cart_col:
                     valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
 
-                def _sum_row(label, value, big=False, accent=False):
-                    _val_fs = "1.5rem" if big else "0.95rem"
-                    _val_fw = 800 if big else 700
-                    _val_color = "#E07B39" if accent else "#111111"
-                    st.markdown(
-                        f"<div style='display:flex;justify-content:space-between;align-items:baseline;"
-                        f"margin:{'12px' if big else '6px'} 0 2px'>"
-                        f"<span style='font-size:0.9rem;color:oklch(0.55 0 0)'>{label}</span>"
-                        f"<span style='font-size:{_val_fs};font-weight:{_val_fw};color:{_val_color}'>{value}</span>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-
-                with _summary_col:
-                    _summary_box = st.container(border=True)
-
-                with _summary_box:
-                    _sum_total = sum(float(p.get("price") or 0) * q for p, q, _ in valid_items)
-                    _sum_pv    = sum(float(p.get("points_per_unit") or 0) * q for p, q, _ in valid_items)
-                    st.markdown("**สรุปยอด**")
-                    if valid_items:
-                        st.caption("🛒 " + "  |  ".join(f"{p['id']} ×{q}" for p, q, _ in valid_items))
-
-                    _sum_row("ยอดรวมสินค้า", f"฿{_sum_total:,.0f}")
-                    _sum_row("รายการ", f"{len(valid_items)} สินค้า")
-                    if m_delivery != "ส่งพัสดุ":
-                        st.divider()
-                        _sum_row("ยอดรวม", f"฿{_sum_total:,.0f}", big=True, accent=True)
-                        _sum_row("⭐ PV ที่จะได้รับ", f"+{_sum_pv:,.0f}", accent=True)
-
-                if not valid_items and _has_rx_action:
-                    st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
-
-                m_partial_amount = 0.0
-                if m_pay == "จ่ายบางส่วน" and valid_items:
-                    _partial_base_amt = sum(float(p["price"]) * q for p, q, _ in valid_items)
-                    m_partial_amount = st.number_input(
-                        "💵 จำนวนเงินที่ลูกค้าจ่ายมาแล้ว (บาท)",
-                        min_value=0.0, max_value=float(_partial_base_amt), step=1.0,
-                        key="m_partial_amount",
-                        help=f"ยอดสินค้ารวม {_partial_base_amt:,.0f} ฿",
-                    )
-
-                m_cod     = (m_pay == "COD")
-                m_receipt = "ฝากของ" if m_delivery == "ฝากของ" else "รับของแล้ว"
-                m_postcode = ""
-                m_zone     = "normal"
-                m_carrier  = "Flash Express"
-                f_sur = s_sur = 0
-                f_zone = s_zone = ""
-
-                if m_delivery == "ส่งพัสดุ":
-                    if "_staged_pc" in st.session_state:
-                        st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
-                    m_postcode = st.session_state.get("m_postcode", "")
-
-
-
-                    fees = carrier_fees(0, m_postcode.strip()) if len(m_postcode.strip()) == 5 else None
-                    f_sur  = fees["Flash Express"]["surcharge"] if fees else 0
-                    s_sur  = fees["SPX Express"]["surcharge"]   if fees else 0
-                    f_zone = fees["Flash Express"]["zone"]      if fees else ""
-                    s_zone = fees["SPX Express"]["zone"]        if fees else ""
-                    if fees and m_postcode != st.session_state.get("_prev_pc", ""):
-                        st.session_state["m_carrier"] = _pick_carrier(m_postcode)
-                        st.session_state["_prev_pc"]  = m_postcode
-                    if "_staged_carrier" in st.session_state:
-                        st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
-                    m_carrier = st.session_state.get("m_carrier", "Flash Express")
-                    m_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key="m_iship_note")
-
-                    # ── ที่อยู่ผู้รับ (จำกัดความกว้างตามสัดส่วนจอ ไม่เต็มหน้า) ──────
-                    _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
-                    _addr_col, _ = st.columns([3.1, 1.1], gap="medium")
-                    with _addr_col, st.expander("📦 ที่อยู่ผู้รับ", expanded=(m_delivery == "ส่งพัสดุ")):
+                    # ── ที่อยู่ผู้รับ (อยู่ใต้รายการสินค้าทันที เมื่อเลือกส่งพัสดุ) ──
+                    if m_delivery == "ส่งพัสดุ":
+                        _cid = customer_map[m_customer]["id"] if m_customer != "— เลือกลูกค้า —" else "no_cust"
+                        with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
                             # ── quick-select ที่อยู่เดิมของลูกค้า ──────────────────
                             if m_customer != "— เลือกลูกค้า —":
                                 try:
@@ -473,8 +402,79 @@ def render(tab1, products, customers, customer_map):
                                         st.success("✅ บันทึกแล้ว — ค้นหาจากเบอร์ได้เลยครั้งถัดไป")
                                     except Exception as _sa_e:
                                         st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_sa_e}")
-                else:
-                    r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
+                    else:
+                        r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
+
+                def _sum_row(label, value, big=False, accent=False):
+                    _val_fs = "1.5rem" if big else "0.95rem"
+                    _val_fw = 800 if big else 700
+                    _val_color = "#E07B39" if accent else "#111111"
+                    st.markdown(
+                        f"<div style='display:flex;justify-content:space-between;align-items:baseline;"
+                        f"margin:{'12px' if big else '6px'} 0 2px'>"
+                        f"<span style='font-size:0.9rem;color:oklch(0.55 0 0)'>{label}</span>"
+                        f"<span style='font-size:{_val_fs};font-weight:{_val_fw};color:{_val_color}'>{value}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
+                with _summary_col:
+                    _summary_box = st.container(border=True)
+
+                with _summary_box:
+                    _sum_total = sum(float(p.get("price") or 0) * q for p, q, _ in valid_items)
+                    _sum_pv    = sum(float(p.get("points_per_unit") or 0) * q for p, q, _ in valid_items)
+                    st.markdown("**สรุปยอด**")
+                    if valid_items:
+                        st.caption("🛒 " + "  |  ".join(f"{p['id']} ×{q}" for p, q, _ in valid_items))
+
+                    _sum_row("ยอดรวมสินค้า", f"฿{_sum_total:,.0f}")
+                    _sum_row("รายการ", f"{len(valid_items)} สินค้า")
+                    if m_delivery != "ส่งพัสดุ":
+                        st.divider()
+                        _sum_row("ยอดรวม", f"฿{_sum_total:,.0f}", big=True, accent=True)
+                        _sum_row("⭐ PV ที่จะได้รับ", f"+{_sum_pv:,.0f}", accent=True)
+
+                if not valid_items and _has_rx_action:
+                    st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
+
+                m_partial_amount = 0.0
+                if m_pay == "จ่ายบางส่วน" and valid_items:
+                    _partial_base_amt = sum(float(p["price"]) * q for p, q, _ in valid_items)
+                    m_partial_amount = st.number_input(
+                        "💵 จำนวนเงินที่ลูกค้าจ่ายมาแล้ว (บาท)",
+                        min_value=0.0, max_value=float(_partial_base_amt), step=1.0,
+                        key="m_partial_amount",
+                        help=f"ยอดสินค้ารวม {_partial_base_amt:,.0f} ฿",
+                    )
+
+                m_cod     = (m_pay == "COD")
+                m_receipt = "ฝากของ" if m_delivery == "ฝากของ" else "รับของแล้ว"
+                m_postcode = ""
+                m_zone     = "normal"
+                m_carrier  = "Flash Express"
+                f_sur = s_sur = 0
+                f_zone = s_zone = ""
+
+                if m_delivery == "ส่งพัสดุ":
+                    if "_staged_pc" in st.session_state:
+                        st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
+                    m_postcode = st.session_state.get("m_postcode", "")
+
+
+
+                    fees = carrier_fees(0, m_postcode.strip()) if len(m_postcode.strip()) == 5 else None
+                    f_sur  = fees["Flash Express"]["surcharge"] if fees else 0
+                    s_sur  = fees["SPX Express"]["surcharge"]   if fees else 0
+                    f_zone = fees["Flash Express"]["zone"]      if fees else ""
+                    s_zone = fees["SPX Express"]["zone"]        if fees else ""
+                    if fees and m_postcode != st.session_state.get("_prev_pc", ""):
+                        st.session_state["m_carrier"] = _pick_carrier(m_postcode)
+                        st.session_state["_prev_pc"]  = m_postcode
+                    if "_staged_carrier" in st.session_state:
+                        st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
+                    m_carrier = st.session_state.get("m_carrier", "Flash Express")
+                    m_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key="m_iship_note")
 
                 # auto-select carrier จาก weight + location (รันทุกครั้งที่ items หรือ postcode เปลี่ยน)
                 if m_delivery == "ส่งพัสดุ" and len(m_postcode.strip()) == 5:
