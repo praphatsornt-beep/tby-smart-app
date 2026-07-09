@@ -379,6 +379,93 @@ def raw_weight_g(items, extra_g: float = 0) -> float:
     return sum(float(p.get("weight_grams") or 0) * q for p, q, _ in items) + extra_g
 
 
+def _cart_add_items(cart_key: str, items: list) -> None:
+    """เพิ่มรายการเข้าตะกร้า (list-based, เก็บใน session_state[cart_key])
+    items: [{"product": product_dict, "qty": int}, ...] — ถ้าสินค้าซ้ำ กับที่มีอยู่แล้ว จะรวมจำนวนกัน
+    """
+    cart = st.session_state.setdefault(cart_key, [])
+    for it in items:
+        _pid = it["product"]["id"]
+        for _row in cart:
+            if _row["product_id"] == _pid:
+                _row["qty"] += int(it["qty"])
+                break
+        else:
+            cart.append({"product_id": _pid, "qty": int(it["qty"])})
+
+
+def _render_cart_card(cart_key: str, products: list, title: str = "บันทึกรายการขาย"):
+    """ตะกร้าสไตล์การ์ด (ชื่อ+รหัส/ราคา, ตัวคุมจำนวน −/+, ยอดต่อแถว, ปุ่มลบ ✕)
+    แทน st.data_editor เดิม — เก็บสถานะเป็น list ธรรมดาใน session_state[cart_key]
+    (ไม่ผูกกับ widget เหมือน data_editor เดิม เลยไม่ต้องใช้กลไก version-bump
+    เพื่อ "reset" — แค่ pop คีย์ทิ้งก็พอ เหมือนเดิม)
+
+    คืนค่า valid_items ในรูปแบบเดิม [(product_dict, qty, ""), ...] ให้โค้ดเดิม
+    (calc_shipping/cod_fee/iShip payload) ใช้ต่อได้โดยไม่ต้องแก้
+    """
+    cart = st.session_state.setdefault(cart_key, [])
+    _prod_by_id = {p["id"]: p for p in products}
+    _prod_display = {f"{p['id']} — {p['name']}": p for p in products}
+
+    with st.container(border=True):
+        st.markdown(f"**{title}**")
+
+        # ── เพิ่มสินค้าทีละรายการ ──────────────────────────────────────────
+        _ac1, _ac2, _ac3 = st.columns([3, 1, 1])
+        _add_sel = _ac1.selectbox(
+            "เพิ่มสินค้า", ["— เลือกสินค้า —"] + list(_prod_display.keys()),
+            key=f"{cart_key}_add_sel", label_visibility="collapsed",
+        )
+        _add_qty = _ac2.number_input(
+            "จำนวน", min_value=1, step=1, value=1,
+            key=f"{cart_key}_add_qty", label_visibility="collapsed",
+        )
+        if _ac3.button("➕ เพิ่ม", key=f"{cart_key}_add_btn", use_container_width=True):
+            if _add_sel != "— เลือกสินค้า —":
+                _cart_add_items(cart_key, [{"product": _prod_display[_add_sel], "qty": int(_add_qty)}])
+                st.rerun()
+
+        st.divider()
+
+        if not cart:
+            st.caption("ยังไม่มีสินค้าในตะกร้า")
+        else:
+            for _i, _row in enumerate(cart):
+                _p = _prod_by_id.get(_row["product_id"])
+                if not _p:
+                    continue
+                _qty = int(_row["qty"])
+                _line_total = float(_p.get("price") or 0) * _qty
+                _rc1, _rc2, _rc3, _rc4 = st.columns([3, 2, 1.3, 0.6])
+                with _rc1:
+                    st.markdown(f"**{_p['name']}**")
+                    st.caption(f"{_p['id']} · ฿{float(_p.get('price') or 0):,.0f}/หน่วย")
+                with _rc2:
+                    _qc1, _qc2, _qc3 = st.columns([1, 1.4, 1])
+                    if _qc1.button("−", key=f"{cart_key}_dec_{_i}", use_container_width=True):
+                        if _qty - 1 <= 0:
+                            cart.pop(_i)
+                        else:
+                            cart[_i]["qty"] = _qty - 1
+                        st.rerun()
+                    _qc2.markdown(f"<div style='text-align:center;padding-top:8px'>{_qty}</div>", unsafe_allow_html=True)
+                    if _qc3.button("+", key=f"{cart_key}_inc_{_i}", use_container_width=True):
+                        cart[_i]["qty"] = _qty + 1
+                        st.rerun()
+                with _rc3:
+                    st.markdown(f"<div style='padding-top:8px'>฿{_line_total:,.0f}</div>", unsafe_allow_html=True)
+                with _rc4:
+                    if st.button("✕", key=f"{cart_key}_rm_{_i}", use_container_width=True):
+                        cart.pop(_i)
+                        st.rerun()
+
+            st.divider()
+            _total = sum(float(_prod_by_id.get(r["product_id"], {}).get("price") or 0) * int(r["qty"]) for r in cart)
+            st.markdown(f"ยอดรวม &nbsp; **฿{_total:,.0f}**")
+
+    return [(_prod_by_id[r["product_id"]], int(r["qty"]), "") for r in cart if r["product_id"] in _prod_by_id]
+
+
 def _style_status(val):
     """Pill-badge colors (light bg + dark text, matching the good/warn/bad
     badge language used across the reference design) instead of the old

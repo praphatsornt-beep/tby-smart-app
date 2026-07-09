@@ -15,7 +15,7 @@ from ui_helpers import (
     _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
-    get_bulky_presets,
+    get_bulky_presets, _render_cart_card, _cart_add_items,
 )
 import carriers as carr
 
@@ -236,9 +236,7 @@ def render(tab1, products, customers, customer_map):
                         if _qu:
                             st.error(f"❌ รหัสไม่พบ: {', '.join(_qu)}")
                         if _qf:
-                            st.session_state["_quick_cart_items"] = _qf
-                            st.session_state.pop(_cart_key, None)
-                            st.session_state.pop("_cart_base", None)
+                            _cart_add_items(_cart_key, _qf)
                             st.rerun()
 
                 st.divider()
@@ -263,51 +261,9 @@ def render(tab1, products, customers, customer_map):
                         st.session_state["_staged_pc"] = ""
 
                 # ── รายการสินค้า ─────────────────────────────────────────────────
-                product_display = {f"{p['id']} — {p['name']}": p for p in products}
-                product_display_keys = list(product_display.keys())
-                # cart_df ต้องคงที่ระหว่าง reruns เพราะ data_editor เก็บแค่ edit diff
-                if _cart_key not in st.session_state:
-                    # first render หรือหลัง clear — ตั้ง base ใหม่
-                    if "_quick_cart_items" in st.session_state:
-                        _qi = st.session_state.pop("_quick_cart_items")
-                        cart_df = pd.DataFrame({
-                            "สินค้า": [f"{it['product']['id']} — {it['product']['name']}" for it in _qi],
-                            "จำนวน":  pd.array([it["qty"] for it in _qi], dtype="int64"),
-                        })
-                    else:
-                        cart_df = pd.DataFrame({
-                            "สินค้า": pd.Series([""] * 8, dtype="object"),
-                            "จำนวน":  pd.Series([0]  * 8, dtype="int64"),
-                        })
-                    st.session_state["_cart_base"] = cart_df
-                else:
-                    # rerun กลาง session — ใช้ base เดิมเสมอ
-                    cart_df = st.session_state.get("_cart_base", pd.DataFrame({
-                        "สินค้า": pd.Series([""] * 8, dtype="object"),
-                        "จำนวน":  pd.Series([0]  * 8, dtype="int64"),
-                    }))
                 _cart_col, _status_col = st.columns([2, 1], gap="medium")
                 with _cart_col:
-                    with st.container(border=True):
-                        edited_cart = st.data_editor(
-                            cart_df,
-                            num_rows="dynamic",
-                            use_container_width=True,
-                            hide_index=True,
-                            column_config={
-                                "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=product_display_keys, required=False, width="large"),
-                                "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
-                            },
-                            key=_cart_key,
-                        )
-
-                valid_items = [
-                    (product_display[row["สินค้า"]], int(row["จำนวน"]), "")
-                    for _, row in edited_cart.iterrows()
-                    if str(row.get("สินค้า", "")) in product_display
-                    and pd.notna(row.get("จำนวน"))
-                    and int(row.get("จำนวน")) > 0
-                ]
+                    valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
 
                 # ── สถานะ + การจัดส่ง ────────────────────────────────────────────
                 # auto-set COD ก่อน render
@@ -1023,6 +979,7 @@ def render(tab1, products, customers, customer_map):
                         "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search",
                         "_sp_adding_cust","_sp_prev_cust_search"]
             _sp_cart_ver_now = st.session_state.get("_sp_cart_ver", 0)
+            _sp_cart_key = f"sp_cart_{_sp_cart_ver_now}"
 
             _sc1, _sc2 = st.columns([6, 1])
             _sc1.subheader("บันทึกการส่งของ")
@@ -1086,64 +1043,20 @@ def render(tab1, products, customers, customer_map):
                     if _sp_qu:
                         st.error(f"❌ รหัสไม่พบ: {', '.join(_sp_qu)}")
                     if _sp_qf:
-                        st.session_state["_sp_quick_items"] = _sp_qf
-                        _new_ver = st.session_state.get("_sp_cart_ver", 0) + 1
-                        st.session_state["_sp_cart_ver"] = _new_ver
-                        st.session_state.pop(f"sp_cart_{_new_ver - 1}", None)
-                        st.session_state.pop("_sp_cart_base", None)
+                        _cart_add_items(_sp_cart_key, _sp_qf)
                         st.rerun()
 
             st.divider()
 
             # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
-            _sp_prod_keys = [f"{p['id']} — {p['name']}" for p in _sp]
-            _sp_prod_map  = {f"{p['id']} — {p['name']}": p for p in _sp}
-            _sp_cart_ver  = st.session_state.get("_sp_cart_ver", 0)
-            _sp_cart_key  = f"sp_cart_{_sp_cart_ver}"
-            if _sp_cart_key not in st.session_state:
-                if "_sp_quick_items" in st.session_state:
-                    _sp_qi = st.session_state.pop("_sp_quick_items")
-                    _sp_cart_df = pd.DataFrame({
-                        "สินค้า": [f"{it['product']['id']} — {it['product']['name']}" for it in _sp_qi],
-                        "จำนวน":  pd.array([it["qty"] for it in _sp_qi], dtype="int64"),
-                    })
-                else:
-                    _sp_cart_df = pd.DataFrame({"สินค้า": pd.Series([""] * 8, dtype="object"),
-                                                 "จำนวน":  pd.Series([0] * 8, dtype="int64")})
-                st.session_state["_sp_cart_base"] = _sp_cart_df
-            else:
-                _sp_cart_df = st.session_state.get("_sp_cart_base", pd.DataFrame({
-                    "สินค้า": pd.Series([""] * 8, dtype="object"),
-                    "จำนวน":  pd.Series([0] * 8, dtype="int64"),
-                }))
-            with st.container(border=True):
-                _sp_cart_edit = st.data_editor(
-                    _sp_cart_df, num_rows="dynamic", hide_index=True, use_container_width=False,
-                    key=_sp_cart_key,
-                    column_config={
-                        "สินค้า": st.column_config.SelectboxColumn("สินค้า (รหัส — ชื่อ)", options=_sp_prod_keys, required=False, width="large"),
-                        "จำนวน": st.column_config.NumberColumn("จำนวน", min_value=0, step=1, width="small"),
-                    },
-                )
+            _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
             _sp_items = [
-                {"product_id": _sp_prod_map[r["สินค้า"]]["id"],
-                 "name":       _sp_prod_map[r["สินค้า"]]["name"],
-                 "qty":        int(r["จำนวน"] or 0)}
-                for _, r in _sp_cart_edit.iterrows()
-                if str(r.get("สินค้า","")) in _sp_prod_map and int(r.get("จำนวน") or 0) > 0
-            ]
-            _sp_valid_items = [
-                (_sp_prod_map[r["สินค้า"]], int(r["จำนวน"] or 0), None)
-                for _, r in _sp_cart_edit.iterrows()
-                if str(r.get("สินค้า","")) in _sp_prod_map
+                {"product_id": p["id"], "name": p["name"], "qty": qty}
+                for p, qty, _ in _sp_valid_items
             ]
             _sp_raw_weight   = raw_weight_g(_sp_valid_items)
             _sp_total_weight = _sp_raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
-            _sp_total_amt = sum(
-                float(_sp_prod_map.get(r["สินค้า"], {}).get("price") or 0) * int(r["จำนวน"] or 0)
-                for _, r in _sp_cart_edit.iterrows()
-                if str(r.get("สินค้า","")) in _sp_prod_map
-            )
+            _sp_total_amt = sum(float(p.get("price") or 0) * qty for p, qty, _ in _sp_valid_items)
 
             # ── ที่อยู่เดิม (collapsed) ───────────────────────────────────────
             if _sp_cid:
