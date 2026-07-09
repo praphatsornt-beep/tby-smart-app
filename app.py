@@ -92,16 +92,11 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 [data-testid="stSidebar"] hr {
     border-color: rgba(255,255,255,0.15) !important;
 }
-/* main nav = one plain st.button per row (accordion, nested sub-items) —
-   stacks vertically automatically since each is its own Streamlit element,
-   so no button-group/flex-wrap juggling needed. Every nav button gets
-   type="primary" (active) or type="secondary" (inactive); the primary/
-   secondary color rules further below already apply everywhere, so here we
-   only need to (a) make secondary buttons blend into the dark sidebar like
-   a plain menu instead of showing a white box, (b) left-align + full-width
-   every nav row, and (c) indent+shrink the nested sub-item rows (targeted
-   via Streamlit's "st-key-<key>" class on the element container — every
-   sub-item button's key starts with "_nav_sub_"). */
+/* main nav = one plain st.button per row (flat list, no nesting) — stacks
+   vertically automatically since each is its own Streamlit element. Every
+   nav button gets type="primary" (active page) or type="secondary"
+   (inactive); text forced to bold white on both so it stays readable
+   against the dark green background regardless of active state. */
 [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
     width: 100% !important;
     justify-content: flex-start !important;
@@ -112,37 +107,30 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 }
 [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
     font-size: 1rem !important;
+    color: inherit !important;
+    font-weight: inherit !important;
 }
 [data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"],
 [data-testid="stSidebar"] button[data-testid="baseButton-secondary"],
 [data-testid="stSidebar"] button[kind="secondary"] {
     background: transparent !important;
     border: none !important;
-    color: #EAF2EC !important;
+    color: #ffffff !important;
     box-shadow: none !important;
-    font-weight: 600 !important;
+    font-weight: 700 !important;
 }
 [data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"]:hover,
 [data-testid="stSidebar"] button[data-testid="baseButton-secondary"]:hover,
 [data-testid="stSidebar"] button[kind="secondary"]:hover {
-    background: rgba(255,255,255,0.08) !important;
+    background: rgba(255,255,255,0.1) !important;
     border: none !important;
     color: #ffffff !important;
 }
 [data-testid="stSidebar"] button[data-testid="stBaseButton-primary"],
 [data-testid="stSidebar"] button[data-testid="baseButton-primary"],
 [data-testid="stSidebar"] button[kind="primary"] {
+    color: #ffffff !important;
     font-weight: 700 !important;
-}
-[data-testid="stSidebar"] [class*="st-key-_nav_sub_"] button {
-    padding-left: 2rem !important;
-    font-size: 0.88rem !important;
-}
-[data-testid="stSidebar"] [class*="st-key-_nav_sub_"] button p {
-    font-size: 0.88rem !important;
-}
-[data-testid="stSidebar"] [class*="st-key-_nav_sub_"] button[kind="secondary"] {
-    color: #B8D4C2 !important;
 }
 
 /* ── Main nav (st.pills) — solid rounded pill segmented control ──
@@ -754,71 +742,30 @@ if st.session_state.get("_iship_success_info"):
     _show_iship_success_dialog()
 
 
-# ── Sidebar navigation — main sections as a vertical accordion menu; clicking
-#    a nested sub-item jumps straight to that page's sub-tab by pre-setting
-#    its widget key before that page's own render() runs later in this same
-#    script run (same "staging key" pattern documented in CLAUDE.md — setting
-#    a widget's key is only forbidden AFTER that widget has rendered). Every
-#    (label, sub_key) pair below must exactly match the corresponding page's
-#    own tab-list constant (_T1_TABS/_T5_TABS/_T6_TABS/_FIN_TABS/_MD_TABS). ──
-_NAV_STRUCTURE = [
-    ("🏠 หน้าแรก", None, None),
-    ("📋 บันทึกรายการ", "_t1_active_sub",
-        ["📝 บันทึกขาย", "📦 ส่งของ", "🔢 คำนวณยอด"]),
-    ("🗂️ รายละเอียดบิล", "_t5_active_sub",
-        ["💰 ยอดค้าง / จัดการบิล", "👤 บัตรลูกค้า", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"]),
-    ("📦 สต๊อก", "_t6_active_sub", ["📦 สต๊อก", "📋 ของฝาก"]),
-    ("💵 การเงิน", "_fin_active_sub", ["💰 ยอดขาย", "📑 ใบเสร็จ/เคลม VAT"]),
-    ("🛒 E-commerce", None, None),
-    ("⚙️ จัดการข้อมูล", "_md_active_sub",
-        ["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "📐 ขนาดกล่อง"]),
+# ── Sidebar navigation — flat main-section menu only; each page's own
+#    sub-tabs stay at the top of its content area (unchanged). ─────────────
+_TAB_NAMES = [
+    "🏠 หน้าแรก", "📋 บันทึกรายการ", "🗂️ รายละเอียดบิล",
+    "📦 สต๊อก", "💵 การเงิน", "🛒 E-commerce", "⚙️ จัดการข้อมูล",
 ]
-_TAB_NAMES = [_n for _n, _, _ in _NAV_STRUCTURE]
 
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = _TAB_NAMES[0]
-if "_nav_expanded" not in st.session_state:
-    st.session_state["_nav_expanded"] = st.session_state["active_tab"]
 
 with st.sidebar:
     st.markdown("### 🛍️ TBY SMART APP")
     st.caption("ระบบจัดการร้าน")
     st.divider()
 
-    for _nav_i, (_nav_label, _nav_subkey, _nav_subitems) in enumerate(_NAV_STRUCTURE):
+    for _nav_i, _nav_label in enumerate(_TAB_NAMES):
         _nav_is_active = st.session_state["active_tab"] == _nav_label
-        if _nav_subitems:
-            _nav_expanded = st.session_state["_nav_expanded"] == _nav_label
-            _nav_chevron = "︿" if _nav_expanded else "﹀"
-            if st.button(
-                f"{_nav_label}  {_nav_chevron}", key=f"_nav_top_{_nav_i}",
-                use_container_width=True,
-                type=("primary" if _nav_is_active else "secondary"),
-            ):
-                st.session_state["active_tab"] = _nav_label
-                st.session_state["_nav_expanded"] = None if _nav_expanded else _nav_label
-                st.rerun()
-            if _nav_expanded:
-                for _sub_i, _sub_label in enumerate(_nav_subitems):
-                    _sub_is_active = _nav_is_active and st.session_state.get(_nav_subkey) == _sub_label
-                    if st.button(
-                        _sub_label, key=f"_nav_sub_{_nav_i}_{_sub_i}",
-                        use_container_width=True,
-                        type=("primary" if _sub_is_active else "secondary"),
-                    ):
-                        st.session_state["active_tab"] = _nav_label
-                        st.session_state[_nav_subkey] = _sub_label
-                        st.session_state["_nav_expanded"] = _nav_label
-                        st.rerun()
-        else:
-            if st.button(
-                _nav_label, key=f"_nav_top_{_nav_i}",
-                use_container_width=True,
-                type=("primary" if _nav_is_active else "secondary"),
-            ):
-                st.session_state["active_tab"] = _nav_label
-                st.session_state["_nav_expanded"] = None
-                st.rerun()
+        if st.button(
+            _nav_label, key=f"_nav_top_{_nav_i}",
+            use_container_width=True,
+            type=("primary" if _nav_is_active else "secondary"),
+        ):
+            st.session_state["active_tab"] = _nav_label
+            st.rerun()
 
 _active_tab = st.session_state["active_tab"]
 
