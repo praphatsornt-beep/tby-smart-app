@@ -289,29 +289,32 @@ def render(tab1, products, customers, customer_map):
                 with _cart_col:
                     valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
 
+                def _sum_row(label, value, big=False, accent=False):
+                    _val_fs = "1.5rem" if big else "0.95rem"
+                    _val_fw = 800 if big else 700
+                    _val_color = "#E07B39" if accent else "#111111"
+                    st.markdown(
+                        f"<div style='display:flex;justify-content:space-between;align-items:baseline;"
+                        f"margin:{'12px' if big else '6px'} 0 2px'>"
+                        f"<span style='font-size:0.9rem;color:oklch(0.55 0 0)'>{label}</span>"
+                        f"<span style='font-size:{_val_fs};font-weight:{_val_fw};color:{_val_color}'>{value}</span>"
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+
                 with _summary_col:
-                    with st.container(border=True):
-                        _sum_total = sum(float(p.get("price") or 0) * q for p, q, _ in valid_items)
-                        _sum_pv    = sum(float(p.get("points_per_unit") or 0) * q for p, q, _ in valid_items)
-                        st.markdown("**สรุปยอด**")
-                        if valid_items:
-                            st.caption("🛒 " + "  |  ".join(f"{p['id']} ×{q}" for p, q, _ in valid_items))
+                    _summary_box = st.container(border=True)
 
-                        def _sum_row(label, value, big=False, accent=False):
-                            _val_fs = "1.5rem" if big else "0.95rem"
-                            _val_fw = 800 if big else 700
-                            _val_color = "#E07B39" if accent else "#111111"
-                            st.markdown(
-                                f"<div style='display:flex;justify-content:space-between;align-items:baseline;"
-                                f"margin:{'12px' if big else '6px'} 0 2px'>"
-                                f"<span style='font-size:0.9rem;color:oklch(0.55 0 0)'>{label}</span>"
-                                f"<span style='font-size:{_val_fs};font-weight:{_val_fw};color:{_val_color}'>{value}</span>"
-                                f"</div>",
-                                unsafe_allow_html=True,
-                            )
+                with _summary_box:
+                    _sum_total = sum(float(p.get("price") or 0) * q for p, q, _ in valid_items)
+                    _sum_pv    = sum(float(p.get("points_per_unit") or 0) * q for p, q, _ in valid_items)
+                    st.markdown("**สรุปยอด**")
+                    if valid_items:
+                        st.caption("🛒 " + "  |  ".join(f"{p['id']} ×{q}" for p, q, _ in valid_items))
 
-                        _sum_row("ยอดรวมสินค้า", f"฿{_sum_total:,.0f}")
-                        _sum_row("รายการ", f"{len(valid_items)} สินค้า")
+                    _sum_row("ยอดรวมสินค้า", f"฿{_sum_total:,.0f}")
+                    _sum_row("รายการ", f"{len(valid_items)} สินค้า")
+                    if m_delivery != "ส่งพัสดุ":
                         st.divider()
                         _sum_row("ยอดรวม", f"฿{_sum_total:,.0f}", big=True, accent=True)
                         _sum_row("⭐ PV ที่จะได้รับ", f"+{_sum_pv:,.0f}", accent=True)
@@ -506,15 +509,15 @@ def render(tab1, products, customers, customer_map):
                         net_recv  = _base
                         _amt_label = f"ยอดสินค้า (ใหม่ {total_amt:,.0f} + เก่า {_rx_total_pay:,.0f})" if _rx_total_pay > 0.01 else "ยอดสินค้า"
                         _grand_amt = total_amt + _rx_total_pay
+                        with _summary_box:
+                            st.divider()
+                            _sum_row(_amt_label, f"฿{_grand_amt:,.0f}")
+                            _sum_row(f"🚚 {m_carrier}", f"฿{ship_fee:,.0f}")
+                            _sum_row("⚖️ น้ำหนัก", f"{(total_weight/1000):.2f} kg")
                         if m_cod:
-                            vm1, vm2, vm3, vm4, vm5, vm6, vm7 = st.columns(7)
-                            vm1.metric(_amt_label,          f"{_grand_amt:,.0f} ฿")
-                            vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
-                            vm3.metric("💰 ยอดเก็บ (อัตโนมัติ)", f"{collect:,.0f} ฿")
-                            vm4.metric("💸 ค่า COD",       f"{cod_fee:,.2f} ฿")
-                            vm5.metric("✅ ได้รับจริง",    f"{net_recv:,.2f} ฿")
-                            vm6.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
-                            vm7.metric("PV รวม",           f"{total_pv:.0f}")
+                            with _summary_box:
+                                _sum_row("💰 ยอดเก็บ (อัตโนมัติ)", f"฿{collect:,.0f}")
+                                _sum_row("💸 ค่า COD", f"฿{cod_fee:,.2f}")
                             _cod_auto = int(ceil(collect))
                             _cod_custom = st.number_input(
                                 "💰 ยอด COD ที่ต้องเก็บ (แก้ได้)",
@@ -523,13 +526,15 @@ def render(tab1, products, customers, customer_map):
                                 help="ค่า default = คำนวณอัตโนมัติ ปรับได้ถ้าต้องการเก็บยอดอื่น",
                             )
                             collect = float(_cod_custom)
+                            with _summary_box:
+                                st.divider()
+                                _sum_row("✅ ได้รับจริง", f"฿{net_recv:,.2f}", big=True, accent=True)
+                                _sum_row("⭐ PV ที่จะได้รับ", f"+{total_pv:,.0f}", accent=True)
                         else:
-                            vm1, vm2, vm3, vm4, vm5 = st.columns(5)
-                            vm1.metric(_amt_label,          f"{_grand_amt:,.0f} ฿")
-                            vm2.metric(f"🚚 {m_carrier}",  f"{ship_fee:.0f} ฿")
-                            vm3.metric("💰 ยอดรวม",        f"{collect:,.0f} ฿")
-                            vm4.metric("⚖️ น้ำหนัก",      f"{(total_weight/1000):.2f} kg")
-                            vm5.metric("PV รวม",           f"{total_pv:.0f}")
+                            with _summary_box:
+                                st.divider()
+                                _sum_row("ยอดรวม", f"฿{collect:,.0f}", big=True, accent=True)
+                                _sum_row("⭐ PV ที่จะได้รับ", f"+{total_pv:,.0f}", accent=True)
                     else:
                         ship_fee = cod_fee = 0
                         collect  = total_amt
