@@ -79,6 +79,69 @@ h1 {
 h2 { color: #2D6A4F !important; font-weight: 700 !important; }
 h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 
+/* ── Sidebar — main nav lives here as a dark vertical menu ── */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1B4332 0%, #2D6A4F 100%) !important;
+}
+[data-testid="stSidebar"] h3 {
+    color: #ffffff !important;
+}
+[data-testid="stSidebar"] [data-testid="stCaptionContainer"] p {
+    color: #B8D4C2 !important;
+}
+[data-testid="stSidebar"] hr {
+    border-color: rgba(255,255,255,0.15) !important;
+}
+/* main-nav pills, stacked vertically instead of the horizontal bar used
+   elsewhere (e.g. stock_ui's สต๊อก/ของฝาก sub-nav still gets the white
+   horizontal bar style further below since it's not inside the sidebar) */
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    flex-direction: column !important;
+    flex-wrap: nowrap !important;
+    align-items: stretch !important;
+    gap: 4px !important;
+    padding: 0 !important;
+    margin-bottom: 0.5rem !important;
+}
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] button {
+    justify-content: flex-start !important;
+    width: 100% !important;
+    color: #D4E8DA !important;
+    border-radius: 10px !important;
+    padding: 10px 14px !important;
+}
+[data-testid="stSidebar"] button[data-testid="stBaseButton-pills"]:hover {
+    background: rgba(255,255,255,0.08) !important;
+    color: #ffffff !important;
+}
+[data-testid="stSidebar"] button[data-testid="stBaseButton-pillsActive"] {
+    background: rgba(255,255,255,0.14) !important;
+    border-left: 3px solid #E07B39 !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+}
+/* radio fallback (pre-1.36 Streamlit) — stack vertically, dark theme */
+[data-testid="stSidebar"] [data-testid="stRadio"] {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] > div[role="radiogroup"] {
+    flex-direction: column !important;
+    background: transparent !important;
+    border: none !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label {
+    color: #D4E8DA !important;
+}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+    background: rgba(255,255,255,0.14) !important;
+}
+
 /* ── Main nav (st.pills) — solid rounded pill segmented control ──
    NOTE: modern Streamlit renders st.pills as a stButtonGroup container of
    stBaseButton-pills / stBaseButton-pillsActive buttons — NOT a "stPills"
@@ -661,7 +724,8 @@ if st.session_state.get("_iship_success_info"):
     _show_iship_success_dialog()
 
 
-# ── Lazy tab navigation ──────────────────────────────────────────────────────
+# ── Lazy tab navigation — main nav lives in the sidebar, sub-tabs stay on
+#    top of each page's content ─────────────────────────────────────────────
 _TAB_NAMES = [
     "🏠 หน้าแรก", "📋 บันทึกรายการ", "🗂️ รายละเอียดบิล",
     "📦 สต๊อก", "💵 การเงิน", "🛒 E-commerce", "⚙️ จัดการข้อมูล",
@@ -669,20 +733,23 @@ _TAB_NAMES = [
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = _TAB_NAMES[0]
 
-try:
-    # st.pills (Streamlit ≥ 1.36) — looks like tabs, single-select
-    _active_tab = st.pills(
-        "เมนู", _TAB_NAMES,
-        key="active_tab",
-        label_visibility="collapsed",
-    ) or _TAB_NAMES[0]
-except AttributeError:
-    _active_tab = st.radio(
-        "เมนู", _TAB_NAMES,
-        horizontal=True,
-        key="active_tab",
-        label_visibility="collapsed",
-    )
+with st.sidebar:
+    st.markdown("### 🛍️ TBY SMART APP")
+    st.caption("ระบบจัดการร้าน")
+    st.divider()
+    try:
+        # st.pills (Streamlit ≥ 1.36) — looks like tabs, single-select
+        _active_tab = st.pills(
+            "เมนู", _TAB_NAMES,
+            key="active_tab",
+            label_visibility="collapsed",
+        ) or _TAB_NAMES[0]
+    except AttributeError:
+        _active_tab = st.radio(
+            "เมนู", _TAB_NAMES,
+            key="active_tab",
+            label_visibility="collapsed",
+        )
 
 _products = db.get_products()
 _customers = db.get_customers()
