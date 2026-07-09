@@ -110,7 +110,9 @@ h1 { font-weight: 700 !important; margin-bottom: 0.6rem !important; }
 h2 { font-weight: 600 !important; }
 h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 
-/* ── Global top bar (page title + date), rendered once per page in app.py ── */
+/* ── Global top bar (page title + date), rendered once per page in app.py ──
+   Sticky so it (and the sidebar) stay put while only the page content
+   below scrolls, matching the reference layout. ── */
 .tby-topbar {
     display: flex;
     align-items: center;
@@ -120,6 +122,13 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     border-radius: 14px;
     padding: 18px 24px;
     margin-bottom: 20px;
+    position: sticky;
+    /* Streamlit's own native header (hamburger/menu bar) is fixed at the very
+       top of the viewport with a very high z-index of its own — sticking to
+       top:0 would tuck this bar underneath it. Stick just below it instead,
+       matching the gap this bar already sits at before it starts scrolling. */
+    top: 52px;
+    z-index: 100;
 }
 .tby-topbar-title {
     font-family: 'Kanit', sans-serif;
@@ -133,10 +142,27 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     font-size: 0.85rem;
     color: var(--tby-muted);
 }
+/* Streamlit wraps every st.markdown() output in a chain of wrapper divs
+   that tightly hug its own content (stElementContainer > stMarkdown >
+   stMarkdownContainer). That makes those wrappers the sticky element's
+   "containing block", so it only had ~20px of slack to stay stuck before
+   unsticking. Collapsing just this chain (via :has, so no other element
+   is affected) makes the topbar's effective containing block the full
+   page-height block instead, so it can stay pinned for the whole scroll. */
+[data-testid="stElementContainer"]:has(.tby-topbar),
+[data-testid="stElementContainer"]:has(.tby-topbar) div:has(.tby-topbar) {
+    display: contents;
+}
 
-/* ── Sidebar — main nav lives here as a dark vertical menu ── */
+/* ── Sidebar — main nav lives here as a dark vertical menu.
+   Pinned in place (its own scroll) so it never moves when the page
+   content scrolls. ── */
 [data-testid="stSidebar"] {
     background: linear-gradient(190deg, var(--tby-sidebar-1) 0%, var(--tby-sidebar-2) 100%) !important;
+    position: sticky !important;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
 }
 [data-testid="stSidebar"] h3 {
     color: #ffffff !important;
