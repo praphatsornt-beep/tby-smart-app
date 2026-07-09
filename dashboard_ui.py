@@ -9,6 +9,9 @@ import iship_api
 _BKK = timezone(timedelta(hours=7))
 
 
+_LOW_STOCK_THRESHOLD = 5  # นับจริง (qty_physical) ต่ำกว่านี้ = ใกล้หมด
+
+
 def render():
     _today = date.today()
     _today_str = _today.strftime("%Y-%m-%d")
@@ -20,6 +23,8 @@ def render():
         _dash_ships = db.get_shipments()
         _dash_pv    = db.get_unbilled_pv_summary()
         _dash_fin   = db.get_finance_summary()
+        _dash_stock = db.get_latest_stock_counts()
+        _dash_prods = db.get_products()
     except Exception as _de:
         st.error(f"โหลดข้อมูลไม่ได้: {_de}")
         st.stop()
@@ -27,6 +32,7 @@ def render():
     # ── คำนวณ metrics ────────────────────────────────────────────────────────
     _today_sales = sum(float(t.get("total_amount") or 0) for t in _dash_today)
     _today_count = len(_dash_today)
+    _today_bills = len({t.get("bill_no") for t in _dash_today if t.get("bill_no")})
 
     _total_owed  = _dash_outs["ค้างจ่าย"].sum() if not _dash_outs.empty else 0.0
     _total_custs = _dash_outs["ลูกค้า"].nunique() if not _dash_outs.empty else 0
@@ -40,21 +46,71 @@ def render():
     _pv_count = _dash_pv.get("count", 0)
     _pv_total = _dash_pv.get("total_pv", 0.0)
 
+    # ── สินค้าใกล้หมด (นับจริงจากนับสต๊อกล่าสุด <= threshold) ──────────────
+    _low_stock = []
+    for _p in _dash_prods:
+        _sc = _dash_stock.get(_p["id"])
+        if _sc and int(_sc.get("qty_physical") or 0) <= _LOW_STOCK_THRESHOLD:
+            _low_stock.append({"name": _p["name"], "qty": int(_sc.get("qty_physical") or 0)})
+    _low_stock.sort(key=lambda x: x["qty"])
+
+    # ── ยอดขาย 7 วันล่าสุด ──────────────────────────────────────────────────
+    _week_start = (_today - timedelta(days=6)).strftime("%Y-%m-%d")
+    _week_df = db.get_all_transactions_df(date_from=_week_start, date_to=_today_str)
+    if not _week_df.empty:
+        _daily_sales = (pd.to_datetime(_week_df["วันที่"]).dt.date
+                        .pipe(lambda s: _week_df.groupby(s)["ยอดรวม"].sum()))
+    else:
+        _daily_sales = pd.Series(dtype=float)
+    _week_days = [_today - timedelta(days=_i) for _i in range(6, -1, -1)]
+    _chart_df = pd.DataFrame({
+        "วัน": [d.strftime("%d/%m") for d in _week_days],
+        "ยอดขาย": [float(_daily_sales.get(d, 0)) for d in _week_days],
+    }).set_index("วัน")
+
+    # ── แจ้งเตือนสินค้าใกล้หมด ───────────────────────────────────────────────
+    if _low_stock:
+        st.warning(f"⚠️ มีสินค้าใกล้หมดหรือหมดสต๊อก {len(_low_stock)} รายการ — ควรสั่งซื้อเพิ่มเพื่อไม่ให้ขาดสต๊อก")
+
     # ── Metric cards ─────────────────────────────────────────────────────────
     _dc1, _dc2, _dc3, _dc4 = st.columns(4)
     _dc1.metric("💵 ยอดขายวันนี้",   f"{_today_sales:,.0f} ฿",
                 delta=f"{_today_count} รายการ", delta_color="off")
-    _dc2.metric("⚠️ ค้างจ่ายรวม",    f"{_total_owed:,.0f} ฿",
+    _dc2.metric("🧾 จำนวนบิลวันนี้", f"{_today_bills}",
+                delta=f"{_today_count} รายการสินค้า", delta_color="off")
+    _dc3.metric("📦 สินค้าใกล้หมด",  f"{len(_low_stock)} รายการ",
+                delta="ควรสั่งเพิ่มด่วน" if _low_stock else "ปกติ", delta_color="off")
+    _dc4.metric("⚠️ ค้างจ่ายรวม",    f"{_total_owed:,.0f} ฿",
                 delta=f"{_total_custs} ลูกค้า", delta_color="off")
-    _dc3.metric("🚚 COD รอรับ",       f"{_cod_count} รายการ",
-                delta=f"{_cod_amt:,.0f} ฿" if _cod_amt else "ไม่มี", delta_color="off")
-    _dc4.metric("⭐ PV รอเปิดบิล",   f"{_pv_total:,.0f} PV",
-                delta=f"{_pv_count} รายการ", delta_color="off")
 
-    # แสดงสิทธิ์สั่งของถ้ามี finance data
+    # แสดงสิทธิ์สั่งของ + COD/PV แบบย่อ
+    _info_parts = []
     _credit = float(_dash_fin.get("credit", 0) or 0)
     if _credit > 0:
-        st.info(f"💳 สิทธิ์สั่งของคงเหลือ: **{_credit:,.0f} ฿**")
+        _info_parts.append(f"💳 สิทธิ์สั่งของคงเหลือ: **{_credit:,.0f} ฿**")
+    if _cod_count:
+        _info_parts.append(f"🚚 COD รอรับ {_cod_count} รายการ ({_cod_amt:,.0f} ฿)")
+    if _pv_count:
+        _info_parts.append(f"⭐ PV รอเปิดบิล {_pv_total:,.0f}")
+    if _info_parts:
+        st.info(" &nbsp;|&nbsp; ".join(_info_parts))
+
+    st.divider()
+
+    # ── ยอดขาย 7 วันล่าสุด + สินค้าใกล้หมด ──────────────────────────────────
+    _dch1, _dch2 = st.columns([3, 2])
+    with _dch1:
+        st.markdown("**📊 ยอดขาย 7 วันล่าสุด**")
+        st.bar_chart(_chart_df, color="#D9822B", use_container_width=True)
+    with _dch2:
+        st.markdown("**📦 สินค้าใกล้หมด**")
+        if not _low_stock:
+            st.caption("ไม่มีสินค้าใกล้หมด")
+        else:
+            for _it in _low_stock[:8]:
+                _lc1, _lc2 = st.columns([3, 1])
+                _lc1.markdown(_it["name"])
+                _lc2.markdown(f"**{_it['qty']} ชิ้น**")
 
     st.divider()
 
