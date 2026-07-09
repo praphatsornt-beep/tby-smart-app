@@ -450,6 +450,13 @@ button[kind="secondary"]:hover {
     border-radius: 14px !important;
     box-shadow: none;
 }
+/* Radio group nested inside a bordered container: drop the double box,
+   read as one section of the card instead of a separate floating card */
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stRadio"] {
+    background: transparent;
+    border: none;
+    padding: 4px 0 !important;
+}
 
 /* ── DataFrame / Data editor — flat card, muted header row ── */
 [data-testid="stDataFrame"],

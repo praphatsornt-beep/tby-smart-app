@@ -320,9 +320,13 @@ def render(tab1, products, customers, customer_map):
                     st.session_state["_prev_pay"] = _cur_pay
                 _delivery_opts = ["ส่งพัสดุ", "ฝากของ", "รับแล้ว"]
                 with _status_col:
-                    m_delivery = st.radio("การรับ / สถานะของ", _delivery_opts, key="m_delivery", index=None)
-                    m_pay  = st.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
-                    m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], key="m_bill", index=None)
+                    with st.container(border=True):
+                        st.markdown("**สถานะรายการ**")
+                        m_delivery = st.radio("การรับ / สถานะของ", _delivery_opts, key="m_delivery", index=None)
+                        st.divider()
+                        m_pay  = st.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
+                        st.divider()
+                        m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], key="m_bill", index=None)
 
                 if not valid_items and _has_rx_action:
                     st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
