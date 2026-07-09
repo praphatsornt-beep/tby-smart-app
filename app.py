@@ -96,10 +96,10 @@ st.markdown("""
     font-family: 'Sarabun', sans-serif;
 }
 
-/* ── Streamlit's own header bar — transparent so it doesn't show as a
-   separate dark strip above the topbar, matching the reference layout ── */
+/* ── Streamlit's own header bar — solid white (same as the topbar right
+   below it) instead of a separate dark strip, matching the reference ── */
 header[data-testid="stHeader"] {
-    background: transparent;
+    background: #ffffff;
 }
 
 /* ── Headings — Kanit, flat (no decorative underline/shadow) ── */
