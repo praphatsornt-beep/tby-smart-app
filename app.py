@@ -105,10 +105,18 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
     padding: 10px 14px !important;
     font-size: 1rem !important;
 }
+/* force left-align all the way down — Streamlit centers button labels by
+   default via inner wrapper divs/p, which otherwise wins over the button's
+   own text-align when the label wraps to 2 lines */
+[data-testid="stSidebar"] [data-testid="stElementContainer"] button div {
+    justify-content: flex-start !important;
+    text-align: left !important;
+}
 [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
     font-size: 1rem !important;
     color: inherit !important;
     font-weight: inherit !important;
+    text-align: left !important;
 }
 [data-testid="stSidebar"] button[data-testid="stBaseButton-secondary"],
 [data-testid="stSidebar"] button[data-testid="baseButton-secondary"],
