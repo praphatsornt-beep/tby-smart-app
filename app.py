@@ -133,13 +133,13 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 .tby-topbar-title {
     font-family: 'Kanit', sans-serif;
     font-weight: 700;
-    font-size: 1.35rem;
+    font-size: 1.7rem;
     color: var(--tby-text);
 }
 .tby-topbar-date {
     font-family: 'Sarabun', sans-serif;
     font-weight: 500;
-    font-size: 0.85rem;
+    font-size: 0.95rem;
     color: var(--tby-muted);
 }
 /* Streamlit wraps every st.markdown() output in a chain of wrapper divs
@@ -182,8 +182,8 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     justify-content: flex-start !important;
     text-align: left !important;
     border-radius: 10px !important;
-    padding: 11px 14px !important;
-    font-size: 1rem !important;
+    padding: 12px 14px !important;
+    font-size: 1.08rem !important;
     font-family: 'Sarabun', sans-serif !important;
 }
 /* force left-align all the way down — Streamlit centers button labels by
@@ -194,7 +194,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     text-align: left !important;
 }
 [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
-    font-size: 1rem !important;
+    font-size: 1.08rem !important;
     color: inherit !important;
     font-weight: inherit !important;
     text-align: left !important;
@@ -253,9 +253,9 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     border-bottom: 3px solid transparent !important;
     border-radius: 0 !important;
     font-family: 'Sarabun', sans-serif !important;
-    font-size: 0.92rem !important;
+    font-size: 1.02rem !important;
     font-weight: 500 !important;
-    padding: 12px 16px 10px !important;
+    padding: 12px 18px 10px !important;
     white-space: nowrap;
     box-shadow: none !important;
     transition: color 0.18s, border-color 0.18s !important;
@@ -362,12 +362,12 @@ button[kind="secondary"]:hover {
 }
 [data-testid="stMetricValue"] {
     font-family: 'Kanit', sans-serif !important;
-    font-size: 1.7rem !important;
+    font-size: 2.3rem !important;
     font-weight: 700 !important;
     color: var(--tby-text) !important;
 }
 [data-testid="stMetricLabel"] {
-    font-size: 0.8rem !important;
+    font-size: 0.9rem !important;
     font-weight: 500 !important;
     color: var(--tby-muted) !important;
 }
@@ -501,9 +501,13 @@ button[kind="secondary"]:hover {
     font-weight: 600 !important;
 }
 
-/* ── Block container padding ── */
+/* ── Block container padding — tighter side gutters so pages use full width,
+   matching the reference layout ── */
 .block-container {
     padding-top: 1.5rem !important;
+    padding-left: 2rem !important;
+    padding-right: 2rem !important;
+    max-width: 100% !important;
 }
 
 /* ── Dividers ── */
@@ -513,14 +517,14 @@ hr {
 }
 
 /* ── Typography / Readability ── */
-html { font-size: 15px; }
+html { font-size: 16px; }
 
 /* Body text & markdown */
 [data-testid="stMarkdownContainer"] p,
 [data-testid="stMarkdownContainer"] li,
 [data-testid="stText"] p {
     font-family: 'Sarabun', sans-serif !important;
-    font-size: 0.93rem !important;
+    font-size: 0.98rem !important;
     line-height: 1.65 !important;
     color: var(--tby-text) !important;
 }
@@ -529,7 +533,7 @@ html { font-size: 15px; }
 label,
 [data-testid="stWidgetLabel"] p {
     font-family: 'Sarabun', sans-serif !important;
-    font-size: 0.86rem !important;
+    font-size: 0.92rem !important;
     font-weight: 600 !important;
     color: var(--tby-text) !important;
     letter-spacing: 0.01em;
@@ -540,20 +544,20 @@ label,
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea {
-    font-size: 0.93rem !important;
+    font-size: 0.98rem !important;
     color: var(--tby-text) !important;
 }
 
 /* Selectbox value text */
 [data-baseweb="select"] span,
 [data-baseweb="select"] div[class*="placeholder"] {
-    font-size: 0.91rem !important;
+    font-size: 0.96rem !important;
     color: var(--tby-text) !important;
 }
 
 /* st.info / st.success / st.warning / st.error */
 [data-testid="stAlert"] p {
-    font-size: 0.88rem !important;
+    font-size: 0.92rem !important;
     line-height: 1.6 !important;
     color: var(--tby-text) !important;
 }
