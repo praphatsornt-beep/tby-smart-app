@@ -310,10 +310,14 @@ button[kind="secondary"]:hover {
 }
 
 /* ── Text/Number inputs — roomier, softly rounded like the mockup's chip
-   fields (taller + more side padding than a cramped default input) ── */
+   fields (taller + more side padding than a cramped default input). Plain
+   white background — Streamlit's theme secondaryBackgroundColor (used as
+   the default input fill) is a pale mint that makes fields nearly invisible
+   against this app's cream/mint page background. ── */
 .stTextInput input,
 .stNumberInput input,
 .stTextArea textarea {
+    background-color: #ffffff !important;
     border-radius: 10px !important;
     border: 1.5px solid #C8DDD0 !important;
     padding: 10px 14px !important;
@@ -330,8 +334,9 @@ button[kind="secondary"]:hover {
     box-shadow: 0 0 0 3px rgba(64,145,108,0.18) !important;
 }
 
-/* ── Select boxes — same roomier treatment ── */
+/* ── Select boxes — same roomier treatment + white background ── */
 [data-baseweb="select"] > div:first-child {
+    background-color: #ffffff !important;
     border-radius: 10px !important;
     border: 1.5px solid #C8DDD0 !important;
     min-height: 44px;

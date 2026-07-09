@@ -44,9 +44,17 @@ def get_bulky_presets() -> list[dict]:
     """preset ขนาดกล่อง (ยาว×กว้าง×สูง ซม.) — จัดการที่แท็บ ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง
     (เก็บถาวรใน Supabase table `box_presets`) ใช้ร่วมกันทั้งหน้าเลือกขนส่ง iShip (bulky)
     และหน้าปริ้นใบปะหน้า manual — จุดอื่นดึงมาอ่านอย่างเดียว ไม่มีการแก้ไข preset ณ จุดใช้งาน
+
+    คืนลิสต์ว่างถ้าตาราง box_presets ยังไม่ถูกสร้าง (รัน box_presets_setup.sql ก่อน)
+    แทนที่จะโยน exception ทำให้ทั้งหน้าล่ม — จุดที่ต้องแจ้งเตือนให้รัน SQL คือ
+    master_data_ui.py (เรียก db.get_box_presets() ตรงๆ) อยู่แล้ว
     """
+    try:
+        _rows = db.get_box_presets()
+    except Exception:
+        return []
     return [{"name": p["name"], "l": int(p["length_cm"]), "w": int(p["width_cm"]), "h": int(p["height_cm"])}
-            for p in db.get_box_presets()]
+            for p in _rows]
 
 
 # ── Functions ────────────────────────────────────────────────────────────────
