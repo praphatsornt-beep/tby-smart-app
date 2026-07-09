@@ -77,7 +77,7 @@ h1 {
     margin-bottom: 1rem !important;
 }
 h2 { color: #2D6A4F !important; font-weight: 700 !important; }
-h3 { color: #2D6A4F !important; font-weight: 600 !important; }
+h3 { color: #2D6A4F !important; font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 
 /* ── Sidebar — main nav lives here as a dark vertical menu ── */
 [data-testid="stSidebar"] {
@@ -157,6 +157,7 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
+    margin-top: 0.35rem !important;
     margin-bottom: 1.25rem !important;
 }
 [data-testid="stButtonGroup"] button,
@@ -476,12 +477,13 @@ label,
 </style>
 """, unsafe_allow_html=True)
 
-st.title("🛍️ TBY SMART APP")
-
 # ── Login guard ──────────────────────────────────────────────────────────────
+# (branding — 🛍️ TBY SMART APP — only shown here on the login screen; once
+# authenticated the sidebar header is the single place it appears)
 _APP_PASSWORD = st.secrets.get("APP_PASSWORD", "")
 _DEBUG_MODE   = bool(st.secrets.get("DEBUG_MODE", False))
 if _APP_PASSWORD and not st.session_state.get("_authenticated"):
+    st.title("🛍️ TBY SMART APP")
     _lc1, _lc2, _lc3 = st.columns([1, 2, 1])
     with _lc2:
         st.markdown("### 🔐 เข้าสู่ระบบ")
