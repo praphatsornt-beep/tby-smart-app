@@ -116,9 +116,16 @@ h3 { color: #2D6A4F !important; font-weight: 600 !important; }
 [data-testid="stSidebar"] [data-testid="stPills"] button {
     justify-content: flex-start !important;
     width: 100% !important;
-    color: #D4E8DA !important;
+    color: #EAF2EC !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
     border-radius: 10px !important;
-    padding: 10px 14px !important;
+    padding: 12px 14px !important;
+}
+[data-testid="stSidebar"] [data-testid="stButtonGroup"] button p,
+[data-testid="stSidebar"] [data-testid="stPills"] button p {
+    font-size: 1rem !important;
+    color: inherit !important;
 }
 [data-testid="stSidebar"] button[data-testid="stBaseButton-pills"]:hover,
 [data-testid="stSidebar"] [data-testid="stPills"] button:hover {
