@@ -1,6 +1,7 @@
 from datetime import date
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 import database as db
@@ -193,6 +194,17 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 [data-testid="stSidebarResizeHandle"] {
     display: none !important;
 }
+/* Below Streamlit's own internal ~768px breakpoint, it switches stMain to
+   position:absolute; left:0; width:100vw — an "overlay drawer" layout that
+   assumes the sidebar is fully hidden underneath. Since we now force the
+   sidebar to stay open (as the 72px icon rail) instead of letting it fully
+   collapse there, offset the content so the rail doesn't sit on top of it.
+   `left` is a no-op on stMain's normal (static) positioning at wider
+   widths, so this only takes effect in that same narrow range. */
+[data-testid="stMain"] {
+    left: 72px !important;
+    width: calc(100% - 72px) !important;
+}
 [data-testid="stSidebar"] h3 {
     color: #ffffff !important;
 }
@@ -253,30 +265,22 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     box-shadow: none !important;
 }
 
-/* ── Sidebar collapse arrow (shown while sidebar is expanded) — Streamlit
-   hides this until hover by default, which made it too easy to miss; keep
-   it always visible with a real background chip so it stands out against
-   the dark green sidebar regardless of icon color quirks ── */
+/* ── Sidebar collapse arrow — hidden entirely. The sidebar now has its own
+   width-driven icon-only rail (below ~1100px, see the compact-rail rules
+   further down) so there's no need for a separate manual "fully hide the
+   whole sidebar" control anymore; keeping it around just let people
+   trigger a confusing third state (fully hidden, chip-only) that doesn't
+   match the icon rail. A JS watcher below force-reopens the sidebar
+   whenever Streamlit's own native <768px auto-collapse fires, so the icon
+   rail — not native hide — is what always handles narrow widths. ── */
 [data-testid="stSidebarCollapseButton"] {
-    visibility: visible !important;
-    opacity: 1 !important;
-}
-[data-testid="stSidebarCollapseButton"] button {
-    background: rgba(255,255,255,0.16) !important;
-    border-radius: 8px !important;
-}
-[data-testid="stSidebarCollapseButton"] button:hover {
-    background: rgba(255,255,255,0.28) !important;
-}
-[data-testid="stSidebarCollapseButton"] button svg {
-    color: #ffffff !important;
-    stroke: #ffffff !important;
-    opacity: 1 !important;
+    display: none !important;
 }
 
-/* ── Re-expand button (shown while sidebar is collapsed) — replace the
-   bare arrow with a small branded "TBY" chip so it's obvious what it does
-   and where the menu went ── */
+/* ── Re-expand button — kept only as a safety net for the brief instant
+   between Streamlit's native auto-collapse and our JS watcher re-opening
+   it; styled as a small branded chip so it's not just a bare arrow if it
+   ever flashes into view. ── */
 [data-testid="stExpandSidebarButton"] {
     visibility: visible !important;
     opacity: 1 !important;
@@ -293,7 +297,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     display: none !important;
 }
 [data-testid="stExpandSidebarButton"]::after {
-    content: "🛍️ TBY";
+    content: "TBY";
     color: #ffffff;
     font-weight: 700;
     font-family: 'Kanit', sans-serif;
@@ -1091,7 +1095,8 @@ with st.sidebar:
     st.markdown(
         """<div class="tby-sidebar-brand" style="display:flex;align-items:center;gap:12px;padding:4px 0 12px;">
         <div style="width:44px;height:44px;border-radius:12px;background:var(--tby-accent);
-        display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">🛍️</div>
+        display:flex;align-items:center;justify-content:center;flex-shrink:0;
+        font-family:'Kanit',sans-serif;font-weight:700;font-size:0.9rem;color:#ffffff;letter-spacing:0.02em;">TBY</div>
         <div class="tby-sidebar-brand-text">
         <div style="font-family:'Kanit',sans-serif;font-weight:700;font-size:1.05rem;color:#ffffff;line-height:1.3;">TBY SMART APP</div>
         <div style="font-family:'Sarabun',sans-serif;font-size:0.8rem;color:var(--tby-sidebar-cap);line-height:1.3;">ระบบจัดการร้าน</div>
@@ -1112,6 +1117,42 @@ with st.sidebar:
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
+
+# ── Force the sidebar to stay "expanded" at all times, even on narrow
+#    windows — Streamlit has its own native auto-collapse below ~768px
+#    viewport width that fully hides the sidebar (independent of our CSS
+#    icon-rail below), which is the confusing "just a TBY chip, nothing
+#    else" state. Our own compact-rail CSS already handles any width down
+#    to a phone screen, so native collapse only gets in the way here; watch
+#    for it flipping aria-expanded to false and immediately click the
+#    re-expand button to undo it. ──────────────────────────────────────────
+components.html(
+    """
+    <script>
+    (function() {
+        function tick() {
+            try {
+                var doc = window.parent.document;
+                var sb = doc.querySelector('[data-testid="stSidebar"]');
+                if (!sb) return;
+                if (sb.getAttribute('aria-expanded') === 'false') {
+                    var btn = doc.querySelector('[data-testid="stExpandSidebarButton"]');
+                    if (btn) btn.click();
+                }
+            } catch (e) {}
+        }
+        var obs = new MutationObserver(tick);
+        var target = window.parent.document.querySelector('[data-testid="stSidebar"]');
+        if (target) {
+            obs.observe(target, {attributes: true, attributeFilter: ['aria-expanded']});
+        }
+        window.parent.addEventListener('resize', tick);
+        tick();
+    })();
+    </script>
+    """,
+    height=0,
+)
 
 _active_tab = st.session_state["active_tab"]
 
