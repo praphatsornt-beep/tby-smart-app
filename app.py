@@ -396,15 +396,29 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
    oklch(0.14 0.025 160)), so it visually blended in and read as "stuck-looking"
    ghosted text instead of a clearly distinct tooltip. Use the orange brand
    accent instead — high contrast against the dark sidebar in any hover spot. */
+/* The tooltip's text box was inheriting a narrow width (~35px, tied to the
+   small icon-button anchor in compact mode) with white-space:normal, so
+   longer labels like "บันทึกรายการ" wrapped onto a 2nd line — but the outer
+   box stays capped to single-line height with overflow:auto, silently
+   clipping that 2nd line off entirely ("characters not fully shown"). Force
+   single-line, content-sized rendering instead of letting it wrap+clip. */
 [data-testid="stTooltipContent"] {
     background: var(--tby-accent) !important;
     border-radius: 8px !important;
     padding: 6px 10px !important;
     box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
+    width: auto !important;
+    max-width: none !important;
+    height: auto !important;
+    overflow: visible !important;
+    white-space: nowrap !important;
 }
 [data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"] p {
     color: #ffffff !important;
     font-family: 'Prompt', sans-serif !important;
+    white-space: nowrap !important;
+    width: auto !important;
+    max-width: none !important;
     font-size: 0.85rem !important;
     font-weight: 600 !important;
     margin: 0 !important;

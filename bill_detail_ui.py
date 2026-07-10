@@ -2,7 +2,7 @@ import re
 import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from math import floor
 import uuid
 
@@ -1639,6 +1639,42 @@ def render(products, customers):
             st.warning("⚙️ ยังไม่ได้สร้าง table shipments")
             _sh_all = []
 
+        # ── filter แสดงเฉพาะที่ต้องดำเนินการ ─────────────────────────────
+        _TERMINAL_STATUSES = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
+        _delay_cutoff = datetime.now(timezone.utc) - timedelta(days=3)
+
+        def _is_delayed(r):
+            if not r.get("tracking_no") or (r.get("delivery_status") or "") in _TERMINAL_STATUSES:
+                return False
+            try:
+                _sdt = datetime.fromisoformat(str(r.get("created_at") or "").replace("Z", "+00:00"))
+            except Exception:
+                return False
+            if _sdt.tzinfo is None:
+                _sdt = _sdt.replace(tzinfo=timezone.utc)
+            return _sdt < _delay_cutoff
+
+        def _is_cod_pending(r):
+            return float(r.get("cod_amount") or 0) > 0 and not r.get("cod_transferred_at")
+
+        def _is_billing_anomaly(r):
+            tn = r.get("tracking_no", "") or ""
+            if not tn or tn not in _sh_billing_map:
+                return False
+            actual = float(_sh_billing_map[tn].get("discount_price") or 0)
+            est    = float(r.get("shipping_cost") or 0)
+            return actual > 0 and est > 0 and abs(actual - est) > 2
+
+        _f1, _f2, _f3 = st.columns(3)
+        _filter_delayed = _f1.checkbox("🚚 ล่าช้า (>3 วัน)", key="sh_filter_delayed")
+        _filter_cod     = _f2.checkbox("💸 COD ค้างโอน", key="sh_filter_cod")
+        _filter_billing = _f3.checkbox("⚠️ ยอดผิดปกติ", key="sh_filter_billing")
+        if _filter_delayed or _filter_cod or _filter_billing:
+            _sh_all = [r for r in _sh_all if
+                       (_filter_delayed and _is_delayed(r)) or
+                       (_filter_cod and _is_cod_pending(r)) or
+                       (_filter_billing and _is_billing_anomaly(r))]
+
         if _sh_all:
             def _items_str(items):
                 if not items:
@@ -1702,19 +1738,19 @@ def render(products, customers):
                 "💰 เทียบยอด":     _billing_check(r),
                 "สถานะส่ง":        (_delivery_icon(r.get("delivery_status") or "") + " " +
                                     (r.get("delivery_status") or "")).strip(),
+                "🔗":              (f"https://app.iship.cloud/tracking?track={r['tracking_no']}"
+                                   if r.get("tracking_no") else ""),
                 "ผู้รับ":           r.get("recipient_name", ""),
                 "เบอร์":            r.get("phone", ""),
                 "รายการ":          _items_str(r.get("items")),
                 "ขนส่ง":           r.get("carrier", ""),
                 "Tracking":        r.get("tracking_no", "") or "",
-                "🔗":              (f"https://app.iship.cloud/tracking?track={r['tracking_no']}"
-                                   if r.get("tracking_no") else ""),
+                "หมายเหตุ":        r.get("notes", ""),
                 "บ้านเลขที่/ถนน":  r.get("address_line", ""),
                 "ตำบล":            r.get("district", ""),
                 "อำเภอ":           r.get("amphure", ""),
                 "จังหวัด":         r.get("province", ""),
                 "รหัสปณ.":         r.get("postal_code", ""),
-                "หมายเหตุ":        r.get("notes", ""),
             } for r in _sh_all])
 
             _sh_edit = st.data_editor(
@@ -1731,6 +1767,11 @@ def render(products, customers):
                                     help="🛒 = บันทึกขาย  📦 = ส่งของ"),
                     "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
                     "💸":       st.column_config.TextColumn("💸", width="small"),
+                    "💰 เทียบยอด": st.column_config.TextColumn("💰 เทียบยอด", width="medium",
+                                    help="เทียบยอดที่ขนส่งหักจริงกับราคาที่เราประเมินไว้ (=ราคาที่คิดลูกค้าด้วย "
+                                         "เพราะบันทึกขาย/ส่งของคิดลูกค้าตามราคาขนส่งจริงตรงๆ ไม่มีบวกเพิ่ม) "
+                                         "Δ ลบ = เก็บลูกค้าไว้มากกว่าที่ขนส่งคิดจริง (กำไร) "
+                                         "Δ บวก = เก็บลูกค้าไม่พอ ขนส่งคิดแพงกว่า (ขาดทุนค่าส่ง)"),
                     "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width="medium"),
                     "Tracking": st.column_config.TextColumn("Tracking", width="small"),
                     "🔗":       st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
