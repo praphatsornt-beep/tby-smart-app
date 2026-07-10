@@ -69,8 +69,8 @@ st.markdown("""
 :root {
     --tby-bg:            oklch(0.975 0.012 95);
     --tby-text:          oklch(0.24 0.02 155);
-    --tby-sidebar-1:     oklch(0.30 0.06 155);
-    --tby-sidebar-2:     oklch(0.20 0.045 160);
+    --tby-sidebar-1:     oklch(0.22 0.035 155);
+    --tby-sidebar-2:     oklch(0.14 0.025 160);
     --tby-sidebar-inact: oklch(0.88 0.02 155);
     --tby-sidebar-cap:   oklch(0.85 0.02 155);
     --tby-accent:        oklch(0.68 0.17 45);
