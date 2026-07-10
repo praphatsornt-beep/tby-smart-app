@@ -1,7 +1,6 @@
 from datetime import date
 
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 
 import database as db
@@ -300,6 +299,53 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     font-family: 'Kanit', sans-serif;
     font-size: 0.85rem;
     white-space: nowrap;
+}
+
+/* ── Compact icon-only rail below ~1100px — sidebar stays "expanded" from
+   Streamlit's own perspective (buttons stay live/clickable), just narrowed;
+   nav labels are "🏠 หน้าแรก" single-string button labels, so the trailing
+   Thai text is clipped via a fixed-width+overflow-hidden box rather than
+   hidden with a separate selector (there's no separate DOM node for it).
+   Each button's `help=` tooltip (native Streamlit hover tooltip) is what
+   surfaces the full name back to the user on hover. ── */
+@media (max-width: 1100px) {
+    [data-testid="stSidebar"] {
+        width: 72px !important;
+        min-width: 72px !important;
+        max-width: 72px !important;
+    }
+    [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
+    [data-testid="stSidebar"] .tby-sidebar-brand { justify-content: center !important; padding-right: 0 !important; }
+    [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
+        justify-content: center !important;
+        padding: 10px 0 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stElementContainer"] button div {
+        justify-content: center !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
+        font-size: 1.25rem !important;
+        text-align: left !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        width: 1.4em !important;
+        color: #ffffff !important;
+    }
+}
+/* Nav-button hover tooltip (`help=`) — Streamlit's default is a plain white
+   box; restyle to a small dark chip so it reads clearly against any page
+   background, matching the rest of the sidebar's dark/branded look. */
+[data-testid="stTooltipContent"] {
+    background: oklch(0.25 0.02 155) !important;
+    border-radius: 8px !important;
+    padding: 6px 10px !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+}
+[data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"] p {
+    color: #ffffff !important;
+    font-family: 'Sarabun', sans-serif !important;
+    font-size: 0.85rem !important;
+    margin: 0 !important;
 }
 
 /* ── In-page sub-nav (st.pills, used at the top of most pages) — same flat
@@ -979,10 +1025,10 @@ if "active_tab" not in st.session_state:
 
 with st.sidebar:
     st.markdown(
-        """<div style="display:flex;align-items:center;gap:12px;padding:4px 0 12px;">
+        """<div class="tby-sidebar-brand" style="display:flex;align-items:center;gap:12px;padding:4px 0 12px;">
         <div style="width:44px;height:44px;border-radius:12px;background:var(--tby-accent);
         display:flex;align-items:center;justify-content:center;font-size:1.3rem;flex-shrink:0;">🛍️</div>
-        <div>
+        <div class="tby-sidebar-brand-text">
         <div style="font-family:'Kanit',sans-serif;font-weight:700;font-size:1.05rem;color:#ffffff;line-height:1.3;">TBY SMART APP</div>
         <div style="font-family:'Sarabun',sans-serif;font-size:0.8rem;color:var(--tby-sidebar-cap);line-height:1.3;">ระบบจัดการร้าน</div>
         </div>
@@ -993,46 +1039,15 @@ with st.sidebar:
 
     for _nav_i, _nav_label in enumerate(_TAB_NAMES):
         _nav_is_active = st.session_state["active_tab"] == _nav_label
+        _nav_help = _nav_label.split(" ", 1)[1] if " " in _nav_label else _nav_label
         if st.button(
             _nav_label, key=f"_nav_top_{_nav_i}",
             use_container_width=True,
             type=("primary" if _nav_is_active else "secondary"),
+            help=_nav_help,
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
-
-# ── Auto-collapse the sidebar on medium-narrow windows (below the same
-#    ~1100px breakpoint where the บันทึกขาย columns stack) — Streamlit's own
-#    native auto-collapse only kicks in below 768px, leaving a gap where the
-#    main content has already stacked but the sidebar still eats 300px.
-#    One-directional only (never auto-re-expands) so it never fights a
-#    manual choice to collapse/expand; the always-visible toggle chip above
-#    still works normally regardless. ──────────────────────────────────────
-components.html(
-    """
-    <script>
-    (function() {
-        var THRESHOLD = 1100;
-        function tick() {
-            try {
-                var doc = window.parent.document;
-                var sb = doc.querySelector('[data-testid="stSidebar"]');
-                if (!sb) return;
-                var expanded = sb.getAttribute('aria-expanded') === 'true';
-                var w = window.parent.innerWidth;
-                if (w < THRESHOLD && expanded) {
-                    var btn = doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
-                    if (btn) btn.click();
-                }
-            } catch (e) {}
-        }
-        window.parent.addEventListener('resize', tick);
-        tick();
-    })();
-    </script>
-    """,
-    height=0,
-)
 
 _active_tab = st.session_state["active_tab"]
 
