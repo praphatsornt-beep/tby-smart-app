@@ -942,7 +942,8 @@ def _show_carrier_select():
             _fuel_txt = f"+{o['fuel']}" if o["fuel"] else "-"
             _cod_txt  = f"+{o['cod_fee']:,}" if o["cod_fee"] else "-"
             _size_txt = f"≤{o['max_cm']}cm" if o.get("max_cm") else "-"
-            _cmp.append({"ขนส่ง": ("🥇 " if _ci == 0 else "") + o["name"],
+            _pickup_txt = " 🚗 เรียกรถเข้ารับ" if o.get("manual_pickup") else ""
+            _cmp.append({"ขนส่ง": ("🥇 " if _ci == 0 else "") + o["name"] + _pickup_txt,
                          "ค่าส่ง": o["base"], "พื้นที่พิเศษ": _sur_txt,
                          "น้ำมัน": _fuel_txt, "รวม (฿)": o["total"], "📐": _size_txt, "COD": _cod_txt})
         st.dataframe(pd.DataFrame(_cmp), hide_index=True, use_container_width=True,
@@ -955,6 +956,8 @@ def _show_carrier_select():
         _cs_total   = _cs_sel_opt.get("total", 0)
         _cs_max_cm  = _cs_sel_opt.get("max_cm", 0)
         st.caption(f"iShip code: `{_cs_code}` | ราคาจริง: {_cs_total:,} ฿")
+        if _cs_sel_opt.get("manual_pickup"):
+            st.warning(f"🚗 {_cs_carrier} ต้องกดเรียกรถเข้ารับเองในระบบ iShip ก่อนเวลา cut off — ถ้าไม่กด จะไม่มีพนักงานเข้ารับ")
         if _cs_max_cm:
             st.warning(f"📐 {_cs_carrier} — กว้าง+ยาว+สูง รวมไม่เกิน **{_cs_max_cm} cm** (ถึงกล่องเบอร์ {'2B' if _cs_max_cm <= 60 else 'G' if _cs_max_cm <= 100 else '?'})")
         if not _cs_code:

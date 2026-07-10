@@ -1705,8 +1705,9 @@ def render(tab1, products, customers, customer_map):
                             _fuel_txt = f"+{o['fuel']}" if o["fuel"] else "-"
                             _cod_txt  = f"+{o['cod_fee']:,}" if o["cod_fee"] else "-"
                             _badge    = "🥇 " if _ci == 0 else ""
+                            _pickup_txt = " 🚗 เรียกรถเข้ารับ" if o.get("manual_pickup") else ""
                             _cmp_data.append({
-                                "ขนส่ง":        _badge + o["name"],
+                                "ขนส่ง":        _badge + o["name"] + _pickup_txt,
                                 "ค่าส่ง":       o["base"],
                                 "พื้นที่พิเศษ": _sur_txt,
                                 "น้ำมัน":       _fuel_txt,

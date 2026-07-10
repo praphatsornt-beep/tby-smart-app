@@ -226,22 +226,24 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 
 
 # ── Carrier definitions ───────────────────────────────────────────────────────
-# (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt)
+# (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup)
 # max_cm: กว้าง+ยาว+สูง รวมต้องไม่เกินค่านี้ (0 = ไม่จำกัด) | max_cod_amt: วงเงิน COD สูงสุด (0 = ไม่จำกัด)
+# manual_pickup: True = ต้องกดเรียกรถเข้ารับเองในระบบ iShip ทุกครั้ง (ถ้าไม่กด = ไม่มีพนักงานเข้ารับ)
+#                False = รถเข้ารับอัตโนมัติ แค่สร้างรายการก่อนเวลา cut off — ตามอินโฟกราฟิก iShip
 _CARRIER_DEFS = [
-    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,    60, True,  0),
-    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,    60, True,  0),
-    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,    60, True,  0),
-    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   100, True,  0),
-    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01,  0, True,  0),
-    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,     0, True,  0),
-    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,     0, True,  0),
-    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,     0, True,  0),
-    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,     0, True,  0),
-    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0),
-    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0),
-    ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0),
-    ("jt_express",        "J&T Express",        _JT_EXPRESS,         100,  _jt_sur,                 0, 2.675,False, 0,   600, True,  10000),
+    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,    60, True,  0,     True),
+    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,    60, True,  0,     True),
+    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,    60, True,  0,     True),
+    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   100, True,  0,     True),
+    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01,  0, True,  0,     True),
+    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,     0, True,  0,     False),
+    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,     0, True,  0,     False),
+    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,     0, True,  0,     False),
+    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,     0, True,  0,     False),
+    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0,     True),
+    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0,     True),
+    ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0,     False),
+    ("jt_express",        "J&T Express",        _JT_EXPRESS,         100,  _jt_sur,                 0, 2.675,False, 0,   600, True,  10000, False),
 ]
 
 
@@ -252,7 +254,7 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
     """คิดราคา 1 ขนส่ง (tuple จาก _CARRIER_DEFS) สำหรับน้ำหนัก/รหัสไปรษณีย์ที่กำหนด
     คืน None ถ้าขนส่งนี้ใช้ไม่ได้เลย (ต่ำกว่าขั้นต่ำ, ไม่รับ COD, เกินวงเงิน COD, หรือหาราคาไม่เจอ)
     """
-    cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt = carrier_def
+    cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup = carrier_def
     if weight_kg < min_kg:
         return None  # ไม่แสดงถ้าน้ำหนักต่ำกว่าขั้นต่ำ (เช่น Flash Pro DD Bulky ต้อง >5kg)
     if is_cod and not supports_cod:
@@ -286,6 +288,7 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
         "return_free":   return_free,
         "max_cm":        max_cm,
         "max_cod_amt":   max_cod_amt,
+        "manual_pickup": manual_pickup,
     }
 
 
