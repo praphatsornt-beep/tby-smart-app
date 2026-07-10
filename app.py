@@ -575,7 +575,7 @@ hr {
 }
 
 /* ── Typography / Readability ── */
-html { font-size: 16px; }
+html { font-size: 12px; }
 
 /* Body text & markdown */
 [data-testid="stMarkdownContainer"] p,
