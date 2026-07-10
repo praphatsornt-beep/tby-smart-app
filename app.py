@@ -390,19 +390,23 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         color: #ffffff !important;
     }
 }
-/* Nav-button hover tooltip (`help=`) — Streamlit's default is a plain white
-   box; restyle to a small dark chip so it reads clearly against any page
-   background, matching the rest of the sidebar's dark/branded look. */
+/* Nav-button hover tooltip (`help=`) — this only ever appears floating over
+   the dark sidebar. The chip's background was previously a dark green almost
+   identical to the sidebar's own gradient (oklch(0.22 0.035 155) /
+   oklch(0.14 0.025 160)), so it visually blended in and read as "stuck-looking"
+   ghosted text instead of a clearly distinct tooltip. Use the orange brand
+   accent instead — high contrast against the dark sidebar in any hover spot. */
 [data-testid="stTooltipContent"] {
-    background: oklch(0.25 0.02 155) !important;
+    background: var(--tby-accent) !important;
     border-radius: 8px !important;
     padding: 6px 10px !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3) !important;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
 }
 [data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"] p {
     color: #ffffff !important;
     font-family: 'Prompt', sans-serif !important;
     font-size: 0.85rem !important;
+    font-weight: 600 !important;
     margin: 0 !important;
 }
 
