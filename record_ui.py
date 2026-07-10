@@ -459,12 +459,13 @@ def render(tab1, products, customers, customer_map):
                     if valid_items:
                         st.caption("🛒 " + "  |  ".join(f"{p['id']} ×{q}" for p, q, _ in valid_items))
 
+                    _sum_qty = sum(q for _, q, _ in valid_items)
                     _sum_row("ยอดรวมสินค้า", f"฿{_sum_total:,.0f}")
-                    _sum_row("รายการ", f"{len(valid_items)} สินค้า")
+                    _sum_row("จำนวนสินค้า", f"{_sum_qty} ชิ้น")
                     if m_delivery != "ส่งพัสดุ":
                         st.divider()
-                        _sum_row("ยอดรวม", f"฿{_sum_total:,.0f}", big=True, accent=True)
-                        _sum_row("⭐ PV ที่จะได้รับ", f"+{_sum_pv:,.0f}", accent=True)
+                        _sum_row("💰 ยอดรวม", f"฿{_sum_total:,.0f}", big=True, accent=True)
+                        _sum_row("⭐ PV รวม", f"{_sum_pv:,.0f}", accent=True)
 
                 if not valid_items and _has_rx_action:
                     st.caption("ℹ️ มีแต่รับของเก่า ไม่ต้องเลือกสถานะจ่าย/สถานะบิล — ใช้ปุ่ม '💾 บันทึกรับของจากบิลเก่า' ด้านบนแทน")
@@ -541,10 +542,13 @@ def render(tab1, products, customers, customer_map):
                         net_recv  = _base
                         _amt_label = f"ยอดสินค้า (ใหม่ {total_amt:,.0f} + เก่า {_rx_total_pay:,.0f})" if _rx_total_pay > 0.01 else "ยอดสินค้า"
                         _grand_amt = total_amt + _rx_total_pay
+                        _ship_surcharge = fees_all[m_carrier]["surcharge"] if m_postcode else 0
                         with _summary_box:
                             st.divider()
                             _sum_row(_amt_label, f"฿{_grand_amt:,.0f}")
-                            _sum_row(f"🚚 {m_carrier}", f"฿{ship_fee:,.0f}")
+                            _sum_row("🚚 ค่าส่ง", f"฿{ship_fee:,.0f}")
+                            if _ship_surcharge > 0:
+                                _sum_row("📍 พื้นที่ห่างไกล", f"฿{_ship_surcharge:,.0f}")
                             _sum_row("⚖️ น้ำหนัก", f"{(total_weight/1000):.2f} kg")
                         if m_cod:
                             with _summary_box:
@@ -561,12 +565,12 @@ def render(tab1, products, customers, customer_map):
                             with _summary_box:
                                 st.divider()
                                 _sum_row("✅ ได้รับจริง", f"฿{net_recv:,.2f}", big=True, accent=True)
-                                _sum_row("⭐ PV ที่จะได้รับ", f"+{total_pv:,.0f}", accent=True)
+                                _sum_row("⭐ PV รวม", f"{total_pv:,.0f}", accent=True)
                         else:
                             with _summary_box:
                                 st.divider()
-                                _sum_row("ยอดรวม", f"฿{collect:,.0f}", big=True, accent=True)
-                                _sum_row("⭐ PV ที่จะได้รับ", f"+{total_pv:,.0f}", accent=True)
+                                _sum_row("💰 ยอดรวม", f"฿{collect:,.0f}", big=True, accent=True)
+                                _sum_row("⭐ PV รวม", f"{total_pv:,.0f}", accent=True)
                     else:
                         ship_fee = cod_fee = 0
                         collect  = total_amt
