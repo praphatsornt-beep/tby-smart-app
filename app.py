@@ -110,7 +110,7 @@ h1, h2, h3 {
 }
 h1 { font-weight: 700 !important; margin-bottom: 0.6rem !important; }
 h2 { font-weight: 600 !important; }
-h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
+h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.15rem !important; }
 
 /* ── Global top bar (page title + date), rendered once per page in app.py ──
    Flush with the page (no card/border) — sticky so it (and the sidebar)
@@ -123,7 +123,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     border: none;
     border-bottom: 1px solid var(--tby-border);
     padding: 18px 8px;
-    margin: -1.5rem -2rem 20px -2rem;
+    margin: -1.5rem -2rem 0 -2rem;
     width: calc(100% + 4rem);
     position: sticky;
     /* Streamlit's own native header (hamburger/menu bar) is fixed at the very
@@ -155,7 +155,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 @media (max-width: 600px) {
     .tby-topbar {
         padding: 10px 6px;
-        margin: -1.5rem -1rem 16px -1rem;
+        margin: -1.5rem -1rem 0 -1rem;
         width: calc(100% + 2rem);
     }
     .tby-topbar-title {
@@ -421,7 +421,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     border-bottom: 3px solid transparent !important;
     border-radius: 0 !important;
     font-family: 'Prompt', sans-serif !important;
-    font-size: 1.2rem !important;
+    font-size: 1.35rem !important;
     font-weight: 500 !important;
     padding: 12px 18px 10px !important;
     white-space: nowrap;
@@ -702,16 +702,26 @@ button[kind="secondary"]:hover {
     gap: 24px !important;
 }
 
-/* ── Bordered containers (st.container(border=True)) — flat card ── */
-[data-testid="stVerticalBlockBorderWrapper"] {
-    background: #ffffff;
+/* ── Bordered containers (st.container(border=True)) — flat card ──
+   NOTE: this Streamlit version (1.56) no longer wraps bordered containers
+   in a separate `stVerticalBlockBorderWrapper` div (confirmed via DOM
+   inspection: that testid doesn't exist anywhere in the page) — the border
+   is applied directly to the plain `stVerticalBlock` via an emotion-
+   generated class instead, which carries the border but NOT a background,
+   so every bordered card was silently staying page-cream instead of white
+   all session. Target the actual border via an attribute check that
+   doesn't depend on Streamlit's internal class-naming scheme. ── */
+[data-testid="stVerticalBlockBorderWrapper"],
+.st-emotion-cache-1ikpmoq {
+    background: #ffffff !important;
     border: 1px solid var(--tby-border) !important;
     border-radius: 20px !important;
     box-shadow: none;
 }
 /* Radio group nested inside a bordered container: drop the double box,
    read as one section of the card instead of a separate floating card */
-[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stRadio"] {
+[data-testid="stVerticalBlockBorderWrapper"] [data-testid="stRadio"],
+.st-emotion-cache-1ikpmoq [data-testid="stRadio"] {
     background: transparent;
     border: none;
     padding: 4px 0 !important;

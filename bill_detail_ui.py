@@ -204,18 +204,6 @@ def render(products, customers):
                         )
 
                     if _is_active_cust:
-                        for _cb_bno, _cb_total, _cb_owed, _pill_txt, _pill_css in _bill_rows_info:
-                            with st.container(border=True):
-                                _rc1, _rc2, _rc3, _rc4 = st.columns([1.8, 1.2, 1.3, 1.4])
-                                _rc1.caption(_cb_bno)
-                                _rc2.markdown(f"฿{_cb_total:,.0f}")
-                                _rc3.markdown(f"฿{_cb_owed:,.0f}" if _cb_owed > 0.01 else "—")
-                                _rc4.markdown(
-                                    f'<span style="{_pill_css}border-radius:999px;padding:4px 12px;'
-                                    f'font-size:0.8rem;display:inline-block;">{_pill_txt}</span>',
-                                    unsafe_allow_html=True,
-                                )
-
                         # ── 🖨️ พิมพ์ / จัดการบิล ───────────────────────────────
                         with st.expander("🖨️ พิมพ์ / จัดการบิล"):
                             _cust_obj_bp = _cust_map_all.get(customer_name)
