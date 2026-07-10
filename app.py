@@ -594,10 +594,15 @@ button[kind="secondary"]:hover {
 }
 
 /* ── บันทึกขาย status panel (สถานะรายการ) — plain native radio circles,
-   no segmented-pill box, no card border: reads cleaner/roomier at a glance
-   than the pill treatment used everywhere else, and sidesteps the pill
-   label wrapping issue on narrow columns since native radios wrap normally
-   instead of being force-flexed into equal-width segments. ── */
+   flat white card. Note: this container (key= combined with border=True)
+   renders as a plain stVerticalBlock with a native border, NOT the usual
+   stVerticalBlockBorderWrapper our other bordered-card CSS targets — so
+   the shared white-card rule doesn't reach it and needs its own explicit
+   background here. ── */
+[class*="st-key-sale_status_panel"] {
+    background: #ffffff !important;
+    border-radius: 14px !important;
+}
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] {
     background: transparent !important;
     border: none !important;
