@@ -1,6 +1,7 @@
 from datetime import date
 
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 
 import database as db
@@ -233,21 +234,52 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     box-shadow: none !important;
 }
 
-/* ── Sidebar collapse/expand arrow — Streamlit hides this until hover by
-   default, which made it too easy to miss; keep it always visible ── */
+/* ── Sidebar collapse arrow (shown while sidebar is expanded) — Streamlit
+   hides this until hover by default, which made it too easy to miss; keep
+   it always visible with a real background chip so it stands out against
+   the dark green sidebar regardless of icon color quirks ── */
 [data-testid="stSidebarCollapseButton"] {
     visibility: visible !important;
     opacity: 1 !important;
 }
+[data-testid="stSidebarCollapseButton"] button {
+    background: rgba(255,255,255,0.16) !important;
+    border-radius: 8px !important;
+}
+[data-testid="stSidebarCollapseButton"] button:hover {
+    background: rgba(255,255,255,0.28) !important;
+}
 [data-testid="stSidebarCollapseButton"] button svg {
-    color: rgba(255,255,255,0.7) !important;
-}
-[data-testid="stSidebarCollapseButton"] button:hover svg {
     color: #ffffff !important;
+    stroke: #ffffff !important;
+    opacity: 1 !important;
 }
-[data-testid="collapsedControl"] {
+
+/* ── Re-expand button (shown while sidebar is collapsed) — replace the
+   bare arrow with a small branded "TBY" chip so it's obvious what it does
+   and where the menu went ── */
+[data-testid="stExpandSidebarButton"] {
     visibility: visible !important;
     opacity: 1 !important;
+    background: var(--tby-accent) !important;
+    border-radius: 8px !important;
+    width: auto !important;
+    height: auto !important;
+    padding: 6px 12px !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 6px;
+}
+[data-testid="stExpandSidebarButton"] span {
+    display: none !important;
+}
+[data-testid="stExpandSidebarButton"]::after {
+    content: "🛍️ TBY";
+    color: #ffffff;
+    font-weight: 700;
+    font-family: 'Kanit', sans-serif;
+    font-size: 0.85rem;
+    white-space: nowrap;
 }
 
 /* ── In-page sub-nav (st.pills, used at the top of most pages) — same flat
@@ -948,6 +980,39 @@ with st.sidebar:
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
+
+# ── Auto-collapse the sidebar on medium-narrow windows (below the same
+#    ~1100px breakpoint where the บันทึกขาย columns stack) — Streamlit's own
+#    native auto-collapse only kicks in below 768px, leaving a gap where the
+#    main content has already stacked but the sidebar still eats 300px.
+#    One-directional only (never auto-re-expands) so it never fights a
+#    manual choice to collapse/expand; the always-visible toggle chip above
+#    still works normally regardless. ──────────────────────────────────────
+components.html(
+    """
+    <script>
+    (function() {
+        var THRESHOLD = 1100;
+        function tick() {
+            try {
+                var doc = window.parent.document;
+                var sb = doc.querySelector('[data-testid="stSidebar"]');
+                if (!sb) return;
+                var expanded = sb.getAttribute('aria-expanded') === 'true';
+                var w = window.parent.innerWidth;
+                if (w < THRESHOLD && expanded) {
+                    var btn = doc.querySelector('[data-testid="stSidebarCollapseButton"] button');
+                    if (btn) btn.click();
+                }
+            } catch (e) {}
+        }
+        window.parent.addEventListener('resize', tick);
+        tick();
+    })();
+    </script>
+    """,
+    height=0,
+)
 
 _active_tab = st.session_state["active_tab"]
 
