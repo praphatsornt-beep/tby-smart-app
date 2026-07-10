@@ -593,6 +593,53 @@ button[kind="secondary"]:hover {
     font-weight: 600 !important;
 }
 
+/* ── บันทึกขาย status panel (สถานะรายการ) — plain native radio circles,
+   no segmented-pill box, no card border: reads cleaner/roomier at a glance
+   than the pill treatment used everywhere else, and sidesteps the pill
+   label wrapping issue on narrow columns since native radios wrap normally
+   instead of being force-flexed into equal-width segments. ── */
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] > div[role="radiogroup"] {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    background: transparent !important;
+    border: none !important;
+    padding: 6px 0 0 !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label > div:first-child {
+    display: block !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 2px 0 !important;
+    flex: 0 0 auto !important;
+    justify-content: flex-start !important;
+    gap: 8px;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:not(:has(input:checked)):hover {
+    background: transparent !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) {
+    background: transparent !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) p,
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) div {
+    color: var(--tby-text) !important;
+    font-weight: 600 !important;
+}
+[class*="st-key-sale_status_bill_row"] [data-testid="stRadio"] > div[role="radiogroup"] {
+    flex-direction: row !important;
+    gap: 24px !important;
+}
+
 /* ── Bordered containers (st.container(border=True)) — flat card ── */
 [data-testid="stVerticalBlockBorderWrapper"] {
     background: #ffffff;
