@@ -154,8 +154,9 @@ def render(products, customers):
                     _luid   = _cust_line_map.get(customer_name, "")
                     _gid    = _cust_gid_map.get(customer_name, "")
                     _unbilled_pv = grp.loc[grp["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in grp.columns else 0
-                    # ── รายการเป็นแถวต่อบิล (คลิกชื่อลูกค้าเพื่อดูรายละเอียด) ──
+                    # ── แถวเดียวต่อลูกค้า (ยอดรวมทุกบิล) — คลิกชื่อเพื่อดูรายละเอียดทีละบิล ──
                     _cust_bills = _bills_from_df(grp)
+                    _bill_rows_info = []
                     for _, _cb in _cust_bills.iterrows():
                         _cb_bno   = _cb["เลขที่บิล"] if pd.notna(_cb["เลขที่บิล"]) and str(_cb["เลขที่บิล"]).strip() else "—"
                         _cb_total = float(_cb["ยอดรวม"])
@@ -168,27 +169,53 @@ def render(products, customers):
                             _cb_date = pd.to_datetime(_cb["วันที่"], errors="coerce")
                             _overdue = pd.notna(_cb_date) and (pd.Timestamp.now() - _cb_date).days > _BILL_OVERDUE_DAYS
                             _pill_txt, _pill_css = ("เกินกำหนด", _PILL_BAD) if _overdue else ("ค้างชำระ", _PILL_WARN)
-                        with st.container(border=True):
-                            _rc1, _rc2, _rc3, _rc4, _rc5 = st.columns([1.5, 2.8, 1.2, 1.3, 1.2])
-                            _rc1.caption(_cb_bno)
-                            if _rc2.button(
-                                f"👤 {customer_name}",
-                                key=f"billrow_{customer_name}_{_cb_bno}",
-                                use_container_width=True,
-                                type=("primary" if (single_cust or customer_name == _active_cust) else "secondary"),
-                            ):
-                                st.session_state["_t5_out_active_cust"] = customer_name
-                                st.rerun()
-                            _rc3.markdown(f"฿{_cb_total:,.0f}")
-                            _rc4.markdown(f"฿{_cb_owed:,.0f}" if _cb_owed > 0.01 else "—")
-                            _rc5.markdown(
-                                f'<span style="{_pill_css}border-radius:999px;padding:4px 12px;'
-                                f'font-size:0.8rem;display:inline-block;">{_pill_txt}</span>',
-                                unsafe_allow_html=True,
-                            )
+                        _bill_rows_info.append((_cb_bno, _cb_total, _cb_owed, _pill_txt, _pill_css))
+
+                    _bill_count = len(_bill_rows_info)
+                    _grp_total  = sum(r[1] for r in _bill_rows_info)
+                    _pill_priority = {"เกินกำหนด": 3, "ยังไม่เปิดบิล": 2, "ค้างชำระ": 1, "ชำระแล้ว": 0}
+                    _agg_txt, _agg_css = max(
+                        ((r[3], r[4]) for r in _bill_rows_info),
+                        key=lambda x: _pill_priority.get(x[0], 0),
+                        default=("ชำระแล้ว", _PILL_GOOD),
+                    )
 
                     _is_active_cust = single_cust or customer_name == _active_cust
+
+                    with st.container(border=True):
+                        _gc1, _gc2, _gc3, _gc4, _gc5 = st.columns([1.3, 2.8, 1.2, 1.3, 1.4])
+                        _gc1.caption(f"{_bill_count} บิล")
+                        if _gc2.button(
+                            f"👤 {customer_name}",
+                            key=f"custrow_{customer_name}",
+                            use_container_width=True,
+                            type=("primary" if _is_active_cust else "secondary"),
+                        ):
+                            st.session_state["_t5_out_active_cust"] = (
+                                "" if customer_name == _active_cust else customer_name
+                            )
+                            st.rerun()
+                        _gc3.markdown(f"฿{_grp_total:,.0f}")
+                        _gc4.markdown(f"฿{owed:,.0f}" if owed > 0.01 else "—")
+                        _gc5.markdown(
+                            f'<span style="{_agg_css}border-radius:999px;padding:4px 12px;'
+                            f'font-size:0.8rem;display:inline-block;">{_agg_txt}</span>',
+                            unsafe_allow_html=True,
+                        )
+
                     if _is_active_cust:
+                        for _cb_bno, _cb_total, _cb_owed, _pill_txt, _pill_css in _bill_rows_info:
+                            with st.container(border=True):
+                                _rc1, _rc2, _rc3, _rc4 = st.columns([1.8, 1.2, 1.3, 1.4])
+                                _rc1.caption(_cb_bno)
+                                _rc2.markdown(f"฿{_cb_total:,.0f}")
+                                _rc3.markdown(f"฿{_cb_owed:,.0f}" if _cb_owed > 0.01 else "—")
+                                _rc4.markdown(
+                                    f'<span style="{_pill_css}border-radius:999px;padding:4px 12px;'
+                                    f'font-size:0.8rem;display:inline-block;">{_pill_txt}</span>',
+                                    unsafe_allow_html=True,
+                                )
+
                         # ── 🖨️ พิมพ์ / จัดการบิล ───────────────────────────────
                         with st.expander("🖨️ พิมพ์ / จัดการบิล"):
                             _cust_obj_bp = _cust_map_all.get(customer_name)
