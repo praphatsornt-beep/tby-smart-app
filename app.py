@@ -789,7 +789,7 @@ label,
 [class*="st-key-sale_status_cart_summary_row"] [data-testid="stColumn"]:first-child {
     container-type: inline-size;
 }
-@container (max-width: 340px) {
+@container (max-width: 200px) {
     [class*="st-key-sale_status_subrow"] [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
     }
