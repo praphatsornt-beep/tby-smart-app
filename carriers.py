@@ -1,6 +1,6 @@
 """Carrier rate cards and multi-carrier shipping comparison."""
 from math import ceil
-from flash_zones import lookup_zone, zone_surcharge_by_weight, spx_surcharge
+from flash_zones import lookup_zone, zone_surcharge_by_weight, spx_surcharge, thai_post_special_surcharge
 import calc_logic
 
 # ── Bangkok zone detection ────────────────────────────────────────────────────
@@ -185,8 +185,7 @@ def _dhl_sur(pc: str, _kg: float) -> tuple[int, str]:
     return sur, ("ห่างไกล" if sur else "")
 
 def _thai_post_sur(pc: str, _kg: float) -> tuple[int, str]:
-    zone = lookup_zone(pc)
-    sur  = 20 if zone == "tourist_island" else 0
+    sur = thai_post_special_surcharge(pc)
     return sur, ("เกาะ/พิเศษ" if sur else "")
 
 def _no_sur(_pc: str, _kg: float) -> tuple[int, str]:
