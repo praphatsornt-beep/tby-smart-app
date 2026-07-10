@@ -604,11 +604,13 @@ label,
     line-height: 1.5 !important;
 }
 
-/* ── Responsive: stack บันทึกขาย status|cart|summary row below ~1400px ──
-   Below this width the 3-way split gets too narrow to read (Thai radio
-   labels wrap character-by-character) — stack full-width instead, which
-   also puts ยอดสรุป (summary) as its own full-width box at the bottom. */
-@media (max-width: 1400px) {
+/* ── Responsive: stack บันทึกขาย status|cart|summary row below ~1100px ──
+   Below this width the 3-way split gets too narrow to read comfortably —
+   stack full-width instead, which also puts ยอดสรุป (summary) as its own
+   full-width box at the bottom. Raised from an earlier, too-eager 1400px
+   now that the inner สถานะรับของ|สถานะจ่าย split (below) protects itself
+   via a container query instead of depending on this same breakpoint. */
+@media (max-width: 1100px) {
     [class*="st-key-sale_status_cart_summary_row"] [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
     }
@@ -619,11 +621,13 @@ label,
     }
 }
 
-/* ── Responsive: stack สถานะรับของ|สถานะจ่าย sub-columns on true mobile ──
-   Even after the row above stacks, this inner 2-way split can still get
-   too narrow on phone-width screens, wrapping labels like "จ่ายบางส่วน"
-   onto two lines — stack these full-width too below ~640px. */
-@media (max-width: 640px) {
+/* ── สถานะรับของ|สถานะจ่าย sub-columns: stack based on their OWN rendered
+   width (container query), not viewport width — this way they self-protect
+   whether the outer row above has stacked yet or not, at any window size. */
+[class*="st-key-sale_status_cart_summary_row"] [data-testid="stColumn"]:first-child {
+    container-type: inline-size;
+}
+@container (max-width: 340px) {
     [class*="st-key-sale_status_subrow"] [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
     }
