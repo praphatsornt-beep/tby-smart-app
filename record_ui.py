@@ -460,8 +460,10 @@ def render(tab1, products, customers, customer_map):
                         st.caption("🛒 " + "  |  ".join(f"{p['id']} ×{q}" for p, q, _ in valid_items))
 
                     _sum_qty = sum(q for _, q, _ in valid_items)
-                    _sum_row("ยอดรวมสินค้า", f"฿{_sum_total:,.0f}")
-                    _sum_row("จำนวนสินค้า", f"{_sum_qty} ชิ้น")
+                    _sum_row("📦 จำนวนสินค้า", f"{_sum_qty} ชิ้น")
+                    if m_delivery == "ส่งพัสดุ":
+                        _early_weight = (raw_weight_g(valid_items, _rx_extra_weight_g) + BOX_WEIGHT_G) / 1000
+                        _sum_row("⚖️ น้ำหนัก", f"{_early_weight:.2f} kg")
                     if m_delivery != "ส่งพัสดุ":
                         st.divider()
                         _sum_row("💰 ยอดรวม", f"฿{_sum_total:,.0f}", big=True, accent=True)
@@ -529,7 +531,6 @@ def render(tab1, products, customers, customer_map):
                     total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
                     total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
                     _raw_weight  = raw_weight_g(valid_items, _rx_extra_weight_g)
-                    total_weight = _raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
                     if _rx_old_items and valid_items:
                         _old_label = "  +  ".join(f"{it['name']} ×{it['qty']}" for it in _rx_old_items)
                         st.info(f"📦 ของเก่า: {_old_label}  ·  ยอดค้างที่จะจ่าย **{_rx_total_pay:,.0f}฿**  ·  รวมยอดทั้งหมด **{total_amt + _rx_total_pay:,.0f}฿**")
@@ -540,7 +541,7 @@ def render(tab1, products, customers, customer_map):
                         cod_fee   = round(_base * COD_FEE_RATE, 2) if m_cod else 0
                         collect   = _base + cod_fee if m_cod else _base
                         net_recv  = _base
-                        _amt_label = f"ยอดสินค้า (ใหม่ {total_amt:,.0f} + เก่า {_rx_total_pay:,.0f})" if _rx_total_pay > 0.01 else "ยอดสินค้า"
+                        _amt_label = f"🧾 ยอดสินค้า (ใหม่ {total_amt:,.0f} + เก่า {_rx_total_pay:,.0f})" if _rx_total_pay > 0.01 else "🧾 ยอดสินค้า"
                         _grand_amt = total_amt + _rx_total_pay
                         _ship_surcharge = fees_all[m_carrier]["surcharge"] if m_postcode else 0
                         with _summary_box:
@@ -549,7 +550,6 @@ def render(tab1, products, customers, customer_map):
                             _sum_row("🚚 ค่าส่ง", f"฿{ship_fee:,.0f}")
                             if _ship_surcharge > 0:
                                 _sum_row("📍 พื้นที่ห่างไกล", f"฿{_ship_surcharge:,.0f}")
-                            _sum_row("⚖️ น้ำหนัก", f"{(total_weight/1000):.2f} kg")
                         if m_cod:
                             with _summary_box:
                                 _sum_row("💰 ยอดเก็บ (อัตโนมัติ)", f"฿{collect:,.0f}")
@@ -1127,6 +1127,31 @@ def render(tab1, products, customers, customer_map):
                     st.rerun()
                 elif _sp_qu:
                     st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_sp_qu)}")
+
+            components.html(
+                """
+                <script>
+                (function() {
+                    try { window.parent.focus(); } catch (e) {}
+                    var tries = 0;
+                    function tryFocus() {
+                        tries++;
+                        try {
+                            var doc = window.parent.document;
+                            var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                            if (input && doc.activeElement !== input) {
+                                input.focus({preventScroll: true});
+                                input.click();
+                            }
+                        } catch (e) {}
+                        if (tries < 20) { setTimeout(tryFocus, 100); }
+                    }
+                    requestAnimationFrame(tryFocus);
+                })();
+                </script>
+                """,
+                height=0,
+            )
 
             st.divider()
 
