@@ -305,6 +305,24 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     white-space: nowrap;
 }
 
+/* ── Manual ย่อ/ขยายเมนู toggle (our own st.button, «/» arrow only) — bold
+   white arrow so it stays clearly visible against the dark sidebar,
+   matching the plain-arrow look the user asked for instead of a text
+   label + tooltip (the tooltip was rendering as a stuck-looking chip). ── */
+[class*="st-key-_sidebar_compact_toggle"] button {
+    background: rgba(255,255,255,0.1) !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+[class*="st-key-_sidebar_compact_toggle"] button:hover {
+    background: rgba(255,255,255,0.22) !important;
+}
+[class*="st-key-_sidebar_compact_toggle"] button p {
+    color: #ffffff !important;
+    font-size: 1.1rem !important;
+    font-weight: 700 !important;
+}
+
 /* ── Compact icon-only rail below ~1100px — sidebar stays "expanded" from
    Streamlit's own perspective (buttons stay live/clickable), just narrowed;
    nav labels are "🏠 หน้าแรก" single-string button labels, so the trailing
@@ -1109,10 +1127,9 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
     if st.button(
-        ("✕ ย่อเมนู" if not st.session_state["_sidebar_compact"] else "☰ ขยายเมนู"),
+        ("«" if not st.session_state["_sidebar_compact"] else "»"),
         key="_sidebar_compact_toggle",
         use_container_width=True,
-        help="ย่อเมนู" if not st.session_state["_sidebar_compact"] else "ขยายเมนู",
     ):
         st.session_state["_sidebar_compact"] = not st.session_state["_sidebar_compact"]
         st.rerun()
