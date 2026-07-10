@@ -233,6 +233,23 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     box-shadow: none !important;
 }
 
+/* ── Sidebar collapse/expand arrow — Streamlit hides this until hover by
+   default, which made it too easy to miss; keep it always visible ── */
+[data-testid="stSidebarCollapseButton"] {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+[data-testid="stSidebarCollapseButton"] button svg {
+    color: rgba(255,255,255,0.7) !important;
+}
+[data-testid="stSidebarCollapseButton"] button:hover svg {
+    color: #ffffff !important;
+}
+[data-testid="collapsedControl"] {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
 /* ── In-page sub-nav (st.pills, used at the top of most pages) — same flat
    underline treatment as st.tabs below, for one consistent "sub tabs" look
    site-wide instead of two different widgets looking different. NOTE:
