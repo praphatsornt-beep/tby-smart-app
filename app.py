@@ -635,6 +635,17 @@ button[kind="secondary"]:hover {
     color: var(--tby-text) !important;
     font-weight: 600 !important;
 }
+/* smaller, tighter type scale for this panel — headers, widget labels
+   ("การรับ / สถานะของ" etc.), and radio option text all one notch down */
+[class*="st-key-sale_status_panel"] [data-testid="stMarkdownContainer"] p {
+    font-size: 0.88rem !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stWidgetLabel"] p {
+    font-size: 0.82rem !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label p {
+    font-size: 0.82rem !important;
+}
 [class*="st-key-sale_status_bill_row"] [data-testid="stRadio"] > div[role="radiogroup"] {
     flex-direction: row !important;
     gap: 24px !important;

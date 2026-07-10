@@ -258,7 +258,7 @@ def render(tab1, products, customers, customer_map):
                     _status_col, _cart_col, _summary_col = st.columns([1.3, 1.6, 1.0], gap="medium")
 
                 with _status_col:
-                    with st.container(key="sale_status_panel"):
+                    with st.container(key="sale_status_panel", border=True):
                         st.markdown("**สถานะรายการ**")
                         with st.container(key="sale_status_subrow"):
                             _sc1, _sc2 = st.columns(2)
