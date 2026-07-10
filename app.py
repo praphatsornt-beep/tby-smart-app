@@ -586,6 +586,21 @@ label,
     font-size: 0.87rem !important;
     line-height: 1.5 !important;
 }
+
+/* ── Responsive: stack บันทึกขาย status|cart|summary row below ~1400px ──
+   Below this width the 3-way split gets too narrow to read (Thai radio
+   labels wrap character-by-character) — stack full-width instead, which
+   also puts ยอดสรุป (summary) as its own full-width box at the bottom. */
+@media (max-width: 1400px) {
+    [class*="st-key-sale_status_cart_summary_row"] [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+    }
+    [class*="st-key-sale_status_cart_summary_row"] [data-testid="stColumn"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 

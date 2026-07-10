@@ -254,9 +254,19 @@ def render(tab1, products, customers, customer_map):
                 _delivery_opts = ["ส่งพัสดุ", "ฝากของ", "รับแล้ว"]
 
                 # ── รายการสินค้า: เพิ่มสินค้า+สถานะ | ตะกร้า | สรุปยอด ──────────────
-                _status_col, _cart_col, _summary_col = st.columns([1.3, 1.8, 1.1], gap="medium")
+                with st.container(key="sale_status_cart_summary_row"):
+                    _status_col, _cart_col, _summary_col = st.columns([1.3, 1.6, 1.0], gap="medium")
 
                 with _status_col:
+                    with st.container(border=True):
+                        st.markdown("**สถานะรายการ**")
+                        _sc1, _sc2 = st.columns(2)
+                        m_delivery = _sc1.radio("การรับ / สถานะของ", _delivery_opts, key="m_delivery", index=None)
+                        m_pay  = _sc2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
+                        st.divider()
+                        m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
+
+                with _cart_col:
                     _qtext_ver = st.session_state.get("_qtext_ver", 0)
                     _qtext_key = f"q_text_{_qtext_ver}"
                     with st.container(border=True):
@@ -278,15 +288,6 @@ def render(tab1, products, customers, customer_map):
                                 # (ไม่ bump version ด้วย เพื่อให้ข้อความเดิมยังอยู่ให้แก้ไขต่อได้)
                                 st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_qu)}")
 
-                    with st.container(border=True):
-                        st.markdown("**สถานะรายการ**")
-                        _sc1, _sc2 = st.columns(2)
-                        m_delivery = _sc1.radio("การรับ / สถานะของ", _delivery_opts, key="m_delivery", index=None)
-                        m_pay  = _sc2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
-                        st.divider()
-                        m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
-
-                with _cart_col:
                     valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
 
                     # ── ที่อยู่ผู้รับ (อยู่ใต้รายการสินค้าทันที เมื่อเลือกส่งพัสดุ) ──
