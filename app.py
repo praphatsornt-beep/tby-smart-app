@@ -57,7 +57,7 @@ if "code" in _qp and "shop_id" in _qp:
 
 st.markdown(
     '<link rel="preconnect" href="https://fonts.googleapis.com">'
-    '<link href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">',
+    '<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&display=swap" rel="stylesheet">',
     unsafe_allow_html=True,
 )
 
@@ -68,7 +68,7 @@ st.markdown("""
    (body) fonts, flat bordered cards (no drop shadows), pill badges. ===== */
 :root {
     --tby-bg:            oklch(0.975 0.012 95);
-    --tby-text:          oklch(0.24 0.02 155);
+    --tby-text:          oklch(0.22 0.005 260);
     --tby-sidebar-1:     oklch(0.22 0.035 155);
     --tby-sidebar-2:     oklch(0.14 0.025 160);
     --tby-sidebar-inact: oklch(0.88 0.02 155);
@@ -94,7 +94,7 @@ st.markdown("""
 /* ── App canvas ── */
 .stApp {
     background: var(--tby-bg);
-    font-family: 'Sarabun', sans-serif;
+    font-family: 'Prompt', sans-serif;
 }
 
 /* ── Streamlit's own header bar — solid white (same as the topbar right
@@ -105,7 +105,7 @@ header[data-testid="stHeader"] {
 
 /* ── Headings — Kanit, flat (no decorative underline/shadow) ── */
 h1, h2, h3 {
-    font-family: 'Kanit', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
     color: var(--tby-text) !important;
 }
 h1 { font-weight: 700 !important; margin-bottom: 0.6rem !important; }
@@ -134,7 +134,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     z-index: 100;
 }
 .tby-topbar-title {
-    font-family: 'Kanit', sans-serif;
+    font-family: 'Prompt', sans-serif;
     font-weight: 700;
     font-size: 2rem;
     color: var(--tby-text);
@@ -147,7 +147,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     padding-right: 1.5rem;
 }
 .tby-topbar-date {
-    font-family: 'Sarabun', sans-serif;
+    font-family: 'Prompt', sans-serif;
     font-weight: 500;
     font-size: 0.95rem;
     color: var(--tby-muted);
@@ -225,7 +225,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     border-radius: 10px !important;
     padding: 10px 10px !important;
     font-size: 0.95rem !important;
-    font-family: 'Sarabun', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
 }
 /* force left-align all the way down — Streamlit centers button labels by
    default via inner wrapper divs/p, which otherwise wins over the button's
@@ -300,7 +300,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     content: "TBY";
     color: #ffffff;
     font-weight: 700;
-    font-family: 'Kanit', sans-serif;
+    font-family: 'Prompt', sans-serif;
     font-size: 0.85rem;
     white-space: nowrap;
 }
@@ -347,7 +347,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 }
 [data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"] p {
     color: #ffffff !important;
-    font-family: 'Sarabun', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
     font-size: 0.85rem !important;
     margin: 0 !important;
 }
@@ -380,7 +380,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     border: none !important;
     border-bottom: 3px solid transparent !important;
     border-radius: 0 !important;
-    font-family: 'Sarabun', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
     font-size: 1.02rem !important;
     font-weight: 500 !important;
     padding: 12px 18px 10px !important;
@@ -416,7 +416,7 @@ button[kind="pillsActive"] {
     color: var(--tby-muted) !important;
     background: transparent !important;
     border-radius: 0 !important;
-    font-family: 'Sarabun', sans-serif;
+    font-family: 'Prompt', sans-serif;
     font-weight: 500;
     font-size: 0.92rem;
     padding: 14px 18px 12px !important;
@@ -449,7 +449,7 @@ button[kind="primary"] {
     color: #fff !important;
     border: none !important;
     border-radius: 10px !important;
-    font-family: 'Kanit', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
     font-weight: 600 !important;
     box-shadow: none !important;
     transition: background 0.15s !important;
@@ -489,7 +489,7 @@ button[kind="secondary"]:hover {
     box-shadow: none;
 }
 [data-testid="stMetricValue"] {
-    font-family: 'Kanit', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
     font-size: 2.3rem !important;
     font-weight: 700 !important;
     color: var(--tby-text) !important;
@@ -526,7 +526,7 @@ button[kind="secondary"]:hover {
     border: 1.5px solid var(--tby-input-border) !important;
     padding: 10px 14px !important;
     min-height: 44px;
-    font-family: 'Sarabun', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
     transition: border-color 0.18s, box-shadow 0.18s !important;
 }
 .stTextArea textarea {
@@ -605,7 +605,8 @@ button[kind="secondary"]:hover {
    background here. ── */
 [class*="st-key-sale_status_panel"] {
     background: #ffffff !important;
-    border-radius: 14px !important;
+    border-radius: 20px !important;
+    border-color: transparent !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] {
     background: transparent !important;
@@ -664,8 +665,8 @@ button[kind="secondary"]:hover {
 /* ── Bordered containers (st.container(border=True)) — flat card ── */
 [data-testid="stVerticalBlockBorderWrapper"] {
     background: #ffffff;
-    border: 1px solid var(--tby-border) !important;
-    border-radius: 14px !important;
+    border: none !important;
+    border-radius: 20px !important;
     box-shadow: none;
 }
 /* Radio group nested inside a bordered container: drop the double box,
@@ -715,7 +716,7 @@ html { font-size: 12px; }
 [data-testid="stMarkdownContainer"] p,
 [data-testid="stMarkdownContainer"] li,
 [data-testid="stText"] p {
-    font-family: 'Sarabun', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
     font-size: 0.98rem !important;
     line-height: 1.65 !important;
     color: var(--tby-text) !important;
@@ -724,7 +725,7 @@ html { font-size: 12px; }
 /* Widget labels */
 label,
 [data-testid="stWidgetLabel"] p {
-    font-family: 'Sarabun', sans-serif !important;
+    font-family: 'Prompt', sans-serif !important;
     font-size: 0.92rem !important;
     font-weight: 600 !important;
     color: var(--tby-text) !important;
@@ -1091,19 +1092,30 @@ _TAB_NAMES = [
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = _TAB_NAMES[0]
 
+if "_sidebar_compact" not in st.session_state:
+    st.session_state["_sidebar_compact"] = False
+
 with st.sidebar:
     st.markdown(
         """<div class="tby-sidebar-brand" style="display:flex;align-items:center;gap:12px;padding:4px 0 12px;">
         <div style="width:44px;height:44px;border-radius:12px;background:var(--tby-accent);
         display:flex;align-items:center;justify-content:center;flex-shrink:0;
-        font-family:'Kanit',sans-serif;font-weight:700;font-size:0.9rem;color:#ffffff;letter-spacing:0.02em;">TBY</div>
+        font-family:'Prompt',sans-serif;font-weight:700;font-size:0.9rem;color:#ffffff;letter-spacing:0.02em;">TBY</div>
         <div class="tby-sidebar-brand-text">
-        <div style="font-family:'Kanit',sans-serif;font-weight:700;font-size:1.05rem;color:#ffffff;line-height:1.3;">TBY SMART APP</div>
-        <div style="font-family:'Sarabun',sans-serif;font-size:0.8rem;color:var(--tby-sidebar-cap);line-height:1.3;">ระบบจัดการร้าน</div>
+        <div style="font-family:'Prompt',sans-serif;font-weight:700;font-size:1.05rem;color:#ffffff;line-height:1.3;">TBY SMART APP</div>
+        <div style="font-family:'Prompt',sans-serif;font-size:0.8rem;color:var(--tby-sidebar-cap);line-height:1.3;">ระบบจัดการร้าน</div>
         </div>
         </div>""",
         unsafe_allow_html=True,
     )
+    if st.button(
+        ("✕ ย่อเมนู" if not st.session_state["_sidebar_compact"] else "☰ ขยายเมนู"),
+        key="_sidebar_compact_toggle",
+        use_container_width=True,
+        help="ย่อเมนู" if not st.session_state["_sidebar_compact"] else "ขยายเมนู",
+    ):
+        st.session_state["_sidebar_compact"] = not st.session_state["_sidebar_compact"]
+        st.rerun()
     st.divider()
 
     for _nav_i, _nav_label in enumerate(_TAB_NAMES):
@@ -1117,6 +1129,41 @@ with st.sidebar:
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
+
+# Manual "✕ ย่อเมนู" toggle above — forces the same icon-rail CSS the
+# @media query already applies below ~1100px, but on demand at any window
+# width (duplicated here unconditionally since the @media rules are scoped
+# to that breakpoint only).
+if st.session_state["_sidebar_compact"]:
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] {
+            width: 72px !important;
+            min-width: 72px !important;
+            max-width: 72px !important;
+        }
+        [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
+        [data-testid="stSidebar"] .tby-sidebar-brand { justify-content: center !important; padding-right: 0 !important; }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
+            justify-content: center !important;
+            padding: 10px 0 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button div {
+            justify-content: center !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
+            font-size: 1.25rem !important;
+            text-align: left !important;
+            white-space: nowrap !important;
+            overflow: hidden !important;
+            width: 1.4em !important;
+            color: #ffffff !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 # ── Force the sidebar to stay "expanded" at all times, even on narrow
 #    windows — Streamlit has its own native auto-collapse below ~768px

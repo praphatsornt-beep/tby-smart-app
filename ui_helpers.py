@@ -796,7 +796,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
 
     _css = """
   *{box-sizing:border-box;margin:0;padding:0}
-  body{font-family:'Sarabun',sans-serif;padding:16px;color:#111;background:#fff;font-size:13px}
+  body{font-family:'Prompt',sans-serif;padding:16px;color:#111;background:#fff;font-size:13px}
   .header{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px}
   .header h1{font-size:16px;font-weight:700}
   .header h2{font-size:14px;font-weight:600;margin-top:2px}

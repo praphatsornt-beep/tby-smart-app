@@ -244,7 +244,7 @@ def render(products, customers):
     <style>
     *{{box-sizing:border-box;margin:0;padding:0}}
     html,body{{background:#fff!important;color:#000!important}}
-    body{{font-family:'Sarabun',sans-serif;padding:16px;font-size:13px}}
+    body{{font-family:'Prompt',sans-serif;padding:16px;font-size:13px}}
     .header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
     .header h1{{font-size:16px;font-weight:700}}
     .header h2{{font-size:14px;font-weight:600;margin-top:2px}}
@@ -1806,7 +1806,7 @@ def render(products, customers):
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 html,body{{background:#fff!important;color:#000!important}}
-body{{font-family:'Sarabun',sans-serif;padding:16px;font-size:13px}}
+body{{font-family:'Prompt',sans-serif;padding:16px;font-size:13px}}
 .header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
 .header h1{{font-size:16px;font-weight:700}}
 .header-right{{text-align:right;font-size:13px;font-weight:600}}

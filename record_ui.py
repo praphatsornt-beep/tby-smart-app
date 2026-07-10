@@ -889,7 +889,7 @@ def render(tab1, products, customers, customer_map):
                         _bill_html_popup = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
     <style>
     html,body{{background:#fff!important;color:#000!important;margin:0;padding:0}}
-    body{{font-family:'Sarabun',sans-serif;padding:20px;font-size:15px}}
+    body{{font-family:'Prompt',sans-serif;padding:20px;font-size:15px}}
     h3{{margin:0 0 6px;font-size:20px}}
     .info{{font-size:14px;margin-bottom:10px;color:#222}}
     table{{width:100%;border-collapse:collapse;margin:8px 0;font-size:14px}}
@@ -1911,7 +1911,7 @@ def render(tab1, products, customers, customer_map):
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 html,body{{background:#fff!important;color:#000!important}}
-body{{font-family:'Sarabun',sans-serif;padding:16px;font-size:13px}}
+body{{font-family:'Prompt',sans-serif;padding:16px;font-size:13px}}
 .header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
 .header h1{{font-size:16px;font-weight:700}}
 .header-right{{text-align:right;font-size:13px;font-weight:600}}
