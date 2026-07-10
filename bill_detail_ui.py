@@ -1697,8 +1697,8 @@ def render(products, customers):
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
                           "รายการ","ขนส่ง","COD","💸","สถานะส่ง","🔗","หมายเหตุ"],
                 column_config={
-                    "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
-                    "📤":       st.column_config.CheckboxColumn("📤", default=False, width="small",
+                    "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width=45),
+                    "📤":       st.column_config.CheckboxColumn("📤", default=False, width=45,
                                     help="เลือกเพื่อส่ง iShip ใหม่"),
                     "แหล่ง":    st.column_config.TextColumn("แหล่ง", width="small",
                                     help="🛒 = บันทึกขาย  📦 = ส่งของ"),
@@ -1707,6 +1707,7 @@ def render(products, customers):
                     "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width="medium"),
                     "Tracking": st.column_config.TextColumn("Tracking", width="small"),
                     "🔗":       st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
+                    "บ้านเลขที่/ถนน": st.column_config.TextColumn("บ้านเลขที่/ถนน", width=140),
                 },
             )
 
