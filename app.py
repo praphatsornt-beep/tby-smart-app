@@ -177,6 +177,15 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
 [data-testid="stElementContainer"]:has(.tby-topbar) div:has(.tby-topbar) {
     display: contents;
 }
+/* Same fix, same reason, for the sticky sub-nav pills below — its own
+   stElementContainer wrapper was never collapsed, so it had no real
+   containing block to stay pinned against and just scrolled away. */
+[data-testid="stElementContainer"]:has([data-testid="stButtonGroup"]),
+[data-testid="stElementContainer"]:has([data-testid="stButtonGroup"]) div:has([data-testid="stButtonGroup"]),
+[data-testid="stElementContainer"]:has([data-testid="stPills"]),
+[data-testid="stElementContainer"]:has([data-testid="stPills"]) div:has([data-testid="stPills"]) {
+    display: contents;
+}
 
 /* ── Sidebar — main nav lives here as a dark vertical menu.
    Pinned in place (its own scroll) so it never moves when the page
