@@ -136,7 +136,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 .tby-topbar-title {
     font-family: 'Prompt', sans-serif;
     font-weight: 700;
-    font-size: 2rem;
+    font-size: 1.4rem;
     color: var(--tby-text);
     padding-left: 1.5rem;
 }
@@ -383,17 +383,28 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
    regardless of which one is actually deployed. ── */
 [data-testid="stButtonGroup"],
 [data-testid="stPills"] {
-    background: transparent;
+    background: #ffffff;
     border: none;
     border-bottom: 2px solid var(--tby-border);
     border-radius: 0;
-    padding: 0;
+    padding: 0 2rem;
     box-shadow: none;
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    margin-top: 0 !important;
-    margin-bottom: 1.25rem !important;
+    margin: 0 -2rem 1.25rem -2rem !important;
+    width: calc(100% + 4rem);
+    position: sticky;
+    top: 116px;
+    z-index: 90;
+}
+@media (max-width: 600px) {
+    [data-testid="stButtonGroup"],
+    [data-testid="stPills"] {
+        padding: 0 1rem;
+        margin: 0 -1rem 1.25rem -1rem !important;
+        width: calc(100% + 2rem);
+    }
 }
 [data-testid="stButtonGroup"] button,
 [data-testid="stPills"] button {
@@ -403,7 +414,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     border-bottom: 3px solid transparent !important;
     border-radius: 0 !important;
     font-family: 'Prompt', sans-serif !important;
-    font-size: 1.02rem !important;
+    font-size: 1.2rem !important;
     font-weight: 500 !important;
     padding: 12px 18px 10px !important;
     white-space: nowrap;
@@ -628,7 +639,7 @@ button[kind="secondary"]:hover {
 [class*="st-key-sale_status_panel"] {
     background: #ffffff !important;
     border-radius: 20px !important;
-    border-color: transparent !important;
+    border-color: var(--tby-border) !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] {
     background: transparent !important;
@@ -687,7 +698,7 @@ button[kind="secondary"]:hover {
 /* ── Bordered containers (st.container(border=True)) — flat card ── */
 [data-testid="stVerticalBlockBorderWrapper"] {
     background: #ffffff;
-    border: none !important;
+    border: 1px solid var(--tby-border) !important;
     border-radius: 20px !important;
     box-shadow: none;
 }
