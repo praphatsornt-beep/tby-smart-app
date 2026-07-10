@@ -1543,7 +1543,7 @@ def render(products, customers):
     elif _t5_active == _T5_TABS[3]:
         st.subheader("ประวัติการส่งของ")
 
-        _sh_cod_col, _sh_status_col, _sh_sync_col = st.columns([4, 2, 2])
+        _sh_cod_col, _sh_status_col, _sh_sync_col, _sh_bill_col = st.columns([2, 2, 2, 2])
         if _sh_status_col.button("🚚 สถานะส่ง", key="sh_status_sync", use_container_width=True):
             _pending_tn = db.get_pending_delivery_tracking()
             if not _pending_tn:
@@ -1599,7 +1599,17 @@ def render(products, customers):
                         st.rerun()
                     else:
                         st.info("ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
+        if _sh_bill_col.button("💰 เทียบยอดจริง", key="sh_billing_sync", use_container_width=True):
+            with st.spinner("กำลังดึงข้อมูลจาก iShip..."):
+                _br = iship_api.get_shipping_report(days_back=90)
+            if _br.get("error"):
+                st.error(f"❌ {_br['error']}")
+            else:
+                st.session_state["_sh_billing_map"] = _br.get("report", {})
+                st.success(f"✅ ดึงข้อมูล {len(_br.get('report', {}))} tracking")
+                st.rerun()
         _sh_cod_map = st.session_state.get("_sh_cod_map", {})
+        _sh_billing_map = st.session_state.get("_sh_billing_map", {})
         # โหลดสถานะที่บันทึกใน DB ด้วย
         try:
             _db_transferred = set(
@@ -1665,6 +1675,22 @@ def render(products, customers):
                 if s == "manual": return "🖨️"
                 return "—"
 
+            def _billing_check(r):
+                tn = r.get("tracking_no", "") or ""
+                if not tn or tn not in _sh_billing_map:
+                    return "-"
+                actual = float(_sh_billing_map[tn].get("discount_price") or 0)
+                if actual <= 0:
+                    return "⏳ รอตีราคา"
+                est = float(r.get("shipping_cost") or 0)
+                if est <= 0:
+                    return f"❓ ไม่มีราคาประเมิน (จริง {actual:,.0f}฿)"
+                diff = actual - est
+                if abs(diff) <= 2:
+                    return f"✅ {actual:,.0f}฿"
+                sign = "+" if diff > 0 else ""
+                return f"⚠️ {actual:,.0f}฿ (Δ{sign}{diff:,.0f})"
+
             _sh_df   = pd.DataFrame([{
                 "ลบ":              False,
                 "📤":              False,
@@ -1673,6 +1699,7 @@ def render(products, customers):
                 "ลูกค้า":          (r.get("customers") or {}).get("name", ""),
                 "COD":             float(r.get("cod_amount") or 0),
                 "💸":              _cod_status(r),
+                "💰 เทียบยอด":     _billing_check(r),
                 "สถานะส่ง":        (_delivery_icon(r.get("delivery_status") or "") + " " +
                                     (r.get("delivery_status") or "")).strip(),
                 "ผู้รับ":           r.get("recipient_name", ""),
@@ -1695,7 +1722,7 @@ def render(products, customers):
                 hide_index=True, use_container_width=False, key="sh_hist_tbl",
                 disabled=["แหล่ง","วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
-                          "รายการ","ขนส่ง","COD","💸","สถานะส่ง","🔗","หมายเหตุ"],
+                          "รายการ","ขนส่ง","COD","💸","💰 เทียบยอด","สถานะส่ง","🔗","หมายเหตุ"],
                 column_config={
                     "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width=45),
                     "📤":       st.column_config.CheckboxColumn("📤", default=False, width=45,

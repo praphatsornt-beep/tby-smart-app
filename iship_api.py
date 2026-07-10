@@ -317,6 +317,72 @@ def get_shipment_statuses(days_back: int = 60) -> dict:
         return {"statuses": {}, "error": str(e)}
 
 
+def get_shipping_report(days_back: int = 60) -> dict:
+    """
+    ดึงยอดที่ iShip คิดจริง (หลังชั่งน้ำหนักจริงที่คลัง) ต่อ tracking — ใช้เทียบกับ
+    ราคาที่เราประเมินไว้ตอนสร้างรายการ (shipments.shipping_cost) เพื่อจับความผิดปกติ
+    คืน: {"report": {track_no: {"discount_price","actual_weight","status_name"}}, "error": str|None}
+    หมายเหตุ: discount_price/actual_weight เป็น 0 จนกว่าขนส่งจะเข้ารับและชั่งน้ำหนักจริง
+    (ไม่ใช่ค่าเริ่มต้นที่หมายถึง "ฟรี") — ฝั่งเรียกใช้ต้องเช็คสถานะก่อนตีความว่าผิดปกติ
+    """
+    sess, login_msg = _get_cached_web_session()
+    if not sess:
+        return {"report": {}, "error": login_msg}
+
+    end_date   = _dt.date.today()
+    start_date = end_date - _dt.timedelta(days=days_back)
+
+    sess.get(f"{WEB_BASE}/report/shipping", timeout=10)
+    xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
+    hdrs = {
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept":           "application/json, text/javascript, */*; q=0.01",
+        "Referer":          f"{WEB_BASE}/report/shipping",
+        "X-XSRF-TOKEN":     xsrf,
+    }
+
+    _cols = ["created_at", "pickedup_date", "delivered_at", "courier_code", "track_no",
+             "custom_order_id", "dst_name", "dst_address", "cod_amount", "size", "box",
+             "actual_weight", "discount_price", "status_name", "remark"]
+    params = {
+        "draw": 1, "start": 0, "length": 1000,
+        "order[0][column]": 0, "order[0][dir]": "desc",
+        "search[value]": "", "search[regex]": "false",
+        "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
+        "pickedup_date": "",
+    }
+    for i, c in enumerate(_cols):
+        params[f"columns[{i}][data]"]          = c
+        params[f"columns[{i}][name]"]          = c
+        params[f"columns[{i}][searchable]"]    = "true"
+        params[f"columns[{i}][orderable]"]     = "true"
+        params[f"columns[{i}][search][value]"] = ""
+        params[f"columns[{i}][search][regex]"] = "false"
+
+    try:
+        r = sess.get(f"{WEB_BASE}/getdt-shipping-report", headers=hdrs,
+                     params=params, timeout=15)
+        if r.status_code != 200 or not r.text.strip():
+            return {"report": {}, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+        try:
+            rows = r.json().get("data", [])
+        except Exception:
+            return {"report": {}, "error": f"JSON parse failed: {r.text[:300]}"}
+        report = {}
+        for row in rows:
+            tn = (row.get("track_no") or "").strip()
+            if not tn:
+                continue
+            report[tn] = {
+                "discount_price": float(row.get("discount_price") or 0),
+                "actual_weight":  float(row.get("actual_weight") or 0),
+                "status_name":    row.get("status_name", "") or "",
+            }
+        return {"report": report, "error": None, "_debug": {"rows": len(rows)}}
+    except Exception as e:
+        return {"report": {}, "error": str(e)}
+
+
 def create_order(
     dst_name: str, dst_phone: str,
     address_line: str, district: str, amphure: str, province: str, zipcode: str,

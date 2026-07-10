@@ -1039,6 +1039,7 @@ def _show_carrier_select():
                             "province":       info.get("province", ""),
                             "postal_code":    postcode,
                             "carrier":        _cs_carrier,
+                            "shipping_cost":  _cs_total,
                             "items":          info.get("items", []),
                             "tracking_no":    _cs_track,
                             "cod_amount":     int(cod_amt),
