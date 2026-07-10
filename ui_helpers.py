@@ -479,7 +479,13 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
 
             st.divider()
             _total = sum(float(_prod_by_id.get(r["product_id"], {}).get("price") or 0) * int(r["qty"]) for r in cart)
-            st.markdown(f"ยอดรวม &nbsp; **฿{_total:,.0f}**")
+            st.markdown(
+                f"<div style='display:flex;justify-content:space-between;align-items:baseline'>"
+                f"<span style='font-size:0.95rem;color:oklch(0.55 0 0)'>ยอดรวม</span>"
+                f"<span style='font-size:1.4rem;font-weight:800;color:var(--tby-accent)'>฿{_total:,.0f}</span>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
     return [(_prod_by_id[r["product_id"]], int(r["qty"]), "") for r in cart if r["product_id"] in _prod_by_id]
 

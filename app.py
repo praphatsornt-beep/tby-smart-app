@@ -199,11 +199,15 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
    assumes the sidebar is fully hidden underneath. Since we now force the
    sidebar to stay open (as the 72px icon rail) instead of letting it fully
    collapse there, offset the content so the rail doesn't sit on top of it.
-   `left` is a no-op on stMain's normal (static) positioning at wider
-   widths, so this only takes effect in that same narrow range. */
-[data-testid="stMain"] {
-    left: 72px !important;
-    width: calc(100% - 72px) !important;
+   Explicitly scoped to that same narrow range (rather than left as a
+   theoretical "no-op at wider widths") since an unconditional width:calc()
+   here was leaving a dead gap on the right at wide widths whenever the
+   sidebar was manually toggled to the compact rail. */
+@media (max-width: 768px) {
+    [data-testid="stMain"] {
+        left: 72px !important;
+        width: calc(100% - 72px) !important;
+    }
 }
 [data-testid="stSidebar"] h3 {
     color: #ffffff !important;
