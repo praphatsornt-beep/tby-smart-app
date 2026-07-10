@@ -255,7 +255,7 @@ def render(tab1, products, customers, customer_map):
 
                 # ── รายการสินค้า: เพิ่มสินค้า+สถานะ | ตะกร้า | สรุปยอด ──────────────
                 with st.container(key="sale_status_cart_summary_row"):
-                    _status_col, _cart_col, _summary_col = st.columns([1.3, 1.6, 1.0], gap="medium")
+                    _status_col, _cart_col, _summary_col = st.columns([1.0, 1.9, 1.0], gap="medium")
 
                 with _status_col:
                     with st.container(key="sale_status_panel", border=True):

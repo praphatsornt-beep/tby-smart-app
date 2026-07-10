@@ -640,16 +640,17 @@ button[kind="secondary"]:hover {
     color: var(--tby-text) !important;
     font-weight: 600 !important;
 }
-/* smaller, tighter type scale for this panel — headers, widget labels
-   ("การรับ / สถานะของ" etc.), and radio option text all one notch down */
+/* tighter type scale for this panel — headers, widget labels
+   ("การรับ / สถานะของ" etc.), and radio option text all one notch down
+   from the global default, but not as small as a first pass made them */
 [class*="st-key-sale_status_panel"] [data-testid="stMarkdownContainer"] p {
-    font-size: 0.88rem !important;
+    font-size: 0.98rem !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stWidgetLabel"] p {
-    font-size: 0.82rem !important;
+    font-size: 0.9rem !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label p {
-    font-size: 0.82rem !important;
+    font-size: 0.92rem !important;
 }
 [class*="st-key-sale_status_bill_row"] [data-testid="stRadio"] > div[role="radiogroup"] {
     flex-direction: row !important;
