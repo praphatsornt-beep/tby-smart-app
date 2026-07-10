@@ -401,9 +401,6 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     gap: 4px;
     margin: 0 -2rem 1.25rem -2rem !important;
     width: calc(100% + 4rem);
-    position: sticky;
-    top: 116px;
-    z-index: 90;
 }
 @media (max-width: 600px) {
     [data-testid="stButtonGroup"],
