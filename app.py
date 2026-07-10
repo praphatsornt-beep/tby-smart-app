@@ -152,6 +152,20 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     font-size: 0.95rem;
     color: var(--tby-muted);
 }
+@media (max-width: 600px) {
+    .tby-topbar {
+        padding: 10px 6px;
+        margin: -1.5rem -1rem 16px -1rem;
+        width: calc(100% + 2rem);
+    }
+    .tby-topbar-title {
+        font-size: 1.2rem;
+        padding-left: 0.6rem;
+    }
+    .tby-topbar-date {
+        font-size: 0.75rem;
+    }
+}
 /* Streamlit wraps every st.markdown() output in a chain of wrapper divs
    that tightly hug its own content (stElementContainer > stMarkdown >
    stMarkdownContainer). That makes those wrappers the sticky element's
@@ -173,6 +187,12 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     top: 0;
     height: 100vh;
     overflow-y: auto;
+    width: 200px !important;
+    min-width: 200px !important;
+    max-width: 200px !important;
+}
+[data-testid="stSidebarResizeHandle"] {
+    display: none !important;
 }
 [data-testid="stSidebar"] h3 {
     color: #ffffff !important;
@@ -192,8 +212,8 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     justify-content: flex-start !important;
     text-align: left !important;
     border-radius: 10px !important;
-    padding: 12px 14px !important;
-    font-size: 1.08rem !important;
+    padding: 10px 10px !important;
+    font-size: 0.95rem !important;
     font-family: 'Sarabun', sans-serif !important;
 }
 /* force left-align all the way down — Streamlit centers button labels by
@@ -204,7 +224,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     text-align: left !important;
 }
 [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
-    font-size: 1.08rem !important;
+    font-size: 0.95rem !important;
     color: inherit !important;
     font-weight: inherit !important;
     text-align: left !important;
