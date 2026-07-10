@@ -23,6 +23,22 @@ import carriers as carr
 _T1_TABS = ["📝 บันทึกขาย", "📦 ส่งของ", "🔢 คำนวณยอด"]
 
 
+def _sum_row(label, value, big=False, accent=False):
+    """label/value row for the right-hand สรุปยอด card — shared by
+    บันทึกขาย and ส่งของ so both use the same summary-card look."""
+    _val_fs = "1.5rem" if big else "0.95rem"
+    _val_fw = 800 if big else 700
+    _val_color = "#E07B39" if accent else "#111111"
+    st.markdown(
+        f"<div style='display:flex;justify-content:space-between;align-items:baseline;"
+        f"margin:{'12px' if big else '6px'} 0 2px'>"
+        f"<span style='font-size:0.9rem;color:oklch(0.55 0 0)'>{label}</span>"
+        f"<span style='font-size:{_val_fs};font-weight:{_val_fw};color:{_val_color}'>{value}</span>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def render(tab1, products, customers, customer_map):
     """Render tab1: บันทึกรายการ (sub_calc, sub_ship, sub_sale)."""
     with tab1:
@@ -435,19 +451,6 @@ def render(tab1, products, customers, customer_map):
                                         st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_sa_e}")
                     else:
                         r_name = r_phone = r_addr_line = r_district = r_amphure = r_province = ""
-
-                def _sum_row(label, value, big=False, accent=False):
-                    _val_fs = "1.5rem" if big else "0.95rem"
-                    _val_fw = 800 if big else 700
-                    _val_color = "#E07B39" if accent else "#111111"
-                    st.markdown(
-                        f"<div style='display:flex;justify-content:space-between;align-items:baseline;"
-                        f"margin:{'12px' if big else '6px'} 0 2px'>"
-                        f"<span style='font-size:0.9rem;color:oklch(0.55 0 0)'>{label}</span>"
-                        f"<span style='font-size:{_val_fs};font-weight:{_val_fw};color:{_val_color}'>{value}</span>"
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
 
                 with _summary_col:
                     _summary_box = st.container(border=True)
@@ -1107,185 +1110,187 @@ def render(tab1, products, customers, customer_map):
             _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
             _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
 
-            # ── เพิ่มสินค้า (แสดงตลอด ไม่ซ่อนใน expander) ──────────────────
-            _sp_qtext_ver = st.session_state.get("_sp_qtext_ver", 0)
-            _sp_qtext_key = f"sp_q_text_{_sp_qtext_ver}"
-            _sp_add_box = st.container(border=True)
-            _sp_add_box.markdown("**เพิ่มสินค้า**")
-            _sqc1, _sqc2 = _sp_add_box.columns([4, 1])
-            _sp_q_text = _sqc1.text_input(
-                "รหัสสินค้า",
-                placeholder="พิมพ์รหัสสินค้า (เต็มหรือบางส่วนก็ได้) เช่น tf2581 — Enter เพื่อเพิ่มเลย",
-                key=_sp_qtext_key, label_visibility="collapsed",
-            )
-            _sp_q_submit = _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", use_container_width=True)
-            if _sp_q_submit or _sp_q_text.strip():
-                _sp_qf, _sp_qu = _parse_quick_order(_sp_q_text or "", _sp)
-                if _sp_qf:
-                    _cart_add_items(_sp_cart_key, _sp_qf)
-                    st.session_state["_sp_qtext_ver"] = _sp_qtext_ver + 1
-                    st.rerun()
-                elif _sp_qu:
-                    st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_sp_qu)}")
+            # ── เพิ่มสินค้า+ตะกร้า+ที่อยู่ | สรุปยอด (จัดหน้าให้เหมือนบันทึกขาย) ──
+            _ship_cart_col, _ship_summary_col = st.columns([1.9, 1.0], gap="medium")
 
-            components.html(
-                """
-                <script>
-                (function() {
-                    try { window.parent.focus(); } catch (e) {}
-                    var tries = 0;
-                    function tryFocus() {
-                        tries++;
-                        try {
-                            var doc = window.parent.document;
-                            var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
-                            if (input && doc.activeElement !== input) {
-                                input.focus({preventScroll: true});
-                                input.click();
-                            }
-                        } catch (e) {}
-                        if (tries < 20) { setTimeout(tryFocus, 100); }
-                    }
-                    requestAnimationFrame(tryFocus);
-                })();
-                </script>
-                """,
-                height=0,
-            )
+            with _ship_summary_col:
+                _ship_summary_box = st.container(border=True)
 
-            st.divider()
-
-            # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
-            _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
-            _sp_items = [
-                {"product_id": p["id"], "name": p["name"], "qty": qty}
-                for p, qty, _ in _sp_valid_items
-            ]
-            _sp_raw_weight   = raw_weight_g(_sp_valid_items)
-            _sp_total_weight = _sp_raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
-            _sp_total_amt = sum(float(p.get("price") or 0) * qty for p, qty, _ in _sp_valid_items)
-
-            # ── ที่อยู่เดิม (collapsed) ───────────────────────────────────────
-            if _sp_cid:
-                try:
-                    _sp_saved = db.get_customer_addresses(customer_id=_sp_cid)
-                except Exception as _sp_load_e:
-                    _sp_saved = []
-                    st.caption(f"⚠️ โหลดที่อยู่เดิมไม่สำเร็จ: {_sp_load_e}")
-                if _sp_saved:
-                    with st.expander(f"⚡ ที่อยู่เดิม ({len(_sp_saved)} รายการ)", expanded=False):
-                        for _sa in _sp_saved:
-                            _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}"
-                            if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
-                                _sa_dt = (_sa.get("district", "") or "").strip()
-                                _sa_pc = (_sa.get("postal_code", "") or "").strip()
-                                st.session_state["_fsp_rname"] = _sa.get("recipient_name", "")
-                                st.session_state["_fsp_rphone"]= _sa.get("phone", "")
-                                st.session_state["_fsp_al"]   = _sa.get("address_line", "")
-                                st.session_state["_fsp_dt"]   = _sa_dt
-                                st.session_state["_fsp_am"]   = _sa.get("amphure", "")
-                                st.session_state["_fsp_pv"]   = _sa.get("province", "")
-                                st.session_state["_fsp_pc"]   = _sa_pc
-                                st.session_state["_sp_last_dt"] = _sa_dt
-                                st.session_state["_sp_last_pc"] = _sa_pc
-                                st.rerun()
-
-            # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────────
-            with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
-                # paste-parse จาก LINE format
-                _sp_parse_key = "_sp_parse_open"
-                if st.button("📍 แยกที่อยู่อัตโนมัติ", key="sp_parse_open_btn"):
-                    st.session_state[_sp_parse_key] = not st.session_state.get(_sp_parse_key, False)
-                if st.session_state.get(_sp_parse_key):
-                    _sp_paste = st.text_area("วางที่อยู่จาก LINE (iShip format)", key="sp_paste_addr",
-                                              height=100,
-                                              placeholder="Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976")
-                    _spc1, _spc2 = st.columns([1, 1])
-                    if _spc1.button("✅ ตกลง", key="sp_parse_btn", type="primary"):
-                        _sp_parsed = _parse_iship_address(_sp_paste)
-                        st.session_state["_fsp_rname"] = _sp_parsed.get("dst_name", "")
-                        st.session_state["_fsp_rphone"]= _sp_parsed.get("dst_phone", "")
-                        st.session_state["_fsp_al"]   = _sp_parsed.get("address_line", "")
-                        st.session_state["_fsp_dt"]   = _sp_parsed.get("district", "")
-                        st.session_state["_fsp_am"]   = _sp_parsed.get("amphure", "")
-                        st.session_state["_fsp_pv"]   = _sp_parsed.get("province", "")
-                        st.session_state["_fsp_pc"]   = _sp_parsed.get("zipcode", "")
-                        if _sp_parsed.get("district"):  st.session_state["_sp_last_dt"] = _sp_parsed["district"]
-                        if _sp_parsed.get("zipcode"):   st.session_state["_sp_last_pc"] = _sp_parsed["zipcode"]
-                        st.session_state[_sp_parse_key] = False
+            with _ship_cart_col:
+                # ── เพิ่มสินค้า (แสดงตลอด ไม่ซ่อนใน expander) ──────────────────
+                _sp_qtext_ver = st.session_state.get("_sp_qtext_ver", 0)
+                _sp_qtext_key = f"sp_q_text_{_sp_qtext_ver}"
+                _sp_add_box = st.container(border=True)
+                _sp_add_box.markdown("**เพิ่มสินค้า**")
+                _sqc1, _sqc2 = _sp_add_box.columns([4, 1])
+                _sp_q_text = _sqc1.text_input(
+                    "รหัสสินค้า",
+                    placeholder="พิมพ์รหัสสินค้า (เต็มหรือบางส่วนก็ได้) เช่น tf2581 — Enter เพื่อเพิ่มเลย",
+                    key=_sp_qtext_key, label_visibility="collapsed",
+                )
+                _sp_q_submit = _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", use_container_width=True)
+                if _sp_q_submit or _sp_q_text.strip():
+                    _sp_qf, _sp_qu = _parse_quick_order(_sp_q_text or "", _sp)
+                    if _sp_qf:
+                        _cart_add_items(_sp_cart_key, _sp_qf)
+                        st.session_state["_sp_qtext_ver"] = _sp_qtext_ver + 1
                         st.rerun()
-                    if _spc2.button("ยกเลิก", key="sp_parse_cancel"):
-                        st.session_state[_sp_parse_key] = False
-                        st.rerun()
-                st.divider()
+                    elif _sp_qu:
+                        st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_sp_qu)}")
 
-                # apply staged address fill ก่อน render widgets
-                for _fk, _wk in [("_fsp_rname",f"sp_rname_v{_sp_av}"),("_fsp_rphone",f"sp_rphone_v{_sp_av}"),
-                                  ("_fsp_al",f"sp_al_v{_sp_av}"),
-                                  ("_fsp_dt",f"sp_dt_v{_sp_av}"),("_fsp_am",f"sp_am_v{_sp_av}"),
-                                  ("_fsp_pv",f"sp_pv_v{_sp_av}"),("_fsp_pc",f"sp_pc_v{_sp_av}")]:
-                    if _fk in st.session_state:
-                        st.session_state[_wk] = st.session_state.pop(_fk)
+                components.html(
+                    """
+                    <script>
+                    (function() {
+                        try { window.parent.focus(); } catch (e) {}
+                        var tries = 0;
+                        function tryFocus() {
+                            tries++;
+                            try {
+                                var doc = window.parent.document;
+                                var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                                if (input && doc.activeElement !== input) {
+                                    input.focus({preventScroll: true});
+                                    input.click();
+                                }
+                            } catch (e) {}
+                            if (tries < 20) { setTimeout(tryFocus, 100); }
+                        }
+                        requestAnimationFrame(tryFocus);
+                    })();
+                    </script>
+                    """,
+                    height=0,
+                )
 
-                # phone lookup อัตโนมัติ
-                _sp_cur_rph = st.session_state.get(f"sp_rphone_v{_sp_av}", "")
-                if len(_sp_cur_rph.strip()) == 10 and st.session_state.get("_sp_last_rph_fill") != _sp_cur_rph.strip():
+                # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
+                _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
+                _sp_items = [
+                    {"product_id": p["id"], "name": p["name"], "qty": qty}
+                    for p, qty, _ in _sp_valid_items
+                ]
+                _sp_raw_weight   = raw_weight_g(_sp_valid_items)
+                _sp_total_weight = _sp_raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
+                _sp_total_amt = sum(float(p.get("price") or 0) * qty for p, qty, _ in _sp_valid_items)
+
+                # ── ที่อยู่เดิม (collapsed) ───────────────────────────────────────
+                if _sp_cid:
                     try:
-                        _sp_rph_addr = db.get_address_by_phone(_sp_cur_rph.strip())
-                    except Exception:
-                        _sp_rph_addr = None
-                    st.session_state["_sp_last_rph_fill"] = _sp_cur_rph.strip()
-                    if _sp_rph_addr:
-                        for _k, _v in [(f"sp_rname_v{_sp_av}", _sp_rph_addr.get("recipient_name") or ""),
-                                       (f"sp_al_v{_sp_av}",    _sp_rph_addr.get("address_line") or ""),
-                                       (f"sp_dt_v{_sp_av}",    _sp_rph_addr.get("district") or ""),
-                                       (f"sp_am_v{_sp_av}",    _sp_rph_addr.get("amphure") or ""),
-                                       (f"sp_pv_v{_sp_av}",    _sp_rph_addr.get("province") or "")]:
-                            if _v: st.session_state[_k] = _v
-                        if _sp_rph_addr.get("postal_code"):
-                            _sp_rph_pc = _sp_rph_addr["postal_code"]
-                            st.session_state[f"sp_pc_v{_sp_av}"] = _sp_rph_pc
-                            st.session_state["_sp_last_pc"] = _sp_rph_pc
-                        _sp_rph_cust = (_sp_rph_addr.get("customers") or {}).get("name", "")
-                        if _sp_rph_cust and not st.session_state.get("_sp_cust_picked"):
-                            st.session_state["_sp_cust_picked"] = _sp_rph_cust
-                        st.rerun()
+                        _sp_saved = db.get_customer_addresses(customer_id=_sp_cid)
+                    except Exception as _sp_load_e:
+                        _sp_saved = []
+                        st.caption(f"⚠️ โหลดที่อยู่เดิมไม่สำเร็จ: {_sp_load_e}")
+                    if _sp_saved:
+                        with st.expander(f"⚡ ที่อยู่เดิม ({len(_sp_saved)} รายการ)", expanded=False):
+                            for _sa in _sp_saved:
+                                _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}"
+                                if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
+                                    _sa_dt = (_sa.get("district", "") or "").strip()
+                                    _sa_pc = (_sa.get("postal_code", "") or "").strip()
+                                    st.session_state["_fsp_rname"] = _sa.get("recipient_name", "")
+                                    st.session_state["_fsp_rphone"]= _sa.get("phone", "")
+                                    st.session_state["_fsp_al"]   = _sa.get("address_line", "")
+                                    st.session_state["_fsp_dt"]   = _sa_dt
+                                    st.session_state["_fsp_am"]   = _sa.get("amphure", "")
+                                    st.session_state["_fsp_pv"]   = _sa.get("province", "")
+                                    st.session_state["_fsp_pc"]   = _sa_pc
+                                    st.session_state["_sp_last_dt"] = _sa_dt
+                                    st.session_state["_sp_last_pc"] = _sa_pc
+                                    st.rerun()
 
-                _sa1, _sa2 = st.columns(2)
-                _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key=f"sp_rname_v{_sp_av}")
-                _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}")
-                _warn_duplicate_phone(_sp_rphone, _sp_cid)
-                _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key=f"sp_al_v{_sp_av}")
-                _sb1, _sb2, _sb3 = st.columns(3)
-                with _sb1:
-                    _sp_dt = _tambon_selectbox(f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
-                                                f"sp_pc_v{_sp_av}", f"sp_dt_searchbox_v{_sp_av}")
-                _sp_am = _sb2.text_input("อำเภอ/เขต",   key=f"sp_am_v{_sp_av}")
-                _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
-                _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key=f"sp_pc_v{_sp_av}", placeholder="เช่น 10400")
-                _postcode_suggest(_sp_pc, f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
-                                  f"sp_dt_searchbox_v{_sp_av}", f"sp_pc_suggest_v{_sp_av}",
-                                  stage_dt="_fsp_dt", stage_am="_fsp_am", stage_pv="_fsp_pv")
-                if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
-                    db.upsert_customer_address({
-                        "id":             str(uuid.uuid4()),
-                        "customer_id":    _sp_cid,
-                        "recipient_name": _sp_rname,
-                        "phone":          _sp_rphone,
-                        "address_line":   _sp_al,
-                        "district":       _sp_dt,
-                        "amphure":        _sp_am,
-                        "province":       _sp_pv,
-                        "postal_code":    _sp_pc,
-                    })
-                    st.success("✅ บันทึกที่อยู่แล้ว")
+                # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────────
+                with st.expander("📦 ที่อยู่ผู้รับ", expanded=True):
+                    # paste-parse จาก LINE format
+                    _sp_parse_key = "_sp_parse_open"
+                    if st.button("📍 แยกที่อยู่อัตโนมัติ", key="sp_parse_open_btn"):
+                        st.session_state[_sp_parse_key] = not st.session_state.get(_sp_parse_key, False)
+                    if st.session_state.get(_sp_parse_key):
+                        _sp_paste = st.text_area("วางที่อยู่จาก LINE (iShip format)", key="sp_paste_addr",
+                                                  height=100,
+                                                  placeholder="Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976")
+                        _spc1, _spc2 = st.columns([1, 1])
+                        if _spc1.button("✅ ตกลง", key="sp_parse_btn", type="primary"):
+                            _sp_parsed = _parse_iship_address(_sp_paste)
+                            st.session_state["_fsp_rname"] = _sp_parsed.get("dst_name", "")
+                            st.session_state["_fsp_rphone"]= _sp_parsed.get("dst_phone", "")
+                            st.session_state["_fsp_al"]   = _sp_parsed.get("address_line", "")
+                            st.session_state["_fsp_dt"]   = _sp_parsed.get("district", "")
+                            st.session_state["_fsp_am"]   = _sp_parsed.get("amphure", "")
+                            st.session_state["_fsp_pv"]   = _sp_parsed.get("province", "")
+                            st.session_state["_fsp_pc"]   = _sp_parsed.get("zipcode", "")
+                            if _sp_parsed.get("district"):  st.session_state["_sp_last_dt"] = _sp_parsed["district"]
+                            if _sp_parsed.get("zipcode"):   st.session_state["_sp_last_pc"] = _sp_parsed["zipcode"]
+                            st.session_state[_sp_parse_key] = False
+                            st.rerun()
+                        if _spc2.button("ยกเลิก", key="sp_parse_cancel"):
+                            st.session_state[_sp_parse_key] = False
+                            st.rerun()
+                    st.divider()
 
-            # ── ค่าส่ง + metrics ─────────────────────────────────────────────
-            _sp_fc1, _sp_fc2 = st.columns(2)
+                    # apply staged address fill ก่อน render widgets
+                    for _fk, _wk in [("_fsp_rname",f"sp_rname_v{_sp_av}"),("_fsp_rphone",f"sp_rphone_v{_sp_av}"),
+                                      ("_fsp_al",f"sp_al_v{_sp_av}"),
+                                      ("_fsp_dt",f"sp_dt_v{_sp_av}"),("_fsp_am",f"sp_am_v{_sp_av}"),
+                                      ("_fsp_pv",f"sp_pv_v{_sp_av}"),("_fsp_pc",f"sp_pc_v{_sp_av}")]:
+                        if _fk in st.session_state:
+                            st.session_state[_wk] = st.session_state.pop(_fk)
+
+                    # phone lookup อัตโนมัติ
+                    _sp_cur_rph = st.session_state.get(f"sp_rphone_v{_sp_av}", "")
+                    if len(_sp_cur_rph.strip()) == 10 and st.session_state.get("_sp_last_rph_fill") != _sp_cur_rph.strip():
+                        try:
+                            _sp_rph_addr = db.get_address_by_phone(_sp_cur_rph.strip())
+                        except Exception:
+                            _sp_rph_addr = None
+                        st.session_state["_sp_last_rph_fill"] = _sp_cur_rph.strip()
+                        if _sp_rph_addr:
+                            for _k, _v in [(f"sp_rname_v{_sp_av}", _sp_rph_addr.get("recipient_name") or ""),
+                                           (f"sp_al_v{_sp_av}",    _sp_rph_addr.get("address_line") or ""),
+                                           (f"sp_dt_v{_sp_av}",    _sp_rph_addr.get("district") or ""),
+                                           (f"sp_am_v{_sp_av}",    _sp_rph_addr.get("amphure") or ""),
+                                           (f"sp_pv_v{_sp_av}",    _sp_rph_addr.get("province") or "")]:
+                                if _v: st.session_state[_k] = _v
+                            if _sp_rph_addr.get("postal_code"):
+                                _sp_rph_pc = _sp_rph_addr["postal_code"]
+                                st.session_state[f"sp_pc_v{_sp_av}"] = _sp_rph_pc
+                                st.session_state["_sp_last_pc"] = _sp_rph_pc
+                            _sp_rph_cust = (_sp_rph_addr.get("customers") or {}).get("name", "")
+                            if _sp_rph_cust and not st.session_state.get("_sp_cust_picked"):
+                                st.session_state["_sp_cust_picked"] = _sp_rph_cust
+                            st.rerun()
+
+                    _sa1, _sa2 = st.columns(2)
+                    _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key=f"sp_rname_v{_sp_av}")
+                    _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}")
+                    _warn_duplicate_phone(_sp_rphone, _sp_cid)
+                    _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key=f"sp_al_v{_sp_av}")
+                    _sb1, _sb2, _sb3 = st.columns(3)
+                    with _sb1:
+                        _sp_dt = _tambon_selectbox(f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
+                                                    f"sp_pc_v{_sp_av}", f"sp_dt_searchbox_v{_sp_av}")
+                    _sp_am = _sb2.text_input("อำเภอ/เขต",   key=f"sp_am_v{_sp_av}")
+                    _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
+                    _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key=f"sp_pc_v{_sp_av}", placeholder="เช่น 10400")
+                    _postcode_suggest(_sp_pc, f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
+                                      f"sp_dt_searchbox_v{_sp_av}", f"sp_pc_suggest_v{_sp_av}",
+                                      stage_dt="_fsp_dt", stage_am="_fsp_am", stage_pv="_fsp_pv")
+                    if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
+                        db.upsert_customer_address({
+                            "id":             str(uuid.uuid4()),
+                            "customer_id":    _sp_cid,
+                            "recipient_name": _sp_rname,
+                            "phone":          _sp_rphone,
+                            "address_line":   _sp_al,
+                            "district":       _sp_dt,
+                            "amphure":        _sp_am,
+                            "province":       _sp_pv,
+                            "postal_code":    _sp_pc,
+                        })
+                        st.success("✅ บันทึกที่อยู่แล้ว")
+
+            # ── ค่าส่ง (คำนวณ) — แสดงผลใน สรุปยอด ฝั่งขวาแทน (สไตล์เดียวกับบันทึกขาย) ──
             _sp_fees = carrier_fees(_sp_raw_weight, _sp_pc.strip()) if len((_sp_pc or "").strip()) == 5 else None
             if _sp_fees:
-                _sp_fc1.caption(f"Flash: {_sp_fees['Flash Express']['zone'] or 'ปกติ'} | +{_sp_fees['Flash Express']['surcharge']} ฿")
-                _sp_fc2.caption(f"SPX:   {_sp_fees['SPX Express']['zone']   or 'ปกติ'} | +{_sp_fees['SPX Express']['surcharge']} ฿")
                 _sp_f_tot = _sp_fees["Flash Express"]["total"]
                 _sp_s_tot = _sp_fees["SPX Express"]["total"]
                 if _sp_f_tot < _sp_s_tot:
@@ -1296,24 +1301,35 @@ def render(tab1, products, customers, customer_map):
                     _sp_carrier = _pick_carrier(_sp_pc.strip(), round(_sp_total_weight / 1000, 2))
             else:
                 _sp_carrier = "Flash Express"
-            _sp_cost = _sp_fees[_sp_carrier]["total"] if _sp_fees else 0
-            if _sp_items:
-                _sm1, _sm2, _sm3 = st.columns(3)
-                _sm1.metric(f"🚚 {_sp_carrier}", f"{_sp_cost} ฿")
-                _sm2.metric("⚖️ น้ำหนัก", f"{(_sp_total_weight/1000):.2f} kg")
-                _sm3.metric("📦 รายการ", f"{len(_sp_items)} สินค้า")
-                if _sp_total_amt > 0:
-                    _sm4, _sm5 = st.columns(2)
-                    _sm4.metric("💵 ยอดสินค้า", f"{_sp_total_amt:,.0f} ฿")
-                    _sm5.metric("💰 ยอดรวม (รวมค่าส่ง)", f"{(_sp_total_amt + _sp_cost):,.0f} ฿")
+            _sp_cost      = _sp_fees[_sp_carrier]["total"]     if _sp_fees else 0
+            _sp_surcharge = _sp_fees[_sp_carrier]["surcharge"] if _sp_fees else 0
 
-            # ── tracking + หมายเหตุ ───────────────────────────────────────────
-            _sp_track = st.text_input("เลข tracking (กรอกทีหลังได้)", key=f"sp_track_v{_sp_av}", placeholder="TH123456789")
-            _sp_notes = st.text_input("หมายเหตุ", key=f"sp_notes_v{_sp_av}")
-            _sp_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key=f"sp_iship_note_v{_sp_av}")
+            with _ship_summary_box:
+                st.markdown("**สรุปยอด**")
+                if _sp_items:
+                    st.caption("🛒 " + "  |  ".join(f"{it['product_id']} ×{it['qty']}" for it in _sp_items))
+                _sum_row("📦 จำนวนสินค้า", f"{sum(it['qty'] for it in _sp_items)} ชิ้น")
+                _sum_row("⚖️ น้ำหนัก", f"{(_sp_total_weight/1000):.2f} kg")
+                if _sp_items:
+                    st.divider()
+                    if _sp_total_amt > 0:
+                        _sum_row("🧾 ยอดสินค้า", f"฿{_sp_total_amt:,.0f}")
+                    _sum_row("🚚 ค่าส่ง", f"฿{_sp_cost:,.0f}")
+                    if _sp_surcharge > 0:
+                        _sum_row("📍 พื้นที่ห่างไกล", f"฿{_sp_surcharge:,.0f}")
+                    st.divider()
+                    _sum_row("💰 ยอดรวม", f"฿{(_sp_total_amt + _sp_cost):,.0f}", big=True, accent=True)
+
+                # ── tracking + หมายเหตุ ───────────────────────────────────────
+                _sp_track = st.text_input("เลข tracking (กรอกทีหลังได้)", key=f"sp_track_v{_sp_av}", placeholder="TH123456789")
+                _sp_notes = st.text_input("หมายเหตุ", key=f"sp_notes_v{_sp_av}")
+                _sp_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key=f"sp_iship_note_v{_sp_av}")
+
+                st.divider()
+                _sp_save_clicked = st.button("💾 บันทึกการส่งของ", type="primary", use_container_width=True, key="sp_save")
 
             # ── บันทึก ────────────────────────────────────────────────────────
-            if st.button("💾 บันทึกการส่งของ", type="primary", use_container_width=True, key="sp_save"):
+            if _sp_save_clicked:
                 if not _sp_rname.strip():
                     st.error("กรุณากรอกชื่อผู้รับ")
                 elif not _sp_pc.strip():
