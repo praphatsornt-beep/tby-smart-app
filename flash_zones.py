@@ -208,6 +208,24 @@ def dhl_remote_surcharge(postcode: str) -> int:
     return 50 if str(postcode).strip() in DHL_REMOTE else 0
 
 
+# ─── KEX Bulky — พื้นที่ห่างไกล (+50) ─────────────────────────────────────────
+# รายชื่อทางการจาก iShip — แคบกว่า FLASH_ZONES "remote" มาก (มีแค่ปัตตานี/ยะลา/
+# นราธิวาส ไม่รวมภาคเหนือ/กลางที่ Flash จัดเป็น remote) ห้ามใช้ lookup_zone() แทนชุดนี้
+KEX_BULKY_REMOTE: set[str] = {
+    # ปัตตานี
+    "94160", "94170", "94180", "94190", "94220", "94230",
+    # ยะลา
+    "95000", "95110", "95120", "95130", "95140", "95150", "95160", "95170",
+    # นราธิวาส
+    "96000", "96110", "96120", "96130", "96140", "96150",
+    "96160", "96170", "96180", "96190", "96210", "96220",
+}
+
+
+def kex_bulky_remote_surcharge(postcode: str) -> int:
+    return 50 if str(postcode).strip() in KEX_BULKY_REMOTE else 0
+
+
 def carrier_fees(weight_grams: float, postcode: str, box_weight_g: int = 500) -> dict:
     """คืน {carrier: (base_fee, surcharge, total)} สำหรับทั้ง 2 ขนส่ง"""
     from math import ceil
