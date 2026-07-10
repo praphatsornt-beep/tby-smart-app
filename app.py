@@ -328,10 +328,10 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
 }
 
 /* ── Compact icon-only rail below ~1100px — sidebar stays "expanded" from
-   Streamlit's own perspective (buttons stay live/clickable), just narrowed;
-   nav labels are "🏠 หน้าแรก" single-string button labels, so the trailing
-   Thai text is clipped via a fixed-width+overflow-hidden box rather than
-   hidden with a separate selector (there's no separate DOM node for it).
+   Streamlit's own perspective (buttons stay live/clickable), just narrowed.
+   Nav buttons use `icon=":material/..."` (a real, separate stIconMaterial
+   span) + a plain text label, so compact mode simply hides the text and
+   centers the icon — no more clipping the label to fake an icon-only look.
    Each button's `help=` tooltip (native Streamlit hover tooltip) is what
    surfaces the full name back to the user on hover. ── */
 @media (max-width: 1100px) {
@@ -342,6 +342,14 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     }
     [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
     [data-testid="stSidebar"] .tby-sidebar-brand { justify-content: center !important; padding-right: 0 !important; }
+    [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+    }
+    [class*="st-key-sidebar_brand_row"] [data-testid="stColumn"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
     [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
         justify-content: center !important;
         padding: 10px 0 !important;
@@ -349,12 +357,11 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; }
     [data-testid="stSidebar"] [data-testid="stElementContainer"] button div {
         justify-content: center !important;
     }
-    [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
-        font-size: 1.25rem !important;
-        text-align: left !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        width: 1.4em !important;
+    [data-testid="stSidebar"] [data-testid="stElementContainer"]:not([class*="st-key-_sidebar_compact_toggle"]) button [data-testid="stMarkdownContainer"] {
+        display: none !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stElementContainer"] button [data-testid="stIconMaterial"] {
+        font-size: 1.4rem !important;
         color: #ffffff !important;
     }
 }
@@ -1121,6 +1128,10 @@ _TAB_NAMES = [
     "🏠 หน้าแรก", "📋 บันทึกรายการ", "🗂️ รายละเอียดบิล",
     "📦 สต๊อก", "💵 การเงิน", "🛒 E-commerce", "⚙️ จัดการข้อมูล",
 ]
+_TAB_ICONS = [
+    ":material/home:", ":material/shopping_cart:", ":material/receipt_long:",
+    ":material/inventory_2:", ":material/payments:", ":material/storefront:", ":material/settings:",
+]
 
 if "active_tab" not in st.session_state:
     st.session_state["active_tab"] = _TAB_NAMES[0]
@@ -1129,35 +1140,40 @@ if "_sidebar_compact" not in st.session_state:
     st.session_state["_sidebar_compact"] = False
 
 with st.sidebar:
-    st.markdown(
-        """<div class="tby-sidebar-brand" style="display:flex;align-items:center;gap:12px;padding:4px 0 12px;">
-        <div style="width:44px;height:44px;border-radius:12px;background:var(--tby-accent);
-        display:flex;align-items:center;justify-content:center;flex-shrink:0;
-        font-family:'Prompt',sans-serif;font-weight:700;font-size:0.9rem;color:#ffffff;letter-spacing:0.02em;">TBY</div>
-        <div class="tby-sidebar-brand-text">
-        <div style="font-family:'Prompt',sans-serif;font-weight:700;font-size:1.05rem;color:#ffffff;line-height:1.3;">TBY SMART APP</div>
-        <div style="font-family:'Prompt',sans-serif;font-size:0.8rem;color:var(--tby-sidebar-cap);line-height:1.3;">ระบบจัดการร้าน</div>
-        </div>
-        </div>""",
-        unsafe_allow_html=True,
-    )
-    if st.button(
-        ("«" if not st.session_state["_sidebar_compact"] else "»"),
-        key="_sidebar_compact_toggle",
-        use_container_width=True,
-    ):
-        st.session_state["_sidebar_compact"] = not st.session_state["_sidebar_compact"]
-        st.rerun()
+    _brand_row = st.container(key="sidebar_brand_row")
+    with _brand_row:
+        _brand_col, _toggle_col = st.columns([8, 1], vertical_alignment="center")
+    with _brand_col:
+        st.markdown(
+            """<div class="tby-sidebar-brand" style="display:flex;align-items:center;gap:12px;padding:4px 0 12px;">
+            <div style="width:44px;height:44px;border-radius:12px;background:var(--tby-accent);
+            display:flex;align-items:center;justify-content:center;flex-shrink:0;
+            font-family:'Prompt',sans-serif;font-weight:700;font-size:0.9rem;color:#ffffff;letter-spacing:0.02em;">TBY</div>
+            <div class="tby-sidebar-brand-text">
+            <div style="font-family:'Prompt',sans-serif;font-weight:700;font-size:1.05rem;color:#ffffff;line-height:1.3;">TBY SMART APP</div>
+            <div style="font-family:'Prompt',sans-serif;font-size:0.8rem;color:var(--tby-sidebar-cap);line-height:1.3;">ระบบจัดการร้าน</div>
+            </div>
+            </div>""",
+            unsafe_allow_html=True,
+        )
+    with _toggle_col:
+        if st.button(
+            ("«" if not st.session_state["_sidebar_compact"] else "»"),
+            key="_sidebar_compact_toggle",
+        ):
+            st.session_state["_sidebar_compact"] = not st.session_state["_sidebar_compact"]
+            st.rerun()
     st.divider()
 
     for _nav_i, _nav_label in enumerate(_TAB_NAMES):
         _nav_is_active = st.session_state["active_tab"] == _nav_label
-        _nav_help = _nav_label.split(" ", 1)[1] if " " in _nav_label else _nav_label
+        _nav_text = _nav_label.split(" ", 1)[1] if " " in _nav_label else _nav_label
         if st.button(
-            _nav_label, key=f"_nav_top_{_nav_i}",
+            _nav_text, key=f"_nav_top_{_nav_i}",
             use_container_width=True,
             type=("primary" if _nav_is_active else "secondary"),
-            help=_nav_help,
+            icon=_TAB_ICONS[_nav_i],
+            help=_nav_text,
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
@@ -1177,6 +1193,14 @@ if st.session_state["_sidebar_compact"]:
         }
         [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
         [data-testid="stSidebar"] .tby-sidebar-brand { justify-content: center !important; padding-right: 0 !important; }
+        [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
+            flex-wrap: wrap !important;
+        }
+        [class*="st-key-sidebar_brand_row"] [data-testid="stColumn"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+        }
         [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
             justify-content: center !important;
             padding: 10px 0 !important;
@@ -1184,12 +1208,11 @@ if st.session_state["_sidebar_compact"]:
         [data-testid="stSidebar"] [data-testid="stElementContainer"] button div {
             justify-content: center !important;
         }
-        [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
-            font-size: 1.25rem !important;
-            text-align: left !important;
-            white-space: nowrap !important;
-            overflow: hidden !important;
-            width: 1.4em !important;
+        [data-testid="stSidebar"] [data-testid="stElementContainer"]:not([class*="st-key-_sidebar_compact_toggle"]) button [data-testid="stMarkdownContainer"] {
+            display: none !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button [data-testid="stIconMaterial"] {
+            font-size: 1.4rem !important;
             color: #ffffff !important;
         }
         </style>
