@@ -343,7 +343,7 @@ def render(products, customers):
                             grp[_dcols].reset_index(drop=True).style
                                 .format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
                                 .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"])
-                                .map(lambda v: "background-color:oklch(0.94 0.03 25);color:oklch(0.5 0.15 25);font-weight:600"
+                                .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
                                      if isinstance(v, (int, float)) and v > 0 else "",
                                      subset=["ค้างรับ", "ค้างจ่าย"]),
                             use_container_width=True,
@@ -1016,7 +1016,7 @@ def render(products, customers):
                             _bl_df = pd.DataFrame(_bl_rows)
                             st.dataframe(
                                 _bl_df.style.format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
-                                .map(lambda v: "background-color:oklch(0.94 0.03 25);color:oklch(0.5 0.15 25);font-weight:600"
+                                .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
                                      if isinstance(v, (int, float)) and v > 0 else "",
                                      subset=["ค้างรับ", "ค้างจ่าย"]),
                                 use_container_width=True, hide_index=True,

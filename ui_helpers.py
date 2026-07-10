@@ -493,10 +493,18 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
 def _style_status(val):
     """Pill-badge colors (light bg + dark text, matching the good/warn/bad
     badge language used across the reference design) instead of the old
-    solid-dark-bg-white-text look."""
-    _good = "background-color:oklch(0.94 0.03 155);color:oklch(0.4 0.1 155);font-weight:600"
-    _warn = "background-color:oklch(0.94 0.04 55);color:oklch(0.5 0.14 50);font-weight:600"
-    _bad  = "background-color:oklch(0.94 0.03 25);color:oklch(0.5 0.15 25);font-weight:600"
+    solid-dark-bg-white-text look.
+
+    NOTE: hex, not oklch() — this feeds pandas Styler.map() for st.dataframe,
+    which renders cells on a <canvas> (glide-data-grid). Canvas 2D fillStyle
+    doesn't parse oklch() in this Streamlit/browser combo; the assignment
+    silently fails and the PREVIOUS cell's fill color carries over, which
+    shows up as random solid-color blocks that "stick" as you scroll/hover.
+    oklch() is fine everywhere else in the app (real CSS via markdown/HTML),
+    just not here. """
+    _good = "background-color:#E6F4EA;color:#1E7B34;font-weight:600"
+    _warn = "background-color:#FFF4E0;color:#B26A00;font-weight:600"
+    _bad  = "background-color:#FDECEA;color:#C0392B;font-weight:600"
     colors = {
         "เปิดบิลแล้ว":   _good,
         "ยังไม่เปิดบิล": _warn,
