@@ -198,7 +198,7 @@ def render(tab1, products, customers, customer_map):
                             if _cur_delivery == "ส่งพัสดุ":
                                 st.caption("ของที่กรอก 'รับวันนี้' จะถูกรวมในพัสดุเมื่อกด บันทึกทั้งหมด · ยอดค้างจะถูกปรับตามสัดส่วน")
                             elif not _cur_delivery:
-                                st.caption("⬆️ เลือก การรับ/สถานะของ ด้านบนก่อน")
+                                st.caption("⬆️ เลือก สถานะรับของ ด้านบนก่อน")
                             elif _cur_delivery in ("ฝากของ", "รับแล้ว"):
                                 if st.button("💾 บันทึกรับของจากบิลเก่า", key="sale_recv_old_btn", type="primary"):
                                     _saved_rx, _total_pay, _ = _process_old_items_receipt(
@@ -259,9 +259,10 @@ def render(tab1, products, customers, customer_map):
 
                 with _status_col:
                     with st.container(border=True):
-                        st.markdown("**สถานะรายการ**")
-                        _sc1, _sc2 = st.columns(2)
-                        m_delivery = _sc1.radio("การรับ / สถานะของ", _delivery_opts, key="m_delivery", index=None)
+                        st.markdown("**สถานะ**")
+                        with st.container(key="sale_status_subrow"):
+                            _sc1, _sc2 = st.columns(2)
+                        m_delivery = _sc1.radio("สถานะรับของ", _delivery_opts, key="m_delivery", index=None)
                         m_pay  = _sc2.radio("สถานะจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
                         st.divider()
                         m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
@@ -555,7 +556,7 @@ def render(tab1, products, customers, customer_map):
                 if not valid_items: m_errors.append("⚠️ ยังไม่ได้กรอกสินค้า")
                 if m_pay == "จ่ายบางส่วน" and valid_items and m_partial_amount <= 0:
                     m_errors.append("⚠️ กรุณาระบุจำนวนเงินที่จ่ายมา (ต้องมากกว่า 0)")
-                if m_delivery is None: m_errors.append("⚠️ ยังไม่ได้เลือก การรับ/สถานะของ")
+                if m_delivery is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะรับของ")
                 if valid_items:
                     if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก สถานะจ่าย")
                     if m_bill is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")

@@ -618,6 +618,21 @@ label,
         min-width: 100% !important;
     }
 }
+
+/* ── Responsive: stack สถานะรับของ|สถานะจ่าย sub-columns on true mobile ──
+   Even after the row above stacks, this inner 2-way split can still get
+   too narrow on phone-width screens, wrapping labels like "จ่ายบางส่วน"
+   onto two lines — stack these full-width too below ~640px. */
+@media (max-width: 640px) {
+    [class*="st-key-sale_status_subrow"] [data-testid="stHorizontalBlock"] {
+        flex-wrap: wrap !important;
+    }
+    [class*="st-key-sale_status_subrow"] [data-testid="stColumn"] {
+        width: 100% !important;
+        flex: 1 1 100% !important;
+        min-width: 100% !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 
