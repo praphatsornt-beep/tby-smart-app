@@ -341,14 +341,30 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         max-width: 72px !important;
     }
     [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
-    [data-testid="stSidebar"] .tby-sidebar-brand { justify-content: center !important; padding-right: 0 !important; }
+    [data-testid="stSidebar"] .tby-sidebar-brand {
+        justify-content: center !important;
+        padding-right: 0 !important;
+        gap: 4px !important;
+    }
+    [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
+        width: 34px !important;
+        height: 34px !important;
+        border-radius: 9px !important;
+        font-size: 0.65rem !important;
+    }
     [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
+        flex-wrap: nowrap !important;
+        gap: 2px !important;
+        justify-content: center !important;
     }
     [class*="st-key-sidebar_brand_row"] [data-testid="stColumn"] {
-        width: 100% !important;
-        flex: 1 1 100% !important;
-        min-width: 100% !important;
+        width: auto !important;
+        flex: 0 0 auto !important;
+        min-width: 0 !important;
+    }
+    [class*="st-key-_sidebar_compact_toggle"] button {
+        padding: 4px 6px !important;
+        min-width: 0 !important;
     }
     [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
         justify-content: center !important;
@@ -401,6 +417,9 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     gap: 4px;
     margin: 0 -2rem 1.25rem -2rem !important;
     width: calc(100% + 4rem);
+    position: sticky;
+    top: 116px;
+    z-index: 90;
 }
 @media (max-width: 600px) {
     [data-testid="stButtonGroup"],
@@ -1199,14 +1218,30 @@ if st.session_state["_sidebar_compact"]:
             max-width: 72px !important;
         }
         [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
-        [data-testid="stSidebar"] .tby-sidebar-brand { justify-content: center !important; padding-right: 0 !important; }
+        [data-testid="stSidebar"] .tby-sidebar-brand {
+            justify-content: center !important;
+            padding-right: 0 !important;
+            gap: 4px !important;
+        }
+        [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 9px !important;
+            font-size: 0.65rem !important;
+        }
         [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
-            flex-wrap: wrap !important;
+            flex-wrap: nowrap !important;
+            gap: 2px !important;
+            justify-content: center !important;
         }
         [class*="st-key-sidebar_brand_row"] [data-testid="stColumn"] {
-            width: 100% !important;
-            flex: 1 1 100% !important;
-            min-width: 100% !important;
+            width: auto !important;
+            flex: 0 0 auto !important;
+            min-width: 0 !important;
+        }
+        [class*="st-key-_sidebar_compact_toggle"] button {
+            padding: 4px 6px !important;
+            min-width: 0 !important;
         }
         [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
             justify-content: center !important;
