@@ -90,6 +90,16 @@ _DHL = {
     34:(644,651),35:(680,687),
 }
 
+_DHL_NEXT_DAY = {
+    1:(30,30),2:(42,42),3:(46,46),4:(48,54),5:(50,58),6:(57,100),7:(63,102),
+    8:(70,111),9:(77,119),10:(83,129),11:(88,130),12:(93,133),13:(100,141),
+    14:(107,151),15:(114,153),16:(120,160),17:(126,170),18:(133,178),
+    19:(139,186),20:(146,196),21:(150,203),22:(159,212),23:(167,221),
+    24:(177,229),25:(187,239),26:(197,246),27:(206,255),28:(216,264),
+    29:(224,272),30:(234,281),31:(263,312),32:(291,344),33:(321,375),
+    34:(349,407),35:(378,438),
+}
+
 _THAI_POST_EMS = {  # flat everywhere
     1:24,2:34,3:44,4:55,5:65,6:84,7:96,8:108,9:120,10:133,
     11:157,12:170,13:183,14:196,15:209,16:222,17:235,18:248,19:261,20:274,
@@ -239,7 +249,8 @@ _CARRIER_DEFS = [
     ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,     0, True,  0,     False),
     ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,     0, True,  0,     False),
     ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,     0, True,  0,     False),
-    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,     0, True,  0,     False),
+    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,     0, True,  50000, False),
+    ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   250, True,  50000, False),
     ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0,     True),
     ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0,     True),
     ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0,     False),

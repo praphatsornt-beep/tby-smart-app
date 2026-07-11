@@ -19,6 +19,7 @@ COURIER_MAP = {
     "KEX Express":         "KerryExpress",
     "KEX Bulky":           "KexBulky",
     "DHL eCommerce":       "DHL",
+    "DHL Next Day":        "DHLND",
     "ไปรษณีย์ EMS":        "THP_eParcelX",
     "ไปรษณีย์ EMS Bulky":  "THP_eParcelZ",
     "J&T Express":         "JntExpress",
