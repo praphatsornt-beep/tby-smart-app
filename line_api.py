@@ -32,7 +32,7 @@ def _push(to_id: str, text: str, group_id: str = "") -> dict:
                 last_err = f"LINE API HTTP {r.status_code}: {r.text[:200]}"
         except Exception as e:
             last_err = str(e)
-    return {"ok": True} if not last_err else {"ok": True, "warning": last_err}
+    return {"ok": not last_err, "error": last_err} if last_err else {"ok": True}
 
 
 def push_tracking(line_user_id: str, dst_name: str, tracking: str,
