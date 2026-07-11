@@ -45,7 +45,12 @@ function _sbPatch(path, data) {
 var _cachedProducts = null;
 function _getProducts() {
   if (_cachedProducts) return _cachedProducts;
-  _cachedProducts = (_sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id') || []).map(function(p) {
+  var _raw = _sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id');
+  if (!Array.isArray(_raw)) {
+    // DEBUG ชั่วคราว — โยน error ที่มีเนื้อหาจริงจาก Supabase ติดไปด้วย
+    throw new Error('_getProducts non-array response: ' + JSON.stringify(_raw));
+  }
+  _cachedProducts = _raw.map(function(p) {
     return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
   });
   return _cachedProducts;
@@ -54,6 +59,11 @@ function _getProducts() {
 // ─── doPost ──────────────────────────────────────────────────────────────────
 
 function doPost(e) {
+  try {
+  // ── DEBUG ชั่วคราว ──────────────────────────────────────────────────────
+  var _dbgSigOk = 'n/a';
+  // ─────────────────────────────────────────────────────────────────────────
+
   // ── LINE webhook signature verification (HMAC-SHA256) ─────────────────────
   var _channelSecret = _scriptProps.getProperty('CHANNEL_SECRET');
   if (_channelSecret) {
@@ -61,6 +71,7 @@ function doPost(e) {
     var _computed = Utilities.base64Encode(
       Utilities.computeHmacSha256Signature(e.postData.contents, _channelSecret)
     );
+    _dbgSigOk = (_sig === _computed); // DEBUG ชั่วคราว
     if (_sig !== _computed) return;
   }
   // ─────────────────────────────────────────────────────────────────────────
@@ -77,6 +88,17 @@ function doPost(e) {
   }
 
   if (event.type !== 'message' || event.message.type !== 'text') return;
+
+  // ── DEBUG ชั่วคราว — พิมพ์ "debug" ใน LINE เพื่อดูค่าตรงนี้ ──────────────────
+  if (event.message.text.trim().toLowerCase() === 'debug') {
+    sendReply(event.replyToken,
+      'sig match=' + _dbgSigOk +
+      '\nCHANNEL_ACCESS_TOKEN len=' + (CHANNEL_ACCESS_TOKEN ? CHANNEL_ACCESS_TOKEN.length : 'MISSING') +
+      '\nSUPABASE_URL=' + SUPABASE_URL +
+      '\nSUPABASE_KEY len=' + (SUPABASE_KEY ? SUPABASE_KEY.length : 'MISSING'));
+    return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
   var replyToken = event.replyToken;
   var rawMsg = event.message.text.trim();
 
@@ -227,9 +249,17 @@ function doPost(e) {
   }
 
   // ── คำนวณออเดอร์ ────────────────────────────────────────────────────────────
-  var bothRemote = ["63150","50160","50240","50250","50260","50270","50310","50350","55130","55220","58110","58120","58130","58140","58150","63170","67260","94000","94110","94120","94130","94140","94150","94160","94170","94180","94220","94230","95000","95110","95120","95130","95140","95150","96000","96110","96120","96130","96140","96150","96160","96170","96180","96190","96210","96220"];
-  var flashOnlyRemote = ["71180","71240","82150","94190","95160","95170"];
-  var spxOnlyRemote = ["51160","52160","52180","52230","56160","57170","57180","57260","57310","57340","58000"];
+  // รายชื่อพื้นที่ห่างไกล 3 ชุดนี้ต้องตรงกับ flash_zones.py (FLASH_ZONES ที่ zone=="remote")
+  // และ SPX_REMOTE ในแอปหลักเป๊ะๆ — คำนวณด้วย set difference จาก 2 ลิสต์นั้นตรงๆ (อย่าเดา)
+  // อัปเดตล่าสุด 2026-07-12 หลัง audit ค่าส่งทุกขนส่งในแอปหลัก แก้บั๊กที่ SPX เคยใช้โซนของ
+  // Flash ผิด (เช่น 63150 ท่าสองยาง ไม่ใช่พื้นที่ห่างไกลของ SPX ทั้งที่เป็นของ Flash)
+  // หมายเหตุ: บางรหัส (81120,81150,81210,84280,84360) เป็น "SPX ห่างไกล" ซ้อนกับ
+  // "Flash ท่องเที่ยว/เกาะ" พร้อมกัน — โค้ดด้านล่างเช็ค remote ก่อน tourist เสมอ ทำให้เคส
+  // เหล่านี้ได้ค่า remote +50 แม้จะจบที่ Flash (ซึ่งจริงๆ ควรได้ค่าท่องเที่ยวแบบขั้นบันไดแทน)
+  // เป็นข้อจำกัดเดิมของโมเดลนี้ที่ไม่รู้ล่วงหน้าว่าจะจบที่ขนส่งไหน ยังไม่แก้ในรอบนี้
+  var bothRemote = ["50260","50270","50310","50350","55220","58110","58120","58130","58140","58150","63170","67260","71180","71240","94120","94230","95110","95130","95150","95160","95170","96110","96120","96130","96140","96150","96160","96190","96210","96220"];
+  var flashOnlyRemote = ["55130","63150","82150","94000","94110","94130","94140","94150","94160","94170","94180","94190","94220","95000","95120","95140","96000","96170","96180"];
+  var spxOnlyRemote = ["20120","23170","50160","50240","50250","51160","52160","52180","52230","56160","57170","57180","57260","57310","57340","58000","81120","81150","81210","82160","84280","84360","84370"];
   var touristIslandZips = ["20120","20150","21160","23000","23170","81000","81130","81150","81180","81210","82000","82160","84140","84220","84280","84310","84320","84330","84360","85000","91000","92110","92120"];
   var touristZips = ["20260","81120","82110","82130","82140","82190","82220","83000","83100","83110","83120","83130","83150"];
 
@@ -356,6 +386,18 @@ function doPost(e) {
   else if (!isCOD && lang !== 'none') summaryText += '\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
 
   sendReply(replyToken, summaryText + translatedNote);
+  } catch (err) {
+    // DEBUG ชั่วคราว — เก็บ error ไว้ดูผ่าน ?debug=1
+    var _dbgKey = SUPABASE_KEY || '';
+    var _dbgTok = CHANNEL_ACCESS_TOKEN || '';
+    _scriptProps.setProperty('LAST_ERROR',
+      Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss') + ' | ' +
+      String(err) + (err.stack ? (' | STACK: ' + err.stack) : '') +
+      ' | SUPABASE_URL=' + SUPABASE_URL +
+      ' | SUPABASE_KEY len=' + _dbgKey.length + ' last6=' + _dbgKey.slice(-6) +
+      ' | CHANNEL_ACCESS_TOKEN len=' + _dbgTok.length + ' last6=' + _dbgTok.slice(-6) +
+      ' | replyToken=' + (typeof replyToken !== 'undefined' ? replyToken : 'n/a'));
+  }
 }
 
 // ─── sendReply ────────────────────────────────────────────────────────────────
@@ -1308,6 +1350,10 @@ function handleOldGoods(name, items, payAmount, billNo, replyToken, confirmed, s
 // ─── doGet — product list ─────────────────────────────────────────────────────
 
 function doGet(e) {
+  // DEBUG ชั่วคราว — เปิด URL ของ deployment ต่อท้ายด้วย ?debug=1 เพื่อดู error ล่าสุด
+  if (e.parameter && e.parameter.debug) {
+    return ContentService.createTextOutput(_scriptProps.getProperty('LAST_ERROR') || '(no error recorded)');
+  }
   var products = _getProducts().map(function(p) {
     return { code: p[0].toUpperCase(), nameTH: p[1], nameMM: p[2], price: p[3], pv: p[4] };
   });
