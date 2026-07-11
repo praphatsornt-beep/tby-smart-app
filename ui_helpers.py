@@ -171,7 +171,11 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
         return
 
     def _stage(dt="", am="", pv=""):
-        if dt: st.session_state[stage_dt or value_key] = dt
+        if dt:
+            st.session_state[stage_dt or value_key] = dt
+            # เคลียร์ searchbox ของตำบลด้วยเสมอ — ถ้า key นี้เคยมีอยู่แล้ว Streamlit
+            # จะไม่ยอมอัปเดตค่าที่แสดง (value= ถูกมองข้ามเมื่อ key มีอยู่แล้วใน session_state)
+            st.session_state.pop(searchbox_key, None)
         if am: st.session_state[stage_am or am_key] = am
         if pv: st.session_state[stage_pv or pv_key] = pv
         if stage_dt or stage_am or stage_pv:

@@ -364,6 +364,7 @@ def render(tab1, products, customers, customer_map):
                                                 st.session_state["_r_last_dt"]     = _qa_dt
                                                 st.session_state["_r_last_pc"]     = _qa_pc
                                                 st.session_state["_last_rph_fill"] = _sa.get("phone", "")
+                                                st.session_state.pop("r_dt_searchbox", None)
                                                 st.rerun()
                             _parse_key = f"_show_paste_{_cid}"
                             if st.button("📍 แยกที่อยู่อัตโนมัติ", key=f"parse_open_{_cid}"):
@@ -384,6 +385,7 @@ def render(tab1, products, customers, customer_map):
                                     st.session_state["_fr_am"]     = _parsed.get("amphure", "")
                                     st.session_state["_fr_pv"]     = _parsed.get("province", "")
                                     st.session_state["_staged_pc"] = _parsed.get("zipcode", "")
+                                    st.session_state.pop("r_dt_searchbox", None)
                                     st.session_state[_parse_key] = False
                                     st.rerun()
                                 if _pc2.button("ยกเลิก", key=f"parse_cancel_{_cid}"):
@@ -406,6 +408,8 @@ def render(tab1, products, customers, customer_map):
                                         ("r_pv",   _rph_addr.get("province") or ""),
                                     ]:
                                         if _v: st.session_state[_k] = _v
+                                    if _rph_addr.get("district"):
+                                        st.session_state["r_dt_searchbox"] = _rph_addr["district"]
                                     if _rph_addr.get("postal_code"):
                                         st.session_state["m_postcode"] = _rph_addr["postal_code"]
                                     _rph_cust = (_rph_addr.get("customers") or {}).get("name", "")
@@ -1196,6 +1200,7 @@ def render(tab1, products, customers, customer_map):
                                     st.session_state["_fsp_pc"]   = _sa_pc
                                     st.session_state["_sp_last_dt"] = _sa_dt
                                     st.session_state["_sp_last_pc"] = _sa_pc
+                                    st.session_state.pop(f"sp_dt_searchbox_v{_sp_av}", None)
                                     st.rerun()
 
                 # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────────
@@ -1220,6 +1225,7 @@ def render(tab1, products, customers, customer_map):
                             st.session_state["_fsp_pc"]   = _sp_parsed.get("zipcode", "")
                             if _sp_parsed.get("district"):  st.session_state["_sp_last_dt"] = _sp_parsed["district"]
                             if _sp_parsed.get("zipcode"):   st.session_state["_sp_last_pc"] = _sp_parsed["zipcode"]
+                            st.session_state.pop(f"sp_dt_searchbox_v{_sp_av}", None)
                             st.session_state[_sp_parse_key] = False
                             st.rerun()
                         if _spc2.button("ยกเลิก", key="sp_parse_cancel"):
@@ -1250,6 +1256,8 @@ def render(tab1, products, customers, customer_map):
                                            (f"sp_am_v{_sp_av}",    _sp_rph_addr.get("amphure") or ""),
                                            (f"sp_pv_v{_sp_av}",    _sp_rph_addr.get("province") or "")]:
                                 if _v: st.session_state[_k] = _v
+                            if _sp_rph_addr.get("district"):
+                                st.session_state[f"sp_dt_searchbox_v{_sp_av}"] = _sp_rph_addr["district"]
                             if _sp_rph_addr.get("postal_code"):
                                 _sp_rph_pc = _sp_rph_addr["postal_code"]
                                 st.session_state[f"sp_pc_v{_sp_av}"] = _sp_rph_pc
