@@ -21,6 +21,7 @@ COURIER_MAP = {
     "DHL eCommerce":       "DHL",
     "ไปรษณีย์ EMS":        "THP_eParcelX",
     "ไปรษณีย์ EMS Bulky":  "THP_eParcelZ",
+    "J&T Express":         "JntExpress",
 }
 
 _PROVINCE_MAP = {
