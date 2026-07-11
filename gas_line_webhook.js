@@ -2,7 +2,10 @@
 // ⚙️  Script Properties — วิธีตั้งค่า
 //    GAS Editor > ⚙️ Project Settings > Script Properties > Add property:
 //      CHANNEL_ACCESS_TOKEN  — LINE OA Channel Access Token (LINE Developers Console)
-//      CHANNEL_SECRET        — LINE OA Channel Secret (สำหรับ verify webhook signature)
+//      WEBHOOK_TOKEN         — รหัสลับที่คุณสุ่มเอง แล้วต่อท้าย Webhook URL ใน LINE
+//                              Developers Console > Messaging API เป็น .../exec?token=<ค่านี้>
+//                              (Apps Script อ่าน HTTP header ไม่ได้ เลย verify signature ตรงๆ
+//                              ไม่ได้ ใช้ query-param secret แทน — ดูคอมเมนต์ใน doPost())
 //      SUPABASE_URL          — https://xxxx.supabase.co
 //      SUPABASE_KEY          — anon key จาก Supabase > Settings > API
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,19 +63,18 @@ function _getProducts() {
 
 function doPost(e) {
   try {
-  // ── DEBUG ชั่วคราว ──────────────────────────────────────────────────────
-  var _dbgSigOk = 'n/a';
-  // ─────────────────────────────────────────────────────────────────────────
-
-  // ── LINE webhook signature verification (HMAC-SHA256) ─────────────────────
-  var _channelSecret = _scriptProps.getProperty('CHANNEL_SECRET');
-  if (_channelSecret) {
-    var _sig      = (e.headers && e.headers['X-Line-Signature']) || '';
-    var _computed = Utilities.base64Encode(
-      Utilities.computeHmacSha256Signature(e.postData.contents, _channelSecret)
-    );
-    _dbgSigOk = (_sig === _computed); // DEBUG ชั่วคราว
-    if (_sig !== _computed) return;
+  // ── Webhook auth: query-param shared secret ────────────────────────────────
+  // Apps Script's doPost(e) ไม่ส่ง HTTP headers มาให้เลย (ไม่มี e.headers) เลย verify
+  // X-Line-Signature ตามมาตรฐานไม่ได้บนแพลตฟอร์มนี้ (เคยลองแล้วทำให้ทุก request โดน
+  // return ทิ้งหมด บอทเงียบสนิม — 2026-07-12) ใช้วิธีนี้แทน: LINE POST ไปที่ URL ตรงๆ
+  // ตามที่ตั้งไว้ใน Messaging API เสมอ ต่อท้าย query param ใน Webhook URL ได้ปกติ
+  // และ e.parameter อ่านได้ (ต่างจาก header) — ตั้ง Script Property WEBHOOK_TOKEN
+  // แล้วตั้ง Webhook URL ใน LINE Developers Console เป็น .../exec?token=<ค่าเดียวกัน>
+  var _webhookToken = _scriptProps.getProperty('WEBHOOK_TOKEN');
+  var _tokenOk = 'n/a';
+  if (_webhookToken) {
+    _tokenOk = (e.parameter && e.parameter.token === _webhookToken);
+    if (!_tokenOk) return;
   }
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -92,7 +94,7 @@ function doPost(e) {
   // ── DEBUG ชั่วคราว — พิมพ์ "debug" ใน LINE เพื่อดูค่าตรงนี้ ──────────────────
   if (event.message.text.trim().toLowerCase() === 'debug') {
     sendReply(event.replyToken,
-      'sig match=' + _dbgSigOk +
+      'token match=' + _tokenOk +
       '\nCHANNEL_ACCESS_TOKEN len=' + (CHANNEL_ACCESS_TOKEN ? CHANNEL_ACCESS_TOKEN.length : 'MISSING') +
       '\nSUPABASE_URL=' + SUPABASE_URL +
       '\nSUPABASE_KEY len=' + (SUPABASE_KEY ? SUPABASE_KEY.length : 'MISSING'));
