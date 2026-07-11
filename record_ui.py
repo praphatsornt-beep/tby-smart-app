@@ -113,10 +113,11 @@ def render(tab1, products, customers, customer_map):
                             st.rerun()
                         m_customer = _cust_picked
                     else:
-                        _cust_options = ["— เลือกลูกค้า —"] + sorted(customer_map.keys(), key=str.casefold)
-                        _cust_sel = st.selectbox("ลูกค้า", _cust_options, key="m_cust_search")
+                        _cust_options = sorted(customer_map.keys(), key=str.casefold)
+                        _cust_sel = st.selectbox("ลูกค้า", _cust_options, index=None,
+                                                  placeholder="เลือกลูกค้า หรือพิมพ์ค้นหา...", key="m_cust_search")
                         m_customer = "— เลือกลูกค้า —"
-                        if _cust_sel != "— เลือกลูกค้า —":
+                        if _cust_sel:
                             st.session_state["_cust_picked"] = _cust_sel
                             st.rerun()
                         _quick_add_customer("")
@@ -1104,10 +1105,11 @@ def render(tab1, products, customers, customer_map):
                         st.rerun()
                     _sp_cust = _sp_picked
                 else:
-                    _sp_options = ["— เลือกลูกค้า —"] + sorted(_sc_map.keys(), key=str.casefold)
-                    _sp_sel = st.selectbox("ลูกค้า", _sp_options, key=f"sp_cust_search_v{_sp_av}")
+                    _sp_options = sorted(_sc_map.keys(), key=str.casefold)
+                    _sp_sel = st.selectbox("ลูกค้า", _sp_options, index=None,
+                                            placeholder="เลือกลูกค้า หรือพิมพ์ค้นหา...", key=f"sp_cust_search_v{_sp_av}")
                     _sp_cust = "— เลือกลูกค้า —"
-                    if _sp_sel != "— เลือกลูกค้า —":
+                    if _sp_sel:
                         st.session_state["_sp_cust_picked"] = _sp_sel
                         st.rerun()
                     _quick_add_customer("sp_")
