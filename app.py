@@ -688,17 +688,21 @@ button[kind="secondary"]:hover {
     display: flex !important;
     align-items: center !important;
     justify-content: center !important;
-    width: 20px !important;
-    height: 20px !important;
-    min-width: 20px !important;
+    width: 16px !important;
+    height: 16px !important;
+    min-width: 16px !important;
     flex: 0 0 auto !important;
     border-radius: 50% !important;
     box-sizing: border-box !important;
 }
+/* Dot hidden by default (plain hollow circle when NOT selected) — only
+   shown once a status is actually picked, so it's unambiguous at a glance
+   which one (if any) is selected. */
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label > div:first-child > div {
-    width: 8px !important;
-    height: 8px !important;
+    width: 6px !important;
+    height: 6px !important;
     border-radius: 50% !important;
+    background-color: transparent !important;
 }
 /* Two accent colors per status category, matching reference: orange for
    การรับของ (receiving), green for การจ่าย/สถานะบิล (payment/bill) — the
