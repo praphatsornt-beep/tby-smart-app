@@ -1329,6 +1329,66 @@ components.html(
     height=0,
 )
 
+# ── Fix tooltip (help=) bubbles overflowing off the left edge of the screen —
+#    Streamlit centers the tooltip horizontally over its trigger button, which
+#    on the narrow (72px) compact sidebar icon rail pushes wide labels (e.g.
+#    "รายละเอียดบิล") to a negative x position — genuinely off-screen, not
+#    just visually clipped, so no amount of CSS on the tooltip itself helps.
+#    Nudge the positioned wrapper back on-screen whenever one appears. ───────
+components.html(
+    r"""
+    <script>
+    (function() {
+        function fixTooltipPos() {
+            try {
+                var doc = window.parent.document;
+                var tips = doc.querySelectorAll('[data-testid="stTooltipContent"]');
+                tips.forEach(function(tip) {
+                    var el = tip, wrapper = null;
+                    for (var i = 0; i < 6 && el; i++) {
+                        el = el.parentElement;
+                        if (el && window.parent.getComputedStyle(el).position === 'absolute') {
+                            wrapper = el;
+                            break;
+                        }
+                    }
+                    if (!wrapper) return;
+                    var rect = wrapper.getBoundingClientRect();
+                    if (rect.x < 8) {
+                        // ตำแหน่งจริงมาจาก transform: matrix(...) ไม่ใช่ left — ต้องแก้ tx
+                        // ใน matrix ตรงๆ (แก้แค่ style.left เฉยๆ ไม่มีผลอะไรเลย)
+                        var m = window.parent.getComputedStyle(wrapper).transform;
+                        var tx = 0, ty = 0, is3d = false;
+                        var match3d = m && m.match(/matrix3d\(([^)]+)\)/);
+                        var match2d = !match3d && m && m.match(/matrix\(([^)]+)\)/);
+                        if (match3d) {
+                            var p3 = match3d[1].split(',').map(parseFloat);
+                            tx = p3[12]; ty = p3[13]; is3d = true;
+                        } else if (match2d) {
+                            var p2 = match2d[1].split(',').map(parseFloat);
+                            tx = p2[4]; ty = p2[5];
+                        }
+                        var shift = 8 - rect.x;
+                        wrapper.style.transform = is3d
+                            ? 'translate3d(' + (tx + shift) + 'px, ' + ty + 'px, 0px)'
+                            : 'translate(' + (tx + shift) + 'px, ' + ty + 'px)';
+                    }
+                });
+            } catch (e) {}
+        }
+        var obs = new MutationObserver(function() {
+            // หน่วงเวลาสั้นๆ ก่อนแก้ — ตอน mutation เพิ่งเกิด ตำแหน่งจริงจาก
+            // floating-ui อาจยังคำนวณไม่เสร็จ (ยังเป็นค่า placeholder 0,0)
+            // ถ้าแก้ทันทีจะไปเขียนทับค่าจริงที่กำลังจะมาแทน ทำให้ตำแหน่งแนวตั้งหาย
+            setTimeout(fixTooltipPos, 30);
+        });
+        obs.observe(window.parent.document.body, {childList: true, subtree: true});
+    })();
+    </script>
+    """,
+    height=0,
+)
+
 _active_tab = st.session_state["active_tab"]
 
 # ── Global top bar — page title (left) + today's date (right), shown on
