@@ -432,6 +432,12 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     font-weight: 600 !important;
     margin: 0 !important;
     text-align: center !important;
+    /* Default line-height matches the font's base em box, which is too
+       short for Thai upper vowel/tone marks (ิ ี ่ ้ etc., e.g. in
+       "การเงิน") - those render above the line box and poke out over the
+       dark sidebar instead of being covered by the orange pill. Extra
+       line-height gives them room inside the box. */
+    line-height: 2 !important;
 }
 
 /* ── In-page sub-nav (st.pills, used at the top of most pages) — same flat
@@ -1390,49 +1396,110 @@ components.html(
     height=0,
 )
 
-# ── Fix tooltip (help=) bubbles overflowing off the left edge of the screen —
-#    Streamlit centers the tooltip horizontally over its trigger button, which
-#    on the narrow (72px) compact sidebar icon rail pushes wide labels (e.g.
-#    "รายละเอียดบิล") to a negative x position — genuinely off-screen, not
-#    just visually clipped, so no amount of CSS on the tooltip itself helps.
-#    Nudge the positioned wrapper back on-screen whenever one appears. ───────
+# ── Fix tooltip (help=) bubble positioning for the compact sidebar icon
+#    rail. Streamlit's default placement centers the tooltip ABOVE its
+#    trigger button — on the 72px icon rail, icons sit only ~56px apart
+#    (44px icon + gap), so a tooltip placed above one icon has nowhere to
+#    go but overlap the icon of the nav item directly above it (that's the
+#    "orange background doesn't fully cover it / looks lopsided" bug: the
+#    neighboring icon pokes out through/above the pill). Reposition every
+#    sidebar tooltip to sit to the RIGHT of its icon instead, vertically
+#    centered — icons in a rail never collide horizontally with each
+#    other, so this sidesteps the overlap entirely rather than nudging
+#    around it. Non-sidebar tooltips keep the old "nudge back on-screen if
+#    pushed past the left edge" behavior. ─────────────────────────────────
 components.html(
     r"""
     <script>
     (function() {
+        function readTransform(wrapper) {
+            var m = window.parent.getComputedStyle(wrapper).transform;
+            var x = 0, y = 0, is3d = false;
+            var match3d = m && m.match(/matrix3d\(([^)]+)\)/);
+            var match2d = !match3d && m && m.match(/matrix\(([^)]+)\)/);
+            if (match3d) {
+                var p3 = match3d[1].split(',').map(parseFloat);
+                x = p3[12]; y = p3[13]; is3d = true;
+            } else if (match2d) {
+                var p2 = match2d[1].split(',').map(parseFloat);
+                x = p2[4]; y = p2[5];
+            }
+            return {x: x, y: y, is3d: is3d};
+        }
+        function setTransform(wrapper, tx, ty, is3d) {
+            wrapper.style.transform = is3d
+                ? 'translate3d(' + tx + 'px, ' + ty + 'px, 0px)'
+                : 'translate(' + tx + 'px, ' + ty + 'px)';
+        }
         function fixTooltipPos() {
             try {
                 var doc = window.parent.document;
                 var tips = doc.querySelectorAll('[data-testid="stTooltipContent"]');
                 tips.forEach(function(tip) {
-                    var el = tip, wrapper = null;
+                    var el = tip, wrapper = null, chain = [];
                     for (var i = 0; i < 6 && el; i++) {
                         el = el.parentElement;
-                        if (el && window.parent.getComputedStyle(el).position === 'absolute') {
+                        if (!el) break;
+                        chain.push(el);
+                        if (window.parent.getComputedStyle(el).position === 'absolute') {
                             wrapper = el;
                             break;
                         }
                     }
                     if (!wrapper) return;
+
+                    var anchor = wrapper.id ? doc.querySelector('[aria-describedby="' + wrapper.id + '"]') : null;
+                    var sidebarAnchor = anchor ? anchor.closest('[data-testid="stSidebar"]') : null;
+                    if (anchor && sidebarAnchor) {
+                        // floating-ui sometimes bakes its own extra offset (e.g. for
+                        // arrow/collision alignment) as an inline left/top/transform on
+                        // an INTERMEDIATE node between the tooltip and the outer
+                        // positioned wrapper — that offset varies per icon (wider
+                        // labels like "บันทึกรายการ" got shifted ~27px further right
+                        // than short ones like "การเงิน"), so pinning only the outer
+                        // wrapper left it randomly skewed depending on which icon was
+                        // hovered. Clear it on every intermediate node first.
+                        chain.forEach(function(node) {
+                            if (node !== wrapper) {
+                                node.style.setProperty('left', '0px', 'important');
+                                node.style.setProperty('top', '0px', 'important');
+                                node.style.setProperty('transform', 'none', 'important');
+                            }
+                        });
+                        // Pin with position:fixed + left/top (both viewport-relative,
+                        // same frame as getBoundingClientRect) instead of adding a
+                        // transform delta on top of whatever floating-ui already set —
+                        // an absolute pin is idempotent regardless of floating-ui's
+                        // baseline placement for a given icon.
+                        var aRect = anchor.getBoundingClientRect();
+                        var tRect = wrapper.getBoundingClientRect();
+                        var targetX = aRect.right + 8;
+                        var targetY = aRect.top + (aRect.height - tRect.height) / 2;
+                        wrapper.style.setProperty('position', 'fixed', 'important');
+                        wrapper.style.setProperty('transform', 'none', 'important');
+                        wrapper.style.setProperty('left', targetX + 'px', 'important');
+                        wrapper.style.setProperty('top', targetY + 'px', 'important');
+                        // A positioned ancestor further up (outside this 6-hop walk)
+                        // can establish its own containing block for position:fixed,
+                        // offsetting our left/top by a constant the walk never sees.
+                        // Measure the actual result and correct once so this is
+                        // self-calibrating instead of relying on a guessed constant.
+                        var actual = wrapper.getBoundingClientRect();
+                        var errX = actual.x - targetX, errY = actual.y - targetY;
+                        if (errX || errY) {
+                            wrapper.style.setProperty('left', (targetX - errX) + 'px', 'important');
+                            wrapper.style.setProperty('top', (targetY - errY) + 'px', 'important');
+                        }
+                        return;
+                    }
+
                     var rect = wrapper.getBoundingClientRect();
                     if (rect.x < 8) {
                         // ตำแหน่งจริงมาจาก transform: matrix(...) ไม่ใช่ left — ต้องแก้ tx
                         // ใน matrix ตรงๆ (แก้แค่ style.left เฉยๆ ไม่มีผลอะไรเลย)
-                        var m = window.parent.getComputedStyle(wrapper).transform;
-                        var tx = 0, ty = 0, is3d = false;
-                        var match3d = m && m.match(/matrix3d\(([^)]+)\)/);
-                        var match2d = !match3d && m && m.match(/matrix\(([^)]+)\)/);
-                        if (match3d) {
-                            var p3 = match3d[1].split(',').map(parseFloat);
-                            tx = p3[12]; ty = p3[13]; is3d = true;
-                        } else if (match2d) {
-                            var p2 = match2d[1].split(',').map(parseFloat);
-                            tx = p2[4]; ty = p2[5];
-                        }
+                        var cur2 = readTransform(wrapper);
                         var shift = 8 - rect.x;
-                        wrapper.style.transform = is3d
-                            ? 'translate3d(' + (tx + shift) + 'px, ' + ty + 'px, 0px)'
-                            : 'translate(' + (tx + shift) + 'px, ' + ty + 'px)';
+                        setTransform(wrapper, cur2.x + shift, cur2.y, cur2.is3d);
                     }
                 });
             } catch (e) {}
@@ -1444,6 +1511,17 @@ components.html(
             setTimeout(fixTooltipPos, 30);
         });
         obs.observe(window.parent.document.body, {childList: true, subtree: true});
+        // Streamlit's own tooltip library keeps re-asserting its position (e.g.
+        // on an internal autoUpdate/resize loop) for as long as a tooltip stays
+        // open, which can undo a one-shot MutationObserver correction a moment
+        // later — observed as some sidebar icons landing correctly and others
+        // drifting depending on hover timing. Re-run continuously while any
+        // tooltip is open so ours is always the last write.
+        setInterval(function() {
+            if (window.parent.document.querySelector('[data-testid="stTooltipContent"]')) {
+                fixTooltipPos();
+            }
+        }, 80);
     })();
     </script>
     """,
