@@ -1,4 +1,5 @@
 from datetime import date
+import uuid
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -936,6 +937,14 @@ def _show_carrier_select():
     info = st.session_state.get("_iship_carrier_select", {})
     if not info:
         return
+    # ── กันส่ง iShip ซ้ำ: @st.dialog ของ Streamlit บางครั้ง "ค้าง"/เด้งขึ้นมาใหม่
+    # หลังกดปิดแล้ว (ข้อจำกัดของเฟรมเวิร์กเอง ไม่ใช่บั๊กเรา) ถ้าผู้ใช้กด "ส่ง iShip"
+    # ซ้ำตอนหน้าต่างค้าง ต้องไม่ยิง create_order ซ้ำเด็ดขาด — ผูก token กับ info
+    # ชุดนี้ตัวเดียว เช็คก่อนว่าเคยส่งสำเร็จไปแล้วหรือยังทุกครั้งก่อนเรียก API จริง
+    if "_submit_token" not in info:
+        info["_submit_token"] = str(uuid.uuid4())
+        st.session_state["_iship_carrier_select"] = info
+    _cs_already_sent = info["_submit_token"] in st.session_state.get("_iship_sent_tokens", set())
     tab       = info.get("tab", "ship")
     postcode  = info.get("postcode", "")
     weight_kg = info.get("weight_kg", 0.5)
@@ -1016,7 +1025,10 @@ def _show_carrier_select():
         if _btn3.button("⬅️ ย้อนกลับแก้ไข", use_container_width=True, key="_cs_back"):
             st.session_state.pop("_iship_carrier_select", None)
             st.rerun()
-        if _btn1.button("📦 ส่ง iShip", type="primary", use_container_width=True, key="_cs_send"):
+        if _cs_already_sent:
+            st.warning("⚠️ รายการนี้ส่ง iShip สำเร็จไปแล้ว — ถ้าหน้าต่างนี้ค้าง กด \"ข้าม\"/ปิดหน้าต่างแล้วเข้าไปดูใน 🚚 ประวัติการส่งแทน (ป้องกันไม่ให้ส่งซ้ำโดยไม่ตั้งใจ)")
+        if _btn1.button("📦 ส่ง iShip", type="primary", use_container_width=True, key="_cs_send",
+                        disabled=_cs_already_sent):
             _cs_items       = info.get("items", [])
             _cs_item_codes  = " ".join(
                 f"{(it.get('product_id') or it.get('name','')).upper()}-{it.get('qty',0)}"
@@ -1045,6 +1057,7 @@ def _show_carrier_select():
                     height_cm    = int(_cs_hgt),
                 )
             if _cs_resp.get("status"):
+                st.session_state.setdefault("_iship_sent_tokens", set()).add(info["_submit_token"])
                 _cs_track    = _extract_tracking(_cs_resp)
                 _cs_order_id = _extract_iship_order_id(_cs_resp)
                 st.session_state["_iship_debug_resp"] = _cs_resp
