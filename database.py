@@ -224,6 +224,7 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
             "bill_status": "ยังไม่เปิดบิล",
             "pay_status": "ค้างจ่าย",
             "notes": txn.get("notes", "") or "",
+            "bill_no": txn.get("bill_no"),
         }).execute()
     _clear_transaction_caches()
 
