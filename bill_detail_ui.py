@@ -1720,12 +1720,13 @@ def render(products, customers):
                     return "⏳ รอตีราคา"
                 est = float(r.get("shipping_cost") or 0)
                 if est <= 0:
-                    return f"❓ ไม่มีราคาประเมิน (จริง {actual:,.0f}฿)"
-                diff = actual - est
+                    return "?"
+                diff = actual - est  # + = จริงแพงกว่าประเมิน (คิดลูกค้าขาด/ขาดทุน), - = จริงถูกกว่า (คิดลูกค้าเกิน/กำไร)
                 if abs(diff) <= 2:
                     return f"✅ {actual:,.0f}฿"
-                sign = "+" if diff > 0 else ""
-                return f"⚠️ {actual:,.0f}฿ (Δ{sign}{diff:,.0f})"
+                if diff < 0:
+                    return f"+{abs(diff):,.0f}฿"
+                return f"❗-{diff:,.0f}฿"
 
             _sh_df   = pd.DataFrame([{
                 "ลบ":              False,
@@ -1770,8 +1771,9 @@ def render(products, customers):
                     "💰 เทียบยอด": st.column_config.TextColumn("💰 เทียบยอด", width="medium",
                                     help="เทียบยอดที่ขนส่งหักจริงกับราคาที่เราประเมินไว้ (=ราคาที่คิดลูกค้าด้วย "
                                          "เพราะบันทึกขาย/ส่งของคิดลูกค้าตามราคาขนส่งจริงตรงๆ ไม่มีบวกเพิ่ม) "
-                                         "Δ ลบ = เก็บลูกค้าไว้มากกว่าที่ขนส่งคิดจริง (กำไร) "
-                                         "Δ บวก = เก็บลูกค้าไม่พอ ขนส่งคิดแพงกว่า (ขาดทุนค่าส่ง)"),
+                                         "? = ไม่มีราคาประเมินไว้ให้เทียบ  ⏳ = iShip ยังไม่ตีราคาจริงมา  "
+                                         "+ = เก็บลูกค้าไว้มากกว่าที่ขนส่งคิดจริง (กำไร)  "
+                                         "❗- = เก็บลูกค้าไม่พอ ขนส่งคิดแพงกว่า (ขาดทุนค่าส่ง)"),
                     "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width="medium"),
                     "Tracking": st.column_config.TextColumn("Tracking", width="small"),
                     "🔗":       st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
