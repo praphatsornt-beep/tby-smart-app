@@ -417,27 +417,49 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
     st.markdown(
         """
         <style>
+        [class*="st-key-stepper_"] button[data-testid="stBaseButton-secondary"],
+        [class*="st-key-stepper_"] button[data-testid="baseButton-secondary"],
         [class*="st-key-stepper_"] button[kind="secondary"] {
-            background: oklch(0.94 0.03 155) !important;
-            color: oklch(0.4 0.1 155) !important;
+            background: var(--tby-green) !important;
             border: none !important;
             border-radius: 8px !important;
             font-weight: 700 !important;
             font-size: 1.15rem !important;
             min-height: 40px !important;
         }
-        [class*="st-key-stepper_"] button[kind="secondary"]:hover {
-            background: oklch(0.90 0.05 155) !important;
+        [class*="st-key-stepper_"] button[data-testid="stBaseButton-secondary"] p,
+        [class*="st-key-stepper_"] button[data-testid="baseButton-secondary"] p,
+        [class*="st-key-stepper_"] button[kind="secondary"] p {
+            color: #ffffff !important;
+            font-weight: 700 !important;
+            font-size: 1.15rem !important;
         }
+        [class*="st-key-stepper_"] button[data-testid="stBaseButton-secondary"]:hover,
+        [class*="st-key-stepper_"] button[data-testid="baseButton-secondary"]:hover,
+        [class*="st-key-stepper_"] button[kind="secondary"]:hover {
+            background: var(--tby-green-dark) !important;
+        }
+        [class*="st-key-remove_"] button[data-testid="stBaseButton-secondary"],
+        [class*="st-key-remove_"] button[data-testid="baseButton-secondary"],
         [class*="st-key-remove_"] button[kind="secondary"] {
             background: transparent !important;
             border: none !important;
-            color: oklch(0.5 0.15 25) !important;
             box-shadow: none !important;
         }
+        [class*="st-key-remove_"] button[data-testid="stBaseButton-secondary"] p,
+        [class*="st-key-remove_"] button[data-testid="baseButton-secondary"] p,
+        [class*="st-key-remove_"] button[kind="secondary"] p {
+            color: oklch(0.5 0.15 25) !important;
+        }
+        [class*="st-key-remove_"] button[data-testid="stBaseButton-secondary"]:hover,
+        [class*="st-key-remove_"] button[data-testid="baseButton-secondary"]:hover,
         [class*="st-key-remove_"] button[kind="secondary"]:hover {
-            color: oklch(0.45 0.18 25) !important;
             background: oklch(0.94 0.03 25) !important;
+        }
+        [class*="st-key-remove_"] button[data-testid="stBaseButton-secondary"]:hover p,
+        [class*="st-key-remove_"] button[data-testid="baseButton-secondary"]:hover p,
+        [class*="st-key-remove_"] button[kind="secondary"]:hover p {
+            color: oklch(0.45 0.18 25) !important;
         }
         </style>
         """,
