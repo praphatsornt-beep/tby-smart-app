@@ -1394,6 +1394,15 @@ components.html(
     """
     <script>
     (function() {
+        // Re-executes on every Streamlit rerun. Tear down whatever the last
+        // execution installed before installing fresh — an "install once"
+        // flag doesn't work here since the iframe hosting the previous
+        // observer/listener may or may not survive a rerun (depends on
+        // Streamlit's own reconciliation); tying cleanup to a stored
+        // teardown function keeps exactly one live instance either way.
+        if (window.parent.__tbySidebarExpandFixCleanup) {
+            try { window.parent.__tbySidebarExpandFixCleanup(); } catch (e) {}
+        }
         function tick() {
             try {
                 var doc = window.parent.document;
@@ -1411,6 +1420,10 @@ components.html(
             obs.observe(target, {attributes: true, attributeFilter: ['aria-expanded']});
         }
         window.parent.addEventListener('resize', tick);
+        window.parent.__tbySidebarExpandFixCleanup = function() {
+            try { obs.disconnect(); } catch (e) {}
+            try { window.parent.removeEventListener('resize', tick); } catch (e) {}
+        };
         tick();
     })();
     </script>
@@ -1434,6 +1447,21 @@ components.html(
     r"""
     <script>
     (function() {
+        // This whole block re-executes on every Streamlit rerun (nearly every
+        // click/keystroke). It originally registered ANOTHER permanent
+        // MutationObserver + setInterval on window.parent on every single
+        // rerun with no cleanup at all — those accumulated without bound
+        // across a session and crashed the deployed app. A simple "install
+        // once" flag isn't enough either: it can't tell whether the previous
+        // instance's iframe is still alive (depends on Streamlit's own
+        // reconciliation), so it either still leaks (old instance survives)
+        // or goes permanently dark (old instance died, flag blocks a
+        // replacement forever). Tear down whatever the last execution
+        // installed, then install fresh — keeps exactly one live instance no
+        // matter what Streamlit does with the iframe.
+        if (window.parent.__tbyTooltipFixCleanup) {
+            try { window.parent.__tbyTooltipFixCleanup(); } catch (e) {}
+        }
         function readTransform(wrapper) {
             var m = window.parent.getComputedStyle(wrapper).transform;
             var x = 0, y = 0, is3d = false;
@@ -1546,11 +1574,15 @@ components.html(
         // later — observed as some sidebar icons landing correctly and others
         // drifting depending on hover timing. Re-run continuously while any
         // tooltip is open so ours is always the last write.
-        setInterval(function() {
+        var intervalId = setInterval(function() {
             if (window.parent.document.querySelector('[data-testid="stTooltipContent"]')) {
                 fixTooltipPos();
             }
         }, 80);
+        window.parent.__tbyTooltipFixCleanup = function() {
+            try { obs.disconnect(); } catch (e) {}
+            try { clearInterval(intervalId); } catch (e) {}
+        };
     })();
     </script>
     """,
