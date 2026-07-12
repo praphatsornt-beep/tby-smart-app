@@ -350,14 +350,6 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         min-width: 72px !important;
         max-width: 72px !important;
     }
-    [data-testid="stSidebarContent"] {
-        padding-left: 4px !important;
-        padding-right: 4px !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stElementContainer"],
-    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        width: 100% !important;
-    }
     [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
     [data-testid="stSidebar"] .tby-sidebar-brand {
         justify-content: center !important;
@@ -365,10 +357,10 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         gap: 4px !important;
     }
     [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
-        width: 38px !important;
-        height: 38px !important;
-        border-radius: 10px !important;
-        font-size: 0.85rem !important;
+        width: 34px !important;
+        height: 34px !important;
+        border-radius: 9px !important;
+        font-size: 0.65rem !important;
     }
     [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
@@ -440,12 +432,6 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     font-weight: 600 !important;
     margin: 0 !important;
     text-align: center !important;
-    /* Default line-height matches the font's base em box, which is too
-       short for Thai upper vowel/tone marks (ิ ี ่ ้ etc., e.g. in
-       "การเงิน") - those render above the line box and poke out over the
-       dark sidebar instead of being covered by the orange pill. Extra
-       line-height gives them room inside the box. */
-    line-height: 2 !important;
 }
 
 /* ── In-page sub-nav (st.pills, used at the top of most pages) — same flat
@@ -1288,20 +1274,6 @@ if st.session_state["_sidebar_compact"]:
             min-width: 72px !important;
             max-width: 72px !important;
         }
-        /* Streamlit's own sidebar content wrapper carries a fixed 15px/15px
-           L-R padding, leaving only 42px of usable width — narrower than our
-           44px squircle buttons below, so they overflowed that padding
-           unevenly (nearly flush with the right edge, a big gap on the left)
-           instead of sitting centered. Shrink the padding so there's enough
-           room either side. */
-        [data-testid="stSidebarContent"] {
-            padding-left: 4px !important;
-            padding-right: 4px !important;
-        }
-        [data-testid="stSidebar"] [data-testid="stElementContainer"],
-        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-            width: 100% !important;
-        }
         [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
         [data-testid="stSidebar"] .tby-sidebar-brand {
             justify-content: center !important;
@@ -1309,10 +1281,10 @@ if st.session_state["_sidebar_compact"]:
             gap: 4px !important;
         }
         [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
-            width: 38px !important;
-            height: 38px !important;
-            border-radius: 10px !important;
-            font-size: 0.85rem !important;
+            width: 34px !important;
+            height: 34px !important;
+            border-radius: 9px !important;
+            font-size: 0.65rem !important;
         }
         [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
@@ -1423,15 +1395,7 @@ components.html(
 #    on the narrow (72px) compact sidebar icon rail pushes wide labels (e.g.
 #    "รายละเอียดบิล") to a negative x position — genuinely off-screen, not
 #    just visually clipped, so no amount of CSS on the tooltip itself helps.
-#    Nudge the positioned wrapper back on-screen whenever one appears.
-#    NOTE: a fancier version of this (repositioning tooltips to the right of
-#    their icon, with a continuous setInterval to fight Streamlit's own
-#    re-positioning) shipped briefly and was reverted — it's suspected of
-#    having caused a server-side crash (Segmentation fault) by being by far
-#    the largest/most expensive components.html() payload in the app,
-#    re-sent on every single rerun. Back to this simpler, long-stable
-#    version until a safer way to fix the icon-overlap cosmetic issue is
-#    found. ───────────────────────────────────────────────────────────────
+#    Nudge the positioned wrapper back on-screen whenever one appears. ───────
 components.html(
     r"""
     <script>
