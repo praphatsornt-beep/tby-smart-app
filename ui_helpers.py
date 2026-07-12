@@ -1224,11 +1224,16 @@ def _parse_iship_address(text: str) -> dict:
 def _parse_quick_order(text: str, products: list) -> tuple:
     """แยกข้อความเป็น token คั่นด้วยเว้นวรรค แต่ละ token = รหัสสินค้า (เต็มหรือแค่บางส่วน
     ตรงไหนก็ได้ของรหัส ไม่ใช่แค่ขึ้นต้น — เช่น "2581" match "TF2581" ได้) ตามด้วย -จำนวน
-    ได้ (ไม่ใส่ = 1 ชิ้น) ถ้าเจอมากกว่า 1 ตัวหรือไม่เจอเลย จะติด unknown พร้อมเหตุผล
+    ได้ (ไม่ใส่ = 1 ชิ้น) หรือเว้นวรรคแล้วตามด้วยตัวเลขล้วนๆ ก็ได้เหมือนกัน เช่น "TF2581 3"
+    (ใช้ได้เฉพาะตอนโค้ดก่อนหน้า match สินค้าได้ชัดเจนแล้วเท่านั้น กันไปกินโค้ดสินค้าจริงที่
+    บังเอิญเป็นตัวเลขล้วน) ถ้าเจอมากกว่า 1 ตัวหรือไม่เจอเลย จะติด unknown พร้อมเหตุผล
     """
     product_by_id = {p["id"].upper(): p for p in products}
+    tokens = text.strip().split()
     found, unknown = [], []
-    for token in text.strip().split():
+    i, n = 0, len(tokens)
+    while i < n:
+        token = tokens[i]
         qty = 1
         code_part = token
         parts = token.rsplit("-", 1)
@@ -1237,17 +1242,19 @@ def _parse_quick_order(text: str, products: list) -> tuple:
         code_up = code_part.upper()
 
         p = product_by_id.get(code_up)
-        if p:
-            found.append({"product": p, "qty": qty})
-            continue
+        matches = [p] if p else [pr for pr in products if code_up in pr["id"].upper()]
 
-        _matches = [pr for pr in products if code_up in pr["id"].upper()]
-        if len(_matches) == 1:
-            found.append({"product": _matches[0], "qty": qty})
-        elif len(_matches) > 1:
-            unknown.append(f"{code_part} (พบ {len(_matches)} รายการ ระบุให้ชัดเจนขึ้น)")
+        if qty == 1 and len(matches) == 1 and i + 1 < n and tokens[i + 1].isdigit() and int(tokens[i + 1]) > 0:
+            qty = int(tokens[i + 1])
+            i += 1
+
+        if len(matches) == 1:
+            found.append({"product": matches[0], "qty": qty})
+        elif len(matches) > 1:
+            unknown.append(f"{code_part} (พบ {len(matches)} รายการ ระบุให้ชัดเจนขึ้น)")
         else:
             unknown.append(code_part)
+        i += 1
     return found, unknown
 
 

@@ -292,7 +292,7 @@ def render(tab1, products, customers, customer_map):
                         st.markdown("**เพิ่มสินค้า**")
                         q_text = st.text_input(
                             "รหัสสินค้า",
-                            placeholder="พิมพ์รหัสสินค้า (เต็มหรือบางส่วนก็ได้) เช่น tf2581 — Enter เพื่อเพิ่มเลย",
+                            placeholder="พิมพ์รหัสสินค้า เช่น tf2581-3 หรือ tf2581 3 (3 ชิ้น) — Enter เพื่อเพิ่มเลย",
                             key=_qtext_key, label_visibility="collapsed",
                         )
                         _q_submit = st.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", use_container_width=True)
@@ -1131,7 +1131,7 @@ def render(tab1, products, customers, customer_map):
                 _sqc1, _sqc2 = _sp_add_box.columns([4, 1])
                 _sp_q_text = _sqc1.text_input(
                     "รหัสสินค้า",
-                    placeholder="พิมพ์รหัสสินค้า (เต็มหรือบางส่วนก็ได้) เช่น tf2581 — Enter เพื่อเพิ่มเลย",
+                    placeholder="พิมพ์รหัสสินค้า เช่น tf2581-3 หรือ tf2581 3 (3 ชิ้น) — Enter เพื่อเพิ่มเลย",
                     key=_sp_qtext_key, label_visibility="collapsed",
                 )
                 _sp_q_submit = _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", use_container_width=True)
