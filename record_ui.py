@@ -271,7 +271,7 @@ def render(tab1, products, customers, customer_map):
 
                 # ── รายการสินค้า: เพิ่มสินค้า+สถานะ | ตะกร้า | สรุปยอด ──────────────
                 with st.container(key="sale_status_cart_summary_row"):
-                    _status_col, _cart_col, _summary_col = st.columns([1.2, 1.7, 1.0], gap="small")
+                    _status_col, _cart_col, _summary_col = st.columns([1.05, 1.85, 1.0], gap="small")
 
                 with _status_col:
                     with st.container(key="sale_status_panel", border=True):
@@ -423,7 +423,8 @@ def render(tab1, products, customers, customer_map):
                                         st.session_state["_prev_shipping_cid"] = _rph_addr.get("customer_id", "")
                             # apply staged address fill ก่อน render ทุก widget
                             for _fk, _wk in [("_fr_rname","r_name"),("_fr_rphone","r_phone"),("_fr_al","r_al"),
-                                              ("_fr_dt","r_dt"),("_fr_am","r_am"),("_fr_pv","r_pv")]:
+                                              ("_fr_dt","r_dt"),("_fr_am","r_am"),("_fr_pv","r_pv"),
+                                              ("_staged_pc","m_postcode")]:
                                 if _fk in st.session_state:
                                     st.session_state[_wk] = st.session_state.pop(_fk)
                             col_a, col_b = st.columns(2)
@@ -503,11 +504,7 @@ def render(tab1, products, customers, customer_map):
                 f_zone = s_zone = ""
 
                 if m_delivery == "ส่งพัสดุ":
-                    if "_staged_pc" in st.session_state:
-                        st.session_state["m_postcode"] = st.session_state.pop("_staged_pc")
                     m_postcode = st.session_state.get("m_postcode", "")
-
-
 
                     fees = carrier_fees(0, m_postcode.strip()) if len(m_postcode.strip()) == 5 else None
                     f_sur  = fees["Flash Express"]["surcharge"] if fees else 0

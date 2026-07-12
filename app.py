@@ -851,7 +851,7 @@ label,
 
 /* st.info / st.success / st.warning / st.error */
 [data-testid="stAlert"] p {
-    font-size: 0.92rem !important;
+    font-size: 1.05rem !important;
     line-height: 1.6 !important;
     color: var(--tby-text) !important;
 }
