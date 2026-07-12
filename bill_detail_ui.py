@@ -865,9 +865,13 @@ def render(products, customers):
 
                             if not _bill_owed.empty:
                                 st.dataframe(
-                                    _bill_owed[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]]
-                                    .style.format({"ค้างจ่ายบิล":"{:,.0f}","จ่ายล่วงหน้า":"{:,.0f}","ค้างสุทธิ":"{:,.0f}"}),
+                                    _bill_owed[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]],
                                     width="stretch", hide_index=True,
+                                    column_config={
+                                        "ค้างจ่ายบิล": st.column_config.NumberColumn("ค้างจ่ายบิล", format="%,.0f"),
+                                        "จ่ายล่วงหน้า": st.column_config.NumberColumn("จ่ายล่วงหน้า", format="%,.0f"),
+                                        "ค้างสุทธิ": st.column_config.NumberColumn("ค้างสุทธิ", format="%,.0f"),
+                                    },
                                 )
                                 _net = _bill_owed["ค้างสุทธิ"].sum()
                                 _pre = _bill_owed["จ่ายล่วงหน้า"].sum()
@@ -894,8 +898,11 @@ def render(products, customers):
                                 _cr_df = pd.DataFrame(_cr_rows)
                                 st.markdown("**💚 เครดิตเหลือ**")
                                 st.dataframe(
-                                    _cr_df.style.format({"เครดิตเหลือ": "{:,.0f}", "PV": "{:,.0f}"}),
-                                    width="stretch", hide_index=True,
+                                    _cr_df, width="stretch", hide_index=True,
+                                    column_config={
+                                        "เครดิตเหลือ": st.column_config.NumberColumn("เครดิตเหลือ", format="%,.0f"),
+                                        "PV": st.column_config.NumberColumn("PV", format="%,.0f"),
+                                    },
                                 )
                                 st.caption(f"รวม PV ที่เปิดบิลได้: **{_cr_df['PV'].sum():,.0f}**")
 
@@ -914,12 +921,12 @@ def render(products, customers):
                                     _bw_outcols.append("PV")
                                 _bw = _unbilled_unpaid.groupby("รหัส").agg(_bw_aggcols).reset_index()
                                 _bw.columns = _bw_outcols
-                                _bw_fmt = {"ยอด":"{:,.0f}"}
+                                _bw_colcfg = {"ยอด": st.column_config.NumberColumn("ยอด", format="%,.0f")}
                                 if _has_pv:
-                                    _bw_fmt["PV"] = "{:,.0f}"
+                                    _bw_colcfg["PV"] = st.column_config.NumberColumn("PV", format="%,.0f")
                                 st.dataframe(
-                                    _bw.style.format(_bw_fmt),
-                                    width="stretch", hide_index=True,
+                                    _bw, width="stretch", hide_index=True,
+                                    column_config=_bw_colcfg,
                                 )
                                 _bw_cap = f"รวม: {int(_bw['จำนวน'].sum())} ชิ้น | {_bw['ยอด'].sum():,.0f} ฿"
                                 if _has_pv:
@@ -1037,11 +1044,11 @@ def render(products, customers):
                                 })
                             _bl_df = pd.DataFrame(_bl_rows)
                             st.dataframe(
-                                _bl_df.style.format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
-                                .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
-                                     if isinstance(v, (int, float)) and v > 0 else "",
-                                     subset=["ค้างรับ", "ค้างจ่าย"]),
-                                width="stretch", hide_index=True,
+                                _bl_df, width="stretch", hide_index=True,
+                                column_config={
+                                    "ยอดรวม": st.column_config.NumberColumn("ยอดรวม", format="%,.0f"),
+                                    "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
+                                },
                             )
 
                     for _bk, _bv in sorted(
