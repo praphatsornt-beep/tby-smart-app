@@ -10,7 +10,7 @@ import line_api
 import iship_api
 from ui_helpers import (
     _to_bkk, _to_excel_bytes, BOX_WEIGHT_G,
-    _fmt_note, _extract_staff_tag,
+    _style_status, _fmt_note, _extract_staff_tag,
     _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
 )
 import carriers as carr
@@ -333,27 +333,23 @@ def render(products, customers):
                                     st.success("✅ ส่ง LINE แล้ว")
                                 else:
                                     st.error(f"❌ {_r.get('error')}")
-                        # ── Table + row selection ──────────────────────────────
-                        # NOTE: do NOT combine a pandas Styler (.style...) with
-                        # selection_mode here — that combo is suspected to be the
-                        # cause of a Linux-only (Streamlit Cloud) segfault that
-                        # never reproduced on local Windows testing. Plain
-                        # column_config formatting instead, no Styler.
+                        # ── Styled table + row selection ──────────────────────
                         _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
                                    "ยอดรวม", "ค้างจ่าย", "สถานะจ่าย", "สถานะบิล"]
                         _id_map = grp["id"].reset_index(drop=True)
                         st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
                         _evt = st.dataframe(
-                            grp[_dcols].reset_index(drop=True),
+                            grp[_dcols].reset_index(drop=True).style
+                                .format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
+                                .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"])
+                                .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
+                                     if isinstance(v, (int, float)) and v > 0 else "",
+                                     subset=["ค้างรับ", "ค้างจ่าย"]),
                             width="stretch",
                             hide_index=True,
                             selection_mode="multi-row",
                             on_select="rerun",
                             key=f"sel_tbl_{customer_name}",
-                            column_config={
-                                "ยอดรวม": st.column_config.NumberColumn("ยอดรวม", format="%,.0f"),
-                                "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
-                            },
                         )
                         _sel_idx  = _evt.selection.rows if hasattr(_evt, "selection") else []
                         selected_ids = [_id_map.iloc[i] for i in _sel_idx if i < len(_id_map)]
@@ -865,13 +861,9 @@ def render(products, customers):
 
                             if not _bill_owed.empty:
                                 st.dataframe(
-                                    _bill_owed[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]],
+                                    _bill_owed[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]]
+                                    .style.format({"ค้างจ่ายบิล":"{:,.0f}","จ่ายล่วงหน้า":"{:,.0f}","ค้างสุทธิ":"{:,.0f}"}),
                                     width="stretch", hide_index=True,
-                                    column_config={
-                                        "ค้างจ่ายบิล": st.column_config.NumberColumn("ค้างจ่ายบิล", format="%,.0f"),
-                                        "จ่ายล่วงหน้า": st.column_config.NumberColumn("จ่ายล่วงหน้า", format="%,.0f"),
-                                        "ค้างสุทธิ": st.column_config.NumberColumn("ค้างสุทธิ", format="%,.0f"),
-                                    },
                                 )
                                 _net = _bill_owed["ค้างสุทธิ"].sum()
                                 _pre = _bill_owed["จ่ายล่วงหน้า"].sum()
@@ -898,11 +890,8 @@ def render(products, customers):
                                 _cr_df = pd.DataFrame(_cr_rows)
                                 st.markdown("**💚 เครดิตเหลือ**")
                                 st.dataframe(
-                                    _cr_df, width="stretch", hide_index=True,
-                                    column_config={
-                                        "เครดิตเหลือ": st.column_config.NumberColumn("เครดิตเหลือ", format="%,.0f"),
-                                        "PV": st.column_config.NumberColumn("PV", format="%,.0f"),
-                                    },
+                                    _cr_df.style.format({"เครดิตเหลือ": "{:,.0f}", "PV": "{:,.0f}"}),
+                                    width="stretch", hide_index=True,
                                 )
                                 st.caption(f"รวม PV ที่เปิดบิลได้: **{_cr_df['PV'].sum():,.0f}**")
 
@@ -921,12 +910,12 @@ def render(products, customers):
                                     _bw_outcols.append("PV")
                                 _bw = _unbilled_unpaid.groupby("รหัส").agg(_bw_aggcols).reset_index()
                                 _bw.columns = _bw_outcols
-                                _bw_colcfg = {"ยอด": st.column_config.NumberColumn("ยอด", format="%,.0f")}
+                                _bw_fmt = {"ยอด":"{:,.0f}"}
                                 if _has_pv:
-                                    _bw_colcfg["PV"] = st.column_config.NumberColumn("PV", format="%,.0f")
+                                    _bw_fmt["PV"] = "{:,.0f}"
                                 st.dataframe(
-                                    _bw, width="stretch", hide_index=True,
-                                    column_config=_bw_colcfg,
+                                    _bw.style.format(_bw_fmt),
+                                    width="stretch", hide_index=True,
                                 )
                                 _bw_cap = f"รวม: {int(_bw['จำนวน'].sum())} ชิ้น | {_bw['ยอด'].sum():,.0f} ฿"
                                 if _has_pv:
@@ -1044,11 +1033,11 @@ def render(products, customers):
                                 })
                             _bl_df = pd.DataFrame(_bl_rows)
                             st.dataframe(
-                                _bl_df, width="stretch", hide_index=True,
-                                column_config={
-                                    "ยอดรวม": st.column_config.NumberColumn("ยอดรวม", format="%,.0f"),
-                                    "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
-                                },
+                                _bl_df.style.format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
+                                .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
+                                     if isinstance(v, (int, float)) and v > 0 else "",
+                                     subset=["ค้างรับ", "ค้างจ่าย"]),
+                                width="stretch", hide_index=True,
                             )
 
                     for _bk, _bv in sorted(
