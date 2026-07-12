@@ -315,7 +315,7 @@ def render(tab1, products, customers, customer_map):
                         # วินาทีทุกครั้งที่หน้ารีรัน (เช่น คลิก selectbox อื่น) ทำให้ต้องคลิก
                         # ซ้ำหลายทีกว่าเคอร์เซอร์จะไปอยู่ในช่องที่ตั้งใจจะคลิกจริง
                         if st.session_state.pop("_qtext_refocus", False):
-                            components.html(
+                            st.iframe(
                                 """
                                 <script>
                                 (function() {
@@ -337,7 +337,7 @@ def render(tab1, products, customers, customer_map):
                                 })();
                                 </script>
                                 """,
-                                height=0,
+                                height=1,
                             )
 
                     valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
@@ -1154,7 +1154,7 @@ def render(tab1, products, customers, customer_map):
                 # (เช่น คลิก selectbox ลูกค้า) ทำให้ต้องคลิกซ้ำหลายทีกว่าเคอร์เซอร์จะ
                 # ไปอยู่ในช่องที่ตั้งใจจะคลิกจริง
                 if st.session_state.pop("_sp_qtext_refocus", False):
-                    components.html(
+                    st.iframe(
                         """
                         <script>
                         (function() {
@@ -1176,7 +1176,7 @@ def render(tab1, products, customers, customer_map):
                         })();
                         </script>
                         """,
-                        height=0,
+                        height=1,
                     )
 
                 # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
