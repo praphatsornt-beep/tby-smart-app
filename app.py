@@ -412,6 +412,14 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     height: auto !important;
     overflow: visible !important;
     white-space: nowrap !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+}
+[data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"] {
+    width: auto !important;
+    display: flex !important;
+    justify-content: center !important;
 }
 [data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"] p {
     color: #ffffff !important;
@@ -422,6 +430,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     font-size: 0.85rem !important;
     font-weight: 600 !important;
     margin: 0 !important;
+    text-align: center !important;
 }
 
 /* ── In-page sub-nav (st.pills, used at the top of most pages) — same flat
