@@ -46,7 +46,7 @@ def render():
                                    จำนวนบิล=("เลขที่บิล", "nunique"))
                               .sort_values("ค้างรับรวม", ascending=False))
                 st.markdown("**สรุปต่อลูกค้า — ลูกค้าที่ยังรับของไม่ครบ**")
-                st.dataframe(_cust_sum, hide_index=True, use_container_width=True)
+                st.dataframe(_cust_sum, hide_index=True, width="stretch")
                 st.divider()
 
                 # สรุปต่อสินค้า
@@ -54,7 +54,7 @@ def render():
                               .sum().rename(columns={"ค้างรับ": "ค้างรับรวม"})
                               .sort_values("ค้างรับรวม", ascending=False))
                 st.markdown("**สรุปต่อสินค้า**")
-                st.dataframe(_prod_sum, hide_index=True, use_container_width=True)
+                st.dataframe(_prod_sum, hide_index=True, width="stretch")
                 st.divider()
 
                 # รายละเอียด — เลือกดูแยกตามลูกค้า หรือแยกตามสินค้า
@@ -66,13 +66,13 @@ def render():
                         _ctotal = int(_cgrp["ค้างรับ"].sum())
                         with st.expander(f"**{_cname}** — ค้างรับรวม {_ctotal} ชิ้น ({_cgrp['สินค้า'].nunique()} รายการสินค้า)"):
                             _det = _cgrp[["สินค้า","เลขที่บิล","วันที่","ค้างรับ"]].reset_index(drop=True)
-                            st.dataframe(_det, hide_index=True, use_container_width=True)
+                            st.dataframe(_det, hide_index=True, width="stretch")
                 else:
                     for _pname, _pgrp in _dep_df.groupby("สินค้า"):
                         _ptotal = int(_pgrp["ค้างรับ"].sum())
                         with st.expander(f"**{_pname}** — รวม {_ptotal} ชิ้น  ({_pgrp['ลูกค้า'].nunique()} คน)"):
                             _det = _pgrp[["ลูกค้า","เลขที่บิล","วันที่","ค้างรับ"]].reset_index(drop=True)
-                            st.dataframe(_det, hide_index=True, use_container_width=True)
+                            st.dataframe(_det, hide_index=True, width="stretch")
 
     elif _t6_active == "📦 สต๊อก":
         st.subheader("สรุปสต๊อก")
@@ -113,7 +113,7 @@ def render():
                 cnt_date = st.date_input("วันที่นับ", value=date.today(), key="stock_cnt_date")
                 edited_stock = st.data_editor(
                     stock_df,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     disabled=["รหัส", "สินค้า", "เบิก", "ฝาก", "ส่วนต่าง", "สถานะ"],
                     column_config={
@@ -126,7 +126,7 @@ def render():
                     key="stock_editor",
                 )
                 st.caption("เบิก = เบิกของไปยังไม่มีบิล  |  ฝาก = เปิดบิลแล้วยังไม่รับของ  |  ส่วนต่าง = คอม − นับจริง + ฝาก − เบิก")
-                _stock_submitted = st.form_submit_button("💾 บันทึกการนับสต๊อก", use_container_width=True, type="primary")
+                _stock_submitted = st.form_submit_button("💾 บันทึกการนับสต๊อก", width="stretch", type="primary")
 
             price_by_name = {p["name"]: float(p.get("price") or 0) for p in products}
             pv_by_name    = {p["name"]: float(p.get("points_per_unit") or 0) for p in products}

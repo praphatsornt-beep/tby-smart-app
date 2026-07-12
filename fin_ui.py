@@ -240,7 +240,7 @@ def render():
             with ob2:
                 ob_owed     = st.number_input("ค้างโอนยกมา (฿)", min_value=0.0, step=100.0,
                     value=max(0.0, -ob_adj), key=f"ob_owed_{ob_date}")
-            if st.button("💾 บันทึกยอดยกมา", type="secondary", use_container_width=True, key="ob_save"):
+            if st.button("💾 บันทึกยอดยกมา", type="secondary", width="stretch", key="ob_save"):
                 db.upsert_finance_entry({
                     "id": str(uuid.uuid4()), "entry_date": str(ob_date),
                     "transfer_amount": 0, "registration_fee": 0,
@@ -267,7 +267,7 @@ def render():
                 fin_bv       = st.number_input("BV (หักยอดค้าง) (฿)", min_value=0.0, step=100.0, value=float(_ex.get("bv_amount", 0)), key=f"fin_bv_{fin_date}")
             fin_notes = st.text_input("หมายเหตุ", value=_ex.get("notes", "") or "", key=f"fin_notes_{fin_date}")
 
-            if st.button("💾 บันทึก", type="primary", use_container_width=True, key="fin_save"):
+            if st.button("💾 บันทึก", type="primary", width="stretch", key="fin_save"):
                 db.upsert_finance_entry({
                     "id":               str(uuid.uuid4()),
                     "entry_date":       str(fin_date),
@@ -367,7 +367,7 @@ def render():
                 with st.expander(_label, expanded=(_i == 0)):
                     st.dataframe(
                         _style_fin(_mdf),
-                        use_container_width=True,
+                        width="stretch",
                         hide_index=True,
                     )
 
@@ -472,7 +472,7 @@ def render():
                 cm_vat_received_date = st.date_input("วันที่ได้รับคืน", value=_parse_date(_cr.get("vat_claim_received_date")), key=f"cm_vat_received_date_{cm_period}")
 
             cm_notes = st.text_area("หมายเหตุ", value=_cr.get("notes", "") or "", key=f"cm_notes_{cm_period}")
-            cm_submitted = st.form_submit_button("💾 บันทึก", type="primary", use_container_width=True)
+            cm_submitted = st.form_submit_button("💾 บันทึก", type="primary", width="stretch")
 
         if cm_submitted:
             try:
@@ -500,7 +500,7 @@ def render():
                 st.error(f"❌ บันทึกไม่สำเร็จ: {e}")
 
         if _cr and float(_cr.get("commission_amount", 0)) > 0:
-            if st.button("🖨️ พิมพ์ใบเสร็จรับเงิน/ใบกำกับภาษี", key=f"cm_print_{cm_period}", use_container_width=True):
+            if st.button("🖨️ พิมพ์ใบเสร็จรับเงิน/ใบกำกับภาษี", key=f"cm_print_{cm_period}", width="stretch"):
                 _receipt_html = _render_receipt_html(_cr, _ci, cm_period)
                 components.html(_receipt_html, height=700, scrolling=True)
 
@@ -537,7 +537,7 @@ def render():
                     "จำนวนเงิน": "{:,.2f}", "หัก ณ ที่จ่าย 3%": "{:,.2f}",
                     "vat claim": "{:,.2f}", "commission": "{:,.2f}",
                 }),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
             # ── สรุปสิ้นปี ────────────────────────────────────────────────────────
@@ -556,5 +556,5 @@ def render():
                     "ค่าคอมมิชชั่นรวม": "{:,.2f}", "ภาษีหักไว้รวม": "{:,.2f}",
                     "สุทธิรวม": "{:,.2f}", "VAT เคลมรวม": "{:,.2f}",
                 }),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )

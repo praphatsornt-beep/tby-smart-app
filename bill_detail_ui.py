@@ -55,7 +55,7 @@ def render(products, customers):
                         "ราคา/หน่วย": r.get("price_per_unit", 0),
                         "ยอดรวม":     r.get("total_amount", 0),
                     } for r in _bill_rows])
-                    st.dataframe(_preview_df, use_container_width=True, hide_index=True)
+                    st.dataframe(_preview_df, width="stretch", hide_index=True)
                     _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
                     st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
                     st.warning(f"⚠️ จะลบบิล **{_sel_bill}** ({_bill_cust}) และทุกรายการข้างต้น — กู้คืนไม่ได้")
@@ -188,7 +188,7 @@ def render(products, customers):
                         if _gc2.button(
                             f"👤 {customer_name}",
                             key=f"custrow_{customer_name}",
-                            use_container_width=True,
+                            width="stretch",
                             type=("primary" if _is_active_cust else "secondary"),
                         ):
                             st.session_state["_t5_out_active_cust"] = (
@@ -284,7 +284,7 @@ def render(products, customers):
                                 _pr_summary
                                 + (f" · จ่าย {_pr['amount_paid']:,.0f} ฿" if _pr.get("amount_paid", 0) > 0.01 else "")
                             )
-                            if _pr_c2.button("📨 แจ้ง LINE", key=f"pr_line_{customer_name}", type="primary", use_container_width=True):
+                            if _pr_c2.button("📨 แจ้ง LINE", key=f"pr_line_{customer_name}", type="primary", width="stretch"):
                                 _pr_res = line_api.push_partial_receipt(
                                     _pr["line_user_id"], _pr.get("product_name", ""),
                                     _pr.get("qty_received", 0), _pr["amount_paid"],
@@ -346,7 +346,7 @@ def render(products, customers):
                                 .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
                                      if isinstance(v, (int, float)) and v > 0 else "",
                                      subset=["ค้างรับ", "ค้างจ่าย"]),
-                            use_container_width=True,
+                            width="stretch",
                             hide_index=True,
                             selection_mode="multi-row",
                             on_select="rerun",
@@ -405,7 +405,7 @@ def render(products, customers):
                                     )
                                     bc2.write("")
                                     submit_bill = bc2.form_submit_button(
-                                        "📄 เปิดบิล", use_container_width=True, type="primary"
+                                        "📄 เปิดบิล", width="stretch", type="primary"
                                     )
                                 if submit_bill:
                                     if qty_to_open == int(txn["qty"]):
@@ -449,7 +449,7 @@ def render(products, customers):
                                             key=f"also_open_{txn_id}",
                                         )
                                     submit_evt  = st.form_submit_button(
-                                        "💾 บันทึก", use_container_width=True, type="primary"
+                                        "💾 บันทึก", width="stretch", type="primary"
                                     )
                                 if submit_evt:
                                     error = None
@@ -530,7 +530,7 @@ def render(products, customers):
                             if _del_bno and _del_bno not in ("—", ""):
                                 st.divider()
                                 _del_bill_rows = grp.loc[grp["เลขที่บิล"] == _del_bno]
-                                st.dataframe(_del_bill_rows[["สินค้า", "สั่ง", "ยอดรวม"]], use_container_width=True, hide_index=True)
+                                st.dataframe(_del_bill_rows[["สินค้า", "สั่ง", "ยอดรวม"]], width="stretch", hide_index=True)
                                 st.warning(f"⚠️ จะลบบิล **{_del_bno}** ({_del_bill_rows['ยอดรวม'].sum():,.0f} ฿) และทุกรายการข้างต้น — กู้คืนไม่ได้")
                                 _del_chk = st.checkbox(
                                     f"ยืนยันลบบิล {_del_bno}",
@@ -580,7 +580,7 @@ def render(products, customers):
                                 _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
                                 st.info(f"จะเปิดบิล {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str}")
                                 if st.button("📄 เปิดบิล", type="primary",
-                                             use_container_width=True, key=f"multi_openonly_{customer_name}"):
+                                             width="stretch", key=f"multi_openonly_{customer_name}"):
                                     _open_bill_ids = sel_rows.loc[_unbilled_mask, "id"].tolist()
                                     db.update_transaction_statuses_batch(_open_bill_ids, bill_status="เปิดบิลแล้ว")
                                     st.success(f"✅ เปิดบิลแล้ว {len(_open_bill_ids)} รายการ")
@@ -614,7 +614,7 @@ def render(products, customers):
                                         "จ่ายจริง":  st.column_config.NumberColumn("จ่ายจริง ✏️", min_value=0, format="%.0f", disabled=_pay_disabled),
                                         "สถานะบิล":  st.column_config.TextColumn(disabled=True),
                                     },
-                                    hide_index=True, use_container_width=True,
+                                    hide_index=True, width="stretch",
                                     key=f"multi_combo_{customer_name}_{_mc_mode}",
                                 )
 
@@ -644,7 +644,7 @@ def render(products, customers):
                                     _ms2.metric("ยอดจ่ายรวม", f"{_mc_pay:,.0f} ฿")
 
                                 if st.button("💾 บันทึกทั้งหมด", type="primary",
-                                             use_container_width=True, key=f"multi_all_{customer_name}"):
+                                             width="stretch", key=f"multi_all_{customer_name}"):
                                     _saved_r, _saved_p = 0, 0
                                     _mrp_received, _mrp_id_qty = [], {}
                                     _total_paid_actual = 0.0
@@ -743,7 +743,7 @@ def render(products, customers):
                             if _del_bnos:
                                 st.divider()
                                 _del_bills_rows = grp.loc[grp["เลขที่บิล"].isin(_del_bnos)]
-                                st.dataframe(_del_bills_rows[["เลขที่บิล", "สินค้า", "สั่ง", "ยอดรวม"]], use_container_width=True, hide_index=True)
+                                st.dataframe(_del_bills_rows[["เลขที่บิล", "สินค้า", "สั่ง", "ยอดรวม"]], width="stretch", hide_index=True)
                                 st.warning(f"⚠️ จะลบบิล **{', '.join(_del_bnos)}** ({_del_bills_rows['ยอดรวม'].sum():,.0f} ฿) และทุกรายการข้างต้น — กู้คืนไม่ได้")
                                 _del_chk_m = st.checkbox(
                                     f"ยืนยันลบ {len(_del_bnos)} บิล",
@@ -845,7 +845,7 @@ def render(products, customers):
                                 st.dataframe(
                                     _bill_owed[["รหัส","สินค้า","เปิดบิล","ค้างจ่ายบิล","จ่ายแล้ว(ชิ้น)","จ่ายล่วงหน้า","ค้างสุทธิ"]]
                                     .style.format({"ค้างจ่ายบิล":"{:,.0f}","จ่ายล่วงหน้า":"{:,.0f}","ค้างสุทธิ":"{:,.0f}"}),
-                                    use_container_width=True, hide_index=True,
+                                    width="stretch", hide_index=True,
                                 )
                                 _net = _bill_owed["ค้างสุทธิ"].sum()
                                 _pre = _bill_owed["จ่ายล่วงหน้า"].sum()
@@ -873,7 +873,7 @@ def render(products, customers):
                                 st.markdown("**💚 เครดิตเหลือ**")
                                 st.dataframe(
                                     _cr_df.style.format({"เครดิตเหลือ": "{:,.0f}", "PV": "{:,.0f}"}),
-                                    use_container_width=True, hide_index=True,
+                                    width="stretch", hide_index=True,
                                 )
                                 st.caption(f"รวม PV ที่เปิดบิลได้: **{_cr_df['PV'].sum():,.0f}**")
 
@@ -897,7 +897,7 @@ def render(products, customers):
                                     _bw_fmt["PV"] = "{:,.0f}"
                                 st.dataframe(
                                     _bw.style.format(_bw_fmt),
-                                    use_container_width=True, hide_index=True,
+                                    width="stretch", hide_index=True,
                                 )
                                 _bw_cap = f"รวม: {int(_bw['จำนวน'].sum())} ชิ้น | {_bw['ยอด'].sum():,.0f} ฿"
                                 if _has_pv:
@@ -1019,7 +1019,7 @@ def render(products, customers):
                                 .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
                                      if isinstance(v, (int, float)) and v > 0 else "",
                                      subset=["ค้างรับ", "ค้างจ่าย"]),
-                                use_container_width=True, hide_index=True,
+                                width="stretch", hide_index=True,
                             )
 
                     for _bk, _bv in sorted(
@@ -1056,7 +1056,7 @@ def render(products, customers):
                                 _disp["สถานะรับของ"] = _dlv_raw.split(" ", 1)[1] if " " in _dlv_raw else _dlv_raw
                                 _disp = _disp[_l_table_cols_disp]
                                 st.dataframe(
-                                    _disp, hide_index=True, use_container_width=True,
+                                    _disp, hide_index=True, width="stretch",
                                     column_config={
                                         "ยอดรวม":   st.column_config.NumberColumn("ยอดรวม", format="%,.0f"),
                                         "จ่ายแล้ว": st.column_config.NumberColumn("จ่ายแล้ว", format="%,.0f"),
@@ -1252,7 +1252,7 @@ def render(products, customers):
             _cust_id_map_h = {c["name"]: c["id"] for c in customers_h}
             edited_h = st.data_editor(
                 chk_df,
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "🗑️":       st.column_config.CheckboxColumn("🗑️", default=False, width="small"),
@@ -1287,7 +1287,7 @@ def render(products, customers):
             if to_del_idx:
                 d1, d2 = st.columns([2, 1])
                 d1.warning(f"เลือก {len(to_del_idx)} รายการ")
-                if d2.button("🗑️ ลบรายการที่เลือก", type="secondary", use_container_width=True, key="hist_del_chk_btn"):
+                if d2.button("🗑️ ลบรายการที่เลือก", type="secondary", width="stretch", key="hist_del_chk_btn"):
                     db.delete_transactions_batch([id_map.iloc[i] for i in to_del_idx])
                     st.success(f"✅ ลบ {len(to_del_idx)} รายการแล้ว")
                     st.session_state.pop("hist_table", None)
@@ -1300,7 +1300,7 @@ def render(products, customers):
                     ob1, ob2 = st.columns([2, 1])
                     ob1.info(f"📄 {len(_sel_unbilled)} รายการยังไม่เปิดบิล")
                     if ob2.button(f"📄 เปิดบิล {len(_sel_unbilled)} รายการ",
-                                   type="primary", use_container_width=True,
+                                   type="primary", width="stretch",
                                    key="hist_open_bill_btn"):
                         db.update_transaction_statuses_batch(
                             [id_map.iloc[i] for i in _sel_unbilled], bill_status="เปิดบิลแล้ว")
@@ -1356,11 +1356,11 @@ def render(products, customers):
                     _sp1, _sp2 = st.columns([3, 1])
                     _sp1.warning(f"⚠️ มีการแก้ไข {len(_any_changes)} รายการ — ยังไม่ได้บันทึก")
                     _top_save = _sp2.button("💾 บันทึกแก้ไข", type="primary",
-                                            use_container_width=True, key="save_all_fix_top")
+                                            width="stretch", key="save_all_fix_top")
                 _sc1, _sc2 = st.columns([3, 1])
                 _sc1.info(f"แก้ไข {len(_any_changes)} รายการ")
                 _bottom_save = _sc2.button("💾 บันทึกแก้ไข", type="primary",
-                                           use_container_width=True, key="save_all_fix")
+                                           width="stretch", key="save_all_fix")
                 if _top_save or _bottom_save:
                     for _i, _tid, _ch in _any_changes:
                         if "recv" in _ch:
@@ -1419,7 +1419,7 @@ def render(products, customers):
                 bc1.caption(f"มี {len(cleared_ids)} รายการที่เคลียร์แล้ว (จ่ายและรับครบ)")
                 h_confirm_bulk = bc1.checkbox("ยืนยันลบทั้งหมดที่เคลียร์แล้ว", key="hist_bulk_chk")
                 if bc2.button(f"🗑️ ลบเคลียร์แล้วทั้งหมด ({len(cleared_ids)})",
-                              disabled=not h_confirm_bulk, use_container_width=True, key="hist_bulk_del"):
+                              disabled=not h_confirm_bulk, width="stretch", key="hist_bulk_del"):
                     db.delete_transactions_batch(cleared_ids)
                     st.success(f"✅ ลบ {len(cleared_ids)} รายการแล้ว")
                     st.rerun()
@@ -1493,7 +1493,7 @@ def render(products, customers):
                             f"— แก้จำนวนหรือราคาอาจทำให้ยอดไม่ตรง"
                         )
 
-                    if st.form_submit_button("💾 บันทึกการแก้ไข", use_container_width=True, type="primary"):
+                    if st.form_submit_button("💾 บันทึกการแก้ไข", width="stretch", type="primary"):
                         e_receive_now = e_receipt == "รับของแล้ว"
                         e_initial_qty = int(e_qty) if e_receive_now else 0
                         e_txn_type = "เบิกของก่อน" if e_bill == "ยังไม่เปิดบิล" and e_receive_now else "ขายปกติ"
@@ -1537,14 +1537,14 @@ def render(products, customers):
                         "สินค้า":   _items_str_h,
                     })
                 _ship_df_h = pd.DataFrame(_ship_rows_h)
-                st.dataframe(_ship_df_h, hide_index=True, use_container_width=True)
+                st.dataframe(_ship_df_h, hide_index=True, width="stretch")
 
 
     elif _t5_active == _T5_TABS[3]:
         st.subheader("ประวัติการส่งของ")
 
         _sh_cod_col, _sh_status_col, _sh_sync_col, _sh_bill_col = st.columns([2, 2, 2, 2])
-        if _sh_status_col.button("🚚 สถานะส่ง", key="sh_status_sync", use_container_width=True):
+        if _sh_status_col.button("🚚 สถานะส่ง", key="sh_status_sync", width="stretch"):
             _pending_tn = db.get_pending_delivery_tracking()
             if not _pending_tn:
                 st.info("ทุก tracking จัดส่งสำเร็จแล้ว")
@@ -1566,7 +1566,7 @@ def render(products, customers):
                                 st.write(f"iShip คืนมา {len(_sr['statuses'])} tracking: {list(_sr['statuses'].keys())[:5]}")
                                 st.write(f"pending ในระบบ {len(_pending_tn)}: {_pending_tn[:5]}")
                                 st.write(f"debug: {_sr.get('_debug')}")
-        if _sh_sync_col.button("🔄 ตรวจสอบ COD", key="sh_cod_sync", use_container_width=True):
+        if _sh_sync_col.button("🔄 ตรวจสอบ COD", key="sh_cod_sync", width="stretch"):
             try:
                 _pending = db.get_pending_cod_tracking()
             except Exception:
@@ -1599,7 +1599,7 @@ def render(products, customers):
                         st.rerun()
                     else:
                         st.info("ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
-        if _sh_bill_col.button("💰 เทียบยอดจริง", key="sh_billing_sync", use_container_width=True):
+        if _sh_bill_col.button("💰 เทียบยอดจริง", key="sh_billing_sync", width="stretch"):
             with st.spinner("กำลังดึงข้อมูลจาก iShip..."):
                 _br = iship_api.get_shipping_report(days_back=90)
             if _br.get("error"):
@@ -1756,7 +1756,7 @@ def render(products, customers):
 
             _sh_edit = st.data_editor(
                 _sh_df,
-                hide_index=True, use_container_width=False, key="sh_hist_tbl",
+                hide_index=True, width="content", key="sh_hist_tbl",
                 disabled=["แหล่ง","วันที่/เวลา","ลูกค้า","ผู้รับ","เบอร์",
                           "บ้านเลขที่/ถนน","ตำบล","อำเภอ","จังหวัด","รหัสปณ.",
                           "รายการ","ขนส่ง","COD","💸","💰 เทียบยอด","สถานะส่ง","🔗","หมายเหตุ"],

@@ -921,7 +921,7 @@ if _APP_PASSWORD and not st.session_state.get("_authenticated"):
         st.markdown("### 🔐 เข้าสู่ระบบ")
         with st.form("_login_form"):
             _pw_input = st.text_input("รหัสผ่าน", type="password", placeholder="กรอกรหัสผ่าน")
-            _login_btn = st.form_submit_button("เข้าสู่ระบบ", type="primary", use_container_width=True)
+            _login_btn = st.form_submit_button("เข้าสู่ระบบ", type="primary", width="stretch")
         if _login_btn:
             if _pw_input == _APP_PASSWORD:
                 st.session_state["_authenticated"] = True
@@ -981,7 +981,7 @@ def _show_carrier_select():
             _cmp.append({"ขนส่ง": ("🥇 " if _ci == 0 else "") + o["name"] + _pickup_txt,
                          "ค่าส่ง": o["base"], "พื้นที่พิเศษ": _sur_txt,
                          "น้ำมัน": _fuel_txt, "รวม (฿)": o["total"], "📐": _size_txt, "COD": _cod_txt})
-        st.dataframe(pd.DataFrame(_cmp), hide_index=True, use_container_width=True,
+        st.dataframe(pd.DataFrame(_cmp), hide_index=True, width="stretch",
                      column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
 
         _cs_carrier = st.selectbox("เลือกขนส่ง", [o["name"] for o in opts_ok],
@@ -1021,12 +1021,12 @@ def _show_carrier_select():
 
         st.divider()
         _btn1, _btn2, _btn3 = st.columns(3)
-        if _btn3.button("⬅️ ย้อนกลับแก้ไข", use_container_width=True, key="_cs_back"):
+        if _btn3.button("⬅️ ย้อนกลับแก้ไข", width="stretch", key="_cs_back"):
             st.session_state.pop("_iship_carrier_select", None)
             st.rerun()
         if _cs_already_sent:
             st.warning("⚠️ รายการนี้ส่ง iShip สำเร็จไปแล้ว — ถ้าหน้าต่างนี้ค้าง กด \"ข้าม\"/ปิดหน้าต่างแล้วเข้าไปดูใน 🚚 ประวัติการส่งแทน (ป้องกันไม่ให้ส่งซ้ำโดยไม่ตั้งใจ)")
-        if _btn1.button("📦 ส่ง iShip", type="primary", use_container_width=True, key="_cs_send",
+        if _btn1.button("📦 ส่ง iShip", type="primary", width="stretch", key="_cs_send",
                         disabled=_cs_already_sent):
             _cs_items       = info.get("items", [])
             _cs_item_codes  = " ".join(
@@ -1107,7 +1107,7 @@ def _show_carrier_select():
                     with st.expander("🔍 debug"):
                         st.json(_cs_resp)
 
-        if _btn2.button("ข้าม (ไม่ส่ง iShip)", use_container_width=True, key="_cs_skip"):
+        if _btn2.button("ข้าม (ไม่ส่ง iShip)", width="stretch", key="_cs_skip"):
             st.session_state.pop("_iship_carrier_select", None)
             st.session_state["_do_clear_after_iship"] = tab
             st.rerun()
@@ -1119,10 +1119,10 @@ def _show_carrier_select():
     else:
         st.warning("ไม่มีขนส่งที่รองรับน้ำหนักนี้")
         _bc1, _bc2 = st.columns(2)
-        if _bc1.button("⬅️ ย้อนกลับแก้ไข", use_container_width=True, key="_cs_back2"):
+        if _bc1.button("⬅️ ย้อนกลับแก้ไข", width="stretch", key="_cs_back2"):
             st.session_state.pop("_iship_carrier_select", None)
             st.rerun()
-        if _bc2.button("ข้าม", use_container_width=True, key="_cs_close"):
+        if _bc2.button("ข้าม", width="stretch", key="_cs_close"):
             st.session_state.pop("_iship_carrier_select", None)
             st.session_state["_do_clear_after_iship"] = tab
             st.rerun()
@@ -1149,13 +1149,13 @@ def _show_iship_success_dialog():
     if _track:
         if _iship_oid:
             _print_url = f"https://app.iship.cloud/print/a6?order={_iship_oid}"
-            st.link_button("🖨️ ปริ้นใบปะหน้า", _print_url, use_container_width=True)
+            st.link_button("🖨️ ปริ้นใบปะหน้า", _print_url, width="stretch")
         elif iship_api.is_configured():
-            if st.button("🖨️ ปริ้นใบปะหน้า", use_container_width=True):
+            if st.button("🖨️ ปริ้นใบปะหน้า", width="stretch"):
                 with st.spinner("กำลังหา order ID..."):
                     _label = iship_api.get_label_url(_track)
                 if _label.get("url"):
-                    st.link_button("🔗 เปิดหน้าปริ้น", _label["url"], use_container_width=True)
+                    st.link_button("🔗 เปิดหน้าปริ้น", _label["url"], width="stretch")
                 else:
                     st.warning(f"⚠️ {_label.get('error','')}")
         _dbg_resp = st.session_state.get("_iship_debug_resp")
@@ -1166,7 +1166,7 @@ def _show_iship_success_dialog():
     _dluid = info.get("line_user_id", "")
     _dlgid = info.get("group_id", "")
     if (_dluid or _dlgid) and line_api.is_configured():
-        if st.button("📨 ส่งแจ้งลูกค้าทาง LINE", use_container_width=True):
+        if st.button("📨 ส่งแจ้งลูกค้าทาง LINE", width="stretch"):
             _dlr = line_api.push_tracking(
                 _dluid,
                 info.get("dst_name", ""),
@@ -1181,7 +1181,7 @@ def _show_iship_success_dialog():
                     db.mark_line_notified(info["shipment_id"])
             else:
                 st.error(f"❌ {_dlr.get('error','')}")
-    if st.button("✅ ตกลง / เริ่มออเดอร์ใหม่", type="primary", use_container_width=True):
+    if st.button("✅ ตกลง / เริ่มออเดอร์ใหม่", type="primary", width="stretch"):
         _tab = info.get("tab", "sale")
         st.session_state.pop("_iship_success_info", None)
         st.session_state["_do_clear_after_iship"] = _tab
@@ -1252,7 +1252,7 @@ with st.sidebar:
         _nav_needs_tip = st.session_state["_sidebar_compact"] and not _nav_is_active
         if st.button(
             _nav_text, key=f"_nav_top_{_nav_i}",
-            use_container_width=True,
+            width="stretch",
             type=("primary" if _nav_is_active else "secondary"),
             icon=_TAB_ICONS[_nav_i],
             help=(_nav_text if _nav_needs_tip else None),

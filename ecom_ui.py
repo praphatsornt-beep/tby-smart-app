@@ -36,7 +36,7 @@ def render():
             "ชื่อร้าน": s["shop_name"], "Shop ID": s["shop_id"],
             "Token หมดอายุ": (s.get("token_expiry") or "")[:16],
         } for s in shops])
-        st.dataframe(shops_df, use_container_width=True, hide_index=True)
+        st.dataframe(shops_df, width="stretch", hide_index=True)
 
         # rename shop
         with st.expander("✏️ เปลี่ยนชื่อร้าน"):
@@ -60,7 +60,7 @@ def render():
         sync_from = sc1.date_input("วันที่เริ่ม", value=date.today().replace(day=1), key="sync_from")
         sync_to   = sc2.date_input("ถึง", value=date.today(), key="sync_to")
 
-        if st.button("🔄 Sync Orders", type="primary", use_container_width=True, key="ecom_sync"):
+        if st.button("🔄 Sync Orders", type="primary", width="stretch", key="ecom_sync"):
             prod_map     = db.get_ecommerce_product_map()
             new_items    = []
             new_unmapped = []
@@ -147,12 +147,12 @@ def render():
     if ecom_df.empty:
         st.info("ยังไม่มีข้อมูล — กด Sync ก่อนครับ")
     else:
-        st.dataframe(ecom_df.style.format({"ยอด": "{:,.2f}"}), use_container_width=True, hide_index=True)
+        st.dataframe(ecom_df.style.format({"ยอด": "{:,.2f}"}), width="stretch", hide_index=True)
         st.caption(f"รวม {ecom_df['จำนวน'].sum():,} ชิ้น | ยอดรวม {ecom_df['ยอด'].sum():,.2f} บาท")
         st.dataframe(
             ecom_df.groupby("สินค้า")[["จำนวน", "ยอด"]].sum().reset_index()
                 .sort_values("จำนวน", ascending=False),
-            use_container_width=True, hide_index=True,
+            width="stretch", hide_index=True,
         )
 
     st.divider()

@@ -75,7 +75,7 @@ def render(tab1, products, customers, customer_map):
                 st.session_state["_cart_version"] = _cart_ver + 1
                 st.rerun()
 
-            if _sale_h2.button("🗑️ ล้าง", key="sale_clear_form", use_container_width=True):
+            if _sale_h2.button("🗑️ ล้าง", key="sale_clear_form", width="stretch"):
                 for _k in _sale_keys:
                     st.session_state.pop(_k, None)
                 st.session_state.pop(_cart_key, None)
@@ -155,7 +155,7 @@ def render(tab1, products, customers, customer_map):
                             } for p in _pending_rx])
                             _rx_edit = st.data_editor(
                                 _rx_df[["สินค้า","บิล","สถานะจ่าย","ค้างรับ","รับวันนี้"]],
-                                hide_index=True, use_container_width=True,
+                                hide_index=True, width="stretch",
                                 column_config={
                                     "รับวันนี้": st.column_config.NumberColumn("รับวันนี้", min_value=0, step=1, width="small"),
                                 },
@@ -177,7 +177,7 @@ def render(tab1, products, customers, customer_map):
                                     _rx_pay_df = pd.DataFrame(_rx_recv_rows)
                                     _rx_pay_edit = st.data_editor(
                                         _rx_pay_df[["สินค้า","รับวันนี้","จ่ายมา"]],
-                                        hide_index=True, use_container_width=True,
+                                        hide_index=True, width="stretch",
                                         column_config={
                                             "จ่ายมา": st.column_config.NumberColumn(
                                                 "จ่ายมา (฿)", min_value=0.0, step=1.0, width="small",
@@ -295,7 +295,7 @@ def render(tab1, products, customers, customer_map):
                             placeholder="พิมพ์รหัสสินค้า เช่น tf2581-3 หรือ tf2581 3 (3 ชิ้น) — Enter เพื่อเพิ่มเลย",
                             key=_qtext_key, label_visibility="collapsed",
                         )
-                        _q_submit = st.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", use_container_width=True)
+                        _q_submit = st.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", width="stretch")
                         if _q_submit or q_text.strip():
                             _qf, _qu = _parse_quick_order(q_text or "", products)
                             if _qf:
@@ -357,7 +357,7 @@ def render(tab1, products, customers, customer_map):
                                     with st.expander(f"⚡ เลือกที่อยู่เดิม ({len(_saved_addrs)})", expanded=False):
                                         for _sa in _saved_addrs:
                                             _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}"
-                                            if st.button(_sa_label, key=f"qa_{_sa['id']}", use_container_width=True):
+                                            if st.button(_sa_label, key=f"qa_{_sa['id']}", width="stretch"):
                                                 _qa_dt = (_sa.get("district", "") or "").strip()
                                                 _qa_pc = (_sa.get("postal_code", "") or "").strip()
                                                 st.session_state["_fr_rname"] = _sa.get("recipient_name", "")
@@ -628,7 +628,7 @@ def render(tab1, products, customers, customer_map):
 
                 with _summary_box:
                     st.divider()
-                    _submit_clicked = st.button("💾 บันทึกทั้งหมด", type="primary", use_container_width=True,
+                    _submit_clicked = st.button("💾 บันทึกทั้งหมด", type="primary", width="stretch",
                                                  key="m_submit", disabled=bool(m_errors))
 
                 if _submit_clicked:
@@ -818,7 +818,7 @@ def render(tab1, products, customers, customer_map):
                     if not m_postcode:  _rxo_errors.append("⚠️ ยังไม่ได้กรอกรหัสไปรษณีย์")
                     if _rxo_errors:
                         st.warning("  \n".join(_rxo_errors))
-                    if st.button("🚚 รับแต่ของเก่า", type="primary", use_container_width=True,
+                    if st.button("🚚 รับแต่ของเก่า", type="primary", width="stretch",
                                  key="m_rxonly_submit", disabled=bool(_rxo_errors)):
                         _rxo_customer   = customer_map[m_customer]
                         _rxo_weight_g   = _rx_extra_weight_g + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
@@ -878,7 +878,7 @@ def render(tab1, products, customers, customer_map):
                         _popup_line_uid, _popup_gid = db.get_customer_line_ids(_pd.get("customer_id", "")) if _pd.get("customer_id") else ("", "")
                         if _pb3.button("📨 LINE", key="popup_line_btn",
                                        disabled=not bool(_popup_line_uid or _popup_gid),
-                                       use_container_width=True,
+                                       width="stretch",
                                        help="ส่งสรุปบิลให้ลูกค้าใน LINE" if (_popup_line_uid or _popup_gid) else "ลูกค้าไม่มี LINE ID"):
                             _line_items = [{"name": f"{it['product_id']} {it['name']}", "qty": it["qty"], "total": it["total"]}
                                            for it in _pd.get("items", [])]
@@ -896,9 +896,9 @@ def render(tab1, products, customers, customer_map):
                                 st.toast("✅ ส่ง LINE แล้ว")
                             else:
                                 st.error(f"LINE error: {_res['error']}")
-                        if _pb4.button("🖨️ พิมพ์", key="popup_print_btn", use_container_width=True):
+                        if _pb4.button("🖨️ พิมพ์", key="popup_print_btn", width="stretch"):
                             st.session_state["_popup_show_print"] = not st.session_state.get("_popup_show_print", False)
-                        if _pb5.button("✕ ปิด", key="popup_close", use_container_width=True):
+                        if _pb5.button("✕ ปิด", key="popup_close", width="stretch"):
                             del st.session_state["_print_popup"]
                             st.session_state.pop("_popup_show_print", None)
                             st.rerun()
@@ -960,7 +960,7 @@ def render(tab1, products, customers, customer_map):
                     _slt = st.session_state["_sale_last_tracking"]
                     _stc1, _stc2 = st.columns([5, 1])
                     _stc1.success(f"✅ iShip สำเร็จ — Tracking: **{_slt}**")
-                    if _stc2.button("✕", key="sale_clear_tracking", use_container_width=True):
+                    if _stc2.button("✕", key="sale_clear_tracking", width="stretch"):
                         del st.session_state["_sale_last_tracking"]
                         st.rerun()
 
@@ -981,7 +981,7 @@ def render(tab1, products, customers, customer_map):
                                                horizontal=True, key="iship_carrier_pick")
                     _p["carrier"] = _carrier_choice
                     col_s1, col_s2 = st.columns([3, 1])
-                    if col_s1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="do_iship"):
+                    if col_s1.button("🚚 ส่ง iShip", type="primary", width="stretch", key="do_iship"):
                         if iship_api.is_configured():
                             _api_keys = {"dst_name","dst_phone","address_line","district",
                                          "amphure","province","zipcode","weight_kg",
@@ -1047,7 +1047,7 @@ def render(tab1, products, customers, customer_map):
                                         st.json(resp)
                         else:
                             st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
-                    if col_s2.button("ปิด", key="cancel_iship", use_container_width=True):
+                    if col_s2.button("ปิด", key="cancel_iship", width="stretch"):
                         del st.session_state["_iship_pending"]
                         st.rerun()
 
@@ -1084,7 +1084,7 @@ def render(tab1, products, customers, customer_map):
                 st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
                 st.rerun()
 
-            if _sc2.button("🗑️ ล้าง", key="sp_clear_form", use_container_width=True):
+            if _sc2.button("🗑️ ล้าง", key="sp_clear_form", width="stretch"):
                 for _k in _sp_keys:
                     st.session_state.pop(_k, None)
                 st.session_state.pop("_sp_cart_base", None)
@@ -1139,7 +1139,7 @@ def render(tab1, products, customers, customer_map):
                     placeholder="พิมพ์รหัสสินค้า เช่น tf2581-3 หรือ tf2581 3 (3 ชิ้น) — Enter เพื่อเพิ่มเลย",
                     key=_sp_qtext_key, label_visibility="collapsed",
                 )
-                _sp_q_submit = _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", use_container_width=True)
+                _sp_q_submit = _sqc2.button("📋 เพิ่ม", key=f"sp_q_to_cart_{_sp_qtext_ver}", type="primary", width="stretch")
                 if _sp_q_submit or _sp_q_text.strip():
                     _sp_qf, _sp_qu = _parse_quick_order(_sp_q_text or "", _sp)
                     if _sp_qf:
@@ -1200,7 +1200,7 @@ def render(tab1, products, customers, customer_map):
                         with st.expander(f"⚡ ที่อยู่เดิม ({len(_sp_saved)} รายการ)", expanded=False):
                             for _sa in _sp_saved:
                                 _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}"
-                                if st.button(_lbl, key=f"qa_ship_{_sa['id']}", use_container_width=False):
+                                if st.button(_lbl, key=f"qa_ship_{_sa['id']}", width="content"):
                                     _sa_dt = (_sa.get("district", "") or "").strip()
                                     _sa_pc = (_sa.get("postal_code", "") or "").strip()
                                     st.session_state["_fsp_rname"] = _sa.get("recipient_name", "")
@@ -1346,7 +1346,7 @@ def render(tab1, products, customers, customer_map):
                 _sp_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key=f"sp_iship_note_v{_sp_av}")
 
                 st.divider()
-                _sp_save_clicked = st.button("💾 บันทึกการส่งของ", type="primary", use_container_width=True, key="sp_save")
+                _sp_save_clicked = st.button("💾 บันทึกการส่งของ", type="primary", width="stretch", key="sp_save")
 
             # ── บันทึก ────────────────────────────────────────────────────────
             if _sp_save_clicked:
@@ -1441,7 +1441,7 @@ def render(tab1, products, customers, customer_map):
                 _lt = st.session_state["_sp_last_tracking"]
                 _ltc1, _ltc2 = st.columns([5, 1])
                 _ltc1.success(f"✅ iShip สำเร็จ — Tracking: **{_lt}**")
-                if _ltc2.button("✕", key="sp_clear_tracking", use_container_width=True):
+                if _ltc2.button("✕", key="sp_clear_tracking", width="stretch"):
                     del st.session_state["_sp_last_tracking"]
                     st.rerun()
 
@@ -1460,7 +1460,7 @@ def render(tab1, products, customers, customer_map):
                                           index=0 if _spp["carrier"] == "Flash Express" else 1,
                                           horizontal=True, key="sp_iship_carrier")
                 _spp["carrier"] = _sp_car_pick
-                if _si1.button("🚚 ส่ง iShip", type="primary", use_container_width=True, key="sp_do_iship"):
+                if _si1.button("🚚 ส่ง iShip", type="primary", width="stretch", key="sp_do_iship"):
                     if iship_api.is_configured():
                         _sp_call = {k: _spp[k] for k in
                                     {"dst_name","dst_phone","address_line","district",
@@ -1510,7 +1510,7 @@ def render(tab1, products, customers, customer_map):
                                 st.error(f"❌ iShip Error: {_sp_err}")
                     else:
                         st.warning("⚙️ ยังไม่ได้ตั้งค่า ISHIP_TOKEN ใน secrets")
-                if _si2.button("ปิด", key="sp_cancel_iship", use_container_width=True):
+                if _si2.button("ปิด", key="sp_cancel_iship", width="stretch"):
                     del st.session_state["_sp_iship_pending"]
                     st.rerun()
 
@@ -1550,7 +1550,7 @@ def render(tab1, products, customers, customer_map):
                 _line_btn_slot  = st.empty()
 
             _cbtn1, _cbtn2 = st.columns([1, 1])
-            if _cbtn1.button("🔢 คำนวณ", type="primary", key="calc_btn", use_container_width=True):
+            if _cbtn1.button("🔢 คำนวณ", type="primary", key="calc_btn", width="stretch"):
                 if not _calc_text.strip():
                     st.warning("กรุณากรอกรหัสสินค้าก่อน")
                 else:
@@ -1564,7 +1564,7 @@ def render(tab1, products, customers, customer_map):
                     if _calc_cod_chk:
                         _cr["is_cod"] = True
                     st.session_state["_calc_result"] = _cr
-            if _cbtn2.button("🗑️ ล้าง", key="calc_clear_btn", use_container_width=True):
+            if _cbtn2.button("🗑️ ล้าง", key="calc_clear_btn", width="stretch"):
                 st.session_state.pop("_calc_result", None)
                 st.session_state["_calc_ver"] = _calc_ver + 1
                 st.rerun()
@@ -1687,7 +1687,7 @@ def render(tab1, products, customers, customer_map):
                                     _ic_hgt = _bd3.number_input("สูง (cm)", min_value=1, max_value=300, value=20, step=1, key="calc_iship_hgt")
 
                                 if st.button("📦 ส่ง iShip ด้วยขนส่งที่ถูกสุด", type="primary",
-                                             key="calc_iship_btn", use_container_width=True):
+                                             key="calc_iship_btn", width="stretch"):
                                     _ic_resp = iship_api.create_order(
                                         dst_name     = _ic_addr.get("recipient_name", ""),
                                         dst_phone    = _ic_addr.get("phone", ""),
@@ -1736,7 +1736,7 @@ def render(tab1, products, customers, customer_map):
                             })
                         if _cmp_data:
                             _cmp_df = pd.DataFrame(_cmp_data)
-                            st.dataframe(_cmp_df, hide_index=True, use_container_width=True,
+                            st.dataframe(_cmp_df, hide_index=True, width="stretch",
                                          column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
                         if _rows_exc:
                             with st.expander(f"⚠️ เกินน้ำหนักสูงสุด ({len(_rows_exc)} ขนส่ง)"):
@@ -1748,7 +1748,7 @@ def render(tab1, products, customers, customer_map):
                         _c_cust  = _calc_cust_map.get(_calc_cust_sel, {})
                         _c_luid, _c_gid  = db.get_customer_line_ids(_c_cust.get("id", "")) if _c_cust.get("id") else ("", "")
                         if _c_luid or _c_gid:
-                            if _line_btn_slot.button(f"📨 ส่ง LINE ให้คุณ {_calc_cust_sel}", type="primary", key="calc_line_btn", use_container_width=True):
+                            if _line_btn_slot.button(f"📨 ส่ง LINE ให้คุณ {_calc_cust_sel}", type="primary", key="calc_line_btn", width="stretch"):
                                 _c_msg_lines = ["📝 รายการสินค้า", ""]
                                 _c_msg_lines += _c_lines
                                 _c_msg_lines += ["",
@@ -1774,7 +1774,7 @@ def render(tab1, products, customers, customer_map):
                             _line_btn_slot.caption(f"👤 ยังไม่มี LINE ID")
 
             # ── แบ่งกล่อง ──────────────────────────────────────────────────────
-            if st.button("📦 แบ่งกล่อง", key="toggle_boxcalc", use_container_width=True):
+            if st.button("📦 แบ่งกล่อง", key="toggle_boxcalc", width="stretch"):
                 st.session_state["_show_boxcalc"] = not st.session_state.get("_show_boxcalc", False)
             if st.session_state.get("_show_boxcalc"):
                 st.subheader("📦 คำนวณการแบ่งกล่อง")
@@ -1805,7 +1805,7 @@ def render(tab1, products, customers, customer_map):
                                 "เพดานกล่อง":    f"{p['ceiling_used']} kg",
                                 "ค่าส่งรวม (฿)":  p["total_cost"],
                             } for i, p in enumerate(_bx_plans)]
-                            st.dataframe(pd.DataFrame(_plan_rows), hide_index=True, use_container_width=True,
+                            st.dataframe(pd.DataFrame(_plan_rows), hide_index=True, width="stretch",
                                          column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%.0f ฿")})
                             st.caption("⭐ = ค่าส่งรวมถูกสุด — ระบบลองแพ็คที่จุดตัดราคาของแต่ละขนส่งให้เองแล้ว")
 
@@ -1837,7 +1837,7 @@ def render(tab1, products, customers, customer_map):
                                     "จำนวนกล่อง":  c["box_count"] if c["box_count"] is not None else "—",
                                     "ค่าส่งรวม (฿)": c["total_cost"] if c["total_cost"] is not None else "เกินน้ำหนัก",
                                 } for c in _sel_plan["candidates"]]
-                                st.dataframe(pd.DataFrame(_cand_rows), hide_index=True, use_container_width=True)
+                                st.dataframe(pd.DataFrame(_cand_rows), hide_index=True, width="stretch")
                                 st.caption("✅ = เพดานที่เลือกใช้ (ถูกสุดหรือเท่ากับตัวอื่น)")
 
                             # ── ปริ้นใบปะหน้า (manual — ไม่ผ่าน iShip เช่น Inter/J&T) ──────
@@ -1966,7 +1966,7 @@ def render(tab1, products, customers, customer_map):
                                         "น้ำหนัก/กล่อง (kg)": r["weight_kg"],
                                         "จำนวน":              r["qty"],
                                     } for r in _lbl_rows])
-                                    st.dataframe(_rows_df, hide_index=True, use_container_width=True)
+                                    st.dataframe(_rows_df, hide_index=True, width="stretch")
                                     _lbl_total_boxes  = sum(r["qty"] for r in _lbl_rows)
                                     _lbl_total_weight = sum(r["weight_kg"] * r["qty"] for r in _lbl_rows)
                                     st.caption(f"รวม {_lbl_total_boxes} กล่อง &nbsp;|&nbsp; น้ำหนักรวม {_lbl_total_weight:.2f} kg")

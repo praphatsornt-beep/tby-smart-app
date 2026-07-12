@@ -94,7 +94,7 @@ def render():
     _dch1, _dch2 = st.columns([3, 2])
     with _dch1:
         st.markdown("**📊 ยอดขาย 7 วันล่าสุด**")
-        st.bar_chart(_chart_df, color="#D9822B", use_container_width=True)
+        st.bar_chart(_chart_df, color="#D9822B", width="stretch")
     with _dch2:
         st.markdown("**📋 สินค้าที่ลูกค้าฝาก**")
         if not _deposits:
@@ -129,7 +129,7 @@ def render():
                 _recent_bills[["เลขที่บิล", "วันที่", "ลูกค้า", "ยอดรวม", "สถานะ"]]
                     .style.format({"ยอดรวม": "{:,.0f}"})
                     .map(_style_status, subset=["สถานะ"]),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
     with _dr:
@@ -144,7 +144,7 @@ def render():
                      .reset_index())
             st.dataframe(
                 _top5.style.format({"ค้างจ่าย": "{:,.0f}", "ค้างรับ": "{:.0f}"}),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
 
     # ── helper ───────────────────────────────────────────────────────────────
@@ -237,7 +237,7 @@ def render():
             st.divider()
             _cod_h1, _cod_h2 = st.columns([5, 1.4])
             _cod_h1.markdown(f"**💛 COD — ติดตามสถานะ ({len(_cod_rows)} รายการ)**")
-            if _cod_h2.button("🔄 อัปเดตยอด COD", key="dash_cod_sync", use_container_width=True):
+            if _cod_h2.button("🔄 อัปเดตยอด COD", key="dash_cod_sync", width="stretch"):
                 try:
                     _pending = db.get_pending_cod_tracking()
                 except Exception:
@@ -271,7 +271,7 @@ def render():
                             st.info("ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
             _cod_df = pd.DataFrame(_cod_rows)
             st.dataframe(_cod_df.style.format({"COD (฿)": "{:,.0f}"}),
-                         use_container_width=True, hide_index=True,
+                         width="stretch", hide_index=True,
                          height=min(35 * len(_cod_df) + 38, 280))
 
         # ── แสดงพัสดุล่าช้า ──────────────────────────────────────────────
@@ -279,7 +279,7 @@ def render():
             st.divider()
             st.markdown(f"**⏳ พัสดุเกิน 3 วัน ยังไม่ถึง ({len(_slow_ships)} รายการ)**")
             st.dataframe(pd.DataFrame(_slow_ships),
-                         use_container_width=True, hide_index=True,
+                         width="stretch", hide_index=True,
                          height=min(35 * len(_slow_ships) + 38, 300))
 
         # ── แสดงพัสดุมีปัญหา ─────────────────────────────────────────────
@@ -287,5 +287,5 @@ def render():
             st.divider()
             st.markdown(f"**⚠️ พัสดุที่มีปัญหา ตีกลับ/ยกเลิก ({len(_problem_ships)} รายการ)**")
             st.dataframe(pd.DataFrame(_problem_ships),
-                         use_container_width=True, hide_index=True,
+                         width="stretch", hide_index=True,
                          height=min(35 * len(_problem_ships) + 38, 300))

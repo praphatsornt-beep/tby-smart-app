@@ -44,7 +44,7 @@ def render():
                 file_name=_fname,
                 mime="application/zip",
                 type="primary",
-                use_container_width=True,
+                width="stretch",
                 key="backup_zip_dl",
             )
 
@@ -78,7 +78,7 @@ def render():
                         file_name=_exp_fname,
                         mime="text/csv",
                         type="primary",
-                        use_container_width=True,
+                        width="stretch",
                         key="exp_sales_dl",
                     )
     st.divider()
@@ -105,7 +105,7 @@ def render():
         edited_prod_df = st.data_editor(
             prod_df,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             key="prod_editor",
             column_config={
                 "รหัส":        st.column_config.TextColumn("รหัส", required=True),
@@ -120,7 +120,7 @@ def render():
                 ),
             },
         )
-        if st.button("💾 บันทึกทั้งหมด", key="save_prod_editor", use_container_width=True, type="primary"):
+        if st.button("💾 บันทึกทั้งหมด", key="save_prod_editor", width="stretch", type="primary"):
             valid = edited_prod_df.dropna(subset=["รหัส", "ชื่อสินค้า"])
             valid = valid[valid["รหัส"].astype(str).str.strip() != ""]
             if valid.empty:
@@ -177,7 +177,7 @@ def render():
         edited_cust_df = st.data_editor(
             cust_df,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             key="cust_editor",
             column_config={
                 "รหัส":       st.column_config.TextColumn("รหัส", help="เว้นว่างให้ระบบออกรหัสอัตโนมัติ"),
@@ -185,7 +185,7 @@ def render():
                 "เบอร์โทร":   st.column_config.TextColumn("เบอร์โทร"),
             },
         )
-        if st.button("💾 บันทึกทั้งหมด", key="save_cust_editor", use_container_width=True, type="primary"):
+        if st.button("💾 บันทึกทั้งหมด", key="save_cust_editor", width="stretch", type="primary"):
             valid = edited_cust_df.dropna(subset=["ชื่อลูกค้า"]).copy()
             valid = valid[valid["ชื่อลูกค้า"].astype(str).str.strip() != ""]
             if valid.empty:
@@ -272,7 +272,7 @@ def render():
                 },
                 disabled=["เบอร์", "ชื่อผู้รับ", "ที่อยู่", "ลูกค้า"],
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
                 key="addr_tbl",
             )
             _to_delete = [_addr_ids[i] for i, v in enumerate(_edited_addr["ลบ"]) if v]
@@ -322,7 +322,7 @@ def render():
                 ea3_am = b2.text_input("อำเภอ/เขต",     value=_ea.get("amphure", ""))
                 ea3_pv = b3.text_input("จังหวัด",        value=_ea.get("province", ""))
                 ea3_pc = st.text_input("รหัสไปรษณีย์",   value=_ea.get("postal_code", ""), max_chars=5)
-                if st.form_submit_button("💾 บันทึก", type="primary", use_container_width=True):
+                if st.form_submit_button("💾 บันทึก", type="primary", width="stretch"):
                     _cur_cust = st.session_state.get("ea3c_cust", "— เลือกลูกค้า —")
                     _ea_cust_id = next((c["id"] for c in all_custs if c["name"] == _cur_cust), "")
                     if not _ea_cust_id:
@@ -375,7 +375,7 @@ ALTER TABLE box_presets DISABLE ROW LEVEL SECURITY;""", language="sql")
         edited_box_df = st.data_editor(
             box_df,
             num_rows="dynamic",
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             key="box_preset_editor",
             column_config={
@@ -385,7 +385,7 @@ ALTER TABLE box_presets DISABLE ROW LEVEL SECURITY;""", language="sql")
                 "สูง (ซม.)":  st.column_config.NumberColumn("สูง (ซม.)",  min_value=1, step=1, format="%d"),
             },
         )
-        if st.button("💾 บันทึกทั้งหมด", key="save_box_preset_editor", use_container_width=True, type="primary"):
+        if st.button("💾 บันทึกทั้งหมด", key="save_box_preset_editor", width="stretch", type="primary"):
             valid = edited_box_df.dropna(subset=["ชื่อกล่อง", "ยาว (ซม.)", "กว้าง (ซม.)", "สูง (ซม.)"])
             valid = valid[valid["ชื่อกล่อง"].astype(str).str.strip() != ""]
             _new_presets = [{
