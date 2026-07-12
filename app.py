@@ -340,9 +340,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
    Streamlit's own perspective (buttons stay live/clickable), just narrowed.
    Nav buttons use `icon=":material/..."` (a real, separate stIconMaterial
    span) + a plain text label, so compact mode simply hides the text and
-   centers the icon — no more clipping the label to fake an icon-only look.
-   Each button's `help=` tooltip (native Streamlit hover tooltip) is what
-   surfaces the full name back to the user on hover. ── */
+   centers the icon — icon-only, no hover tooltip. ── */
 @media (max-width: 1100px) {
     [data-testid="stSidebar"] {
         width: 72px !important;
@@ -398,49 +396,6 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         color: #ffffff !important;
     }
 }
-/* Nav-button hover tooltip (`help=`) — this only ever appears floating over
-   the dark sidebar. The chip's background was previously a dark green almost
-   identical to the sidebar's own gradient (oklch(0.22 0.035 155) /
-   oklch(0.14 0.025 160)), so it visually blended in and read as "stuck-looking"
-   ghosted text instead of a clearly distinct tooltip. Use the orange brand
-   accent instead — high contrast against the dark sidebar in any hover spot. */
-/* The tooltip's text box was inheriting a narrow width (~35px, tied to the
-   small icon-button anchor in compact mode) with white-space:normal, so
-   longer labels like "บันทึกรายการ" wrapped onto a 2nd line — but the outer
-   box stays capped to single-line height with overflow:auto, silently
-   clipping that 2nd line off entirely ("characters not fully shown"). Force
-   single-line, content-sized rendering instead of letting it wrap+clip. */
-[data-testid="stTooltipContent"] {
-    background: var(--tby-accent) !important;
-    border-radius: 8px !important;
-    padding: 6px 10px !important;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4) !important;
-    width: auto !important;
-    max-width: none !important;
-    height: auto !important;
-    overflow: visible !important;
-    white-space: nowrap !important;
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-}
-[data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"] {
-    width: auto !important;
-    display: flex !important;
-    justify-content: center !important;
-}
-[data-testid="stTooltipContent"] [data-testid="stMarkdownContainer"] p {
-    color: #ffffff !important;
-    font-family: 'Prompt', sans-serif !important;
-    white-space: nowrap !important;
-    width: auto !important;
-    max-width: none !important;
-    font-size: 0.85rem !important;
-    font-weight: 600 !important;
-    margin: 0 !important;
-    text-align: center !important;
-}
-
 /* ── In-page sub-nav (st.pills, used at the top of most pages) — same flat
    underline treatment as st.tabs below, for one consistent "sub tabs" look
    site-wide instead of two different widgets looking different. NOTE:
@@ -1254,16 +1209,11 @@ with st.sidebar:
     for _nav_i, _nav_label in enumerate(_TAB_NAMES):
         _nav_is_active = st.session_state["active_tab"] == _nav_label
         _nav_text = _nav_label.split(" ", 1)[1] if " " in _nav_label else _nav_label
-        # tooltip จำเป็นแค่ตอนย่อ (icon-only เห็นแค่ไอคอน ไม่รู้ว่าเมนูไหน) และเฉพาะ
-        # เมนูที่ยังไม่ถูกเลือก (active มีรูปทรง squircle บอกอยู่แล้วว่าเลือกอันไหน) —
-        # ตอนขยายเต็มทุกเมนูเห็นชื่อบนปุ่มอยู่แล้ว ไม่ต้องมี tooltip ซ้อนทับเลยสักเมนู
-        _nav_needs_tip = st.session_state["_sidebar_compact"] and not _nav_is_active
         if st.button(
             _nav_text, key=f"_nav_top_{_nav_i}",
             width="stretch",
             type=("primary" if _nav_is_active else "secondary"),
             icon=_TAB_ICONS[_nav_i],
-            help=(_nav_text if _nav_needs_tip else None),
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
@@ -1330,13 +1280,7 @@ if st.session_state["_sidebar_compact"]:
             color: #ffffff !important;
         }
         /* เมนู active ตอนย่อ — ทำเป็นไอคอนสี่เหลี่ยมมุมมนขนาดพอดี (squircle) แทนที่
-           จะเป็นแท่งสี่เหลี่ยมเต็มความกว้างมุมมนนิดเดียวแบบเดิม — ปุ่มเป็น flex-child
-           ของ span[data-testid="stTooltipHoverTarget"] ที่ตัว span เองแคบแค่ 22px
-           (fit-content ตามไอคอน) ต้องขยาย span นั้นด้วย ไม่งั้น flex-shrink บีบปุ่มให้
-           แคบตามไปด้วยเสมอ ต่อให้ปุ่มเองตั้ง width ไว้เท่าไหร่ก็ตาม */
-        [data-testid="stSidebar"] [data-testid="stTooltipHoverTarget"]:has(button[kind="primary"]) {
-            width: 44px !important;
-        }
+           จะเป็นแท่งสี่เหลี่ยมเต็มความกว้างมุมมนนิดเดียวแบบเดิม */
         [data-testid="stSidebar"] [data-testid="stElementContainer"] button[kind="primary"] {
             width: 44px !important;
             height: 44px !important;
@@ -1347,11 +1291,7 @@ if st.session_state["_sidebar_compact"]:
             border-radius: 14px !important;
         }
         /* เมนูที่ยังไม่ถูกเลือก ตอน hover — ทำเป็น squircle สีเข้มแบบเดียวกัน (ไม่ใช่
-           สีส้ม สีส้มเก็บไว้บอกว่า "อันนี้กำลังเลือกอยู่" เท่านั้น) ต้องขยาย span แม่
-           ด้วยเหตุผลเดียวกับปุ่ม active ข้างบน */
-        [data-testid="stSidebar"] [data-testid="stTooltipHoverTarget"]:has(button[kind="secondary"]) {
-            width: 44px !important;
-        }
+           สีส้ม สีส้มเก็บไว้บอกว่า "อันนี้กำลังเลือกอยู่" เท่านั้น) */
         [data-testid="stSidebar"] [data-testid="stElementContainer"] button[kind="secondary"] {
             width: 44px !important;
             height: 44px !important;
@@ -1399,66 +1339,6 @@ st.iframe(
         }
         window.parent.addEventListener('resize', tick);
         tick();
-    })();
-    </script>
-    """,
-    height=1,
-)
-
-# ── Fix tooltip (help=) bubbles overflowing off the left edge of the screen —
-#    Streamlit centers the tooltip horizontally over its trigger button, which
-#    on the narrow (72px) compact sidebar icon rail pushes wide labels (e.g.
-#    "รายละเอียดบิล") to a negative x position — genuinely off-screen, not
-#    just visually clipped, so no amount of CSS on the tooltip itself helps.
-#    Nudge the positioned wrapper back on-screen whenever one appears. ───────
-st.iframe(
-    r"""
-    <script>
-    (function() {
-        function fixTooltipPos() {
-            try {
-                var doc = window.parent.document;
-                var tips = doc.querySelectorAll('[data-testid="stTooltipContent"]');
-                tips.forEach(function(tip) {
-                    var el = tip, wrapper = null;
-                    for (var i = 0; i < 6 && el; i++) {
-                        el = el.parentElement;
-                        if (el && window.parent.getComputedStyle(el).position === 'absolute') {
-                            wrapper = el;
-                            break;
-                        }
-                    }
-                    if (!wrapper) return;
-                    var rect = wrapper.getBoundingClientRect();
-                    if (rect.x < 8) {
-                        // ตำแหน่งจริงมาจาก transform: matrix(...) ไม่ใช่ left — ต้องแก้ tx
-                        // ใน matrix ตรงๆ (แก้แค่ style.left เฉยๆ ไม่มีผลอะไรเลย)
-                        var m = window.parent.getComputedStyle(wrapper).transform;
-                        var tx = 0, ty = 0, is3d = false;
-                        var match3d = m && m.match(/matrix3d\(([^)]+)\)/);
-                        var match2d = !match3d && m && m.match(/matrix\(([^)]+)\)/);
-                        if (match3d) {
-                            var p3 = match3d[1].split(',').map(parseFloat);
-                            tx = p3[12]; ty = p3[13]; is3d = true;
-                        } else if (match2d) {
-                            var p2 = match2d[1].split(',').map(parseFloat);
-                            tx = p2[4]; ty = p2[5];
-                        }
-                        var shift = 8 - rect.x;
-                        wrapper.style.transform = is3d
-                            ? 'translate3d(' + (tx + shift) + 'px, ' + ty + 'px, 0px)'
-                            : 'translate(' + (tx + shift) + 'px, ' + ty + 'px)';
-                    }
-                });
-            } catch (e) {}
-        }
-        var obs = new MutationObserver(function() {
-            // หน่วงเวลาสั้นๆ ก่อนแก้ — ตอน mutation เพิ่งเกิด ตำแหน่งจริงจาก
-            // floating-ui อาจยังคำนวณไม่เสร็จ (ยังเป็นค่า placeholder 0,0)
-            // ถ้าแก้ทันทีจะไปเขียนทับค่าจริงที่กำลังจะมาแทน ทำให้ตำแหน่งแนวตั้งหาย
-            setTimeout(fixTooltipPos, 30);
-        });
-        obs.observe(window.parent.document.body, {childList: true, subtree: true});
     })();
     </script>
     """,
