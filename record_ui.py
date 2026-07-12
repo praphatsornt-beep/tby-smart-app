@@ -43,9 +43,9 @@ def render(tab1, products, customers, customer_map):
     """Render tab1: บันทึกรายการ (sub_calc, sub_ship, sub_sale)."""
     with tab1:
         try:
-            _sub_active = st.pills("", _T1_TABS, key="_t1_active_sub", label_visibility="collapsed") or _T1_TABS[0]
+            _sub_active = st.pills(" ", _T1_TABS, key="_t1_active_sub", label_visibility="collapsed") or _T1_TABS[0]
         except AttributeError:
-            _sub_active = st.radio("", _T1_TABS, horizontal=True, key="_t1_active_sub", label_visibility="collapsed")
+            _sub_active = st.radio(" ", _T1_TABS, horizontal=True, key="_t1_active_sub", label_visibility="collapsed")
 
         if _sub_active == "📝 บันทึกขาย":
             _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",

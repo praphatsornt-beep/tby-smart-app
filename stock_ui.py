@@ -13,9 +13,9 @@ _T6_TABS = ["📦 สต๊อก", "📋 ของฝาก"]
 
 def render():
     try:
-        _t6_active = st.pills("", _T6_TABS, key="_t6_active_sub", label_visibility="collapsed") or _T6_TABS[0]
+        _t6_active = st.pills(" ", _T6_TABS, key="_t6_active_sub", label_visibility="collapsed") or _T6_TABS[0]
     except AttributeError:
-        _t6_active = st.radio("", _T6_TABS, horizontal=True, key="_t6_active_sub", label_visibility="collapsed")
+        _t6_active = st.radio(" ", _T6_TABS, horizontal=True, key="_t6_active_sub", label_visibility="collapsed")
 
     if _t6_active == "📋 ของฝาก":
         st.subheader("ของที่ลูกค้าฝากไว้")

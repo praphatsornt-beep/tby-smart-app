@@ -211,9 +211,9 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 
 def render():
     try:
-        _fin_active = st.pills("", _FIN_TABS, key="_fin_active_sub", label_visibility="collapsed") or _FIN_TABS[0]
+        _fin_active = st.pills(" ", _FIN_TABS, key="_fin_active_sub", label_visibility="collapsed") or _FIN_TABS[0]
     except AttributeError:
-        _fin_active = st.radio("", _FIN_TABS, horizontal=True, key="_fin_active_sub", label_visibility="collapsed")
+        _fin_active = st.radio(" ", _FIN_TABS, horizontal=True, key="_fin_active_sub", label_visibility="collapsed")
 
     if _fin_active == _FIN_TABS[0]:
         fin_summary = db.get_finance_summary()
