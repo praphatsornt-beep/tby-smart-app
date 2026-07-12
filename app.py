@@ -350,6 +350,14 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         min-width: 72px !important;
         max-width: 72px !important;
     }
+    [data-testid="stSidebarContent"] {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stElementContainer"],
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        width: 100% !important;
+    }
     [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
     [data-testid="stSidebar"] .tby-sidebar-brand {
         justify-content: center !important;
@@ -357,10 +365,10 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         gap: 4px !important;
     }
     [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
-        width: 34px !important;
-        height: 34px !important;
-        border-radius: 9px !important;
-        font-size: 0.65rem !important;
+        width: 38px !important;
+        height: 38px !important;
+        border-radius: 10px !important;
+        font-size: 0.85rem !important;
     }
     [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
@@ -1280,6 +1288,20 @@ if st.session_state["_sidebar_compact"]:
             min-width: 72px !important;
             max-width: 72px !important;
         }
+        /* Streamlit's own sidebar content wrapper carries a fixed 15px/15px
+           L-R padding, leaving only 42px of usable width — narrower than our
+           44px squircle buttons below, so they overflowed that padding
+           unevenly (nearly flush with the right edge, a big gap on the left)
+           instead of sitting centered. Shrink the padding so there's enough
+           room either side. */
+        [data-testid="stSidebarContent"] {
+            padding-left: 4px !important;
+            padding-right: 4px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"],
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+            width: 100% !important;
+        }
         [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
         [data-testid="stSidebar"] .tby-sidebar-brand {
             justify-content: center !important;
@@ -1287,10 +1309,10 @@ if st.session_state["_sidebar_compact"]:
             gap: 4px !important;
         }
         [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
-            width: 34px !important;
-            height: 34px !important;
-            border-radius: 9px !important;
-            font-size: 0.65rem !important;
+            width: 38px !important;
+            height: 38px !important;
+            border-radius: 10px !important;
+            font-size: 0.85rem !important;
         }
         [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
@@ -1479,6 +1501,13 @@ components.html(
                         wrapper.style.setProperty('transform', 'none', 'important');
                         wrapper.style.setProperty('left', targetX + 'px', 'important');
                         wrapper.style.setProperty('top', targetY + 'px', 'important');
+                        // Forcing position:fixed on this (inner) node pulls it out of
+                        // the outer tooltip portal's stacking context (which normally
+                        // carries a very high z-index), so without its own z-index it
+                        // can paint BEHIND ordinary page content that happens to sit at
+                        // the same spot — the pill looked "torn"/overlapped by a real
+                        // button underneath rather than floating cleanly above it.
+                        wrapper.style.setProperty('z-index', '999999', 'important');
                         // A positioned ancestor further up (outside this 6-hop walk)
                         // can establish its own containing block for position:fixed,
                         // offsetting our left/top by a constant the walk never sees.
