@@ -1086,8 +1086,11 @@ def render(products, customers):
                             st.markdown("**📜 ประวัติ**")
                             for _r in _bv["events"]:
                                 if _r["type"] == "เปิดบิล":
+                                    _is_billed_evt = _r.get("bill_status") == "เปิดบิลแล้ว"
+                                    _evt_icon  = "📋" if _is_billed_evt else "📦"
+                                    _evt_label = "เปิดบิล" if _is_billed_evt else "เบิกของ (ยังไม่เปิดบิล)"
                                     st.caption(
-                                        f"📋 {_r['date']}  เปิดบิล — {_r['detail']}  "
+                                        f"{_evt_icon} {_r['date']}  {_evt_label} — {_r['detail']}  "
                                         f"(รวม {_r['total']:,.0f}฿"
                                         + (f", {_r['pv']:.0f} PV" if _r['pv'] > 0 else "")
                                         + ")"

@@ -582,13 +582,13 @@ button[kind="secondary"]:hover {
     background-color: #ffffff !important;
     border-radius: 9px !important;
     border: 1.5px solid var(--tby-input-border) !important;
-    padding: 10px 14px !important;
-    min-height: 44px;
+    padding: 8px 12px !important;
+    min-height: 36px;
     font-family: 'Prompt', sans-serif !important;
     transition: border-color 0.18s, box-shadow 0.18s !important;
 }
 .stTextArea textarea {
-    min-height: 90px;
+    min-height: 76px;
 }
 .stTextInput input:focus,
 .stNumberInput input:focus,
@@ -602,7 +602,7 @@ button[kind="secondary"]:hover {
     background-color: #ffffff !important;
     border-radius: 9px !important;
     border: 1.5px solid var(--tby-input-border) !important;
-    min-height: 44px;
+    min-height: 36px;
     transition: border-color 0.18s !important;
 }
 [data-baseweb="select"] > div:first-child:focus-within {
