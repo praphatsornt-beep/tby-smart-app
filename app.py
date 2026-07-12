@@ -1225,15 +1225,16 @@ with st.sidebar:
     for _nav_i, _nav_label in enumerate(_TAB_NAMES):
         _nav_is_active = st.session_state["active_tab"] == _nav_label
         _nav_text = _nav_label.split(" ", 1)[1] if " " in _nav_label else _nav_label
-        # เมนู active ไม่ต้องมี hover tooltip เลย — ตอนขยายเต็มก็เห็นชื่อบนปุ่มอยู่แล้ว
-        # (tooltip ซ้อนทับกลายเป็นข้อความค้างซ้ำ) ตอนย่อก็มีรูปทรง squircle บอกอยู่แล้ว
-        # ว่าเลือกอันไหน + หัวข้อหน้าเนื้อหาก็บอกซ้ำอีกที ไม่จำเป็นต้องมี tooltip
+        # tooltip จำเป็นแค่ตอนย่อ (icon-only เห็นแค่ไอคอน ไม่รู้ว่าเมนูไหน) และเฉพาะ
+        # เมนูที่ยังไม่ถูกเลือก (active มีรูปทรง squircle บอกอยู่แล้วว่าเลือกอันไหน) —
+        # ตอนขยายเต็มทุกเมนูเห็นชื่อบนปุ่มอยู่แล้ว ไม่ต้องมี tooltip ซ้อนทับเลยสักเมนู
+        _nav_needs_tip = st.session_state["_sidebar_compact"] and not _nav_is_active
         if st.button(
             _nav_text, key=f"_nav_top_{_nav_i}",
             use_container_width=True,
             type=("primary" if _nav_is_active else "secondary"),
             icon=_TAB_ICONS[_nav_i],
-            help=(None if _nav_is_active else _nav_text),
+            help=(_nav_text if _nav_needs_tip else None),
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
@@ -1307,6 +1308,24 @@ if st.session_state["_sidebar_compact"]:
             margin: 0 auto !important;
             padding: 0 !important;
             border-radius: 14px !important;
+        }
+        /* เมนูที่ยังไม่ถูกเลือก ตอน hover — ทำเป็น squircle สีเข้มแบบเดียวกัน (ไม่ใช่
+           สีส้ม สีส้มเก็บไว้บอกว่า "อันนี้กำลังเลือกอยู่" เท่านั้น) ต้องขยาย span แม่
+           ด้วยเหตุผลเดียวกับปุ่ม active ข้างบน */
+        [data-testid="stSidebar"] [data-testid="stTooltipHoverTarget"]:has(button[kind="secondary"]) {
+            width: 44px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button[kind="secondary"] {
+            width: 44px !important;
+            height: 44px !important;
+            min-height: 44px !important;
+            flex-shrink: 0 !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            border-radius: 14px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button[kind="secondary"]:hover {
+            background: rgba(255,255,255,0.12) !important;
         }
         </style>
         """,
