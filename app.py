@@ -349,6 +349,14 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         min-width: 72px !important;
         max-width: 72px !important;
     }
+    [data-testid="stSidebarContent"] {
+        padding-left: 4px !important;
+        padding-right: 4px !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stElementContainer"],
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        width: 100% !important;
+    }
     [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
     [data-testid="stSidebar"] .tby-sidebar-brand {
         justify-content: center !important;
@@ -356,10 +364,10 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         gap: 4px !important;
     }
     [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
-        width: 34px !important;
-        height: 34px !important;
-        border-radius: 9px !important;
-        font-size: 0.65rem !important;
+        width: 40px !important;
+        height: 40px !important;
+        border-radius: 11px !important;
+        font-size: 0.9rem !important;
     }
     [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
         flex-wrap: nowrap !important;
@@ -1273,6 +1281,14 @@ if st.session_state["_sidebar_compact"]:
             min-width: 72px !important;
             max-width: 72px !important;
         }
+        [data-testid="stSidebarContent"] {
+            padding-left: 4px !important;
+            padding-right: 4px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"],
+        [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+            width: 100% !important;
+        }
         [data-testid="stSidebar"] .tby-sidebar-brand-text { display: none !important; }
         [data-testid="stSidebar"] .tby-sidebar-brand {
             justify-content: center !important;
@@ -1280,10 +1296,10 @@ if st.session_state["_sidebar_compact"]:
             gap: 4px !important;
         }
         [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
-            width: 34px !important;
-            height: 34px !important;
-            border-radius: 9px !important;
-            font-size: 0.65rem !important;
+            width: 40px !important;
+            height: 40px !important;
+            border-radius: 11px !important;
+            font-size: 0.9rem !important;
         }
         [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
             flex-wrap: nowrap !important;
