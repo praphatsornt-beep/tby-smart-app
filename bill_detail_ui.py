@@ -600,36 +600,40 @@ def render(products, customers):
                                     "ค้างจ่าย":  float(r["ค้างจ่าย"]),
                                     "จ่ายจริง":  0.0 if _pay_disabled else float(r["ค้างจ่าย"]),
                                     "สถานะบิล":  r["สถานะบิล"],
+                                    "สั่ง":      int(r["สั่ง"]),
+                                    "เปิดบิลกี่ชิ้น": (int(r["สั่ง"]) if r["สถานะบิล"] == "ยังไม่เปิดบิล" else 0),
                                 } for _, r in sel_rows.iterrows()]
                                 _combo_df = pd.DataFrame(_combo_rows)
 
+                                _combo_cols = ["สินค้า","เลขที่บิล","ค้างรับ","รับจริง","ค้างจ่าย","จ่ายจริง","สถานะบิล"]
+                                _combo_colcfg = {
+                                    "สินค้า":    st.column_config.TextColumn(disabled=True),
+                                    "เลขที่บิล": st.column_config.TextColumn(disabled=True),
+                                    "ค้างรับ":   st.column_config.NumberColumn(disabled=True),
+                                    "รับจริง":   st.column_config.NumberColumn("รับจริง ✏️", min_value=0, format="%d", disabled=_recv_disabled),
+                                    "ค้างจ่าย":  st.column_config.NumberColumn(disabled=True, format="%.0f"),
+                                    "จ่ายจริง":  st.column_config.NumberColumn("จ่ายจริง ✏️", min_value=0, format="%.0f", disabled=_pay_disabled),
+                                    "สถานะบิล":  st.column_config.TextColumn(disabled=True),
+                                }
+                                if _any_unbilled:
+                                    _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
+                                    st.caption(f"📄 {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str} — "
+                                               "ใส่จำนวนที่จะเปิดบิลในคอลัมน์ \"เปิดบิลกี่ชิ้น\" ด้านล่าง "
+                                               "(ลดจำนวนได้ถ้าจะเปิดบิลแค่บางส่วน ที่เหลือจะยังค้างไม่เปิดบิลต่อไป, "
+                                               "0 = ไม่เปิดบิลตอนนี้)")
+                                    _combo_cols = ["สินค้า","เลขที่บิล","ค้างรับ","รับจริง","ค้างจ่าย","จ่ายจริง","สถานะบิล","เปิดบิลกี่ชิ้น"]
+                                    _combo_colcfg["เปิดบิลกี่ชิ้น"] = st.column_config.NumberColumn(
+                                        "เปิดบิลกี่ชิ้น ✏️", min_value=0, format="%d",
+                                        help="จำนวนที่จะเปิดบิลจากรายการที่ยังไม่เปิดบิล — ใส่น้อยกว่าจำนวนสั่งเพื่อเปิดบิลบางส่วน "
+                                                 "(ส่วนที่เหลือจะแยกเป็นรายการใหม่ ยังไม่เปิดบิล) ไม่มีผลกับรายการที่เปิดบิลแล้ว",
+                                    )
+
                                 _combo_edit = st.data_editor(
-                                    _combo_df[["สินค้า","เลขที่บิล","ค้างรับ","รับจริง","ค้างจ่าย","จ่ายจริง","สถานะบิล"]],
-                                    column_config={
-                                        "สินค้า":    st.column_config.TextColumn(disabled=True),
-                                        "เลขที่บิล": st.column_config.TextColumn(disabled=True),
-                                        "ค้างรับ":   st.column_config.NumberColumn(disabled=True),
-                                        "รับจริง":   st.column_config.NumberColumn("รับจริง ✏️", min_value=0, format="%d", disabled=_recv_disabled),
-                                        "ค้างจ่าย":  st.column_config.NumberColumn(disabled=True, format="%.0f"),
-                                        "จ่ายจริง":  st.column_config.NumberColumn("จ่ายจริง ✏️", min_value=0, format="%.0f", disabled=_pay_disabled),
-                                        "สถานะบิล":  st.column_config.TextColumn(disabled=True),
-                                    },
+                                    _combo_df[_combo_cols],
+                                    column_config=_combo_colcfg,
                                     hide_index=True, width="stretch",
                                     key=f"multi_combo_{customer_name}_{_mc_mode}",
                                 )
-
-                                _do_open_bill = False
-                                if _any_unbilled:
-                                    _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
-                                    st.markdown(
-                                        "<style>[data-testid='stCheckbox'] > label > div:last-child "
-                                        "{ font-size: 1.15rem; font-weight: 700; }</style>",
-                                        unsafe_allow_html=True,
-                                    )
-                                    _do_open_bill = st.checkbox(
-                                        f"📄 เปิดบิลด้วย ({_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str})",
-                                        key=f"multi_open_chk_{customer_name}",
-                                    )
 
                                 _mc_c1, _mc_c2 = st.columns([2, 1])
                                 mc_notes = _mc_c1.text_input("หมายเหตุ", key=f"mc_notes_{customer_name}")
@@ -682,10 +686,25 @@ def render(products, customers):
                                                 _paid_full_ids.append(row["_id"])
                                     db.insert_partial_events_batch(_pe_rows)
                                     db.update_transaction_statuses_batch(_paid_full_ids, pay_status="จ่ายแล้ว")
-                                    if _do_open_bill:
-                                        _open_bill_ids = [row["_id"] for _, row in _combo_df.iterrows()
-                                                           if row["สถานะบิล"] == "ยังไม่เปิดบิล"]
-                                        db.update_transaction_statuses_batch(_open_bill_ids, bill_status="เปิดบิลแล้ว")
+                                    # เปิดบิล — รองรับเปิดบางส่วน: ถ้า "เปิดบิลกี่ชิ้น" น้อยกว่าจำนวนสั่งเต็ม
+                                    # แยกรายการด้วย split_and_open_bill (เหลือส่วนที่ไม่เปิดเป็นแถวใหม่ยังไม่เปิดบิล)
+                                    # ถ้าเท่ากับเต็มจำนวน เปิดบิลตรงๆ ไม่ต้องแยกแถว
+                                    _full_open_ids = []
+                                    for i, row in _combo_df.iterrows():
+                                        if row["สถานะบิล"] != "ยังไม่เปิดบิล":
+                                            continue
+                                        _bill_qty = (int(_combo_edit.iloc[i]["เปิดบิลกี่ชิ้น"])
+                                                     if "เปิดบิลกี่ชิ้น" in _combo_edit.columns else 0)
+                                        _full_qty = int(row["สั่ง"])
+                                        _bill_qty = max(0, min(_bill_qty, _full_qty))
+                                        if _bill_qty <= 0:
+                                            continue
+                                        if _bill_qty >= _full_qty:
+                                            _full_open_ids.append(row["_id"])
+                                        else:
+                                            db.split_and_open_bill(row["_id"], _bill_qty)
+                                    if _full_open_ids:
+                                        db.update_transaction_statuses_batch(_full_open_ids, bill_status="เปิดบิลแล้ว")
                                     # popup รับของ + LINE notification
                                     _mrp_pending = []
                                     for _, _rr in grp.iterrows():
