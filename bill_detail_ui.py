@@ -11,7 +11,7 @@ import line_api
 import iship_api
 from ui_helpers import (
     _to_bkk, _to_excel_bytes, BOX_WEIGHT_G,
-    _style_status, _fmt_note, _extract_staff_tag,
+    _fmt_note, _extract_staff_tag,
     _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
 )
 import carriers as carr
@@ -334,23 +334,27 @@ def render(products, customers):
                                     st.success("✅ ส่ง LINE แล้ว")
                                 else:
                                     st.error(f"❌ {_r.get('error')}")
-                        # ── Styled table + row selection ──────────────────────
+                        # ── Table + row selection ──────────────────────────────
+                        # NOTE: do NOT combine a pandas Styler (.style...) with
+                        # selection_mode here — that combo is suspected to be the
+                        # cause of a Linux-only (Streamlit Cloud) segfault that
+                        # never reproduced on local Windows testing. Plain
+                        # column_config formatting instead, no Styler.
                         _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
                                    "ยอดรวม", "ค้างจ่าย", "สถานะจ่าย", "สถานะบิล"]
                         _id_map = grp["id"].reset_index(drop=True)
                         st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
                         _evt = st.dataframe(
-                            grp[_dcols].reset_index(drop=True).style
-                                .format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
-                                .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"])
-                                .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
-                                     if isinstance(v, (int, float)) and v > 0 else "",
-                                     subset=["ค้างรับ", "ค้างจ่าย"]),
+                            grp[_dcols].reset_index(drop=True),
                             width="stretch",
                             hide_index=True,
                             selection_mode="multi-row",
                             on_select="rerun",
                             key=f"sel_tbl_{customer_name}",
+                            column_config={
+                                "ยอดรวม": st.column_config.NumberColumn("ยอดรวม", format="%,.0f"),
+                                "ค้างจ่าย": st.column_config.NumberColumn("ค้างจ่าย", format="%,.0f"),
+                            },
                         )
                         _sel_idx  = _evt.selection.rows if hasattr(_evt, "selection") else []
                         selected_ids = [_id_map.iloc[i] for i in _sel_idx if i < len(_id_map)]
