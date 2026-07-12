@@ -353,7 +353,13 @@ def render(tab1, products, customers, customer_map):
                                     _saved_addrs = []
                                     st.caption(f"⚠️ โหลดที่อยู่เดิมไม่สำเร็จ: {_sa_load_e}")
                                 if _saved_addrs:
-                                    with st.expander(f"⚡ เลือกที่อยู่เดิม ({len(_saved_addrs)})", expanded=False):
+                                    # st.expander เก็บสถานะเปิด/ปิดฝั่ง frontend เอง (uncontrolled) —
+                                    # ส่ง expanded=False ซ้ำๆ ไม่ทำให้มันปิดถ้า key เดิมยังไม่เปลี่ยน
+                                    # ต้องเปลี่ยน key (version-bump) เพื่อบังคับ remount ใหม่ทุกครั้ง
+                                    # ที่อยากให้มันปิดจริงๆ (หลังเลือกที่อยู่)
+                                    _addr_exp_ver = st.session_state.get(f"_addr_open_ver_{_cid}", 0)
+                                    with st.expander(f"⚡ เลือกที่อยู่เดิม ({len(_saved_addrs)})", expanded=False,
+                                                      key=f"_addr_open_{_cid}_{_addr_exp_ver}"):
                                         for _sa in _saved_addrs:
                                             _sa_label = f"{_sa.get('recipient_name','')} · {_sa.get('phone','')} · {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}"
                                             if st.button(_sa_label, key=f"qa_{_sa['id']}", width="stretch"):
@@ -370,6 +376,7 @@ def render(tab1, products, customers, customer_map):
                                                 st.session_state["_r_last_pc"]     = _qa_pc
                                                 st.session_state["_last_rph_fill"] = _sa.get("phone", "")
                                                 st.session_state.pop("r_dt_searchbox", None)
+                                                st.session_state[f"_addr_open_ver_{_cid}"] = _addr_exp_ver + 1
                                                 st.rerun()
                             _parse_key = f"_show_paste_{_cid}"
                             if st.button("📍 แยกที่อยู่อัตโนมัติ", key=f"parse_open_{_cid}"):
