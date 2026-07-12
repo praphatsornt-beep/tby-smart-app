@@ -1225,12 +1225,15 @@ with st.sidebar:
     for _nav_i, _nav_label in enumerate(_TAB_NAMES):
         _nav_is_active = st.session_state["active_tab"] == _nav_label
         _nav_text = _nav_label.split(" ", 1)[1] if " " in _nav_label else _nav_label
+        # เมนู active ไม่ต้องมี hover tooltip เลย — ตอนขยายเต็มก็เห็นชื่อบนปุ่มอยู่แล้ว
+        # (tooltip ซ้อนทับกลายเป็นข้อความค้างซ้ำ) ตอนย่อก็มีรูปทรง squircle บอกอยู่แล้ว
+        # ว่าเลือกอันไหน + หัวข้อหน้าเนื้อหาก็บอกซ้ำอีกที ไม่จำเป็นต้องมี tooltip
         if st.button(
             _nav_text, key=f"_nav_top_{_nav_i}",
             use_container_width=True,
             type=("primary" if _nav_is_active else "secondary"),
             icon=_TAB_ICONS[_nav_i],
-            help=_nav_text,
+            help=(None if _nav_is_active else _nav_text),
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
