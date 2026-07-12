@@ -57,7 +57,8 @@ if "code" in _qp and "shop_id" in _qp:
 
 st.markdown(
     '<link rel="preconnect" href="https://fonts.googleapis.com">'
-    '<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800&display=swap" rel="stylesheet">',
+    '<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600;700;800'
+    '&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">',
     unsafe_allow_html=True,
 )
 
@@ -108,9 +109,11 @@ h1, h2, h3 {
     font-family: 'Prompt', sans-serif !important;
     color: var(--tby-text) !important;
 }
-h1 { font-weight: 700 !important; margin-bottom: 0.6rem !important; }
-h2 { font-weight: 600 !important; }
-h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.15rem !important; }
+/* Headings/menus/nav are pinned to fixed px (not rem) so they stay clear
+   and readable independent of the body/table-text root scale below. */
+h1 { font-weight: 700 !important; margin-bottom: 0.6rem !important; font-size: 26px !important; }
+h2 { font-weight: 600 !important; font-size: 22px !important; }
+h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 19px !important; }
 
 /* ── Global top bar (page title + date), rendered once per page in app.py ──
    Flush with the page (no card/border) — sticky so it (and the sidebar)
@@ -136,7 +139,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
 .tby-topbar-title {
     font-family: 'Prompt', sans-serif;
     font-weight: 700;
-    font-size: 1.4rem;
+    font-size: 22px;
     color: var(--tby-text);
     padding-left: 1.5rem;
 }
@@ -159,7 +162,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
         width: calc(100% + 2rem);
     }
     .tby-topbar-title {
-        font-size: 1.2rem;
+        font-size: 19px;
         padding-left: 0.6rem;
     }
     .tby-topbar-date {
@@ -196,9 +199,9 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     top: 0;
     height: 100vh;
     overflow-y: auto;
-    width: 200px !important;
-    min-width: 200px !important;
-    max-width: 200px !important;
+    width: 210px !important;
+    min-width: 210px !important;
+    max-width: 210px !important;
 }
 [data-testid="stSidebarResizeHandle"] {
     display: none !important;
@@ -237,7 +240,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     text-align: left !important;
     border-radius: 10px !important;
     padding: 10px 10px !important;
-    font-size: 0.95rem !important;
+    font-size: 14px !important;
     font-family: 'Prompt', sans-serif !important;
 }
 /* force left-align all the way down — Streamlit centers button labels by
@@ -248,7 +251,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     text-align: left !important;
 }
 [data-testid="stSidebar"] [data-testid="stElementContainer"] button p {
-    font-size: 0.95rem !important;
+    font-size: 14px !important;
     color: inherit !important;
     font-weight: inherit !important;
     text-align: left !important;
@@ -436,7 +439,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 1.
     border-bottom: 3px solid transparent !important;
     border-radius: 0 !important;
     font-family: 'Prompt', sans-serif !important;
-    font-size: 1.35rem !important;
+    font-size: 21px !important;
     font-weight: 500 !important;
     padding: 12px 18px 10px !important;
     white-space: nowrap;
@@ -473,7 +476,7 @@ button[kind="pillsActive"] {
     border-radius: 0 !important;
     font-family: 'Prompt', sans-serif;
     font-weight: 500;
-    font-size: 0.92rem;
+    font-size: 15px;
     padding: 14px 18px 12px !important;
     border: none !important;
     transition: color 0.18s;
@@ -677,8 +680,36 @@ button[kind="secondary"]:hover {
     border: none !important;
     padding: 6px 0 0 !important;
 }
+/* Native radio circle was rendering as one solid blob (ring + dot both
+   filled the same orange with no visible gap) — force a real two-tone
+   ring+dot: fixed-size outer ring, smaller centered inner dot. Target by
+   DOM position (not BaseWeb's atomic class names, which aren't stable). */
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label > div:first-child {
-    display: block !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 20px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+    flex: 0 0 auto !important;
+    border-radius: 50% !important;
+    box-sizing: border-box !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label > div:first-child > div {
+    width: 8px !important;
+    height: 8px !important;
+    border-radius: 50% !important;
+}
+/* Two accent colors per status category, matching reference: orange for
+   การรับของ (receiving), green for การจ่าย/สถานะบิล (payment/bill) — the
+   theme's primaryColor (orange) is the default, so only the green groups
+   need an explicit override. */
+[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:has(input:checked) > div:first-child,
+[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="สถานะบิล"] label:has(input:checked) > div:first-child {
+    background-color: var(--tby-green) !important;
+}
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) > div:first-child > div {
+    background-color: #ffffff !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label {
     background: transparent !important;
@@ -710,7 +741,8 @@ button[kind="secondary"]:hover {
     font-size: 0.9rem !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label p {
-    font-size: 0.92rem !important;
+    font-size: 0.85rem !important;
+    white-space: nowrap !important;
 }
 [class*="st-key-sale_status_bill_row"] [data-testid="stRadio"] > div[role="radiogroup"] {
     flex-direction: row !important;
@@ -775,7 +807,7 @@ hr {
 }
 
 /* ── Typography / Readability ── */
-html { font-size: 12px; }
+html { font-size: 13.5px; }
 
 /* Body text & markdown */
 [data-testid="stMarkdownContainer"] p,
@@ -827,11 +859,13 @@ label,
     line-height: 1.6 !important;
 }
 
-/* Dataframe cells */
+/* Dataframe cells — TH Saraban isn't on Google Fonts (a Thai government
+   desktop font), so use 'Sarabun' as the closest web-available match. */
 [data-testid="stDataFrame"] td,
 [data-testid="stDataFrame"] th,
 [data-testid="stDataEditor"] td,
 [data-testid="stDataEditor"] th {
+    font-family: 'Sarabun', sans-serif !important;
     font-size: 0.87rem !important;
     line-height: 1.5 !important;
 }
