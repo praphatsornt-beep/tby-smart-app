@@ -1225,12 +1225,15 @@ with st.sidebar:
     for _nav_i, _nav_label in enumerate(_TAB_NAMES):
         _nav_is_active = st.session_state["active_tab"] == _nav_label
         _nav_text = _nav_label.split(" ", 1)[1] if " " in _nav_label else _nav_label
+        # เมนู active ตอนย่อมีป้ายชื่อโชว์ตลอดอยู่แล้ว (CSS ด้านล่าง) ไม่ต้องมี
+        # help= tooltip ซ้อนทับเข้าไปอีกชั้นตอน hover
+        _nav_suppress_help = _nav_is_active and st.session_state["_sidebar_compact"]
         if st.button(
             _nav_text, key=f"_nav_top_{_nav_i}",
             use_container_width=True,
             type=("primary" if _nav_is_active else "secondary"),
             icon=_TAB_ICONS[_nav_i],
-            help=_nav_text,
+            help=(None if _nav_suppress_help else _nav_text),
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
@@ -1383,6 +1386,68 @@ components.html(
             setTimeout(fixTooltipPos, 30);
         });
         obs.observe(window.parent.document.body, {childList: true, subtree: true});
+    })();
+    </script>
+    """,
+    height=0,
+)
+
+# ── Persistent label pill for the active tab in the compact sidebar rail —
+#    same idea as the hover tooltip, but always shown (no hover needed) for
+#    whichever nav item is currently selected. Tried this as pure CSS first
+#    (absolutely-positioned child of the button) but the sidebar's own
+#    stacking context sits UNDER the main content pane, so it always got
+#    painted over the moment it crossed the 72px boundary — appending a
+#    fixed-position element straight to <body> (same trick the native
+#    tooltip portal uses) sidesteps that entirely. ─────────────────────────
+components.html(
+    r"""
+    <script>
+    (function() {
+        function updateActivePill() {
+            try {
+                var doc = window.parent.document;
+                var sidebar = doc.querySelector('[data-testid="stSidebar"]');
+                var pill = doc.getElementById('_tby_active_pill');
+                if (!sidebar || sidebar.getBoundingClientRect().width > 100) {
+                    if (pill) pill.remove();
+                    return;
+                }
+                var btn = sidebar.querySelector('button[kind="primary"]');
+                var label = btn && btn.querySelector('[data-testid="stMarkdownContainer"]');
+                var text = label ? label.textContent.trim() : '';
+                if (!btn || !text) {
+                    if (pill) pill.remove();
+                    return;
+                }
+                if (!pill) {
+                    pill = doc.createElement('div');
+                    pill.id = '_tby_active_pill';
+                    pill.style.position = 'fixed';
+                    pill.style.background = 'oklch(0.22 0.02 155)';
+                    pill.style.color = '#ffffff';
+                    pill.style.padding = '8px 18px 8px 22px';
+                    pill.style.borderRadius = '999px';
+                    pill.style.whiteSpace = 'nowrap';
+                    pill.style.fontFamily = "'Prompt', sans-serif";
+                    pill.style.fontWeight = '600';
+                    pill.style.fontSize = '0.85rem';
+                    pill.style.boxShadow = '2px 3px 10px rgba(0,0,0,0.35)';
+                    pill.style.zIndex = '999999';
+                    pill.style.pointerEvents = 'none';
+                    doc.body.appendChild(pill);
+                }
+                if (pill.textContent !== text) pill.textContent = text;
+                var rect = btn.getBoundingClientRect();
+                pill.style.left = (rect.right - 14) + 'px';
+                pill.style.top = (rect.top + rect.height / 2) + 'px';
+                pill.style.transform = 'translateY(-50%)';
+            } catch (e) {}
+        }
+        var obs = new MutationObserver(function() { setTimeout(updateActivePill, 30); });
+        obs.observe(window.parent.document.body, {childList: true, subtree: true});
+        window.parent.addEventListener('resize', updateActivePill);
+        updateActivePill();
     })();
     </script>
     """,
