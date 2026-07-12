@@ -230,6 +230,7 @@ def render():
                     "วันที่ส่ง":    _date_str,
                     "วัน":          (_now_utc - _sdt).days,
                     "สถานะ":        _stat,
+                    "🔗":           f"https://app.iship.cloud/tracking?track={_sh.get('tracking_no', '')}",
                 })
 
         # ── แสดง COD ─────────────────────────────────────────────────────
@@ -277,10 +278,27 @@ def render():
         # ── แสดงพัสดุล่าช้า ──────────────────────────────────────────────
         if _slow_ships:
             st.divider()
-            st.markdown(f"**⏳ พัสดุเกิน 3 วัน ยังไม่ถึง ({len(_slow_ships)} รายการ)**")
+            _slow_h1, _slow_h2 = st.columns([5, 1.4])
+            _slow_h1.markdown(f"**⏳ พัสดุเกิน 3 วัน ยังไม่ถึง ({len(_slow_ships)} รายการ)**")
+            if _slow_h2.button("🔄 ตรวจสอบสถานะ", key="dash_slow_sync", width="stretch"):
+                with st.spinner("กำลังดึงสถานะจาก iShip..."):
+                    _sr = iship_api.get_shipment_statuses(days_back=90)
+                if _sr.get("error"):
+                    st.error(f"❌ {_sr['error']}")
+                else:
+                    _statuses = _sr.get("statuses", {})
+                    _tracks = {r["Tracking"] for r in _slow_ships if r.get("Tracking")}
+                    _relevant = {tn: st_ for tn, st_ in _statuses.items() if tn in _tracks}
+                    if _relevant:
+                        _n = db.update_delivery_statuses(_relevant)
+                        st.success(f"✅ อัปเดตสถานะแล้ว {_n} รายการ")
+                        st.rerun()
+                    else:
+                        st.info("ไม่พบสถานะใหม่สำหรับรายการเหล่านี้")
             st.dataframe(pd.DataFrame(_slow_ships),
                          width="stretch", hide_index=True,
-                         height=min(35 * len(_slow_ships) + 38, 300))
+                         height=min(35 * len(_slow_ships) + 38, 300),
+                         column_config={"🔗": st.column_config.LinkColumn("🔗", width="small", display_text="🔗")})
 
         # ── แสดงพัสดุมีปัญหา ─────────────────────────────────────────────
         if _problem_ships:
