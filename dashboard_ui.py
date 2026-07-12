@@ -107,25 +107,29 @@ def render():
 
     st.divider()
 
-    # ── 2 คอลัมน์: รายการวันนี้ + ลูกค้าค้างสูงสุด ──────────────────────────
+    # ── 2 คอลัมน์: บิลล่าสุด + ลูกค้าค้างสูงสุด ──────────────────────────────
     _dl, _dr = st.columns([3, 2])
 
     with _dl:
-        st.markdown("**📋 รายการที่บันทึกวันนี้**")
-        if not _dash_today:
-            st.caption("ยังไม่มีรายการวันนี้")
+        st.markdown("**🧾 บิลล่าสุด**")
+        _recent_bills = pd.DataFrame()
+        if not _week_df.empty:
+            _recent_bills = (_week_df[_week_df["เลขที่บิล"].notna()]
+                              .groupby("เลขที่บิล", as_index=False)
+                              .agg(วันที่=("วันที่", "max"), ลูกค้า=("ลูกค้า", "first"),
+                                   ยอดรวม=("ยอดรวม", "sum"), ค้างจ่าย=("ค้างจ่าย", "sum"))
+                              .sort_values("เลขที่บิล", ascending=False)
+                              .head(8))
+        if _recent_bills.empty:
+            st.caption("ยังไม่มีบิล")
         else:
-            _show_today = pd.DataFrame([{
-                "บิล": t.get("bill_no") or "",
-                "ลูกค้า": (t.get("customers") or {}).get("name", t.get("customer_id", "")),
-                "สินค้า": t.get("product_name", ""),
-                "ยอด (฿)": float(t.get("total_amount") or 0),
-                "สถานะบิล": t.get("bill_status", ""),
-            } for t in _dash_today])
+            _recent_bills["สถานะ"] = _recent_bills["ค้างจ่าย"].apply(
+                lambda x: "ชำระแล้ว" if x <= 0.01 else "ค้างชำระ")
             st.dataframe(
-                _show_today.style.format({"ยอด (฿)": "{:,.0f}"}),
+                _recent_bills[["เลขที่บิล", "วันที่", "ลูกค้า", "ยอดรวม", "สถานะ"]]
+                    .style.format({"ยอดรวม": "{:,.0f}"})
+                    .map(_style_status, subset=["สถานะ"]),
                 use_container_width=True, hide_index=True,
-                height=min(35 * len(_show_today) + 38, 320),
             )
 
     with _dr:
@@ -142,30 +146,6 @@ def render():
                 _top5.style.format({"ค้างจ่าย": "{:,.0f}", "ค้างรับ": "{:.0f}"}),
                 use_container_width=True, hide_index=True,
             )
-
-    st.divider()
-
-    # ── บิลล่าสุด (จากช่วง 7 วันล่าสุดที่โหลดไว้แล้วสำหรับกราฟ) ──────────────
-    st.markdown("**🧾 บิลล่าสุด**")
-    _recent_bills = pd.DataFrame()
-    if not _week_df.empty:
-        _recent_bills = (_week_df[_week_df["เลขที่บิล"].notna()]
-                          .groupby("เลขที่บิล", as_index=False)
-                          .agg(วันที่=("วันที่", "max"), ลูกค้า=("ลูกค้า", "first"),
-                               ยอดรวม=("ยอดรวม", "sum"), ค้างจ่าย=("ค้างจ่าย", "sum"))
-                          .sort_values("เลขที่บิล", ascending=False)
-                          .head(8))
-    if _recent_bills.empty:
-        st.caption("ยังไม่มีบิล")
-    else:
-        _recent_bills["สถานะ"] = _recent_bills["ค้างจ่าย"].apply(
-            lambda x: "ชำระแล้ว" if x <= 0.01 else "ค้างชำระ")
-        st.dataframe(
-            _recent_bills[["เลขที่บิล", "วันที่", "ลูกค้า", "ยอดรวม", "สถานะ"]]
-                .style.format({"ยอดรวม": "{:,.0f}"})
-                .map(_style_status, subset=["สถานะ"]),
-            use_container_width=True, hide_index=True,
-        )
 
     # ── helper ───────────────────────────────────────────────────────────────
     def _parse_sdt(s_str):
