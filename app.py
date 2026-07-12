@@ -1394,15 +1394,6 @@ components.html(
     """
     <script>
     (function() {
-        // Re-executes on every Streamlit rerun. Tear down whatever the last
-        // execution installed before installing fresh — an "install once"
-        // flag doesn't work here since the iframe hosting the previous
-        // observer/listener may or may not survive a rerun (depends on
-        // Streamlit's own reconciliation); tying cleanup to a stored
-        // teardown function keeps exactly one live instance either way.
-        if (window.parent.__tbySidebarExpandFixCleanup) {
-            try { window.parent.__tbySidebarExpandFixCleanup(); } catch (e) {}
-        }
         function tick() {
             try {
                 var doc = window.parent.document;
@@ -1420,10 +1411,6 @@ components.html(
             obs.observe(target, {attributes: true, attributeFilter: ['aria-expanded']});
         }
         window.parent.addEventListener('resize', tick);
-        window.parent.__tbySidebarExpandFixCleanup = function() {
-            try { obs.disconnect(); } catch (e) {}
-            try { window.parent.removeEventListener('resize', tick); } catch (e) {}
-        };
         tick();
     })();
     </script>
@@ -1431,132 +1418,57 @@ components.html(
     height=0,
 )
 
-# ── Fix tooltip (help=) bubble positioning for the compact sidebar icon
-#    rail. Streamlit's default placement centers the tooltip ABOVE its
-#    trigger button — on the 72px icon rail, icons sit only ~56px apart
-#    (44px icon + gap), so a tooltip placed above one icon has nowhere to
-#    go but overlap the icon of the nav item directly above it (that's the
-#    "orange background doesn't fully cover it / looks lopsided" bug: the
-#    neighboring icon pokes out through/above the pill). Reposition every
-#    sidebar tooltip to sit to the RIGHT of its icon instead, vertically
-#    centered — icons in a rail never collide horizontally with each
-#    other, so this sidesteps the overlap entirely rather than nudging
-#    around it. Non-sidebar tooltips keep the old "nudge back on-screen if
-#    pushed past the left edge" behavior. ─────────────────────────────────
+# ── Fix tooltip (help=) bubbles overflowing off the left edge of the screen —
+#    Streamlit centers the tooltip horizontally over its trigger button, which
+#    on the narrow (72px) compact sidebar icon rail pushes wide labels (e.g.
+#    "รายละเอียดบิล") to a negative x position — genuinely off-screen, not
+#    just visually clipped, so no amount of CSS on the tooltip itself helps.
+#    Nudge the positioned wrapper back on-screen whenever one appears.
+#    NOTE: a fancier version of this (repositioning tooltips to the right of
+#    their icon, with a continuous setInterval to fight Streamlit's own
+#    re-positioning) shipped briefly and was reverted — it's suspected of
+#    having caused a server-side crash (Segmentation fault) by being by far
+#    the largest/most expensive components.html() payload in the app,
+#    re-sent on every single rerun. Back to this simpler, long-stable
+#    version until a safer way to fix the icon-overlap cosmetic issue is
+#    found. ───────────────────────────────────────────────────────────────
 components.html(
     r"""
     <script>
     (function() {
-        // This whole block re-executes on every Streamlit rerun (nearly every
-        // click/keystroke). It originally registered ANOTHER permanent
-        // MutationObserver + setInterval on window.parent on every single
-        // rerun with no cleanup at all — those accumulated without bound
-        // across a session and crashed the deployed app. A simple "install
-        // once" flag isn't enough either: it can't tell whether the previous
-        // instance's iframe is still alive (depends on Streamlit's own
-        // reconciliation), so it either still leaks (old instance survives)
-        // or goes permanently dark (old instance died, flag blocks a
-        // replacement forever). Tear down whatever the last execution
-        // installed, then install fresh — keeps exactly one live instance no
-        // matter what Streamlit does with the iframe.
-        if (window.parent.__tbyTooltipFixCleanup) {
-            try { window.parent.__tbyTooltipFixCleanup(); } catch (e) {}
-        }
-        function readTransform(wrapper) {
-            var m = window.parent.getComputedStyle(wrapper).transform;
-            var x = 0, y = 0, is3d = false;
-            var match3d = m && m.match(/matrix3d\(([^)]+)\)/);
-            var match2d = !match3d && m && m.match(/matrix\(([^)]+)\)/);
-            if (match3d) {
-                var p3 = match3d[1].split(',').map(parseFloat);
-                x = p3[12]; y = p3[13]; is3d = true;
-            } else if (match2d) {
-                var p2 = match2d[1].split(',').map(parseFloat);
-                x = p2[4]; y = p2[5];
-            }
-            return {x: x, y: y, is3d: is3d};
-        }
-        function setTransform(wrapper, tx, ty, is3d) {
-            wrapper.style.transform = is3d
-                ? 'translate3d(' + tx + 'px, ' + ty + 'px, 0px)'
-                : 'translate(' + tx + 'px, ' + ty + 'px)';
-        }
         function fixTooltipPos() {
             try {
                 var doc = window.parent.document;
                 var tips = doc.querySelectorAll('[data-testid="stTooltipContent"]');
                 tips.forEach(function(tip) {
-                    var el = tip, wrapper = null, chain = [];
+                    var el = tip, wrapper = null;
                     for (var i = 0; i < 6 && el; i++) {
                         el = el.parentElement;
-                        if (!el) break;
-                        chain.push(el);
-                        if (window.parent.getComputedStyle(el).position === 'absolute') {
+                        if (el && window.parent.getComputedStyle(el).position === 'absolute') {
                             wrapper = el;
                             break;
                         }
                     }
                     if (!wrapper) return;
-
-                    var anchor = wrapper.id ? doc.querySelector('[aria-describedby="' + wrapper.id + '"]') : null;
-                    var sidebarAnchor = anchor ? anchor.closest('[data-testid="stSidebar"]') : null;
-                    if (anchor && sidebarAnchor) {
-                        // floating-ui sometimes bakes its own extra offset (e.g. for
-                        // arrow/collision alignment) as an inline left/top/transform on
-                        // an INTERMEDIATE node between the tooltip and the outer
-                        // positioned wrapper — that offset varies per icon (wider
-                        // labels like "บันทึกรายการ" got shifted ~27px further right
-                        // than short ones like "การเงิน"), so pinning only the outer
-                        // wrapper left it randomly skewed depending on which icon was
-                        // hovered. Clear it on every intermediate node first.
-                        chain.forEach(function(node) {
-                            if (node !== wrapper) {
-                                node.style.setProperty('left', '0px', 'important');
-                                node.style.setProperty('top', '0px', 'important');
-                                node.style.setProperty('transform', 'none', 'important');
-                            }
-                        });
-                        // Pin with position:fixed + left/top (both viewport-relative,
-                        // same frame as getBoundingClientRect) instead of adding a
-                        // transform delta on top of whatever floating-ui already set —
-                        // an absolute pin is idempotent regardless of floating-ui's
-                        // baseline placement for a given icon.
-                        var aRect = anchor.getBoundingClientRect();
-                        var tRect = wrapper.getBoundingClientRect();
-                        var targetX = aRect.right + 8;
-                        var targetY = aRect.top + (aRect.height - tRect.height) / 2;
-                        wrapper.style.setProperty('position', 'fixed', 'important');
-                        wrapper.style.setProperty('transform', 'none', 'important');
-                        wrapper.style.setProperty('left', targetX + 'px', 'important');
-                        wrapper.style.setProperty('top', targetY + 'px', 'important');
-                        // Forcing position:fixed on this (inner) node pulls it out of
-                        // the outer tooltip portal's stacking context (which normally
-                        // carries a very high z-index), so without its own z-index it
-                        // can paint BEHIND ordinary page content that happens to sit at
-                        // the same spot — the pill looked "torn"/overlapped by a real
-                        // button underneath rather than floating cleanly above it.
-                        wrapper.style.setProperty('z-index', '999999', 'important');
-                        // A positioned ancestor further up (outside this 6-hop walk)
-                        // can establish its own containing block for position:fixed,
-                        // offsetting our left/top by a constant the walk never sees.
-                        // Measure the actual result and correct once so this is
-                        // self-calibrating instead of relying on a guessed constant.
-                        var actual = wrapper.getBoundingClientRect();
-                        var errX = actual.x - targetX, errY = actual.y - targetY;
-                        if (errX || errY) {
-                            wrapper.style.setProperty('left', (targetX - errX) + 'px', 'important');
-                            wrapper.style.setProperty('top', (targetY - errY) + 'px', 'important');
-                        }
-                        return;
-                    }
-
                     var rect = wrapper.getBoundingClientRect();
                     if (rect.x < 8) {
                         // ตำแหน่งจริงมาจาก transform: matrix(...) ไม่ใช่ left — ต้องแก้ tx
                         // ใน matrix ตรงๆ (แก้แค่ style.left เฉยๆ ไม่มีผลอะไรเลย)
-                        var cur2 = readTransform(wrapper);
+                        var m = window.parent.getComputedStyle(wrapper).transform;
+                        var tx = 0, ty = 0, is3d = false;
+                        var match3d = m && m.match(/matrix3d\(([^)]+)\)/);
+                        var match2d = !match3d && m && m.match(/matrix\(([^)]+)\)/);
+                        if (match3d) {
+                            var p3 = match3d[1].split(',').map(parseFloat);
+                            tx = p3[12]; ty = p3[13]; is3d = true;
+                        } else if (match2d) {
+                            var p2 = match2d[1].split(',').map(parseFloat);
+                            tx = p2[4]; ty = p2[5];
+                        }
                         var shift = 8 - rect.x;
-                        setTransform(wrapper, cur2.x + shift, cur2.y, cur2.is3d);
+                        wrapper.style.transform = is3d
+                            ? 'translate3d(' + (tx + shift) + 'px, ' + ty + 'px, 0px)'
+                            : 'translate(' + (tx + shift) + 'px, ' + ty + 'px)';
                     }
                 });
             } catch (e) {}
@@ -1568,21 +1480,6 @@ components.html(
             setTimeout(fixTooltipPos, 30);
         });
         obs.observe(window.parent.document.body, {childList: true, subtree: true});
-        // Streamlit's own tooltip library keeps re-asserting its position (e.g.
-        // on an internal autoUpdate/resize loop) for as long as a tooltip stays
-        // open, which can undo a one-shot MutationObserver correction a moment
-        // later — observed as some sidebar icons landing correctly and others
-        // drifting depending on hover timing. Re-run continuously while any
-        // tooltip is open so ours is always the last write.
-        var intervalId = setInterval(function() {
-            if (window.parent.document.querySelector('[data-testid="stTooltipContent"]')) {
-                fixTooltipPos();
-            }
-        }, 80);
-        window.parent.__tbyTooltipFixCleanup = function() {
-            try { obs.disconnect(); } catch (e) {}
-            try { clearInterval(intervalId); } catch (e) {}
-        };
     })();
     </script>
     """,
