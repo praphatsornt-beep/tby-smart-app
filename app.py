@@ -2,7 +2,6 @@ from datetime import date
 import uuid
 
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 
 import database as db
@@ -1362,7 +1361,7 @@ if st.session_state["_sidebar_compact"]:
 #    to a phone screen, so native collapse only gets in the way here; watch
 #    for it flipping aria-expanded to false and immediately click the
 #    re-expand button to undo it. ──────────────────────────────────────────
-components.html(
+st.iframe(
     """
     <script>
     (function() {
@@ -1387,7 +1386,7 @@ components.html(
     })();
     </script>
     """,
-    height=0,
+    height=1,
 )
 
 # ── Fix tooltip (help=) bubbles overflowing off the left edge of the screen —
@@ -1396,7 +1395,7 @@ components.html(
 #    "รายละเอียดบิล") to a negative x position — genuinely off-screen, not
 #    just visually clipped, so no amount of CSS on the tooltip itself helps.
 #    Nudge the positioned wrapper back on-screen whenever one appears. ───────
-components.html(
+st.iframe(
     r"""
     <script>
     (function() {
@@ -1447,7 +1446,7 @@ components.html(
     })();
     </script>
     """,
-    height=0,
+    height=1,
 )
 
 _active_tab = st.session_state["active_tab"]
