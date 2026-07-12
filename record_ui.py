@@ -301,6 +301,7 @@ def render(tab1, products, customers, customer_map):
                             if _qf:
                                 _cart_add_items(_cart_key, _qf)
                                 st.session_state["_qtext_ver"] = _qtext_ver + 1
+                                st.session_state["_qtext_refocus"] = True
                                 st.rerun()
                             elif _qu:
                                 # ไม่เจอ/ไม่ชัดเจน — ไม่ rerun เพื่อให้ error ค้างให้เห็น
@@ -309,31 +310,35 @@ def render(tab1, products, customers, customer_map):
 
                         # กด Enter แล้วเคอร์เซอร์หลุดโฟกัส (รีรันสร้าง input ใหม่ทุกครั้ง
                         # เพราะ key เป็น version-suffixed) — โฟกัสกลับให้อัตโนมัติ ไม่ต้องเอา
-                        # เมาส์มาคลิกซ้ำเพื่อพิมพ์รหัสถัดไปต่อได้เลย
-                        components.html(
-                            """
-                            <script>
-                            (function() {
-                                try { window.parent.focus(); } catch (e) {}
-                                var tries = 0;
-                                function tryFocus() {
-                                    tries++;
-                                    try {
-                                        var doc = window.parent.document;
-                                        var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
-                                        if (input && doc.activeElement !== input) {
-                                            input.focus({preventScroll: true});
-                                            input.click();
-                                        }
-                                    } catch (e) {}
-                                    if (tries < 20) { setTimeout(tryFocus, 100); }
-                                }
-                                requestAnimationFrame(tryFocus);
-                            })();
-                            </script>
-                            """,
-                            height=0,
-                        )
+                        # เมาส์มาคลิกซ้ำเพื่อพิมพ์รหัสถัดไปต่อได้เลย — ต้องเช็ค flag ก่อนว่า
+                        # rerun รอบนี้เกิดจากการเพิ่มสินค้าจริงๆ ไม่งั้น script แย่งโฟกัสไป 2
+                        # วินาทีทุกครั้งที่หน้ารีรัน (เช่น คลิก selectbox อื่น) ทำให้ต้องคลิก
+                        # ซ้ำหลายทีกว่าเคอร์เซอร์จะไปอยู่ในช่องที่ตั้งใจจะคลิกจริง
+                        if st.session_state.pop("_qtext_refocus", False):
+                            components.html(
+                                """
+                                <script>
+                                (function() {
+                                    try { window.parent.focus(); } catch (e) {}
+                                    var tries = 0;
+                                    function tryFocus() {
+                                        tries++;
+                                        try {
+                                            var doc = window.parent.document;
+                                            var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                                            if (input && doc.activeElement !== input) {
+                                                input.focus({preventScroll: true});
+                                                input.click();
+                                            }
+                                        } catch (e) {}
+                                        if (tries < 20) { setTimeout(tryFocus, 100); }
+                                    }
+                                    requestAnimationFrame(tryFocus);
+                                })();
+                                </script>
+                                """,
+                                height=0,
+                            )
 
                     valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
 
@@ -1140,34 +1145,39 @@ def render(tab1, products, customers, customer_map):
                     if _sp_qf:
                         _cart_add_items(_sp_cart_key, _sp_qf)
                         st.session_state["_sp_qtext_ver"] = _sp_qtext_ver + 1
+                        st.session_state["_sp_qtext_refocus"] = True
                         st.rerun()
                     elif _sp_qu:
                         st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_sp_qu)}")
 
-                components.html(
-                    """
-                    <script>
-                    (function() {
-                        try { window.parent.focus(); } catch (e) {}
-                        var tries = 0;
-                        function tryFocus() {
-                            tries++;
-                            try {
-                                var doc = window.parent.document;
-                                var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
-                                if (input && doc.activeElement !== input) {
-                                    input.focus({preventScroll: true});
-                                    input.click();
-                                }
-                            } catch (e) {}
-                            if (tries < 20) { setTimeout(tryFocus, 100); }
-                        }
-                        requestAnimationFrame(tryFocus);
-                    })();
-                    </script>
-                    """,
-                    height=0,
-                )
+                # เช็ค flag ก่อนแย่งโฟกัส — ไม่งั้น script นี้ยิงทุกครั้งที่หน้ารีรัน
+                # (เช่น คลิก selectbox ลูกค้า) ทำให้ต้องคลิกซ้ำหลายทีกว่าเคอร์เซอร์จะ
+                # ไปอยู่ในช่องที่ตั้งใจจะคลิกจริง
+                if st.session_state.pop("_sp_qtext_refocus", False):
+                    components.html(
+                        """
+                        <script>
+                        (function() {
+                            try { window.parent.focus(); } catch (e) {}
+                            var tries = 0;
+                            function tryFocus() {
+                                tries++;
+                                try {
+                                    var doc = window.parent.document;
+                                    var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                                    if (input && doc.activeElement !== input) {
+                                        input.focus({preventScroll: true});
+                                        input.click();
+                                    }
+                                } catch (e) {}
+                                if (tries < 20) { setTimeout(tryFocus, 100); }
+                            }
+                            requestAnimationFrame(tryFocus);
+                        })();
+                        </script>
+                        """,
+                        height=0,
+                    )
 
                 # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
                 _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
