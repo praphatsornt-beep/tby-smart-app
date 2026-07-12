@@ -675,7 +675,7 @@ button[kind="secondary"]:hover {
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] > div[role="radiogroup"] {
     display: flex !important;
     flex-direction: column !important;
-    gap: 10px !important;
+    gap: 4px !important;
     background: transparent !important;
     border: none !important;
     padding: 6px 0 0 !important;
@@ -745,7 +745,7 @@ button[kind="secondary"]:hover {
     font-size: 0.9rem !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label p {
-    font-size: 0.85rem !important;
+    font-size: 0.95rem !important;
     white-space: nowrap !important;
 }
 [class*="st-key-sale_status_bill_row"] [data-testid="stRadio"] > div[role="radiogroup"] {
