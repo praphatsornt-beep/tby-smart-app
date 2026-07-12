@@ -3,7 +3,6 @@ import io
 import uuid
 
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date
 
@@ -502,7 +501,7 @@ def render():
         if _cr and float(_cr.get("commission_amount", 0)) > 0:
             if st.button("🖨️ พิมพ์ใบเสร็จรับเงิน/ใบกำกับภาษี", key=f"cm_print_{cm_period}", width="stretch"):
                 _receipt_html = _render_receipt_html(_cr, _ci, cm_period)
-                components.html(_receipt_html, height=700, scrolling=True)
+                st.iframe(_receipt_html, height=700)
 
         # ── บันทึกรายการ (Ledger) ────────────────────────────────────────────────
         _cm_df = db.get_commission_records()

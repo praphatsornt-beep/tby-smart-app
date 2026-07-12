@@ -1,6 +1,5 @@
 import re
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date, datetime, timezone, timedelta
 from math import floor, ceil
@@ -852,7 +851,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
 <br><button class="btn" onclick="window.print()">🖨️ พิมพ์</button>
 </body></html>"""
 
-    components.html(bill_html, height=_height, scrolling=True)
+    st.iframe(bill_html, height=_height)
 
     # ── ส่งสรุปบิล LINE ─────────────────────────────────────
     _t7_cust_name = show_p["ลูกค้า"].iloc[0] if not show_p.empty else sel_p

@@ -1,6 +1,5 @@
 import re
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date, datetime, timedelta, timezone
 from math import floor
@@ -258,7 +257,7 @@ def render(products, customers):
     <table><tr><th>รหัส / สินค้า</th><th style='text-align:center;width:80px'>ค้างรับ</th></tr>{_pend_rows_html}</table></div>
     <div style='margin-top:24px'><div class='sig'>ลายเซ็นผู้รับ</div></div>
     </body></html>"""
-                            components.html(_recv_html, height=430, scrolling=False)
+                            st.iframe(_recv_html, height=430)
                             if st.button("✕ ปิดใบรับของ", key=f"close_recv_{customer_name}"):
                                 del st.session_state["_recv_popup"]
                                 st.rerun()
@@ -1839,8 +1838,7 @@ def render(products, customers):
                             with st.spinner("กำลังหา order ID จาก iShip..."):
                                 _pr_result = iship_api.get_label_url(_pr_sel)
                             if _pr_result.get("url"):
-                                import streamlit.components.v1 as _comp
-                                _comp.html(
+                                st.iframe(
                                     f'<a id="_lbl" href="{_pr_result["url"]}" target="_blank" '
                                     f'style="display:inline-block;padding:8px 24px;background:#00A86B;color:#fff;'
                                     f'border-radius:8px;text-decoration:none;font-size:16px">'
@@ -1914,7 +1912,7 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 รวม {_total_boxes} กล่อง {_cod_line}</div>
 {_notes_line}
 </body></html>"""
-                        components.html(_label_html, height=600, scrolling=True)
+                        st.iframe(_label_html, height=600)
 
             _sh_to_resend = [i for i, v in enumerate(_sh_edit["📤"]) if v]
             if len(_sh_to_resend) > 1:

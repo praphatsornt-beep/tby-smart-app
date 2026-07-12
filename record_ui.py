@@ -1,5 +1,4 @@
 import streamlit as st
-import streamlit.components.v1 as components
 import pandas as pd
 from datetime import date
 from math import ceil, floor
@@ -954,7 +953,7 @@ def render(tab1, products, customers, customer_map):
     </table>
     {_total_html}
     </body></html>"""
-                        components.html(_bill_html_popup, height=420, scrolling=True)
+                        st.iframe(_bill_html_popup, height=420)
 
                 if st.session_state.get("_sale_last_tracking"):
                     _slt = st.session_state["_sale_last_tracking"]
@@ -2031,7 +2030,7 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 รวม {_lbl_total_boxes} กล่อง {_cod_line}</div>
 {_notes_line}
 </body></html>"""
-                                        components.html(_label_html, height=600, scrolling=True)
+                                        st.iframe(_label_html, height=600)
 
                                         _box_summary_txt = "; ".join(
                                             f"{r['l']}x{r['w']}x{r['h']}cm {r['weight_kg']:.1f}kg x{r['qty']}"
