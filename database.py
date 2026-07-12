@@ -194,23 +194,38 @@ def update_transaction_statuses_batch(transaction_ids: list[str],
 
 
 def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
-    """แยกรายการ: เปิดบิล qty_to_bill ชิ้น แล้วสร้างรายการใหม่สำหรับที่เหลือ"""
+    """แยกรายการ: เปิดบิล qty_to_bill ชิ้น แล้วสร้างรายการใหม่สำหรับที่เหลือ
+    เงิน/บิล/การรับของ เป็นสถานะอิสระจากกัน — ถ้ารายการเดิม (ก่อนแยก) จ่าย/
+    รับของไปแล้วมากกว่าที่ใช้กับส่วนที่เปิดบิล ส่วนเกินจะถูกโอนไปให้ remainder
+    ด้วย (เช่น จ่ายเงินครบ 10 ชิ้นแล้ว แต่เปิดบิลแค่ 6 ชิ้น — remainder 4 ชิ้น
+    ต้องขึ้นว่าจ่ายแล้วด้วย ไม่ใช่ค้างจ่ายเต็มจำนวนใหม่)"""
     db = get_supabase()
     txn = db.table("transactions").select("*").eq("id", transaction_id).single().execute().data
     qty_remaining = txn["qty"] - qty_to_bill
     price = float(txn["price_per_unit"])
     pv = float(txn["points_per_unit"])
+    billed_total = price * qty_to_bill
+    _is_paid_flag = txn["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว")
 
     db.table("transactions").update({
         "qty": qty_to_bill,
-        "total_amount": price * qty_to_bill,
+        "total_amount": billed_total,
         "bill_status": "เปิดบิลแล้ว",
         "initial_qty_received": min(txn["initial_qty_received"], qty_to_bill),
     }).eq("id", transaction_id).execute()
 
     if qty_remaining > 0:
+        _new_id = str(uuid.uuid4())
+        # ถ้าเดิมจ่ายครบทั้งรายการแล้ว (ผ่าน flag ไม่ใช่ partial_events) ให้
+        # remainder รับ flag เดียวกันไปตรงๆ — ถ้ายังไม่ครบ (ยังต้องอิง
+        # partial_events) ค่อยคำนวณส่วนเกินด้านล่าง
+        _remainder_pay_status = txn["pay_status"] if _is_paid_flag else "ค้างจ่าย"
+        # รับของ: ส่วนเกินจากที่รับไปแล้วเทียบกับจำนวนที่เปิดบิล ก็ยกไปให้
+        # remainder เหมือนกัน (สมมาตรกับที่ initial_qty_received ของส่วนเปิด
+        # บิลถูก cap ไว้ที่ qty_to_bill ด้านบน)
+        _remainder_received = max(0, int(txn["initial_qty_received"]) - qty_to_bill)
         db.table("transactions").insert({
-            "id": str(uuid.uuid4()),
+            "id": _new_id,
             "date": txn["date"],
             "customer_id": txn["customer_id"],
             "product_id": txn["product_id"],
@@ -219,13 +234,37 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
             "price_per_unit": price,
             "points_per_unit": pv,
             "total_amount": price * qty_remaining,
-            "initial_qty_received": 0,
+            "initial_qty_received": _remainder_received,
             "transaction_type": txn["transaction_type"],
             "bill_status": "ยังไม่เปิดบิล",
-            "pay_status": "ค้างจ่าย",
+            "pay_status": _remainder_pay_status,
             "notes": txn.get("notes", "") or "",
             "bill_no": txn.get("bill_no"),
         }).execute()
+
+        if not _is_paid_flag:
+            # ยอดที่จ่ายไปแล้วผ่าน partial_events (ก่อนแยก) อาจมากกว่าที่ใช้
+            # กับส่วนที่เปิดบิล — โอนส่วนเกินไปให้ remainder ด้วย correction
+            # event คู่ตรงข้ามกัน (หักออกจากส่วนเปิดบิล + บวกให้ remainder)
+            # กันยอดรวมทั้งระบบเพี้ยน (ไม่มีผลตอน pay_status เป็น "จ่ายแล้ว"
+            # อยู่แล้ว เพราะ flag นั้นถูกอ่านตรงๆ ไม่ผ่าน partial_events)
+            _evts = db.table("partial_events").select("amount_paid").eq(
+                "transaction_id", transaction_id).execute().data
+            _paid_before = sum(float(e["amount_paid"] or 0) for e in _evts)
+            _leftover_paid = max(0.0, _paid_before - billed_total)
+            if _leftover_paid > 0.01:
+                db.table("partial_events").insert({
+                    "id": str(uuid.uuid4()), "date": txn["date"], "transaction_id": transaction_id,
+                    "qty_received": 0, "amount_paid": -round(_leftover_paid, 2),
+                    "event_type": "จ่ายเงิน",
+                    "notes": "โอนยอดจ่ายส่วนเกินไปให้รายการที่แยกเปิดบิลบางส่วน",
+                }).execute()
+                db.table("partial_events").insert({
+                    "id": str(uuid.uuid4()), "date": txn["date"], "transaction_id": _new_id,
+                    "qty_received": 0, "amount_paid": round(_leftover_paid, 2),
+                    "event_type": "จ่ายเงิน",
+                    "notes": "ยอดจ่ายที่โอนมาจากรายการเดิมตอนแยกเปิดบิลบางส่วน",
+                }).execute()
     _clear_transaction_caches()
 
 
