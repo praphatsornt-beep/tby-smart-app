@@ -420,7 +420,11 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 19
     margin: 0 -2rem 1.25rem -2rem !important;
     width: calc(100% + 4rem);
     position: sticky;
-    top: 116px;
+    /* Must sit flush against .tby-topbar's actual rendered bottom edge
+       (52px top + ~72px height once 'Prompt' is loaded), not a guessed
+       value — a top offset shorter than that makes this bar stick a few
+       px too high and overlap/"squish" into the topbar on scroll. */
+    top: 125px;
     z-index: 90;
 }
 @media (max-width: 600px) {
