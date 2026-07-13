@@ -575,24 +575,30 @@ button[kind="secondary"]:hover {
     background: var(--tby-border) !important;
 }
 
-/* ── Text/Number inputs — roomy, flat, plain white background ── */
-.stTextInput input,
-.stNumberInput input,
-.stTextArea textarea {
+/* ── Text/Number inputs — roomy, flat, plain white background ──
+   Border/background must go on the BaseWeb wrapper div, not the raw
+   input/textarea — those render transparent by default, same as the
+   selectbox wrapper rule below (this is why the box border was invisible
+   even though a border was already declared on the inner <input>). */
+[data-baseweb="base-input"],
+[data-baseweb="textarea"] {
     background-color: #ffffff !important;
     border-radius: 9px !important;
     border: 1.5px solid var(--tby-input-border) !important;
+    transition: border-color 0.18s, box-shadow 0.18s !important;
+}
+.stTextInput input,
+.stNumberInput input,
+.stTextArea textarea {
     padding: 8px 12px !important;
     min-height: 36px;
     font-family: 'Prompt', sans-serif !important;
-    transition: border-color 0.18s, box-shadow 0.18s !important;
 }
 .stTextArea textarea {
     min-height: 76px;
 }
-.stTextInput input:focus,
-.stNumberInput input:focus,
-.stTextArea textarea:focus {
+[data-baseweb="base-input"]:focus-within,
+[data-baseweb="textarea"]:focus-within {
     border-color: var(--tby-accent) !important;
     box-shadow: 0 0 0 3px oklch(0.68 0.17 45 / 0.2) !important;
 }

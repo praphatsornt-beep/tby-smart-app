@@ -42,7 +42,7 @@ def render(tab1, products, customers, customer_map):
     """Render tab1: บันทึกรายการ (sub_calc, sub_ship, sub_sale)."""
     with tab1:
         try:
-            _sub_active = st.pills(" ", _T1_TABS, key="_t1_active_sub", label_visibility="collapsed") or _T1_TABS[0]
+            _sub_active = st.pills(" ", _T1_TABS, key="_t1_active_sub", default=_T1_TABS[0], label_visibility="collapsed") or _T1_TABS[0]
         except AttributeError:
             _sub_active = st.radio(" ", _T1_TABS, horizontal=True, key="_t1_active_sub", label_visibility="collapsed")
 
@@ -1432,9 +1432,8 @@ def render(tab1, products, customers, customer_map):
                     for _k in _sp_keys:
                         st.session_state.pop(_k, None)
                     st.session_state["_sp_addr_ver"] = _sp_av + 1
-                    _sp_cv = st.session_state.get("_sp_cart_ver", 0)
-                    st.session_state.pop(f"sp_cart_{_sp_cv}", None)
-                    st.session_state["_sp_cart_ver"] = _sp_cv + 1
+                    st.session_state.pop(f"sp_cart_{_sp_cart_ver_now}", None)
+                    st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
                     st.rerun()
 
             st.caption("กรอกข้อมูลด้านบนแล้วกด 💾 บันทึกการส่งของ — tracking จะบันทึกอัตโนมัติหลังส่ง iShip")

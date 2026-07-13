@@ -26,7 +26,7 @@ _BILL_OVERDUE_DAYS = 30  # ยังไม่มี due-date จริง ใช
 
 def render(products, customers):
     try:
-        _t5_active = st.pills(" ", _T5_TABS, key="_t5_active_sub", label_visibility="collapsed") or _T5_TABS[0]
+        _t5_active = st.pills(" ", _T5_TABS, key="_t5_active_sub", default=_T5_TABS[0], label_visibility="collapsed") or _T5_TABS[0]
     except AttributeError:
         _t5_active = st.radio(" ", _T5_TABS, horizontal=True, key="_t5_active_sub", label_visibility="collapsed")
 
