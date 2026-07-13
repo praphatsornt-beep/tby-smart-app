@@ -397,9 +397,10 @@ def _cart_add_items(cart_key: str, items: list) -> None:
         for _row in cart:
             if _row["product_id"] == _pid:
                 _row["qty"] += int(it["qty"])
+                _row["_qv"] = _row.get("_qv", 0) + 1
                 break
         else:
-            cart.append({"product_id": _pid, "qty": int(it["qty"])})
+            cart.append({"product_id": _pid, "qty": int(it["qty"]), "_qv": 0})
 
 
 def _render_cart_card(cart_key: str, products: list, title: str = "บันทึกรายการขาย"):
@@ -461,6 +462,16 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
         [class*="st-key-remove_"] button[kind="secondary"]:hover p {
             color: oklch(0.45 0.18 25) !important;
         }
+        /* จำนวน — พิมพ์แก้ตรง ๆ ได้ (แทนที่จะกด + ทีละ 1) ซ่อนปุ่ม +/- ของ
+           native number_input ทิ้ง เหลือแต่ปุ่มเขียวคู่เดิมข้าง ๆ ไม่ให้ซ้ำกัน */
+        [class*="st-key-qtybox_"] [data-testid="stNumberInputStepUp"],
+        [class*="st-key-qtybox_"] [data-testid="stNumberInputStepDown"] {
+            display: none !important;
+        }
+        [class*="st-key-qtybox_"] input {
+            text-align: center !important;
+            font-weight: 700 !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -495,6 +506,7 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
                         f"{float(_p.get('points_per_unit') or 0):,.0f} PV"
                     )
                 with _rc2:
+                    _qv = _row.get("_qv", 0)
                     _qc1, _qc2, _qc3 = st.columns([1, 1.4, 1])
                     with _qc1:
                         with st.container(key=f"stepper_{cart_key}_dec_{_i}"):
@@ -503,12 +515,23 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
                                     cart.pop(_i)
                                 else:
                                     cart[_i]["qty"] = _qty - 1
+                                    cart[_i]["_qv"] = _qv + 1
                                 st.rerun()
-                    _qc2.markdown(f"<div style='text-align:center;padding-top:8px;font-weight:700'>{_qty}</div>", unsafe_allow_html=True)
+                    with _qc2:
+                        with st.container(key=f"qtybox_{cart_key}_{_i}"):
+                            _new_qty = st.number_input(
+                                "จำนวน", min_value=1, step=1, value=_qty,
+                                key=f"qtybox_{cart_key}_{_row['product_id']}_{_qv}",
+                                label_visibility="collapsed",
+                            )
+                        if int(_new_qty) != _qty:
+                            cart[_i]["qty"] = int(_new_qty)
+                            st.rerun()
                     with _qc3:
                         with st.container(key=f"stepper_{cart_key}_inc_{_i}"):
                             if st.button("+", key=f"{cart_key}_inc_{_i}", width="stretch"):
                                 cart[_i]["qty"] = _qty + 1
+                                cart[_i]["_qv"] = _qv + 1
                                 st.rerun()
                 with _rc3:
                     st.markdown(f"<div style='padding-top:8px;font-weight:700;font-size:1rem;text-align:right'>฿{_line_total:,.0f}</div>", unsafe_allow_html=True)
