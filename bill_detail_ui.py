@@ -950,12 +950,21 @@ def render(products, customers):
                     # delivery type heuristic per bill
                     _ship_dates_set = {_r["date"] for _r in _l_ships}
                     _recv_bill_set  = {_r["bill_no"] for _r in _l_receipts if _r["bill_no"]}
+                    _initial_recv_by_bill: dict = {}
+                    for _r in _l_orders:
+                        _ibk = _r["bill_no"] or "—"
+                        _initial_recv_by_bill[_ibk] = _initial_recv_by_bill.get(_ibk, 0) + _r.get("initial_received", 0)
 
                     for _bk, _bv in _bills_tl.items():
                         if _bv["date"] in _ship_dates_set:
                             _dlv = "🚚 ส่งพัสดุ"
                         elif _bk in _recv_bill_set:
                             _dlv = "🏪 รับหน้าร้าน"
+                        elif _bv["qty"] > 0 and _initial_recv_by_bill.get(_bk, 0) >= _bv["qty"]:
+                            # รับของครบตั้งแต่ตอนขาย (เลือก "รับแล้ว" ตอนบันทึกขาย) — ไม่มี
+                            # ทั้ง shipment หรือ partial_events "รับของ" เพราะไม่จำเป็นต้องมี
+                            # แต่ก็ไม่ใช่ของฝาก (ยังไม่ให้ลูกค้า) เหมือนที่ค่า default เดิมเข้าใจผิด
+                            _dlv = "✅ รับแล้ว"
                         else:
                             _dlv = "📦 ฝากของ"
                         _bv["events"].append({
