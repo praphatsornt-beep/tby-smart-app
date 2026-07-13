@@ -689,6 +689,7 @@ def render(products, customers):
                                     # แยกรายการด้วย split_and_open_bill (เหลือส่วนที่ไม่เปิดเป็นแถวใหม่ยังไม่เปิดบิล)
                                     # ถ้าเท่ากับเต็มจำนวน เปิดบิลตรงๆ ไม่ต้องแยกแถว
                                     _full_open_ids = []
+                                    _opened_cnt = 0
                                     for i, row in _combo_df.iterrows():
                                         if row["สถานะบิล"] != "ยังไม่เปิดบิล":
                                             continue
@@ -698,12 +699,14 @@ def render(products, customers):
                                         _bill_qty = max(0, min(_bill_qty, _full_qty))
                                         if _bill_qty <= 0:
                                             continue
+                                        _opened_cnt += 1
                                         if _bill_qty >= _full_qty:
                                             _full_open_ids.append(row["_id"])
                                         else:
                                             db.split_and_open_bill(row["_id"], _bill_qty)
                                     if _full_open_ids:
                                         db.update_transaction_statuses_batch(_full_open_ids, bill_status="เปิดบิลแล้ว")
+                                    _do_open_bill = _opened_cnt > 0
                                     # popup รับของ + LINE notification
                                     _mrp_pending = []
                                     for _, _rr in grp.iterrows():
@@ -744,7 +747,7 @@ def render(products, customers):
                                     if _saved_p:
                                         _parts.append(f"จ่าย ฿{_mc_pay:,.0f}")
                                     if _do_open_bill:
-                                        _parts.append(f"เปิดบิล {len(selected_ids)} รายการ")
+                                        _parts.append(f"เปิดบิล {_opened_cnt} รายการ")
                                     if _parts:
                                         st.success("✅ บันทึก: " + " + ".join(_parts))
                                         for tid in txn_ids:
