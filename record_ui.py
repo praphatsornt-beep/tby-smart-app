@@ -48,7 +48,7 @@ def render(tab1, products, customers, customer_map):
 
         if _sub_active == "📝 บันทึกขาย":
             _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
-                          "m_bill","m_pay","m_delivery","m_cod","m_partial_amount",
+                          "m_bill","m_bill_no","m_pay","m_delivery","m_cod","m_partial_amount",
                           "_cart_base","m_postcode","m_carrier","m_zone","m_iship_note",
                           "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                           "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
@@ -281,6 +281,7 @@ def render(tab1, products, customers, customer_map):
                         st.divider()
                         with st.container(key="sale_status_bill_row"):
                             m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
+                            m_bill_no = st.text_input("เลขที่บิล", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
 
                 with _cart_col:
                     _qtext_ver = st.session_state.get("_qtext_ver", 0)
@@ -604,6 +605,8 @@ def render(tab1, products, customers, customer_map):
                 if valid_items:
                     if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก การจ่าย")
                     if m_bill is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")
+                    if m_bill == "เปิดบิลแล้ว" and not m_bill_no.strip():
+                        m_errors.append("⚠️ ยังไม่ได้ใส่เลขที่บิล")
 
                 if m_errors:
                     st.markdown(
@@ -659,7 +662,7 @@ def render(tab1, products, customers, customer_map):
                             cod_amount = 0
                             collect    = total_amt + ship_fee
                             cod_tag    = ""
-                        bill_no = db.get_next_bill_no(str(m_date))
+                        bill_no = m_bill_no.strip() if m_bill == "เปิดบิลแล้ว" else db.get_next_bill_no(str(m_date))
                         _m_batch = [{
                             "id":                   str(uuid.uuid4()),
                             "date":                 str(m_date),
@@ -676,6 +679,7 @@ def render(tab1, products, customers, customer_map):
                             "pay_status":           actual_pay,
                             "notes":                " ".join(filter(None, [delivery_tag, cod_tag, note])).strip(),
                             "bill_no":              bill_no,
+                            "bill_opened_at":       str(m_date) if m_bill == "เปิดบิลแล้ว" else None,
                         } for p, qty, note in valid_items]
                         try:
                             db.insert_transactions_batch(_m_batch)

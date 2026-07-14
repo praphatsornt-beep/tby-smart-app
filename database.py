@@ -196,14 +196,19 @@ def insert_partial_events_batch(rows: list[dict]) -> None:
 
 
 def update_transaction_statuses_batch(transaction_ids: list[str],
-                                       bill_status: str = None, pay_status: str = None) -> None:
-    """อัปเดต bill_status/pay_status ให้หลาย transaction พร้อมกัน (ค่าเดียวกันทุกแถว)
-    batch แทนการลูปทีละรายการ (ลด round-trip)"""
+                                       bill_status: str = None, pay_status: str = None,
+                                       bill_no: str = None, bill_opened_at: str = None) -> None:
+    """อัปเดต bill_status/pay_status/bill_no/bill_opened_at ให้หลาย transaction พร้อมกัน
+    (ค่าเดียวกันทุกแถว) batch แทนการลูปทีละรายการ (ลด round-trip)"""
     updates = {}
     if bill_status:
         updates["bill_status"] = bill_status
     if pay_status:
         updates["pay_status"] = pay_status
+    if bill_no:
+        updates["bill_no"] = bill_no
+    if bill_opened_at:
+        updates["bill_opened_at"] = bill_opened_at
     if not updates or not transaction_ids:
         return
     db = get_supabase()
@@ -213,12 +218,15 @@ def update_transaction_statuses_batch(transaction_ids: list[str],
     _clear_transaction_caches()
 
 
-def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
+def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = None,
+                         bill_opened_at: str = None) -> None:
     """แยกรายการ: เปิดบิล qty_to_bill ชิ้น แล้วสร้างรายการใหม่สำหรับที่เหลือ
     เงิน/บิล/การรับของ เป็นสถานะอิสระจากกัน — ถ้ารายการเดิม (ก่อนแยก) จ่าย/
     รับของไปแล้วมากกว่าที่ใช้กับส่วนที่เปิดบิล ส่วนเกินจะถูกโอนไปให้ remainder
     ด้วย (เช่น จ่ายเงินครบ 10 ชิ้นแล้ว แต่เปิดบิลแค่ 6 ชิ้น — remainder 4 ชิ้น
-    ต้องขึ้นว่าจ่ายแล้วด้วย ไม่ใช่ค้างจ่ายเต็มจำนวนใหม่)"""
+    ต้องขึ้นว่าจ่ายแล้วด้วย ไม่ใช่ค้างจ่ายเต็มจำนวนใหม่). bill_no/bill_opened_at
+    (ถ้าระบุ) จะ override เลขบิล/วันที่เปิดบิลของส่วนที่เปิดบิล — remainder
+    (ยังไม่เปิดบิล) ยังคงเลขเดิมไว้"""
     db = get_supabase()
     txn = db.table("transactions").select("*").eq("id", transaction_id).single().execute().data
     qty_remaining = txn["qty"] - qty_to_bill
@@ -227,12 +235,17 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int) -> None:
     billed_total = price * qty_to_bill
     _is_paid_flag = txn["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว")
 
-    db.table("transactions").update({
+    _billed_updates = {
         "qty": qty_to_bill,
         "total_amount": billed_total,
         "bill_status": "เปิดบิลแล้ว",
         "initial_qty_received": min(txn["initial_qty_received"], qty_to_bill),
-    }).eq("id", transaction_id).execute()
+    }
+    if bill_no:
+        _billed_updates["bill_no"] = bill_no
+    if bill_opened_at:
+        _billed_updates["bill_opened_at"] = bill_opened_at
+    db.table("transactions").update(_billed_updates).eq("id", transaction_id).execute()
 
     if qty_remaining > 0:
         _new_id = str(uuid.uuid4())
@@ -293,12 +306,17 @@ def update_transaction(transaction_id: str, data: dict) -> None:
     _clear_transaction_caches()
 
 
-def update_transaction_status(transaction_id: str, bill_status: str = None, pay_status: str = None) -> None:
+def update_transaction_status(transaction_id: str, bill_status: str = None, pay_status: str = None,
+                               bill_no: str = None, bill_opened_at: str = None) -> None:
     updates = {}
     if bill_status:
         updates["bill_status"] = bill_status
     if pay_status:
         updates["pay_status"] = pay_status
+    if bill_no:
+        updates["bill_no"] = bill_no
+    if bill_opened_at:
+        updates["bill_opened_at"] = bill_opened_at
     if updates:
         get_supabase().table("transactions").update(updates).eq("id", transaction_id).execute()
         _clear_transaction_caches()
@@ -470,7 +488,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     db = get_supabase()
     txns = _retry(lambda: db.table("transactions").select(
         "id, date, bill_no, product_id, product_name, qty, total_amount, pay_status, "
-        "bill_status, points_per_unit, initial_qty_received, notes"
+        "bill_status, points_per_unit, initial_qty_received, notes, bill_opened_at"
     ).eq("customer_id", customer_id).order("date").execute().data)
     txn_ids = [t["id"] for t in txns]
     txn_map = {t["id"]: t for t in txns}
@@ -508,6 +526,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
             "pv":               float(t.get("points_per_unit") or 0) * int(t.get("qty") or 0),
             "initial_received": int(t.get("initial_qty_received") or 0),
             "notes":            t.get("notes", "") or "",
+            "bill_opened_at":   (t.get("bill_opened_at") or "")[:10],
             "txn_id":           t["id"],
         })
     # partial event rows

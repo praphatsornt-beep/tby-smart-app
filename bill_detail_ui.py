@@ -395,6 +395,9 @@ def render(products, customers):
 
                             if action == "📄 เปิดบิล":
                                 with st.form(f"bill_{txn_id}", clear_on_submit=True):
+                                    bn1, bn2 = st.columns(2)
+                                    new_bill_no   = bn1.text_input("เลขที่บิล")
+                                    new_bill_date = bn2.date_input("วันที่เปิดบิล", value=date.today())
                                     bc1, bc2 = st.columns([3, 1])
                                     qty_to_open = bc1.number_input(
                                         "จำนวนที่เปิดบิล", min_value=1,
@@ -405,11 +408,18 @@ def render(products, customers):
                                         "📄 เปิดบิล", width="stretch", type="primary"
                                     )
                                 if submit_bill:
-                                    if qty_to_open == int(txn["qty"]):
-                                        db.update_transaction_status(txn_id, bill_status="เปิดบิลแล้ว")
+                                    if not new_bill_no.strip():
+                                        st.error("❌ กรุณาใส่เลขที่บิล")
                                     else:
-                                        db.split_and_open_bill(txn_id, qty_to_open)
-                                    st.rerun()
+                                        if qty_to_open == int(txn["qty"]):
+                                            db.update_transaction_status(
+                                                txn_id, bill_status="เปิดบิลแล้ว", bill_no=new_bill_no.strip(),
+                                                bill_opened_at=str(new_bill_date))
+                                        else:
+                                            db.split_and_open_bill(
+                                                txn_id, qty_to_open, bill_no=new_bill_no.strip(),
+                                                bill_opened_at=str(new_bill_date))
+                                        st.rerun()
                             else:
                                 evt_map  = {
                                     "💵 จ่ายเงิน": "จ่ายเงิน",
@@ -440,17 +450,23 @@ def render(products, customers):
                                     event_date  = fc3.date_input("วันที่", value=date.today())
                                     event_notes = st.text_input("หมายเหตุ", key=f"enotes_{txn_id}")
                                     _also_open_bill = False
+                                    _open_bill_no   = ""
                                     if is_unbilled:
                                         _also_open_bill = st.checkbox(
                                             "📄 เปิดบิลด้วย", value=False,
                                             key=f"also_open_{txn_id}",
+                                        )
+                                        _open_bill_no = st.text_input(
+                                            "เลขที่บิล (กรอกถ้าจะเปิดบิลด้วย)", key=f"also_open_bn_{txn_id}"
                                         )
                                     submit_evt  = st.form_submit_button(
                                         "💾 บันทึก", width="stretch", type="primary"
                                     )
                                 if submit_evt:
                                     error = None
-                                    if evt_type == "จ่ายเงิน + รับของ" and qty_received > 0:
+                                    if _also_open_bill and not _open_bill_no.strip():
+                                        error = "❌ กรุณาใส่เลขที่บิล"
+                                    elif evt_type == "จ่ายเงิน + รับของ" and qty_received > 0:
                                         new_paid = balance["total_paid"] + amount_paid
                                         price    = float(txn["price_per_unit"])
                                         max_ok   = floor(new_paid / price) if price > 0 else 0
@@ -476,7 +492,9 @@ def render(products, customers):
                                             st.error(f"❌ DB error: {_pe}")
                                             st.stop()
                                         if _also_open_bill:
-                                            db.update_transaction_status(txn_id, bill_status="เปิดบิลแล้ว")
+                                            db.update_transaction_status(
+                                                txn_id, bill_status="เปิดบิลแล้ว", bill_no=_open_bill_no.strip(),
+                                                bill_opened_at=str(event_date))
                                         if amount_paid > 0:
                                             _new_total_paid = balance["total_paid"] + amount_paid
                                             if _new_total_paid >= float(txn["total_amount"]) - 0.01:
@@ -575,15 +593,24 @@ def render(products, customers):
                             if _mc_mode == "📄 เปิดบิลอย่างเดียว":
                                 _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
                                 st.info(f"จะเปิดบิล {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str}")
+                                _ob_c1, _ob_c2 = st.columns(2)
+                                _ob_bill_no   = _ob_c1.text_input("เลขที่บิล", key=f"multi_openonly_bn_{customer_name}")
+                                _ob_bill_date = _ob_c2.date_input(
+                                    "วันที่เปิดบิล", value=date.today(), key=f"multi_openonly_dt_{customer_name}")
                                 if st.button("📄 เปิดบิล", type="primary",
                                              width="stretch", key=f"multi_openonly_{customer_name}") \
                                         and _guard_double_submit(f"multi_openonly_{customer_name}"):
-                                    _open_bill_ids = sel_rows.loc[_unbilled_mask, "id"].tolist()
-                                    db.update_transaction_statuses_batch(_open_bill_ids, bill_status="เปิดบิลแล้ว")
-                                    st.success(f"✅ เปิดบิลแล้ว {len(_open_bill_ids)} รายการ")
-                                    for tid in txn_ids:
-                                        st.session_state[f"chk_{tid}"] = False
-                                    st.rerun()
+                                    if not _ob_bill_no.strip():
+                                        st.error("❌ กรุณาใส่เลขที่บิล")
+                                    else:
+                                        _open_bill_ids = sel_rows.loc[_unbilled_mask, "id"].tolist()
+                                        db.update_transaction_statuses_batch(
+                                            _open_bill_ids, bill_status="เปิดบิลแล้ว", bill_no=_ob_bill_no.strip(),
+                                            bill_opened_at=str(_ob_bill_date))
+                                        st.success(f"✅ เปิดบิลแล้ว {len(_open_bill_ids)} รายการ")
+                                        for tid in txn_ids:
+                                            st.session_state[f"chk_{tid}"] = False
+                                        st.rerun()
                             else:
                                 _recv_disabled = _mc_mode == "💵 จ่ายเงินอย่างเดียว"
                                 _pay_disabled  = _mc_mode == "📦 รับของอย่างเดียว"
@@ -635,6 +662,12 @@ def render(products, customers):
                                 _mc_c1, _mc_c2 = st.columns([2, 1])
                                 mc_notes = _mc_c1.text_input("หมายเหตุ", key=f"mc_notes_{customer_name}")
                                 mc_date  = _mc_c2.date_input("วันที่", value=date.today(), key=f"mc_date_{customer_name}")
+                                _combo_bill_no = (
+                                    st.text_input(
+                                        "เลขที่บิล (สำหรับรายการที่จะเปิดบิล — ใช้วันที่ด้านบนเป็นวันที่เปิดบิลด้วย)",
+                                        key=f"mc_billno_{customer_name}")
+                                    if _any_unbilled else ""
+                                )
 
                                 _mc_recv = int(_combo_edit["รับจริง"].sum())
                                 _mc_pay  = float(_combo_edit["จ่ายจริง"].sum())
@@ -689,22 +722,31 @@ def render(products, customers):
                                     # ถ้าเท่ากับเต็มจำนวน เปิดบิลตรงๆ ไม่ต้องแยกแถว
                                     _full_open_ids = []
                                     _opened_cnt = 0
-                                    for i, row in _combo_df.iterrows():
-                                        if row["สถานะบิล"] != "ยังไม่เปิดบิล":
-                                            continue
-                                        _bill_qty = (int(_combo_edit.iloc[i]["เปิดบิลกี่ชิ้น"])
-                                                     if "เปิดบิลกี่ชิ้น" in _combo_edit.columns else 0)
-                                        _full_qty = int(row["สั่ง"])
-                                        _bill_qty = max(0, min(_bill_qty, _full_qty))
-                                        if _bill_qty <= 0:
-                                            continue
-                                        _opened_cnt += 1
-                                        if _bill_qty >= _full_qty:
-                                            _full_open_ids.append(row["_id"])
-                                        else:
-                                            db.split_and_open_bill(row["_id"], _bill_qty)
-                                    if _full_open_ids:
-                                        db.update_transaction_statuses_batch(_full_open_ids, bill_status="เปิดบิลแล้ว")
+                                    _wants_open = ("เปิดบิลกี่ชิ้น" in _combo_edit.columns
+                                                   and int(_combo_edit["เปิดบิลกี่ชิ้น"].sum()) > 0)
+                                    if _wants_open and not _combo_bill_no.strip():
+                                        st.error("❌ กรุณาใส่เลขที่บิล — ข้ามการเปิดบิลรอบนี้ (รายการรับของ/จ่ายเงินอื่นบันทึกแล้ว)")
+                                    else:
+                                        for i, row in _combo_df.iterrows():
+                                            if row["สถานะบิล"] != "ยังไม่เปิดบิล":
+                                                continue
+                                            _bill_qty = (int(_combo_edit.iloc[i]["เปิดบิลกี่ชิ้น"])
+                                                         if "เปิดบิลกี่ชิ้น" in _combo_edit.columns else 0)
+                                            _full_qty = int(row["สั่ง"])
+                                            _bill_qty = max(0, min(_bill_qty, _full_qty))
+                                            if _bill_qty <= 0:
+                                                continue
+                                            _opened_cnt += 1
+                                            if _bill_qty >= _full_qty:
+                                                _full_open_ids.append(row["_id"])
+                                            else:
+                                                db.split_and_open_bill(
+                                                    row["_id"], _bill_qty, bill_no=_combo_bill_no.strip(),
+                                                    bill_opened_at=str(mc_date))
+                                        if _full_open_ids:
+                                            db.update_transaction_statuses_batch(
+                                                _full_open_ids, bill_status="เปิดบิลแล้ว", bill_no=_combo_bill_no.strip(),
+                                                bill_opened_at=str(mc_date))
                                     _do_open_bill = _opened_cnt > 0
                                     # popup รับของ + LINE notification
                                     _mrp_pending = []
@@ -931,7 +973,7 @@ def render(products, customers):
                     # ── สร้าง timeline per bill ──────────────────────────────
                     _bills_tl: dict = {}  # bill_no → {date, total, pv, qty, events[]}
 
-                    # Phase 1: orders → bill header
+                    # Phase 1: orders → bill header (ยอดรวม/PV/qty ของทั้งบิล ไม่ว่าจะเปิดแล้วหรือยัง)
                     for _r in _l_orders:
                         _bk = _r["bill_no"] or "—"
                         if _bk not in _bills_tl:
@@ -945,6 +987,28 @@ def render(products, customers):
                         _bills_tl[_bk]["qty"]   += _r["qty_in"]
                         if _r.get("bill_status") == "เปิดบิลแล้ว":
                             _bills_tl[_bk]["bill_status"] = "เปิดบิลแล้ว"
+
+                    # Phase 1b: เหตุการณ์ "เปิดบิล"/"เบิกของ" — จัดกลุ่มตาม (บิล, วันที่เปิดบิลจริง)
+                    # ไม่ใช่วันที่สั่งซื้อครั้งแรก เพราะของอาจเบิกวันหนึ่งแต่มาเปิดบิลจริงอีกวัน
+                    # (ถ้ายังไม่เปิด ใช้วันที่สั่งซื้อแทนเพราะยังไม่มีวันที่เปิดบิลจริง)
+                    _open_groups: dict = {}  # (bill_no, date, is_opened) → {products, total, pv}
+                    for _r in _l_orders:
+                        _bk = _r["bill_no"] or "—"
+                        _is_opened = _r.get("bill_status") == "เปิดบิลแล้ว"
+                        _ed = (_r.get("bill_opened_at") or _r["date"]) if _is_opened else _r["date"]
+                        _g = _open_groups.setdefault((_bk, _ed, _is_opened), {"products": [], "total": 0.0, "pv": 0.0})
+                        _g["products"].append(f"{_r['product']} ×{_r['qty_in']}")
+                        _g["total"] += _r.get("total_amount", 0.0)
+                        _g["pv"]    += _r.get("pv", 0.0)
+                    for (_bk, _ed, _is_opened), _g in _open_groups.items():
+                        if _bk not in _bills_tl:
+                            continue
+                        _bills_tl[_bk]["events"].append({
+                            "date": _ed, "order": 0 if _is_opened else -1, "type": "เปิดบิล",
+                            "detail": ",  ".join(_g["products"]),
+                            "total": _g["total"], "pv": _g["pv"],
+                            "bill_status": "เปิดบิลแล้ว" if _is_opened else "ยังไม่เปิดบิล",
+                        })
 
                     # delivery type heuristic per bill
                     _ship_dates_set = {_r["date"] for _r in _l_ships}
@@ -966,12 +1030,7 @@ def render(products, customers):
                             _dlv = "✅ รับแล้ว"
                         else:
                             _dlv = "📦 ฝากของ"
-                        _bv["events"].append({
-                            "date": _bv["date"], "order": 0, "type": "เปิดบิล",
-                            "detail": ",  ".join(_bv["products"]),
-                            "total": _bv["total"], "pv": _bv["pv"],
-                            "bill_status": _bv["bill_status"], "delivery": _dlv,
-                        })
+                        _bv["delivery"] = _dlv
 
                     # Phase 2: payment events grouped by (bill, date)
                     _pay_groups: dict = {}
@@ -1081,7 +1140,7 @@ def render(products, customers):
                                 _bill_rows = _bill_rows.sort_values("_dt")
                                 _disp = _bill_rows[_l_table_cols].reset_index(drop=True)
                                 _disp["หมายเหตุ"] = _disp["หมายเหตุ"].fillna("").apply(_fmt_note)
-                                _dlv_raw = next((e.get("delivery","") for e in _bv["events"] if e.get("delivery")), "")
+                                _dlv_raw = _bv.get("delivery", "")
                                 _disp["สถานะรับของ"] = _dlv_raw.split(" ", 1)[1] if " " in _dlv_raw else _dlv_raw
                                 _disp = _disp[_l_table_cols_disp]
                                 st.dataframe(

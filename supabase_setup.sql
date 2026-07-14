@@ -37,6 +37,9 @@ CREATE TABLE transactions (
     pay_status TEXT NOT NULL CHECK (pay_status IN ('จ่ายแล้ว', 'ค้างจ่าย', 'COD', 'COD จ่ายแล้ว')),
     notes TEXT,
     bill_no TEXT,  -- เลขที่บิล YYMMDD-NNN (get_next_bill_no) — เพิ่มทีหลังผ่าน ALTER TABLE เช่นกัน
+    bill_opened_at DATE,  -- วันที่ "เปิดบิล" จริง (แยกจาก date = วันที่เบิกของ/สั่งซื้อ)
+                          -- ยังไม่มีในโปรดักชัน ณ ตอนที่เพิ่มโค้ดนี้ — ต้องรัน
+                          -- ALTER TABLE transactions ADD COLUMN bill_opened_at DATE; เอง
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
