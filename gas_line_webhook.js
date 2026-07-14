@@ -50,7 +50,7 @@ function _getProducts() {
   if (_cachedProducts) return _cachedProducts;
   var _raw = _sbGet('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id');
   if (!Array.isArray(_raw)) {
-    // DEBUG ชั่วคราว — โยน error ที่มีเนื้อหาจริงจาก Supabase ติดไปด้วย
+    // โยน error ที่มีเนื้อหาจริงจาก Supabase ติดไปด้วย ดีกว่าเงียบแล้วคืน [] ให้ order พังทีหลัง
     throw new Error('_getProducts non-array response: ' + JSON.stringify(_raw));
   }
   _cachedProducts = _raw.map(function(p) {
@@ -91,16 +91,6 @@ function doPost(e) {
 
   if (event.type !== 'message' || event.message.type !== 'text') return;
 
-  // ── DEBUG ชั่วคราว — พิมพ์ "debug" ใน LINE เพื่อดูค่าตรงนี้ ──────────────────
-  if (event.message.text.trim().toLowerCase() === 'debug') {
-    sendReply(event.replyToken,
-      'token match=' + _tokenOk +
-      '\nCHANNEL_ACCESS_TOKEN len=' + (CHANNEL_ACCESS_TOKEN ? CHANNEL_ACCESS_TOKEN.length : 'MISSING') +
-      '\nSUPABASE_URL=' + SUPABASE_URL +
-      '\nSUPABASE_KEY len=' + (SUPABASE_KEY ? SUPABASE_KEY.length : 'MISSING'));
-    return;
-  }
-  // ─────────────────────────────────────────────────────────────────────────
   var replyToken = event.replyToken;
   var rawMsg = event.message.text.trim();
 
@@ -389,15 +379,12 @@ function doPost(e) {
 
   sendReply(replyToken, summaryText + translatedNote);
   } catch (err) {
-    // DEBUG ชั่วคราว — เก็บ error ไว้ดูผ่าน ?debug=1
-    var _dbgKey = SUPABASE_KEY || '';
-    var _dbgTok = CHANNEL_ACCESS_TOKEN || '';
+    // GAS ไม่มี log ที่ดูง่าย — เก็บ error ล่าสุดไว้ใน Script Property แทน
+    // (ดูได้ผ่าน GAS Editor > Project Settings > Script Properties เท่านั้น ไม่มี
+    // endpoint สาธารณะให้ดูอีกแล้ว และไม่เก็บเศษ secret ใด ๆ ไว้ในนี้)
     _scriptProps.setProperty('LAST_ERROR',
       Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss') + ' | ' +
       String(err) + (err.stack ? (' | STACK: ' + err.stack) : '') +
-      ' | SUPABASE_URL=' + SUPABASE_URL +
-      ' | SUPABASE_KEY len=' + _dbgKey.length + ' last6=' + _dbgKey.slice(-6) +
-      ' | CHANNEL_ACCESS_TOKEN len=' + _dbgTok.length + ' last6=' + _dbgTok.slice(-6) +
       ' | replyToken=' + (typeof replyToken !== 'undefined' ? replyToken : 'n/a'));
   }
 }
@@ -1352,10 +1339,6 @@ function handleOldGoods(name, items, payAmount, billNo, replyToken, confirmed, s
 // ─── doGet — product list ─────────────────────────────────────────────────────
 
 function doGet(e) {
-  // DEBUG ชั่วคราว — เปิด URL ของ deployment ต่อท้ายด้วย ?debug=1 เพื่อดู error ล่าสุด
-  if (e.parameter && e.parameter.debug) {
-    return ContentService.createTextOutput(_scriptProps.getProperty('LAST_ERROR') || '(no error recorded)');
-  }
   var products = _getProducts().map(function(p) {
     return { code: p[0].toUpperCase(), nameTH: p[1], nameMM: p[2], price: p[3], pv: p[4] };
   });
