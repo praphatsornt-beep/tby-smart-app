@@ -42,6 +42,8 @@ def render(products, customers):
             if _bill_list:
                 _sel_bill = st.selectbox("เลขที่บิล", _bill_list, key="del_bill_sel")
                 _bill_rows = db.get_bill_details(_sel_bill)
+                _bill_cust_names = {(r.get("customers") or {}).get("name", "—") for r in _bill_rows}
+                _bill_no_collision = len(_bill_cust_names) > 1
                 if _bill_rows:
                     _bill_date = (_bill_rows[0].get("date") or "")[:10]
                     _bill_cust = (_bill_rows[0].get("customers") or {}).get("name", "—")
@@ -56,10 +58,19 @@ def render(products, customers):
                     st.dataframe(_preview_df, width="stretch", hide_index=True)
                     _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
                     st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
-                    st.warning(f"⚠️ จะลบบิล **{_sel_bill}** ({_bill_cust}) และทุกรายการข้างต้น — กู้คืนไม่ได้")
+                    if _bill_no_collision:
+                        st.error(
+                            f"🚨 เลขที่บิล {_sel_bill} นี้ถูกใช้ซ้ำกันโดยหลายลูกค้า "
+                            f"({', '.join(_bill_cust_names)}) — ลบตรงนี้จะลบของทุกคนที่ใช้เลขนี้ปนกันหมด "
+                            "กรุณาแก้เลขบิลให้ไม่ซ้ำกันก่อน (ผ่าน 'ประวัติทั้งหมด' > แก้ไขรายการ) แล้วค่อยลบทีละบิล"
+                        )
+                    else:
+                        st.warning(f"⚠️ จะลบบิล **{_sel_bill}** ({_bill_cust}) และทุกรายการข้างต้น — กู้คืนไม่ได้")
                 st.divider()
-                _del_chk_main = st.checkbox("ยืนยันการลบ", key="del_bill_confirm")
-                if st.button("🗑️ ลบบิลนี้", type="primary", disabled=not _del_chk_main, key="del_bill_btn"):
+                _del_chk_main = st.checkbox(
+                    "ยืนยันการลบ", key="del_bill_confirm", disabled=_bill_no_collision)
+                if st.button("🗑️ ลบบิลนี้", type="primary",
+                             disabled=not _del_chk_main or _bill_no_collision, key="del_bill_btn"):
                     _n = db.delete_bill(_sel_bill)
                     st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")
                     st.rerun()
@@ -388,12 +399,25 @@ def render(products, customers):
                             )
 
                             is_unbilled = txn["bill_status"] == "ยังไม่เปิดบิล"
-                            radio_opts  = (["📄 เปิดบิล"] if is_unbilled else []) + [
+                            radio_opts  = (["📄 เปิดบิล"] if is_unbilled else ["↩️ ย้อนกลับเป็นยังไม่เปิดบิล"]) + [
                                 "💵 จ่ายเงิน", "📦 รับของ", "💵+📦 จ่ายเงิน + รับของ"
                             ]
                             action = st.radio("บันทึก", radio_opts, horizontal=True, key=f"etype_{txn_id}")
 
-                            if action == "📄 เปิดบิล":
+                            if action == "↩️ ย้อนกลับเป็นยังไม่เปิดบิล":
+                                st.caption(
+                                    f"จะย้อนรายการนี้ (บิล {txn.get('bill_no') or '—'}) กลับเป็น "
+                                    "\"ยังไม่เปิดบิล\" — ล้างเลขที่บิล/วันที่เปิดบิลของแถวนี้ทิ้งด้วย "
+                                    "(ไม่กระทบแถวอื่นที่อาจใช้เลขบิลเดียวกันอยู่)"
+                                )
+                                _revert_confirm = st.checkbox(
+                                    "ยืนยันการย้อนกลับ", key=f"revert_open_chk_{txn_id}")
+                                if st.button("↩️ ย้อนกลับ", type="secondary", disabled=not _revert_confirm,
+                                             key=f"revert_open_btn_{txn_id}"):
+                                    db.revert_bill_open(txn_id)
+                                    st.success("✅ ย้อนกลับเป็นยังไม่เปิดบิลแล้ว")
+                                    st.rerun()
+                            elif action == "📄 เปิดบิล":
                                 with st.form(f"bill_{txn_id}", clear_on_submit=True):
                                     bn1, bn2 = st.columns(2)
                                     new_bill_no   = bn1.text_input("เลขที่บิล")
@@ -408,8 +432,13 @@ def render(products, customers):
                                         "📄 เปิดบิล", width="stretch", type="primary"
                                     )
                                 if submit_bill:
+                                    _bn_conflict = db.find_bill_no_conflict(
+                                        new_bill_no.strip(), _cust_map_all[customer_name]["id"]
+                                    ) if new_bill_no.strip() else None
                                     if not new_bill_no.strip():
                                         st.error("❌ กรุณาใส่เลขที่บิล")
+                                    elif _bn_conflict:
+                                        st.error(f"❌ เลขที่บิล {new_bill_no.strip()} ถูกใช้แล้วโดย {_bn_conflict}")
                                     else:
                                         if qty_to_open == int(txn["qty"]):
                                             db.update_transaction_status(
@@ -464,8 +493,13 @@ def render(products, customers):
                                     )
                                 if submit_evt:
                                     error = None
+                                    _open_bn_conflict = db.find_bill_no_conflict(
+                                        _open_bill_no.strip(), _cust_map_all[customer_name]["id"]
+                                    ) if _also_open_bill and _open_bill_no.strip() else None
                                     if _also_open_bill and not _open_bill_no.strip():
                                         error = "❌ กรุณาใส่เลขที่บิล"
+                                    elif _open_bn_conflict:
+                                        error = f"❌ เลขที่บิล {_open_bill_no.strip()} ถูกใช้แล้วโดย {_open_bn_conflict}"
                                     elif evt_type == "จ่ายเงิน + รับของ" and qty_received > 0:
                                         new_paid = balance["total_paid"] + amount_paid
                                         price    = float(txn["price_per_unit"])
@@ -556,7 +590,7 @@ def render(products, customers):
                                         f"🗑️ ลบบิล {_del_bno}", type="primary",
                                         key=f"del_bill_now_{txn_id}",
                                     ):
-                                        db.delete_bill(_del_bno)
+                                        db.delete_bill(_del_bno, customer_id=_cust_map_all[customer_name]["id"])
                                         st.success(f"✅ ลบบิล {_del_bno} แล้ว")
                                         st.rerun()
 
@@ -600,8 +634,13 @@ def render(products, customers):
                                 if st.button("📄 เปิดบิล", type="primary",
                                              width="stretch", key=f"multi_openonly_{customer_name}") \
                                         and _guard_double_submit(f"multi_openonly_{customer_name}"):
+                                    _ob_conflict = db.find_bill_no_conflict(
+                                        _ob_bill_no.strip(), _cust_map_all[customer_name]["id"]
+                                    ) if _ob_bill_no.strip() else None
                                     if not _ob_bill_no.strip():
                                         st.error("❌ กรุณาใส่เลขที่บิล")
+                                    elif _ob_conflict:
+                                        st.error(f"❌ เลขที่บิล {_ob_bill_no.strip()} ถูกใช้แล้วโดย {_ob_conflict}")
                                     else:
                                         _open_bill_ids = sel_rows.loc[_unbilled_mask, "id"].tolist()
                                         db.update_transaction_statuses_batch(
@@ -724,8 +763,14 @@ def render(products, customers):
                                     _opened_cnt = 0
                                     _wants_open = ("เปิดบิลกี่ชิ้น" in _combo_edit.columns
                                                    and int(_combo_edit["เปิดบิลกี่ชิ้น"].sum()) > 0)
+                                    _combo_conflict = db.find_bill_no_conflict(
+                                        _combo_bill_no.strip(), _cust_map_all[customer_name]["id"]
+                                    ) if _wants_open and _combo_bill_no.strip() else None
                                     if _wants_open and not _combo_bill_no.strip():
                                         st.error("❌ กรุณาใส่เลขที่บิล — ข้ามการเปิดบิลรอบนี้ (รายการรับของ/จ่ายเงินอื่นบันทึกแล้ว)")
+                                    elif _combo_conflict:
+                                        st.error(f"❌ เลขที่บิล {_combo_bill_no.strip()} ถูกใช้แล้วโดย {_combo_conflict} "
+                                                 "— ข้ามการเปิดบิลรอบนี้ (รายการรับของ/จ่ายเงินอื่นบันทึกแล้ว)")
                                     else:
                                         for i, row in _combo_df.iterrows():
                                             if row["สถานะบิล"] != "ยังไม่เปิดบิล":
@@ -816,7 +861,8 @@ def render(products, customers):
                                         f"🗑️ ลบ {len(_del_bnos)} บิล", type="primary",
                                         key=f"del_bill_now_multi_{customer_name}",
                                     ):
-                                        _total_del = sum(db.delete_bill(b) for b in _del_bnos)
+                                        _del_cid = _cust_map_all[customer_name]["id"]
+                                        _total_del = sum(db.delete_bill(b, customer_id=_del_cid) for b in _del_bnos)
                                         st.success(f"✅ ลบแล้ว {len(_del_bnos)} บิล ({_total_del} รายการ)")
                                         st.rerun()
 
@@ -1225,7 +1271,7 @@ def render(products, customers):
                                     )
                                     if st.button("🗑️ ลบบิล", disabled=not _ldel_bill_chk,
                                                   type="secondary", key=f"ldel_bill_btn_{_bk}_{_l_sel}"):
-                                        _n = db.delete_bill(_bk)
+                                        _n = db.delete_bill(_bk, customer_id=_l_cust["id"])
                                         st.success(f"✅ ลบบิล {_bk} แล้ว ({_n} รายการ)")
                                         st.rerun()
 
@@ -1495,11 +1541,32 @@ def render(products, customers):
                         if _txn_upd:
                             db.update_transaction(_tid, _txn_upd)
                         if "bill_status" in _ch or "pay_status" in _ch:
-                            db.update_transaction_status(
-                                _tid,
-                                bill_status=_ch.get("bill_status"),
-                                pay_status=_ch.get("pay_status"),
-                            )
+                            _old_bstatus = str(show_df.iloc[_i]["สถานะบิล"])
+                            _new_bstatus = _ch.get("bill_status")
+                            if _new_bstatus == "ยังไม่เปิดบิล" and _old_bstatus == "เปิดบิลแล้ว":
+                                # ย้อนเปิดบิล — ล้าง bill_no/bill_opened_at ให้สอดคล้องกันด้วย
+                                # ไม่ใช่แค่เปลี่ยน bill_status เฉยๆ (กันเลขบิลจริงค้างอยู่ทั้งที่
+                                # สถานะบอกว่ายังไม่เปิดบิล)
+                                db.revert_bill_open(_tid)
+                                if _ch.get("pay_status"):
+                                    db.update_transaction_status(_tid, pay_status=_ch.get("pay_status"))
+                            elif _new_bstatus == "เปิดบิลแล้ว" and _old_bstatus == "ยังไม่เปิดบิล":
+                                # ตารางนี้ไม่มีช่องกรอกเลขที่บิลจริง — ห้ามเปิดบิลผ่านจุดนี้
+                                # เพื่อกันเปิดบิลลอยๆ ไม่มีเลขบิลจริงผูกอยู่ (ต้องผ่านหน้า
+                                # "ยอดค้าง/จัดการบิล" ที่มีช่องกรอกเลขบิล+เช็คเลขซ้ำแทน)
+                                st.warning(
+                                    f"⚠️ ข้ามการเปิดบิลของแถว {_tid[:8]}… ผ่านตารางนี้ — "
+                                    "กรุณาใช้ปุ่ม \"📄 เปิดบิล\" ในแท็บ ยอดค้าง/จัดการบิล แทน "
+                                    "(ต้องกรอกเลขที่บิลจริง)"
+                                )
+                                if _ch.get("pay_status"):
+                                    db.update_transaction_status(_tid, pay_status=_ch.get("pay_status"))
+                            else:
+                                db.update_transaction_status(
+                                    _tid,
+                                    bill_status=_ch.get("bill_status"),
+                                    pay_status=_ch.get("pay_status"),
+                                )
                     st.success("✅ บันทึกแล้ว")
                     st.session_state.pop("hist_table", None)
                     st.rerun()
@@ -1585,26 +1652,39 @@ def render(products, customers):
                         )
 
                     if st.form_submit_button("💾 บันทึกการแก้ไข", width="stretch", type="primary"):
-                        e_receive_now = e_receipt == "รับของแล้ว"
-                        e_initial_qty = int(e_qty) if e_receive_now else 0
-                        e_txn_type = "เบิกของก่อน" if e_bill == "ยังไม่เปิดบิล" and e_receive_now else "ขายปกติ"
-                        db.update_transaction(edit_txn_id, {
-                            "date": str(e_date),
-                            "customer_id": customer_map_e[e_customer]["id"],
-                            "product_id": e_sel_prod["id"],
-                            "product_name": e_sel_prod["name"],
-                            "qty": int(e_qty),
-                            "price_per_unit": float(e_sel_prod["price"]),
-                            "points_per_unit": float(e_sel_prod["points_per_unit"]),
-                            "total_amount": e_total,
-                            "initial_qty_received": e_initial_qty,
-                            "transaction_type": e_txn_type,
-                            "bill_status": e_bill,
-                            "pay_status": e_pay,
-                            "notes": e_notes,
-                        })
-                        st.success("✅ แก้ไขแล้ว")
-                        st.rerun()
+                        if e_bill == "เปิดบิลแล้ว" and et["bill_status"] == "ยังไม่เปิดบิล":
+                            # ช่องนี้ไม่มีที่กรอกเลขที่บิลจริง — ห้ามเปิดบิลผ่านจุดนี้ กัน
+                            # เปิดบิลลอยๆ ไม่มีเลขบิลจริงผูกอยู่
+                            st.error(
+                                "❌ เปลี่ยนเป็น \"เปิดบิลแล้ว\" ผ่านช่องนี้ไม่ได้ — ต้องกรอกเลขที่บิลจริง "
+                                "ผ่านปุ่ม \"📄 เปิดบิล\" ในแท็บ ยอดค้าง/จัดการบิล แทน"
+                            )
+                        else:
+                            e_receive_now = e_receipt == "รับของแล้ว"
+                            e_initial_qty = int(e_qty) if e_receive_now else 0
+                            e_txn_type = "เบิกของก่อน" if e_bill == "ยังไม่เปิดบิล" and e_receive_now else "ขายปกติ"
+                            _e_upd = {
+                                "date": str(e_date),
+                                "customer_id": customer_map_e[e_customer]["id"],
+                                "product_id": e_sel_prod["id"],
+                                "product_name": e_sel_prod["name"],
+                                "qty": int(e_qty),
+                                "price_per_unit": float(e_sel_prod["price"]),
+                                "points_per_unit": float(e_sel_prod["points_per_unit"]),
+                                "total_amount": e_total,
+                                "initial_qty_received": e_initial_qty,
+                                "transaction_type": e_txn_type,
+                                "bill_status": e_bill,
+                                "pay_status": e_pay,
+                                "notes": e_notes,
+                            }
+                            if e_bill == "ยังไม่เปิดบิล" and et["bill_status"] == "เปิดบิลแล้ว":
+                                # ย้อนเปิดบิล — ล้างเลขที่บิลจริง/วันที่เปิดเดิมทิ้งด้วย
+                                _e_upd["bill_no"] = None
+                                _e_upd["bill_opened_at"] = None
+                            db.update_transaction(edit_txn_id, _e_upd)
+                            st.success("✅ แก้ไขแล้ว")
+                            st.rerun()
 
         st.divider()
         with st.expander("📦 ประวัติการส่งของ", expanded=False):

@@ -711,6 +711,14 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
         if all_df_p.empty:
             st.warning(f"ไม่พบบิล {preselected_bill}")
             return
+        _cust_names_p = all_df_p["ลูกค้า"].unique()
+        if len(_cust_names_p) > 1:
+            st.error(
+                f"🚨 เลขที่บิล {preselected_bill} นี้ถูกใช้ซ้ำกันโดยหลายลูกค้า "
+                f"({', '.join(_cust_names_p)}) — ไม่แสดงรายละเอียดบิลนี้จนกว่าจะแก้เลขบิลให้ไม่ซ้ำกันก่อน "
+                "(ผ่าน 'ประวัติทั้งหมด' > แก้ไขรายการ)"
+            )
+            return
         sel_p = all_df_p["ลูกค้า"].iloc[0]
         _bill_picked = preselected_bill
     else:

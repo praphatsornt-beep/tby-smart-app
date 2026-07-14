@@ -607,6 +607,11 @@ def render(tab1, products, customers, customer_map):
                     if m_bill is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")
                     if m_bill == "เปิดบิลแล้ว" and not m_bill_no.strip():
                         m_errors.append("⚠️ ยังไม่ได้ใส่เลขที่บิล")
+                    elif m_bill == "เปิดบิลแล้ว" and m_bill_no.strip() and m_customer != "— เลือกลูกค้า —":
+                        _bn_conflict = db.find_bill_no_conflict(
+                            m_bill_no.strip(), customer_map[m_customer]["id"])
+                        if _bn_conflict:
+                            m_errors.append(f"⚠️ เลขที่บิล {m_bill_no.strip()} ถูกใช้แล้วโดย {_bn_conflict}")
 
                 if m_errors:
                     st.markdown(

@@ -168,6 +168,23 @@ def get_next_bill_no(date_str: str) -> str:
     return f"{prefix}-{max(nums, default=0) + 1:03d}"
 
 
+def find_bill_no_conflict(bill_no: str, customer_id: str) -> str | None:
+    """เช็คเลขบิลจริง (ที่ staff พิมพ์เองตอนกด "เปิดบิล" — คือเลขบิลจากระบบหลัก/
+    Zhulian ไม่ใช่เลขอ้างอิงอัตโนมัติตอนเบิกของ) ว่าถูกใช้โดยลูกค้าคนอื่นอยู่แล้ว
+    หรือไม่ (กันพิมพ์ชนกันข้ามลูกค้าโดยไม่ตั้งใจ — จะกระทบเอกสารจริงที่ใช้ยื่นภาษี)
+    คืนชื่อลูกค้าที่ใช้เลขนี้ชนอยู่ถ้ามี, None ถ้าไม่ชน (ไม่มีใครใช้ หรือเป็นบิลของ
+    ลูกค้าคนนี้เอง — เปิดบิลเดิมเพิ่มเติมได้ตามปกติ)"""
+    if not bill_no:
+        return None
+    rows = (get_supabase().table("transactions").select("customer_id")
+            .eq("bill_no", bill_no).neq("customer_id", customer_id).limit(1).execute().data)
+    if not rows:
+        return None
+    other_cid = rows[0]["customer_id"]
+    cust = get_supabase().table("customers").select("name").eq("id", other_cid).limit(1).execute().data
+    return cust[0]["name"] if cust else other_cid
+
+
 def _clear_partial_event_caches() -> None:
     get_all_transactions_df.clear()
     get_outstanding_df.clear()
@@ -306,6 +323,18 @@ def update_transaction(transaction_id: str, data: dict) -> None:
     _clear_transaction_caches()
 
 
+def revert_bill_open(transaction_id: str) -> None:
+    """ย้อนรายการที่เปิดบิลแล้วกลับเป็นยังไม่เปิดบิล (เช่น เผลอเปิดผิดเลข/ผิดวัน) —
+    ล้าง bill_no/bill_opened_at ทิ้งด้วย ไม่ใช่แค่เปลี่ยน bill_status เฉยๆ เพราะไม่งั้น
+    แถวจะโชว์ "ยังไม่เปิดบิล" แต่ยังพ่วงเลขบิลจริง/วันที่เปิดเดิมค้างอยู่"""
+    get_supabase().table("transactions").update({
+        "bill_status": "ยังไม่เปิดบิล",
+        "bill_no": None,
+        "bill_opened_at": None,
+    }).eq("id", transaction_id).execute()
+    _clear_transaction_caches()
+
+
 def update_transaction_status(transaction_id: str, bill_status: str = None, pay_status: str = None,
                                bill_no: str = None, bill_opened_at: str = None) -> None:
     updates = {}
@@ -432,13 +461,20 @@ def bill_has_partial_events(bill_no: str) -> bool:
     return bool(events)
 
 
-def delete_bill(bill_no: str) -> int:
+def delete_bill(bill_no: str, customer_id: str = None) -> int:
+    """ลบทุก transaction ที่มีเลขบิลนี้ — ถ้าระบุ customer_id จะกรองเฉพาะของลูกค้า
+    คนนั้นด้วย (defense-in-depth เผื่อเลขบิลจริงที่ staff พิมพ์เองไปชนกับของลูกค้า
+    อื่นโดยไม่ตั้งใจ — กันลบข้ามลูกค้า)"""
     db = get_supabase()
-    rows = db.table("transactions").select("id").eq("bill_no", bill_no).execute().data
+    q = db.table("transactions").select("id").eq("bill_no", bill_no)
+    if customer_id:
+        q = q.eq("customer_id", customer_id)
+    rows = q.execute().data
     txn_ids = [r["id"] for r in rows]
     for i in range(0, len(txn_ids), 50):
         db.table("partial_events").delete().in_("transaction_id", txn_ids[i:i + 50]).execute()
-    db.table("transactions").delete().eq("bill_no", bill_no).execute()
+    if txn_ids:
+        db.table("transactions").delete().in_("id", txn_ids).execute()
     _clear_transaction_caches()
     return len(rows)
 

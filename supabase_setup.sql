@@ -49,13 +49,15 @@ CREATE TABLE partial_events (
     date DATE NOT NULL,
     transaction_id TEXT NOT NULL REFERENCES transactions(id) ON DELETE CASCADE,
     qty_received INTEGER NOT NULL DEFAULT 0 CHECK (qty_received >= 0),
-    -- ⚠️ database.py:split_and_open_bill() insert แถว amount_paid ติดลบตรงๆ
-    -- (correction event ตอนแยกเปิดบิลบางส่วน โอนยอดจ่ายเกินไปให้รายการที่แยก)
-    -- ถ้า CHECK นี้ยังบังคับใช้จริงในโปรดักชัน โค้ดจุดนั้นจะ error ทุกครั้ง —
-    -- ต้อง verify ก่อนรันไฟล์นี้ใหม่ว่า production ยังมี constraint นี้อยู่จริงไหม
-    -- (SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
-    --  WHERE conrelid = 'partial_events'::regclass AND contype = 'c';)
-    amount_paid NUMERIC(10,2) NOT NULL DEFAULT 0 CHECK (amount_paid >= 0),
+    -- amount_paid ไม่มี CHECK >= 0 โดยตั้งใจ — database.py:split_and_open_bill()
+    -- insert แถวติดลบตรงๆ เป็น correction event ตอนแยกเปิดบิลบางส่วน (โอนยอดจ่าย
+    -- เกินไปให้รายการที่แยก) เคยมี CHECK (amount_paid >= 0) มาก่อนแล้วชนกับโค้ด
+    -- จุดนี้จริงในโปรดักชัน (verify แล้ว 2026-07-15 เจอ constraint
+    -- partial_events_amount_paid_check บังคับใช้อยู่จริง) จึง DROP constraint นั้น
+    -- ทิ้งแล้ว — ฝั่ง UI (record_ui.py/bill_detail_ui.py) ยังกัน negative จากผู้ใช้
+    -- ด้วย number_input(min_value=0.0) อยู่แล้วทุกจุด จึงไม่มีช่องให้ค่าติดลบหลุด
+    -- เข้ามาจากที่อื่นนอกจาก correction ที่ตั้งใจนี้จุดเดียว
+    amount_paid NUMERIC(10,2) NOT NULL DEFAULT 0,
     event_type TEXT NOT NULL CHECK (event_type IN ('รับของ', 'จ่ายเงิน', 'ทั้งคู่')),
     notes TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW()
