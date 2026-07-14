@@ -351,8 +351,8 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 19
         max-width: 72px !important;
     }
     [data-testid="stSidebarContent"] {
-        padding-left: 4px !important;
-        padding-right: 4px !important;
+        padding-left: 12px !important;
+        padding-right: 12px !important;
     }
     [data-testid="stSidebar"] [data-testid="stElementContainer"],
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
@@ -1280,8 +1280,8 @@ if st.session_state["_sidebar_compact"]:
             max-width: 72px !important;
         }
         [data-testid="stSidebarContent"] {
-            padding-left: 4px !important;
-            padding-right: 4px !important;
+            padding-left: 12px !important;
+            padding-right: 12px !important;
         }
         [data-testid="stSidebar"] [data-testid="stElementContainer"],
         [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
