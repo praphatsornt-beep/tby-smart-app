@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
-from math import ceil, floor
+from math import ceil
 import uuid
 
 import database as db
@@ -14,7 +14,7 @@ from ui_helpers import (
     _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
-    get_bulky_presets, _render_cart_card, _cart_add_items,
+    get_bulky_presets, _render_cart_card, _cart_add_items, _guard_double_submit,
 )
 import carriers as carr
 
@@ -86,7 +86,6 @@ def render(tab1, products, customers, customer_map):
             elif not customers:
                 st.warning("⚠️ ยังไม่มีข้อมูลลูกค้า กรุณาเพิ่มลูกค้าใน Tab ⚙️ ก่อน")
             else:
-                product_map = {p["name"]: p for p in products}
                 customer_map = {c["name"]: c for c in customers}
 
                 # ── ค้นหาลูกค้าจากเบอร์โทร ─────────────────────────────────────
@@ -247,7 +246,6 @@ def render(tab1, products, customers, customer_map):
                     _cid_detect = customer_map[m_customer]["id"]
                     if st.session_state.get("_prev_shipping_cid") != _cid_detect:
                         st.session_state["_prev_shipping_cid"] = _cid_detect
-                        _ca_d = customer_map[m_customer]
                         for _k, _v in [
                             ("r_name",  ""),
                             ("r_phone", ""),
@@ -505,7 +503,6 @@ def render(tab1, products, customers, customer_map):
                 m_cod     = (m_pay == "COD")
                 m_receipt = "ฝากของ" if m_delivery == "ฝากของ" else "รับของแล้ว"
                 m_postcode = ""
-                m_zone     = "normal"
                 m_carrier  = "Flash Express"
                 f_sur = s_sur = 0
                 f_zone = s_zone = ""
@@ -524,7 +521,7 @@ def render(tab1, products, customers, customer_map):
                     if "_staged_carrier" in st.session_state:
                         st.session_state["m_carrier"] = st.session_state.pop("_staged_carrier")
                     m_carrier = st.session_state.get("m_carrier", "Flash Express")
-                    m_iship_note = st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key="m_iship_note")
+                    st.text_input("📝 หมายเหตุ iShip (ไม่บังคับ)", placeholder="เช่น ฝากสินค้าเพิ่ม...", key="m_iship_note")
 
                 # auto-select carrier จาก weight + location (รันทุกครั้งที่ items หรือ postcode เปลี่ยน)
                 if m_delivery == "ส่งพัสดุ" and len(m_postcode.strip()) == 5:
@@ -535,8 +532,6 @@ def render(tab1, products, customers, customer_map):
                         st.session_state["_carrier_sig"]    = _sig
                         st.session_state["_staged_carrier"] = _optimal
                         st.rerun()
-
-                COD_FEE_RATE = 0.0321  # 3.21%
 
                 if m_delivery == "ส่งพัสดุ" and (f_zone or s_zone):
                     _zone_label = f_zone or s_zone
@@ -554,7 +549,7 @@ def render(tab1, products, customers, customer_map):
                         fees_all  = carrier_fees(_raw_weight, m_postcode)
                         ship_fee  = fees_all[m_carrier]["total"] if m_postcode else calc_shipping(_raw_weight, m_postcode)
                         _base     = total_amt + ship_fee
-                        cod_fee   = round(_base * COD_FEE_RATE, 2) if m_cod else 0
+                        cod_fee   = calc_logic.cod_fee(_base) if m_cod else 0
                         collect   = _base + cod_fee if m_cod else _base
                         net_recv  = _base
                         _amt_label = f"🧾 ยอดสินค้า (ใหม่ {total_amt:,.0f} + เก่า {_rx_total_pay:,.0f})" if _rx_total_pay > 0.01 else "🧾 ยอดสินค้า"
@@ -634,7 +629,7 @@ def render(tab1, products, customers, customer_map):
                     _submit_clicked = st.button("💾 บันทึกทั้งหมด", type="primary", width="stretch",
                                                  key="m_submit", disabled=bool(m_errors))
 
-                if _submit_clicked:
+                if _submit_clicked and _guard_double_submit("m_submit"):
                     customer     = customer_map[m_customer]
                     is_shipping  = m_delivery == "ส่งพัสดุ"
                     _raw_w_save  = raw_weight_g(valid_items, _rx_extra_weight_g)
@@ -654,7 +649,7 @@ def render(tab1, products, customers, customer_map):
                         receive_now = m_receipt == "รับของแล้ว"
                         if m_cod:
                             _base_cod  = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
-                            cod_amount = round(_base_cod * COD_FEE_RATE, 2)
+                            cod_amount = calc_logic.cod_fee(_base_cod)
                             collect    = _base_cod + cod_amount
                             _cod_custom_val = st.session_state.get("m_cod_custom", 0)
                             if _cod_custom_val and int(_cod_custom_val) != int(ceil(collect)):
@@ -733,27 +728,6 @@ def render(tab1, products, customers, customer_map):
                         _new_items = [{"product_id": p["id"], "name": p["name"], "qty": qty}
                                       for p, qty, _ in valid_items]
                         _all_items = _new_items + _old_ship_items
-                        _prod_codes  = " ".join(f"{p['id'].upper()}-{qty}" for p, qty, _ in valid_items)
-                        _iship_args = {
-                            "dst_name":    r_name or customer["name"],
-                            "dst_phone":   r_phone,
-                            "address_line": r_addr_line,
-                            "district":    r_district,
-                            "amphure":     r_amphure,
-                            "province":    r_province,
-                            "zipcode":     m_postcode,
-                            "weight_kg":   total_w_g / 1000,
-                            "cod_amount":  ceil(collect) if m_cod else 0,
-                            "carrier":      m_carrier,
-                            "remark":       " ".join(filter(None, [customer['name'], _prod_codes, st.session_state.get("m_iship_note","").strip()])),
-                            "item_detail":  ", ".join(f"{it['name']} x{it['qty']}" for it in _all_items),
-                            "products":     [{"name": it["name"], "qty": it["qty"],
-                                              "price": float(next((p["price"] for p, q, _ in valid_items if p["id"] == it["product_id"]), 0))}
-                                             for it in _all_items],
-                            "sender_name":  customer["name"],
-                            "_items":       _all_items,
-                            "_customer_id": customer["id"],
-                        }
                         if iship_api.is_configured():
                             st.session_state.pop("_cs_carrier_sel", None)
                             st.session_state["_iship_carrier_select"] = {
@@ -1357,12 +1331,15 @@ def render(tab1, products, customers, customer_map):
                     st.error("กรุณากรอกชื่อผู้รับ")
                 elif not _sp_pc.strip():
                     st.error("กรุณากรอกรหัสไปรษณีย์")
+                elif not _guard_double_submit("sp_save"):
+                    pass  # กดซ้ำเร็วเกินไป (เน็ตช้า/ใจร้อน) — ข้ามโดยไม่แจ้ง error
                 else:
                     _sp_new_id = str(uuid.uuid4())
                     _sp_wt = _sp_total_weight / 1000
                     try:
                         db.create_shipment({
                             "id":             _sp_new_id,
+                            "created_at":     str(_sp_date),
                             "customer_id":    _sp_cid or None,
                             "recipient_name": _sp_rname.strip(),
                             "phone":          _sp_rphone.strip(),
@@ -1390,25 +1367,6 @@ def render(tab1, products, customers, customer_map):
                         _sp_notes.strip(),
                         _sp_iship_note.strip(),
                     ]))
-                    _sp_iship_args = {
-                        "dst_name":     _sp_rname.strip(),
-                        "dst_phone":    _sp_rphone.strip(),
-                        "address_line": _sp_al.strip(),
-                        "district":     _sp_dt.strip(),
-                        "amphure":      _sp_am.strip(),
-                        "province":     _sp_pv.strip(),
-                        "zipcode":      _sp_pc.strip(),
-                        "weight_kg":    max(0.5, _sp_wt),
-                        "cod_amount":   0,
-                        "carrier":      _sp_carrier,
-                        "remark":       _sp_remark,
-                        "item_detail":  ", ".join(f"{it['name']} x{it['qty']}" for it in _sp_items) or _sp_remark,
-                        "products":     [{"name": it["name"], "qty": it["qty"], "price": 0} for it in _sp_items],
-                        "_items":       _sp_items,
-                        "_shipment_id":   _sp_new_id,
-                        "_customer_id":   _sp_cid or "",
-                        "_customer_name": _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
-                    }
                     if iship_api.is_configured():
                         st.session_state.pop("_cs_carrier_sel", None)
                         st.session_state["_iship_carrier_select"] = {
@@ -1773,7 +1731,7 @@ def render(tab1, products, customers, customer_map):
                                 else:
                                     st.error(f"❌ {_c_res['error']}")
                         else:
-                            _line_btn_slot.caption(f"👤 ยังไม่มี LINE ID")
+                            _line_btn_slot.caption("👤 ยังไม่มี LINE ID")
 
             # ── แบ่งกล่อง ──────────────────────────────────────────────────────
             if st.button("📦 แบ่งกล่อง", key="toggle_boxcalc", width="stretch"):

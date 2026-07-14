@@ -144,25 +144,21 @@ def render():
             st.divider()
 
             if _stock_submitted:
-                saved = 0
-                errors = []
+                _sc_rows = []
                 for pid, (_, row) in zip(product_ids, edited_stock.iterrows()):
                     new_sys  = int(row["คอม"])     if pd.notna(row["คอม"])     else 0
                     new_phys = int(row["นับจริง"]) if pd.notna(row["นับจริง"]) else 0
-                    try:
-                        db.upsert_stock_count({
-                            "id":           str(uuid.uuid4()),
-                            "product_id":   pid,
-                            "count_date":   str(cnt_date),
-                            "qty_system":   new_sys,
-                            "qty_physical": new_phys,
-                            "notes":        "",
-                        })
-                        saved += 1
-                    except Exception as e:
-                        errors.append(f"{row['สินค้า']}: {e}")
-                if errors:
-                    st.error("❌ บันทึกไม่สำเร็จบางรายการ:\n" + "\n".join(errors))
-                if saved:
-                    st.success(f"✅ บันทึก {saved} รายการแล้ว")
+                    _sc_rows.append({
+                        "id":           str(uuid.uuid4()),
+                        "product_id":   pid,
+                        "count_date":   str(cnt_date),
+                        "qty_system":   new_sys,
+                        "qty_physical": new_phys,
+                        "notes":        "",
+                    })
+                try:
+                    db.upsert_stock_counts_batch(_sc_rows)
+                    st.success(f"✅ บันทึก {len(_sc_rows)} รายการแล้ว")
                     st.rerun()
+                except Exception as e:
+                    st.error(f"❌ บันทึกไม่สำเร็จ: {e}")

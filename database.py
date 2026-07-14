@@ -91,8 +91,28 @@ def upsert_product(data: dict) -> None:
     get_products.clear()
 
 
+def upsert_products_batch(rows: list[dict]) -> None:
+    """บันทึกสินค้าหลายรายการพร้อมกัน — batch แทนการลูปทีละแถว (ลด round-trip)"""
+    if not rows:
+        return
+    db = get_supabase()
+    for i in range(0, len(rows), 50):
+        db.table("products").upsert(rows[i:i + 50]).execute()
+    get_products.clear()
+
+
 def upsert_customer(data: dict) -> None:
     get_supabase().table("customers").upsert(data).execute()
+    get_customers.clear()
+
+
+def upsert_customers_batch(rows: list[dict]) -> None:
+    """บันทึกลูกค้าหลายรายการพร้อมกัน — batch แทนการลูปทีละแถว (ลด round-trip)"""
+    if not rows:
+        return
+    db = get_supabase()
+    for i in range(0, len(rows), 50):
+        db.table("customers").upsert(rows[i:i + 50]).execute()
     get_customers.clear()
 
 
@@ -286,6 +306,26 @@ def update_transaction_status(transaction_id: str, bill_status: str = None, pay_
 
 # ─── Calculations ────────────────────────────────────────────────────────────
 
+_FULLY_PAID_STATUSES = ("จ่ายแล้ว", "COD จ่ายแล้ว")
+
+
+def _compute_balance(txn: dict, partial_paid: float, qty_received_sum: int) -> dict:
+    """ยอดจ่าย/รับสะสมของ transaction เดียว จาก partial_events ที่รวมมาแล้ว
+    (partial_paid = Σ amount_paid, qty_received_sum = Σ qty_received) — single
+    source of truth ให้ get_transaction_balance/get_all_transactions_df/
+    get_pending_receipts_for_customer เรียกใช้ร่วมกัน แทนคำนวณซ้ำคนละที่
+    (เคยไม่ตรงกัน: จุดหนึ่งเช็คแค่ pay_status == "จ่ายแล้ว" ไม่รวม "COD จ่ายแล้ว")"""
+    total_amount = float(txn["total_amount"])
+    total_paid = total_amount if txn["pay_status"] in _FULLY_PAID_STATUSES else partial_paid
+    total_received = int(txn["initial_qty_received"]) + int(qty_received_sum)
+    return {
+        "total_paid": total_paid,
+        "total_received": total_received,
+        "outstanding_amount": total_amount - total_paid,
+        "outstanding_qty": txn["qty"] - total_received,
+    }
+
+
 def get_transaction_balance(transaction_id: str) -> dict:
     """ยอดจ่ายและรับของสะสมของรายการ พร้อมจำนวนที่รับได้อีก"""
     db = get_supabase()
@@ -296,20 +336,17 @@ def get_transaction_balance(transaction_id: str) -> dict:
     events = _retry(lambda: db.table("partial_events").select("*").eq("transaction_id", transaction_id).execute().data)
 
     _partial_paid = sum(float(e["amount_paid"]) for e in events)
-    total_paid = float(txn["total_amount"]) if txn["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว") else _partial_paid
+    _qty_received_sum = sum(e["qty_received"] for e in events)
+    bal = _compute_balance(txn, _partial_paid, _qty_received_sum)
 
-    total_received = txn["initial_qty_received"] + sum(e["qty_received"] for e in events)
     price = float(txn["price_per_unit"])
-    max_allowed = floor(total_paid / price) if price > 0 else 0
+    max_allowed = floor(bal["total_paid"] / price) if price > 0 else 0
 
     return {
         "transaction": txn,
-        "total_paid": total_paid,
-        "total_received": total_received,
-        "outstanding_amount": float(txn["total_amount"]) - total_paid,
-        "outstanding_qty": txn["qty"] - total_received,
+        **bal,
         "max_allowed_qty": max_allowed,
-        "can_receive": max(0, max_allowed - total_received),
+        "can_receive": max(0, max_allowed - bal["total_received"]),
     }
 
 
@@ -380,8 +417,9 @@ def bill_has_partial_events(bill_no: str) -> bool:
 def delete_bill(bill_no: str) -> int:
     db = get_supabase()
     rows = db.table("transactions").select("id").eq("bill_no", bill_no).execute().data
-    for r in rows:
-        db.table("partial_events").delete().eq("transaction_id", r["id"]).execute()
+    txn_ids = [r["id"] for r in rows]
+    for i in range(0, len(txn_ids), 50):
+        db.table("partial_events").delete().in_("transaction_id", txn_ids[i:i + 50]).execute()
     db.table("transactions").delete().eq("bill_no", bill_no).execute()
     _clear_transaction_caches()
     return len(rows)
@@ -535,9 +573,9 @@ def delete_payment_events(transaction_id: str) -> None:
     """ลบ partial_events ที่เป็นการจ่ายเงิน (amount_paid > 0) ของ transaction นี้"""
     db = get_supabase()
     evts = db.table("partial_events").select("id, amount_paid").eq("transaction_id", transaction_id).execute().data
-    for e in evts:
-        if float(e.get("amount_paid") or 0) > 0:
-            db.table("partial_events").delete().eq("id", e["id"]).execute()
+    ids_to_delete = [e["id"] for e in evts if float(e.get("amount_paid") or 0) > 0]
+    for i in range(0, len(ids_to_delete), 50):
+        db.table("partial_events").delete().in_("id", ids_to_delete[i:i + 50]).execute()
     _clear_transaction_caches()
     bill_has_partial_events.clear()
 
@@ -565,12 +603,10 @@ def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
             paid_by_txn[e["transaction_id"]] += float(e.get("amount_paid") or 0)
     result = []
     for t in txns:
-        outstanding_qty = t["qty"] - (t["initial_qty_received"] + qty_by_txn[t["id"]])
+        bal = _compute_balance(t, paid_by_txn[t["id"]], qty_by_txn[t["id"]])
+        outstanding_qty = bal["outstanding_qty"]
         if outstanding_qty > 0:
-            if t["pay_status"] == "จ่ายแล้ว":
-                outstanding_amt = 0.0
-            else:
-                outstanding_amt = max(0.0, float(t["total_amount"]) - paid_by_txn[t["id"]])
+            outstanding_amt = max(0.0, bal["outstanding_amount"])
             result.append({
                 "id":             t["id"],
                 "product_id":     t["product_id"],
@@ -662,11 +698,12 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
         evts = events_by_txn[tid]
 
         _partial_paid = sum(float(e["amount_paid"]) for e in evts)
-        total_paid = float(t["total_amount"]) if t["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว") else _partial_paid
-
-        total_received = t["initial_qty_received"] + sum(e["qty_received"] for e in evts)
-        outstanding_amount = float(t["total_amount"]) - total_paid
-        outstanding_qty = t["qty"] - total_received
+        _qty_received_sum = sum(e["qty_received"] for e in evts)
+        bal = _compute_balance(t, _partial_paid, _qty_received_sum)
+        total_paid = bal["total_paid"]
+        total_received = bal["total_received"]
+        outstanding_amount = bal["outstanding_amount"]
+        outstanding_qty = bal["outstanding_qty"]
 
         cleared = outstanding_amount <= 0.01 and outstanding_qty <= 0 and t["bill_status"] == "เปิดบิลแล้ว"
         customer_name = (t.get("customers") or {}).get("name", t["customer_id"])
@@ -844,6 +881,21 @@ def upsert_stock_count(data: dict) -> None:
     get_latest_stock_counts.clear()
 
 
+def upsert_stock_counts_batch(rows: list[dict]) -> None:
+    """บันทึกผลนับสต๊อกหลายสินค้าพร้อมกัน (วันเดียวกันทั้งหมด — 1 count_date ต่อ
+    การบันทึก 1 ครั้งเสมอตาม UI) — batch แทนการลูป delete+insert ทีละแถว"""
+    if not rows:
+        return
+    db = get_supabase()
+    count_date = rows[0]["count_date"]
+    pids = [r["product_id"] for r in rows]
+    for i in range(0, len(pids), 50):
+        db.table("stock_counts").delete().eq("count_date", count_date).in_("product_id", pids[i:i + 50]).execute()
+    for i in range(0, len(rows), 50):
+        db.table("stock_counts").insert(rows[i:i + 50]).execute()
+    get_latest_stock_counts.clear()
+
+
 def insert_stock_count(data: dict) -> None:
     get_supabase().table("stock_counts").insert(data).execute()
     get_latest_stock_counts.clear()
@@ -971,9 +1023,12 @@ def get_ecommerce_product_map() -> dict:
 
 
 def upsert_ecommerce_product_map(rows: list[dict]) -> None:
-    for row in rows:
-        get_supabase().table("ecommerce_product_map").upsert(
-            row, on_conflict="platform,platform_item_id"
+    if not rows:
+        return
+    db = get_supabase()
+    for i in range(0, len(rows), 50):
+        db.table("ecommerce_product_map").upsert(
+            rows[i:i + 50], on_conflict="platform,platform_item_id"
         ).execute()
 
 
@@ -1062,7 +1117,11 @@ def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
     """เมื่อ COD ของ tracking ใน tracking_no_to_date ถูกโอนเข้าระบบแล้ว
     mark เฉพาะ transactions ที่ผูกกับ shipment นั้น (จับคู่ผ่าน product_id ใน items)
     ถ้า shipment ไม่มีข้อมูล items → fallback mark ทุก COD ของลูกค้า (legacy)
-    คืนจำนวน transaction ที่ mark"""
+    คืนจำนวน transaction ที่ mark
+
+    ดึง COD transactions ของทุกลูกค้าที่เกี่ยวข้องครั้งเดียว (แทน query ต่อ
+    shipment) แล้ว insert/update เป็น batch เดียวตอนท้าย (แทนทีละแถวในลูป) —
+    ลด round-trip จาก O(shipments × transactions) เหลือ O(1) ต่อ 50 แถว"""
     if not tracking_no_to_date:
         return 0
     db = get_supabase()
@@ -1070,24 +1129,34 @@ def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
              .select("customer_id, tracking_no, items")
              .in_("tracking_no", list(tracking_no_to_date.keys()))
              .execute().data) or []
-    count = 0
+    ships = [s for s in ships if s.get("customer_id")]
+    if not ships:
+        return 0
+
+    cust_ids = list({s["customer_id"] for s in ships})
+    all_cod_txns = []
+    for i in range(0, len(cust_ids), 50):
+        chunk = cust_ids[i:i + 50]
+        all_cod_txns += (db.table("transactions")
+                          .select("id, customer_id, total_amount, product_id")
+                          .in_("customer_id", chunk)
+                          .eq("pay_status", "COD")
+                          .execute().data) or []
+    txns_by_cust: dict[str, list] = defaultdict(list)
+    for t in all_cod_txns:
+        txns_by_cust[t["customer_id"]].append(t)
+
+    pe_rows = []
+    txn_ids_to_mark = []
     for s in ships:
-        cust_id = s.get("customer_id")
+        cust_id = s["customer_id"]
         tn      = s.get("tracking_no")
-        if not cust_id:
-            continue
         transfer_date = (tracking_no_to_date.get(tn) or "")[:10]
         if not transfer_date:
             from datetime import datetime, timezone
             transfer_date = datetime.now(timezone.utc).date().isoformat()
 
-        # ดึง COD transactions ทั้งหมดของลูกค้านี้ที่ยังค้างอยู่
-        all_txns = (db.table("transactions")
-                    .select("id, total_amount, product_id")
-                    .eq("customer_id", cust_id)
-                    .eq("pay_status", "COD")
-                    .execute().data) or []
-
+        all_txns = txns_by_cust.get(cust_id, [])
         # จับคู่ด้วย product_id จาก items ของ shipment นี้
         ship_pids = {it.get("product_id") for it in (s.get("items") or [])
                      if it.get("product_id")}
@@ -1101,7 +1170,7 @@ def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
             txns = all_txns
 
         for t in txns:
-            db.table("partial_events").insert({
+            pe_rows.append({
                 "id":             str(uuid.uuid4()),
                 "date":           transfer_date,
                 "transaction_id": t["id"],
@@ -1109,9 +1178,14 @@ def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
                 "amount_paid":    float(t["total_amount"]),
                 "event_type":     "จ่ายเงิน",
                 "notes":          f"COD โอนจาก iShip ({tn})",
-            }).execute()
-            db.table("transactions").update({"pay_status": "COD จ่ายแล้ว"}).eq("id", t["id"]).execute()
-            count += 1
+            })
+            txn_ids_to_mark.append(t["id"])
+
+    count = len(txn_ids_to_mark)
+    for i in range(0, len(pe_rows), 50):
+        db.table("partial_events").insert(pe_rows[i:i + 50]).execute()
+    for i in range(0, len(txn_ids_to_mark), 50):
+        db.table("transactions").update({"pay_status": "COD จ่ายแล้ว"}).in_("id", txn_ids_to_mark[i:i + 50]).execute()
     if count:
         _clear_transaction_caches()
     return count
@@ -1132,13 +1206,19 @@ def get_pending_cod_tracking() -> list[str]:
 _DELIVERY_TERMINAL = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
 
 def update_delivery_statuses(statuses: dict) -> int:
-    """อัปเดต delivery_status ใน shipments, คืนจำนวนที่อัปเดต"""
+    """อัปเดต delivery_status ใน shipments, คืนจำนวนที่อัปเดต — group tracking
+    number ตามค่า status เดียวกันแล้ว batch ด้วย .in_() แทนอัปเดตทีละแถว"""
     db = get_supabase()
-    count = 0
+    by_status: dict[str, list[str]] = defaultdict(list)
     for track_no, status in statuses.items():
         if track_no:
-            db.table("shipments").update({"delivery_status": status}).eq("tracking_no", track_no).execute()
-            count += 1
+            by_status[status].append(track_no)
+    count = 0
+    for status, track_nos in by_status.items():
+        for i in range(0, len(track_nos), 50):
+            chunk = track_nos[i:i + 50]
+            db.table("shipments").update({"delivery_status": status}).in_("tracking_no", chunk).execute()
+            count += len(chunk)
     return count
 
 

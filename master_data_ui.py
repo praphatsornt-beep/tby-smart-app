@@ -126,9 +126,10 @@ def render():
             if valid.empty:
                 st.error("ไม่มีข้อมูลที่จะบันทึก")
             else:
+                _prod_rows = []
                 for _, row in valid.iterrows():
                     _max_units = row["จำนวนสูงสุด/กล่อง"]
-                    db.upsert_product({
+                    _prod_rows.append({
                         "id":                str(row["รหัส"]).strip(),
                         "name":              str(row["ชื่อสินค้า"]).strip(),
                         "price":             float(row["ราคา (บาท)"]  or 0),
@@ -137,6 +138,7 @@ def render():
                         "weight_grams":      float(row["น้ำหนัก (g)"] or 0),
                         "max_units_per_box": (int(_max_units) if pd.notna(_max_units) and float(_max_units) > 0 else None),
                     })
+                db.upsert_products_batch(_prod_rows)
                 st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
                 st.rerun()
 
@@ -203,12 +205,12 @@ def render():
                     if not _rid or _rid == "nan":
                         _max_num += 1
                         valid.at[_i, "รหัส"] = f"C-{_max_num:03d}"
-                for _, row in valid.iterrows():
-                    db.upsert_customer({
-                        "id":    str(row["รหัส"]).strip(),
-                        "name":  str(row["ชื่อลูกค้า"]).strip(),
-                        "phone": str(row["เบอร์โทร"]).strip() if pd.notna(row["เบอร์โทร"]) else "",
-                    })
+                _cust_rows = [{
+                    "id":    str(row["รหัส"]).strip(),
+                    "name":  str(row["ชื่อลูกค้า"]).strip(),
+                    "phone": str(row["เบอร์โทร"]).strip() if pd.notna(row["เบอร์โทร"]) else "",
+                } for _, row in valid.iterrows()]
+                db.upsert_customers_batch(_cust_rows)
                 st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
                 st.rerun()
 
@@ -309,7 +311,7 @@ def render():
             if st.session_state.get("_prev_addr_edit_sel") != sel_addr:
                 st.session_state["_prev_addr_edit_sel"] = sel_addr
                 st.session_state["ea3c_cust"] = cust_names3[_ea_cust_idx]
-            ea3_cust = st.selectbox("ลูกค้า (ผู้ส่ง)", cust_names3, key="ea3c_cust")
+            st.selectbox("ลูกค้า (ผู้ส่ง)", cust_names3, key="ea3c_cust")
             # form key เปลี่ยนตาม sel_addr เพื่อ reset field ข้างใน
             _form_key = f"addr3_edit_form_{sel_addr[:30]}"
             with st.form(_form_key):

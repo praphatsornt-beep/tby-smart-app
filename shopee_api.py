@@ -69,12 +69,14 @@ def do_refresh_token(shop_id: int, refresh_tok: str) -> dict:
     return r.json()
 
 
+_MAX_ORDER_PAGES = 200  # กันลูปไม่รู้จบถ้า Shopee ตอบ "more" ค้าง/cursor ไม่ขยับ
+
 def get_orders(shop_id: int, access_token: str, from_ts: int, to_ts: int) -> list[dict]:
     """ดึง order list สถานะ COMPLETED ในช่วงเวลา (ทีละ 100)"""
     partner_id, _ = _get_credentials()
     all_orders = []
     cursor = ""
-    while True:
+    for _page in range(_MAX_ORDER_PAGES):
         ts = int(time.time())
         path = "/api/v2/order/get_order_list"
         sign = _sign(path, ts, access_token, shop_id)

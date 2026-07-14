@@ -226,11 +226,18 @@ def kex_bulky_remote_surcharge(postcode: str) -> int:
     return 50 if str(postcode).strip() in KEX_BULKY_REMOTE else 0
 
 
+def flash_base_fee(kg: float) -> float:
+    """ค่าส่งฐาน Flash/SPX Express: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท
+    (ไม่รวมค่าพื้นที่พิเศษ) — single source of truth ให้ carrier_fees() และ
+    ui_helpers.calc_shipping() เรียกใช้ร่วมกัน แทนที่จะคำนวณซ้ำคนละที่"""
+    from math import ceil
+    return 39 + max(0, ceil(kg - 5)) * 10
+
+
 def carrier_fees(weight_grams: float, postcode: str, box_weight_g: int = 500) -> dict:
     """คืน {carrier: (base_fee, surcharge, total)} สำหรับทั้ง 2 ขนส่ง"""
-    from math import ceil
     kg   = (weight_grams + box_weight_g) / 1000
-    base = 39 + max(0, ceil(kg - 5)) * 10
+    base = flash_base_fee(kg)
 
     flash_sur  = zone_surcharge_by_weight(postcode, kg)  # weight-based tiers
     spx_sur    = spx_surcharge(postcode)

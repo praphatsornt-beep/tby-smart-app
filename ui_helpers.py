@@ -2,17 +2,13 @@ import re
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timezone, timedelta
-from math import floor, ceil
 import uuid
 import io
 
 import database as db
-import carriers as carr
-import calc_logic
 import thai_address
 import line_api
-import iship_api
-from flash_zones import lookup_zone, zone_surcharge, ZONE_LABELS, carrier_fees
+from flash_zones import zone_surcharge, flash_base_fee
 
 # ── Constants ────────────────────────────────────────────────────────────────
 
@@ -73,6 +69,20 @@ def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "Sheet1") -> bytes:
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name=sheet_name)
     return buf.getvalue()
+
+
+def _guard_double_submit(key: str, cooldown_sec: float = 2.0) -> bool:
+    """กันกดปุ่มบันทึกซ้ำ (เน็ตช้า/ใจร้อนกดซ้ำก่อนเห็นผลลัพธ์ครั้งแรก) — เรียกทันที
+    หลัง st.button(...) คืน True และก่อนเริ่ม insert จริงเสมอ คืน True ถ้าควร
+    ดำเนินการบันทึกจริง, False ถ้าเป็นการกดซ้ำภายใน cooldown_sec วินาทีล่าสุด
+    (ปุ่มเดียวกัน — key ต้องไม่ซ้ำกับปุ่มอื่น) เป็น pattern เดียวกับ _submit_token
+    ที่ใช้กันส่ง iShip order ซ้ำใน app.py แค่ generalize มาใช้กับปุ่มบันทึกทั่วไป
+    ที่ไม่ได้อยู่ใน @st.dialog"""
+    import time as _time
+    _now = _time.time()
+    _last = st.session_state.get(f"_dbl_submit_{key}", 0.0)
+    st.session_state[f"_dbl_submit_{key}"] = _now
+    return (_now - _last) > cooldown_sec
 
 
 @st.cache_data
@@ -373,9 +383,8 @@ def _warn_duplicate_phone(phone: str, current_cid: str):
 
 def calc_shipping(weight_grams: float, postcode: str = "") -> float:
     """ค่าส่ง Flash Express: 5 kg แรก 39 บาท, ทุก kg ถัดไป +10 บาท + ค่าพื้นที่"""
-    kg  = (weight_grams + BOX_WEIGHT_G) / 1000
-    fee = 39 + max(0, ceil(kg - 5)) * 10
-    return fee + zone_surcharge(postcode)
+    kg = (weight_grams + BOX_WEIGHT_G) / 1000
+    return flash_base_fee(kg) + zone_surcharge(postcode)
 
 
 def raw_weight_g(items, extra_g: float = 0) -> float:
@@ -627,11 +636,15 @@ def _ledger_to_txn_df(ledger_data: list) -> pd.DataFrame:
         tid = o["txn_id"]
         total_amount = float(o.get("total_amount") or 0)
         pay_status   = o.get("pay_status") or ""
-        partial_paid = paid_by_txn.get(tid, 0.0)
-        total_paid   = total_amount if pay_status in ("จ่ายแล้ว", "COD จ่ายแล้ว") else partial_paid
-        total_received = o.get("initial_received", 0) + recv_by_txn.get(tid, 0)
-        outstanding_amount = total_amount - total_paid
-        outstanding_qty    = o["qty_in"] - total_received
+        _pseudo_txn = {
+            "total_amount": total_amount, "pay_status": pay_status,
+            "initial_qty_received": o.get("initial_received", 0), "qty": o["qty_in"],
+        }
+        bal = db._compute_balance(_pseudo_txn, paid_by_txn.get(tid, 0.0), recv_by_txn.get(tid, 0))
+        total_paid = bal["total_paid"]
+        total_received = bal["total_received"]
+        outstanding_amount = bal["outstanding_amount"]
+        outstanding_qty = bal["outstanding_qty"]
         cleared = outstanding_amount <= 0.01 and outstanding_qty <= 0 and o.get("bill_status") == "เปิดบิลแล้ว"
         rows.append({
             "id": tid, "วันที่": o["date"], "รหัส": o.get("product_id", ""),
@@ -791,7 +804,6 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     total_amount      = show_p["ยอดรวม"].sum()
     total_paid        = show_p["จ่ายแล้ว"].sum()
     total_outstanding = show_p["ค้างจ่าย"].sum()
-    total_pv          = show_p["PV รวม"].sum() if "PV รวม" in show_p.columns else 0
     unbilled_pv       = show_p.loc[show_p["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in show_p.columns else 0
     today_str         = date.today().strftime("%d/%m/%Y")
     filter_label      = "รายการทั้งหมด"
@@ -807,8 +819,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     # ตรวจสอบว่ามี tag ส่งพัสดุจาก notes ของรายการแรก
     first_note = str(show_p.iloc[0].get("หมายเหตุ", "") or "")
     is_ship_bill = "[ส่งพัสดุ|" in first_note
-    ship_weight_str, ship_fee_str, ship_remote = "", "", False
-    ship_carrier = ship_postcode = ship_weight_str = ship_fee_str = ship_remote = ""
+    ship_weight_str, ship_fee_str = "", ""
     if is_ship_bill:
         import re as _re
         _m = _re.search(
@@ -816,11 +827,8 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             first_note
         )
         if _m:
-            ship_carrier    = _m.group(1) or ""
-            ship_postcode   = _m.group(2) or ""
             ship_weight_str = _m.group(3) or ""
             ship_fee_str    = _m.group(4) or ""
-            ship_remote     = _m.group(5).strip("|") if _m.group(5) else ""
 
     bm1, bm2 = st.columns(2)
     bm1.metric("💸 ยอดค้างจ่ายรวม",  f"{total_outstanding:,.0f} บาท")

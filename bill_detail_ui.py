@@ -10,10 +10,9 @@ import line_api
 import iship_api
 from ui_helpers import (
     _to_bkk, _to_excel_bytes, BOX_WEIGHT_G,
-    _style_status, _fmt_note, _extract_staff_tag,
+    _style_status, _fmt_note, _guard_double_submit,
     _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
 )
-import carriers as carr
 
 
 _T5_TABS = ["💰 ยอดค้าง / จัดการบิล", "👤 บัตรลูกค้า", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"]
@@ -147,7 +146,6 @@ def render(products, customers):
                 for customer_name, grp in outstanding_df.groupby("ลูกค้า"):
                     _is_cod = grp["สถานะจ่าย"] == "COD"
                     owed     = grp.loc[~_is_cod, "ค้างจ่าย"].sum()
-                    owed_cod = grp.loc[_is_cod, "ค้างจ่าย"].sum()
                     pending = int(grp["ค้างรับ"].sum())
                     txn_ids = grp["id"].tolist()
                     _luid   = _cust_line_map.get(customer_name, "")
@@ -562,7 +560,6 @@ def render(products, customers):
                         else:
                             # Multi: เลือกโหมดก่อน แล้วตารางปรับให้ตรงโหมด
                             sel_rows      = grp[grp["id"].isin(selected_ids)].copy()
-                            total_owed    = float(sel_rows["ค้างจ่าย"].sum())
 
                             _unbilled_mask = sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล"
                             _any_unbilled  = _unbilled_mask.any()
@@ -579,7 +576,8 @@ def render(products, customers):
                                 _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
                                 st.info(f"จะเปิดบิล {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str}")
                                 if st.button("📄 เปิดบิล", type="primary",
-                                             width="stretch", key=f"multi_openonly_{customer_name}"):
+                                             width="stretch", key=f"multi_openonly_{customer_name}") \
+                                        and _guard_double_submit(f"multi_openonly_{customer_name}"):
                                     _open_bill_ids = sel_rows.loc[_unbilled_mask, "id"].tolist()
                                     db.update_transaction_statuses_batch(_open_bill_ids, bill_status="เปิดบิลแล้ว")
                                     st.success(f"✅ เปิดบิลแล้ว {len(_open_bill_ids)} รายการ")
@@ -647,7 +645,8 @@ def render(products, customers):
                                     _ms2.metric("ยอดจ่ายรวม", f"{_mc_pay:,.0f} ฿")
 
                                 if st.button("💾 บันทึกทั้งหมด", type="primary",
-                                             width="stretch", key=f"multi_all_{customer_name}"):
+                                             width="stretch", key=f"multi_all_{customer_name}") \
+                                        and _guard_double_submit(f"multi_all_{customer_name}"):
                                     _saved_r, _saved_p = 0, 0
                                     _mrp_received, _mrp_id_qty = [], {}
                                     _total_paid_actual = 0.0
