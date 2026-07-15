@@ -74,20 +74,20 @@ def upsert_customer_address(data: dict) -> None:
     db = get_supabase()
     # ลบแถวเดิมที่มี id เดียวกันก่อนเสมอ (กรณีแก้ไขที่อยู่เดิม) — ถ้าใช้แค่ eq("phone", ...)
     # แล้ว phone ว่าง แถวเดิมจะไม่ถูกลบ ทำให้ insert ชนกับ primary key เดิม
-    db.table("customer_addresses").delete().eq("id", data["id"]).execute()
+    _retry(lambda: db.table("customer_addresses").delete().eq("id", data["id"]).execute())
     if data.get("phone"):
-        db.table("customer_addresses").delete().eq("phone", data["phone"].strip()).execute()
-    db.table("customer_addresses").insert(data).execute()
+        _retry(lambda: db.table("customer_addresses").delete().eq("phone", data["phone"].strip()).execute())
+    _retry(lambda: db.table("customer_addresses").insert(data).execute())
     _all_customer_addresses.clear()
 
 
 def delete_customer_address(address_id: str) -> None:
-    get_supabase().table("customer_addresses").delete().eq("id", address_id).execute()
+    _retry(lambda: get_supabase().table("customer_addresses").delete().eq("id", address_id).execute())
     _all_customer_addresses.clear()
 
 
 def upsert_product(data: dict) -> None:
-    get_supabase().table("products").upsert(data).execute()
+    _retry(lambda: get_supabase().table("products").upsert(data).execute())
     get_products.clear()
 
 
@@ -97,12 +97,13 @@ def upsert_products_batch(rows: list[dict]) -> None:
         return
     db = get_supabase()
     for i in range(0, len(rows), 50):
-        db.table("products").upsert(rows[i:i + 50]).execute()
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("products").upsert(_chunk).execute())
     get_products.clear()
 
 
 def upsert_customer(data: dict) -> None:
-    get_supabase().table("customers").upsert(data).execute()
+    _retry(lambda: get_supabase().table("customers").upsert(data).execute())
     get_customers.clear()
 
 
@@ -112,13 +113,14 @@ def upsert_customers_batch(rows: list[dict]) -> None:
         return
     db = get_supabase()
     for i in range(0, len(rows), 50):
-        db.table("customers").upsert(rows[i:i + 50]).execute()
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("customers").upsert(_chunk).execute())
     get_customers.clear()
 
 
 def update_customer_address(customer_id: str, data: dict) -> None:
     """อัปเดตที่อยู่จัดส่งของลูกค้า (recipient_name, phone, address, postal_code)"""
-    get_supabase().table("customers").update(data).eq("id", customer_id).execute()
+    _retry(lambda: get_supabase().table("customers").update(data).eq("id", customer_id).execute())
 
 
 
@@ -139,13 +141,13 @@ def _clear_transaction_caches() -> None:
 
 
 def insert_transaction(data: dict) -> None:
-    get_supabase().table("transactions").insert(data).execute()
+    _retry(lambda: get_supabase().table("transactions").insert(data).execute())
     _clear_transaction_caches()
 
 
 def insert_transactions_batch(rows: list[dict]) -> None:
     if rows:
-        get_supabase().table("transactions").insert(rows).execute()
+        _retry(lambda: get_supabase().table("transactions").insert(rows).execute())
         _clear_transaction_caches()
 
 
@@ -198,7 +200,7 @@ def _clear_partial_event_caches() -> None:
 
 
 def insert_partial_event(data: dict) -> None:
-    get_supabase().table("partial_events").insert(data).execute()
+    _retry(lambda: get_supabase().table("partial_events").insert(data).execute())
     _clear_partial_event_caches()
 
 
@@ -208,7 +210,8 @@ def insert_partial_events_batch(rows: list[dict]) -> None:
         return
     db = get_supabase()
     for i in range(0, len(rows), 50):
-        db.table("partial_events").insert(rows[i:i + 50]).execute()
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("partial_events").insert(_chunk).execute())
     _clear_partial_event_caches()
 
 
@@ -231,7 +234,7 @@ def update_transaction_statuses_batch(transaction_ids: list[str],
     db = get_supabase()
     for i in range(0, len(transaction_ids), 50):
         chunk = transaction_ids[i:i + 50]
-        db.table("transactions").update(updates).in_("id", chunk).execute()
+        _retry(lambda: db.table("transactions").update(updates).in_("id", chunk).execute())
     _clear_transaction_caches()
 
 
@@ -245,7 +248,7 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = No
     (ถ้าระบุ) จะ override เลขบิล/วันที่เปิดบิลของส่วนที่เปิดบิล — remainder
     (ยังไม่เปิดบิล) ยังคงเลขเดิมไว้"""
     db = get_supabase()
-    txn = db.table("transactions").select("*").eq("id", transaction_id).single().execute().data
+    txn = _retry(lambda: db.table("transactions").select("*").eq("id", transaction_id).single().execute()).data
     qty_remaining = txn["qty"] - qty_to_bill
     price = float(txn["price_per_unit"])
     pv = float(txn["points_per_unit"])
@@ -262,7 +265,11 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = No
         _billed_updates["bill_no"] = bill_no
     if bill_opened_at:
         _billed_updates["bill_opened_at"] = bill_opened_at
-    db.table("transactions").update(_billed_updates).eq("id", transaction_id).execute()
+    # retry แต่ละ call แยกกัน (ไม่ retry ทั้งฟังก์ชัน) — payload/id ของแต่ละ call
+    # คำนวณคงที่ไว้ก่อนแล้ว (เช่น _new_id ด้านล่าง) การ retry เฉพาะ call ที่พังจึง
+    # idempotent จริง ต่างจากการ retry ทั้งฟังก์ชันที่จะสุ่ม id ใหม่ทุกรอบ เสี่ยง
+    # insert ซ้ำถ้ารอบแรกสำเร็จจริงแต่ response หลุด
+    _retry(lambda: db.table("transactions").update(_billed_updates).eq("id", transaction_id).execute())
 
     if qty_remaining > 0:
         _new_id = str(uuid.uuid4())
@@ -274,7 +281,7 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = No
         # remainder เหมือนกัน (สมมาตรกับที่ initial_qty_received ของส่วนเปิด
         # บิลถูก cap ไว้ที่ qty_to_bill ด้านบน)
         _remainder_received = max(0, int(txn["initial_qty_received"]) - qty_to_bill)
-        db.table("transactions").insert({
+        _remainder_row = {
             "id": _new_id,
             "date": txn["date"],
             "customer_id": txn["customer_id"],
@@ -290,7 +297,8 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = No
             "pay_status": _remainder_pay_status,
             "notes": txn.get("notes", "") or "",
             "bill_no": txn.get("bill_no"),
-        }).execute()
+        }
+        _retry(lambda: db.table("transactions").insert(_remainder_row).execute())
 
         if not _is_paid_flag:
             # ยอดที่จ่ายไปแล้วผ่าน partial_events (ก่อนแยก) อาจมากกว่าที่ใช้
@@ -298,28 +306,30 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = No
             # event คู่ตรงข้ามกัน (หักออกจากส่วนเปิดบิล + บวกให้ remainder)
             # กันยอดรวมทั้งระบบเพี้ยน (ไม่มีผลตอน pay_status เป็น "จ่ายแล้ว"
             # อยู่แล้ว เพราะ flag นั้นถูกอ่านตรงๆ ไม่ผ่าน partial_events)
-            _evts = db.table("partial_events").select("amount_paid").eq(
-                "transaction_id", transaction_id).execute().data
+            _evts = _retry(lambda: db.table("partial_events").select("amount_paid").eq(
+                "transaction_id", transaction_id).execute()).data
             _paid_before = sum(float(e["amount_paid"] or 0) for e in _evts)
             _leftover_paid = max(0.0, _paid_before - billed_total)
             if _leftover_paid > 0.01:
-                db.table("partial_events").insert({
+                _corr_out = {
                     "id": str(uuid.uuid4()), "date": txn["date"], "transaction_id": transaction_id,
                     "qty_received": 0, "amount_paid": -round(_leftover_paid, 2),
                     "event_type": "จ่ายเงิน",
                     "notes": "โอนยอดจ่ายส่วนเกินไปให้รายการที่แยกเปิดบิลบางส่วน",
-                }).execute()
-                db.table("partial_events").insert({
+                }
+                _corr_in = {
                     "id": str(uuid.uuid4()), "date": txn["date"], "transaction_id": _new_id,
                     "qty_received": 0, "amount_paid": round(_leftover_paid, 2),
                     "event_type": "จ่ายเงิน",
                     "notes": "ยอดจ่ายที่โอนมาจากรายการเดิมตอนแยกเปิดบิลบางส่วน",
-                }).execute()
+                }
+                _retry(lambda: db.table("partial_events").insert(_corr_out).execute())
+                _retry(lambda: db.table("partial_events").insert(_corr_in).execute())
     _clear_transaction_caches()
 
 
 def update_transaction(transaction_id: str, data: dict) -> None:
-    get_supabase().table("transactions").update(data).eq("id", transaction_id).execute()
+    _retry(lambda: get_supabase().table("transactions").update(data).eq("id", transaction_id).execute())
     _clear_transaction_caches()
 
 
@@ -327,11 +337,11 @@ def revert_bill_open(transaction_id: str) -> None:
     """ย้อนรายการที่เปิดบิลแล้วกลับเป็นยังไม่เปิดบิล (เช่น เผลอเปิดผิดเลข/ผิดวัน) —
     ล้าง bill_no/bill_opened_at ทิ้งด้วย ไม่ใช่แค่เปลี่ยน bill_status เฉยๆ เพราะไม่งั้น
     แถวจะโชว์ "ยังไม่เปิดบิล" แต่ยังพ่วงเลขบิลจริง/วันที่เปิดเดิมค้างอยู่"""
-    get_supabase().table("transactions").update({
+    _retry(lambda: get_supabase().table("transactions").update({
         "bill_status": "ยังไม่เปิดบิล",
         "bill_no": None,
         "bill_opened_at": None,
-    }).eq("id", transaction_id).execute()
+    }).eq("id", transaction_id).execute())
     _clear_transaction_caches()
 
 
@@ -347,7 +357,7 @@ def update_transaction_status(transaction_id: str, bill_status: str = None, pay_
     if bill_opened_at:
         updates["bill_opened_at"] = bill_opened_at
     if updates:
-        get_supabase().table("transactions").update(updates).eq("id", transaction_id).execute()
+        _retry(lambda: get_supabase().table("transactions").update(updates).eq("id", transaction_id).execute())
         _clear_transaction_caches()
 
 
@@ -420,8 +430,8 @@ def get_last_payment_date(transaction_ids: list) -> str:
 
 def delete_transaction(transaction_id: str) -> None:
     db = get_supabase()
-    db.table("partial_events").delete().eq("transaction_id", transaction_id).execute()
-    db.table("transactions").delete().eq("id", transaction_id).execute()
+    _retry(lambda: db.table("partial_events").delete().eq("transaction_id", transaction_id).execute())
+    _retry(lambda: db.table("transactions").delete().eq("id", transaction_id).execute())
     _clear_transaction_caches()
 
 
@@ -432,8 +442,8 @@ def delete_transactions_batch(transaction_ids: list[str]) -> None:
     db = get_supabase()
     for i in range(0, len(transaction_ids), 50):
         chunk = transaction_ids[i:i + 50]
-        db.table("partial_events").delete().in_("transaction_id", chunk).execute()
-        db.table("transactions").delete().in_("id", chunk).execute()
+        _retry(lambda: db.table("partial_events").delete().in_("transaction_id", chunk).execute())
+        _retry(lambda: db.table("transactions").delete().in_("id", chunk).execute())
     _clear_transaction_caches()
 
 
@@ -444,9 +454,9 @@ def get_bill_details(bill_no: str) -> list[dict]:
 
 
 def update_bill_customer(bill_no: str, new_customer_id: str) -> None:
-    get_supabase().table("transactions")\
-        .update({"customer_id": new_customer_id})\
-        .eq("bill_no", bill_no).execute()
+    _retry(lambda: get_supabase().table("transactions")
+           .update({"customer_id": new_customer_id})
+           .eq("bill_no", bill_no).execute())
     _clear_transaction_caches()
 
 
@@ -469,12 +479,13 @@ def delete_bill(bill_no: str, customer_id: str = None) -> int:
     q = db.table("transactions").select("id").eq("bill_no", bill_no)
     if customer_id:
         q = q.eq("customer_id", customer_id)
-    rows = q.execute().data
+    rows = _retry(lambda: q.execute()).data
     txn_ids = [r["id"] for r in rows]
     for i in range(0, len(txn_ids), 50):
-        db.table("partial_events").delete().in_("transaction_id", txn_ids[i:i + 50]).execute()
+        _chunk = txn_ids[i:i + 50]
+        _retry(lambda: db.table("partial_events").delete().in_("transaction_id", _chunk).execute())
     if txn_ids:
-        db.table("transactions").delete().in_("id", txn_ids).execute()
+        _retry(lambda: db.table("transactions").delete().in_("id", txn_ids).execute())
     _clear_transaction_caches()
     return len(rows)
 
@@ -619,7 +630,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
 
 
 def delete_partial_event(event_id: str) -> None:
-    get_supabase().table("partial_events").delete().eq("id", event_id).execute()
+    _retry(lambda: get_supabase().table("partial_events").delete().eq("id", event_id).execute())
     _clear_transaction_caches()
     bill_has_partial_events.clear()
 
@@ -627,10 +638,12 @@ def delete_partial_event(event_id: str) -> None:
 def delete_payment_events(transaction_id: str) -> None:
     """ลบ partial_events ที่เป็นการจ่ายเงิน (amount_paid > 0) ของ transaction นี้"""
     db = get_supabase()
-    evts = db.table("partial_events").select("id, amount_paid").eq("transaction_id", transaction_id).execute().data
+    evts = _retry(lambda: db.table("partial_events").select("id, amount_paid")
+                  .eq("transaction_id", transaction_id).execute()).data
     ids_to_delete = [e["id"] for e in evts if float(e.get("amount_paid") or 0) > 0]
     for i in range(0, len(ids_to_delete), 50):
-        db.table("partial_events").delete().in_("id", ids_to_delete[i:i + 50]).execute()
+        _chunk = ids_to_delete[i:i + 50]
+        _retry(lambda: db.table("partial_events").delete().in_("id", _chunk).execute())
     _clear_transaction_caches()
     bill_has_partial_events.clear()
 
@@ -674,11 +687,11 @@ def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
 
 
 def delete_product(product_id: str) -> None:
-    get_supabase().table("products").delete().eq("id", product_id).execute()
+    _retry(lambda: get_supabase().table("products").delete().eq("id", product_id).execute())
 
 
 def delete_customer(customer_id: str) -> None:
-    get_supabase().table("customers").delete().eq("id", customer_id).execute()
+    _retry(lambda: get_supabase().table("customers").delete().eq("id", customer_id).execute())
 
 
 @st.cache_data(ttl=60)
@@ -805,8 +818,8 @@ def get_finance_entry(entry_date: str) -> dict | None:
 
 def upsert_finance_entry(data: dict) -> None:
     db = get_supabase()
-    db.table("finance_daily").delete().eq("entry_date", data["entry_date"]).execute()
-    db.table("finance_daily").insert(data).execute()
+    _retry(lambda: db.table("finance_daily").delete().eq("entry_date", data["entry_date"]).execute())
+    _retry(lambda: db.table("finance_daily").insert(data).execute())
     get_finance_entry.clear()
     get_finance_df.clear()
     get_finance_summary.clear()
@@ -874,8 +887,8 @@ def get_commission_record(period: str) -> dict | None:
 
 def upsert_commission_record(data: dict) -> None:
     db = get_supabase()
-    db.table("commission_records").delete().eq("period", data["period"]).execute()
-    db.table("commission_records").insert(data).execute()
+    _retry(lambda: db.table("commission_records").delete().eq("period", data["period"]).execute())
+    _retry(lambda: db.table("commission_records").insert(data).execute())
     get_commission_records.clear()
     get_commission_record.clear()
 
@@ -888,7 +901,7 @@ def get_company_info() -> dict:
 
 def upsert_company_info(data: dict) -> None:
     data["id"] = 1
-    get_supabase().table("company_info").upsert(data).execute()
+    _retry(lambda: get_supabase().table("company_info").upsert(data).execute())
     get_company_info.clear()
 
 
@@ -900,9 +913,12 @@ def get_box_presets() -> list[dict]:
 
 
 def replace_box_presets(presets: list[dict]) -> None:
-    """แทนที่ preset ขนาดกล่องทั้งหมดด้วยรายการใหม่ (ลบของเดิมทั้งหมดแล้วใส่ใหม่)"""
+    """แทนที่ preset ขนาดกล่องทั้งหมดด้วยรายการใหม่ (ลบของเดิมทั้งหมดแล้วใส่ใหม่) —
+    ปลอดภัยที่จะ retry ทั้ง 2 call แยกกันแม้ id ของแถวใหม่สุ่มใหม่ทุกครั้ง เพราะ
+    ลบทิ้งทั้งหมดก่อนเสมอ ผลลัพธ์สุดท้ายจึงเหมือนเดิมไม่ว่าจะรันกี่รอบ"""
     db = get_supabase()
-    db.table("box_presets").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+    _retry(lambda: db.table("box_presets").delete().neq(
+        "id", "00000000-0000-0000-0000-000000000000").execute())
     if presets:
         rows = [{
             "id":         str(uuid.uuid4()),
@@ -911,8 +927,28 @@ def replace_box_presets(presets: list[dict]) -> None:
             "width_cm":   p["width_cm"],
             "height_cm":  p["height_cm"],
         } for p in presets]
-        db.table("box_presets").insert(rows).execute()
+        _retry(lambda: db.table("box_presets").insert(rows).execute())
     get_box_presets.clear()
+
+
+# ─── Carrier zones (โซนพื้นที่พิเศษ/ห่างไกล — mirror ให้ gas_line_webhook.js อ่าน) ────
+# flash_zones.py ยังคงเป็น hardcoded Python source of truth เหมือนเดิม (tests ต้อง
+# import ได้ทันทีไม่พึ่งเน็ต) — ตาราง carrier_zones นี้เป็นแค่ mirror ให้ GAS (ซึ่งไม่มี
+# access โค้ด Python) query สดๆ แทนการ hardcode ลิสต์แยกต่างหากที่เคย drift มาแล้ว
+# ครั้งหนึ่ง ต้องรัน tools/sync_carrier_zones.py ทุกครั้งที่แก้โซนใน flash_zones.py
+
+def sync_carrier_zones(rows: list[dict]) -> int:
+    """แทนที่ carrier_zones ทั้งหมดด้วยรายการใหม่ (ลบของเดิมทั้งหมดแล้วใส่ใหม่) —
+    เรียกจาก tools/sync_carrier_zones.py โดยส่ง rows ที่ derive จาก flash_zones.py
+    เอง ไม่ใช้ตรงนี้ตัดสินใจว่าโซนไหนเป็นอะไร (flash_zones.py ยังเป็น source of
+    truth เดียว). rows: [{"carrier","postcode","zone_type"}]"""
+    db = get_supabase()
+    _retry(lambda: db.table("carrier_zones").delete().neq(
+        "id", "00000000-0000-0000-0000-000000000000").execute())
+    for i in range(0, len(rows), 500):
+        _chunk = rows[i:i + 500]
+        _retry(lambda: db.table("carrier_zones").insert(_chunk).execute())
+    return len(rows)
 
 
 # ─── Stock ───────────────────────────────────────────────────────────────────
@@ -931,8 +967,9 @@ def get_latest_stock_counts() -> dict:
 def upsert_stock_count(data: dict) -> None:
     """Insert หรือ update stock count ตาม product_id + count_date"""
     db = get_supabase()
-    db.table("stock_counts").delete().eq("product_id", data["product_id"]).eq("count_date", data["count_date"]).execute()
-    db.table("stock_counts").insert(data).execute()
+    _retry(lambda: db.table("stock_counts").delete()
+           .eq("product_id", data["product_id"]).eq("count_date", data["count_date"]).execute())
+    _retry(lambda: db.table("stock_counts").insert(data).execute())
     get_latest_stock_counts.clear()
 
 
@@ -945,14 +982,17 @@ def upsert_stock_counts_batch(rows: list[dict]) -> None:
     count_date = rows[0]["count_date"]
     pids = [r["product_id"] for r in rows]
     for i in range(0, len(pids), 50):
-        db.table("stock_counts").delete().eq("count_date", count_date).in_("product_id", pids[i:i + 50]).execute()
+        _chunk = pids[i:i + 50]
+        _retry(lambda: db.table("stock_counts").delete()
+               .eq("count_date", count_date).in_("product_id", _chunk).execute())
     for i in range(0, len(rows), 50):
-        db.table("stock_counts").insert(rows[i:i + 50]).execute()
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("stock_counts").insert(_chunk).execute())
     get_latest_stock_counts.clear()
 
 
 def insert_stock_count(data: dict) -> None:
-    get_supabase().table("stock_counts").insert(data).execute()
+    _retry(lambda: get_supabase().table("stock_counts").insert(data).execute())
     get_latest_stock_counts.clear()
 
 
@@ -962,12 +1002,13 @@ def get_stock_deposits() -> list[dict]:
 
 
 def insert_stock_deposit(data: dict) -> None:
-    get_supabase().table("stock_deposits").insert(data).execute()
+    _retry(lambda: get_supabase().table("stock_deposits").insert(data).execute())
     get_stock_deposits.clear()
 
 
 def return_stock_deposit(deposit_id: str) -> None:
-    get_supabase().table("stock_deposits").update({"is_returned": True}).eq("id", deposit_id).execute()
+    _retry(lambda: get_supabase().table("stock_deposits").update(
+        {"is_returned": True}).eq("id", deposit_id).execute())
     get_stock_deposits.clear()
 
 
@@ -1048,13 +1089,13 @@ def get_ecommerce_shops() -> list[dict]:
 
 def upsert_ecommerce_shop(data: dict) -> None:
     db = get_supabase()
-    db.table("ecommerce_shops").delete().eq("id", data["id"]).execute()
-    db.table("ecommerce_shops").insert(data).execute()
+    _retry(lambda: db.table("ecommerce_shops").delete().eq("id", data["id"]).execute())
+    _retry(lambda: db.table("ecommerce_shops").insert(data).execute())
 
 
 def insert_ecommerce_sales(rows: list[dict]) -> None:
     if rows:
-        get_supabase().table("ecommerce_sales").insert(rows).execute()
+        _retry(lambda: get_supabase().table("ecommerce_sales").insert(rows).execute())
 
 
 def get_ecommerce_sales_df(start_date: str, end_date: str) -> pd.DataFrame:
@@ -1082,9 +1123,10 @@ def upsert_ecommerce_product_map(rows: list[dict]) -> None:
         return
     db = get_supabase()
     for i in range(0, len(rows), 50):
-        db.table("ecommerce_product_map").upsert(
-            rows[i:i + 50], on_conflict="platform,platform_item_id"
-        ).execute()
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("ecommerce_product_map").upsert(
+            _chunk, on_conflict="platform,platform_item_id"
+        ).execute())
 
 
 def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
@@ -1104,7 +1146,7 @@ def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
 # ─── Shipments ────────────────────────────────────────────────────────────────
 
 def create_shipment(data: dict) -> None:
-    get_supabase().table("shipments").insert(data).execute()
+    _retry(lambda: get_supabase().table("shipments").insert(data).execute())
     get_shipments.clear()
     get_customer_ledger.clear()
 
@@ -1118,15 +1160,15 @@ def get_shipments(customer_id: str = None) -> list[dict]:
 
 
 def update_shipment_tracking(shipment_id: str, tracking_no: str) -> None:
-    get_supabase().table("shipments").update(
+    _retry(lambda: get_supabase().table("shipments").update(
         {"tracking_no": tracking_no}
-    ).eq("id", shipment_id).execute()
+    ).eq("id", shipment_id).execute())
     get_shipments.clear()
     get_customer_ledger.clear()
 
 
 def delete_shipment(shipment_id: str) -> None:
-    get_supabase().table("shipments").delete().eq("id", shipment_id).execute()
+    _retry(lambda: get_supabase().table("shipments").delete().eq("id", shipment_id).execute())
     get_shipments.clear()
     get_customer_ledger.clear()
 
@@ -1144,12 +1186,12 @@ def count_shipped_by_date_range(date_from: str, date_to: str) -> int:
 
 def delete_shipped_by_date_range(date_from: str, date_to: str) -> int:
     """ลบ shipments ที่จัดส่งสำเร็จในช่วงวันที่กำหนด คืนจำนวนแถวที่ลบ"""
-    res = (get_supabase().table("shipments")
-           .delete()
-           .eq("delivery_status", "จัดส่งแล้ว")
-           .gte("created_at", f"{date_from}T00:00:00+07:00")
-           .lte("created_at", f"{date_to}T23:59:59+07:00")
-           .execute())
+    q = (get_supabase().table("shipments")
+         .delete()
+         .eq("delivery_status", "จัดส่งแล้ว")
+         .gte("created_at", f"{date_from}T00:00:00+07:00")
+         .lte("created_at", f"{date_to}T23:59:59+07:00"))
+    res = _retry(lambda: q.execute())
     get_shipments.clear()
     get_customer_ledger.clear()
     return len(res.data) if res.data else 0
@@ -1161,11 +1203,12 @@ def mark_cod_transferred(tracking_nos: list[str]) -> None:
         return
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
-    (get_supabase().table("shipments")
-     .update({"cod_transferred_at": now})
-     .in_("tracking_no", tracking_nos)
-     .is_("cod_transferred_at", "null")
-     .execute())
+    db = get_supabase()
+    _retry(lambda: db.table("shipments")
+           .update({"cod_transferred_at": now})
+           .in_("tracking_no", tracking_nos)
+           .is_("cod_transferred_at", "null")
+           .execute())
 
 
 def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
@@ -1237,10 +1280,15 @@ def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
             txn_ids_to_mark.append(t["id"])
 
     count = len(txn_ids_to_mark)
+    # pe_rows ผูก id คงที่มาแล้วตั้งแต่ลูปด้านบน — retry แต่ละ chunk แยกกันจึง
+    # idempotent (ไม่ได้สุ่ม id ใหม่ตอน retry)
     for i in range(0, len(pe_rows), 50):
-        db.table("partial_events").insert(pe_rows[i:i + 50]).execute()
+        _chunk = pe_rows[i:i + 50]
+        _retry(lambda: db.table("partial_events").insert(_chunk).execute())
     for i in range(0, len(txn_ids_to_mark), 50):
-        db.table("transactions").update({"pay_status": "COD จ่ายแล้ว"}).in_("id", txn_ids_to_mark[i:i + 50]).execute()
+        _chunk = txn_ids_to_mark[i:i + 50]
+        _retry(lambda: db.table("transactions").update(
+            {"pay_status": "COD จ่ายแล้ว"}).in_("id", _chunk).execute())
     if count:
         _clear_transaction_caches()
     return count
@@ -1272,7 +1320,8 @@ def update_delivery_statuses(statuses: dict) -> int:
     for status, track_nos in by_status.items():
         for i in range(0, len(track_nos), 50):
             chunk = track_nos[i:i + 50]
-            db.table("shipments").update({"delivery_status": status}).in_("tracking_no", chunk).execute()
+            _retry(lambda: db.table("shipments").update(
+                {"delivery_status": status}).in_("tracking_no", chunk).execute())
             count += len(chunk)
     return count
 
@@ -1310,4 +1359,5 @@ def mark_line_notified(shipment_id: str) -> None:
     """บันทึกวันที่ส่ง LINE notification แล้ว"""
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
-    get_supabase().table("shipments").update({"line_notified_at": now}).eq("id", shipment_id).execute()
+    _retry(lambda: get_supabase().table("shipments").update(
+        {"line_notified_at": now}).eq("id", shipment_id).execute())

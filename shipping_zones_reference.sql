@@ -1,19 +1,25 @@
--- อ้างอิงเก็บข้อมูลโซนพื้นที่พิเศษ/ห่างไกลของแต่ละขนส่ง (ยังไม่รัน — ไม่ใช่ตารางที่ใช้งานจริงตอนนี้)
+-- ⏳ ยังไม่ได้รัน — ตารางกลางเก็บโซนพื้นที่พิเศษ/ห่างไกลของแต่ละขนส่ง (รันไฟล์นี้ทั้งไฟล์
+-- ใน Supabase SQL Editor เพื่อสร้างตาราง carrier_zones)
 --
 -- บริบท: วันที่ 12 ก.ค. 2569 พบว่า gas_line_webhook.js (LINE OA quote bot) มีลิสต์รหัสไปรษณีย์
 -- พื้นที่ห่างไกลของตัวเองแยกจาก flash_zones.py ในแอปหลัก พอ carrier rate audit วันที่ 10 ก.ค.
 -- แก้ไขข้อมูลในแอปหลักแล้ว gas_line_webhook.js ไม่ได้อัปเดตตาม เกิด SPX คำนวณผิด (เช่น 63150
--- ท่าสองยาง) วิธีแก้ที่เลือกใช้รอบนี้คือแก้ gas_line_webhook.js ตรงๆ (ก็อปข้อมูลจาก flash_zones.py
--- ไปแปะ) แต่ยังเป็น 2 ที่เก็บข้อมูลแยกกัน เสี่ยง drift ซ้ำได้อีกในอนาคต
+-- ท่าสองยาง) รอบนั้นแก้ gas_line_webhook.js ตรงๆ (ก็อปข้อมูลจาก flash_zones.py ไปแปะ) แต่ยังเป็น
+-- 2 ที่เก็บข้อมูลแยกกัน เสี่ยง drift ซ้ำได้อีก — รอบนี้ (2026-07-15) แก้ที่ต้นตอ:
 --
--- ไฟล์นี้เตรียมไว้เผื่ออนาคตอยากย้ายไปเก็บโซนพื้นที่ทั้งหมดเป็นตารางเดียวใน Supabase
--- (ตามแนวทางเดียวกับ box_presets_setup.sql) แล้วให้ทั้ง flash_zones.py และ gas_line_webhook.js
--- อ่านจากตารางนี้แทนการฮาร์ดโค้ดคนละที่ — เพื่อไม่ให้ข้อมูลที่ audit ไว้วันนี้หายไปเฉยๆ
--- ถ้ายังไม่ได้ตัดสินใจทำ ก็แค่เก็บไฟล์นี้ไว้เป็นหลักฐาน/backup ของข้อมูลปัจจุบัน ไม่ต้องรัน
+-- flash_zones.py **ยังคงเป็น hardcoded Python dict/set เหมือนเดิม** (ตั้งใจ — เป็น source of
+-- truth ที่ tests/test_flash_zones.py ต้อง import ได้ทันทีไม่พึ่งเน็ต/Supabase) แต่เพิ่มสคริปต์
+-- tools/sync_carrier_zones.py ที่ push ค่าจาก flash_zones.py เข้าตารางนี้ (เรียก
+-- database.sync_carrier_zones() แบบ full replace) — รันสคริปต์นี้ทุกครั้งที่แก้โซนใน
+-- flash_zones.py แล้ว gas_line_webhook.js ก็แก้ให้ query ตารางนี้สดๆ ผ่าน UrlFetchApp แทน
+-- ลิสต์ hardcode 5 ชุดเดิม (bothRemote/flashOnlyRemote/spxOnlyRemote/touristIslandZips/
+-- touristZips) — ดูฟังก์ชัน _getCarrierZones() ในไฟล์นั้น
 --
 -- ครอบคลุม 5 ขนส่ง: flash (FLASH_ZONES ทั้ง tourist/tourist_island/remote), spx (SPX_REMOTE),
 -- thai_post (THAI_POST_SPECIAL), dhl (DHL_REMOTE), kex_bulky (KEX_BULKY_REMOTE)
 -- generate มาจาก flash_zones.py ตรงๆ (ไม่ได้พิมพ์มือ) ให้ตรงกับโค้ดจริง ณ วันที่สร้างไฟล์นี้
+-- (ยืนยันแล้ว 2026-07-15 ว่าไม่มี drift ตั้งแต่สร้างไฟล์นี้ — flash_zones.py ตรงกับ 295 แถว
+-- ด้านล่างเป๊ะ)
 
 CREATE TABLE IF NOT EXISTS carrier_zones (
   id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -24,11 +30,12 @@ CREATE TABLE IF NOT EXISTS carrier_zones (
   UNIQUE(carrier, postcode)
 );
 
--- ตารางนี้ (ถ้าใช้งานจริง) ต้อง disable RLS เหมือน box_presets/commission_records
--- เพราะแอปใช้ SUPABASE_KEY ตัวเดียว ไม่มี auth ต่อผู้ใช้
--- ALTER TABLE carrier_zones DISABLE ROW LEVEL SECURITY;
+-- ตารางนี้ต้อง disable RLS เหมือน box_presets/commission_records เพราะแอปใช้ SUPABASE_KEY
+-- ตัวเดียว ไม่มี auth ต่อผู้ใช้ — gas_line_webhook.js อ่านผ่าน anon key เดียวกันด้วย
+ALTER TABLE carrier_zones DISABLE ROW LEVEL SECURITY;
 
--- seed ด้วยข้อมูลปัจจุบันทั้งหมด (295 แถว) ณ วันที่ 12 ก.ค. 2569
+-- seed ด้วยข้อมูลปัจจุบันทั้งหมด (295 แถว) ณ วันที่ 12 ก.ค. 2569 — sync ซ้ำได้ด้วย
+-- tools/sync_carrier_zones.py (ลบของเดิมทั้งหมดแล้วใส่ใหม่ ไม่ต้องรัน INSERT นี้ซ้ำเอง)
 INSERT INTO carrier_zones (carrier, postcode, zone_type) VALUES
   ('flash', '20120', 'tourist_island'),
   ('flash', '20150', 'tourist_island'),

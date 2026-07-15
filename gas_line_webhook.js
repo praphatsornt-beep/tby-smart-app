@@ -59,6 +59,40 @@ function _getProducts() {
   return _cachedProducts;
 }
 
+// ─── Carrier zones (โซนพื้นที่พิเศษ/ห่างไกล — query สดจาก Supabase) ─────────────
+// เดิมไฟล์นี้ hardcode ลิสต์รหัสไปรษณีย์แยกต่างหากจาก flash_zones.py (แอปหลัก) เอง
+// แล้วเคย drift ไม่ตรงกัน (2026-07-12, SPX คำนวณผิดที่ 63150 ท่าสองยาง) ตอนนี้ query
+// ตาราง carrier_zones ตรงๆ แทน — ตารางนี้ sync มาจาก flash_zones.py ด้วย
+// tools/sync_carrier_zones.py (รันทุกครั้งที่แก้โซนในแอปหลัก) ไม่มีลิสต์ให้ hardcode
+// ในไฟล์นี้อีกต่อไป กันไม่ให้ drift ซ้ำได้
+var _cachedZones = null;
+function _getCarrierZones() {
+  if (_cachedZones) return _cachedZones;
+  var z = { flashRemote: {}, spxRemote: {}, flashTourist: {}, flashTouristIsland: {} };
+  try {
+    var rows = _sbGet('/rest/v1/carrier_zones?select=carrier,postcode,zone_type');
+    if (Array.isArray(rows)) {
+      rows.forEach(function(r) {
+        if (r.carrier === 'flash') {
+          if (r.zone_type === 'remote') z.flashRemote[r.postcode] = true;
+          else if (r.zone_type === 'tourist') z.flashTourist[r.postcode] = true;
+          else if (r.zone_type === 'tourist_island') z.flashTouristIsland[r.postcode] = true;
+        } else if (r.carrier === 'spx' && r.zone_type === 'remote') {
+          z.spxRemote[r.postcode] = true;
+        }
+      });
+      z.ok = true;
+    } else {
+      z.ok = false;
+    }
+  } catch (err) {
+    z.ok = false; // เน็ต/ตารางมีปัญหา — เดินหน้าคำนวณต่อแบบไม่มีค่าพื้นที่พิเศษ ดีกว่าล้ม
+    // ทั้งคำสั่งซื้อ แต่ feeNote จะเตือนไว้ว่าเช็คโซนไม่ได้ (ดูจุดที่ใช้ z.ok ด้านล่าง)
+  }
+  _cachedZones = z;
+  return _cachedZones;
+}
+
 // ─── doPost ──────────────────────────────────────────────────────────────────
 
 function doPost(e) {
@@ -241,19 +275,14 @@ function doPost(e) {
   }
 
   // ── คำนวณออเดอร์ ────────────────────────────────────────────────────────────
-  // รายชื่อพื้นที่ห่างไกล 3 ชุดนี้ต้องตรงกับ flash_zones.py (FLASH_ZONES ที่ zone=="remote")
-  // และ SPX_REMOTE ในแอปหลักเป๊ะๆ — คำนวณด้วย set difference จาก 2 ลิสต์นั้นตรงๆ (อย่าเดา)
-  // อัปเดตล่าสุด 2026-07-12 หลัง audit ค่าส่งทุกขนส่งในแอปหลัก แก้บั๊กที่ SPX เคยใช้โซนของ
-  // Flash ผิด (เช่น 63150 ท่าสองยาง ไม่ใช่พื้นที่ห่างไกลของ SPX ทั้งที่เป็นของ Flash)
-  // หมายเหตุ: บางรหัส (81120,81150,81210,84280,84360) เป็น "SPX ห่างไกล" ซ้อนกับ
-  // "Flash ท่องเที่ยว/เกาะ" พร้อมกัน — โค้ดด้านล่างเช็ค remote ก่อน tourist เสมอ ทำให้เคส
-  // เหล่านี้ได้ค่า remote +50 แม้จะจบที่ Flash (ซึ่งจริงๆ ควรได้ค่าท่องเที่ยวแบบขั้นบันไดแทน)
-  // เป็นข้อจำกัดเดิมของโมเดลนี้ที่ไม่รู้ล่วงหน้าว่าจะจบที่ขนส่งไหน ยังไม่แก้ในรอบนี้
-  var bothRemote = ["50260","50270","50310","50350","55220","58110","58120","58130","58140","58150","63170","67260","71180","71240","94120","94230","95110","95130","95150","95160","95170","96110","96120","96130","96140","96150","96160","96190","96210","96220"];
-  var flashOnlyRemote = ["55130","63150","82150","94000","94110","94130","94140","94150","94160","94170","94180","94190","94220","95000","95120","95140","96000","96170","96180"];
-  var spxOnlyRemote = ["20120","23170","50160","50240","50250","51160","52160","52180","52230","56160","57170","57180","57260","57310","57340","58000","81120","81150","81210","82160","84280","84360","84370"];
-  var touristIslandZips = ["20120","20150","21160","23000","23170","81000","81130","81150","81180","81210","82000","82160","84140","84220","84280","84310","84320","84330","84360","85000","91000","92110","92120"];
-  var touristZips = ["20260","81120","82110","82130","82140","82190","82220","83000","83100","83110","83120","83130","83150"];
+  // โซนพื้นที่พิเศษ/ห่างไกล — query สดจาก Supabase (carrier_zones, sync มาจาก
+  // flash_zones.py) แทนลิสต์ hardcode เดิมที่เคย drift ไม่ตรงกัน (2026-07-12)
+  // ดูฟังก์ชัน _getCarrierZones() ด้านบน. หมายเหตุ: บางรหัส (81120,81150,81210,
+  // 84280,84360) เป็น "SPX ห่างไกล" ซ้อนกับ "Flash ท่องเที่ยว/เกาะ" พร้อมกัน —
+  // โค้ดด้านล่างเช็ค remote ก่อน tourist เสมอ ทำให้เคสเหล่านี้ได้ค่า remote +50
+  // แม้จะจบที่ Flash (ซึ่งจริงๆ ควรได้ค่าท่องเที่ยวแบบขั้นบันไดแทน) เป็นข้อจำกัด
+  // เดิมของโมเดลนี้ที่ไม่รู้ล่วงหน้าว่าจะจบที่ขนส่งไหน ยังไม่แก้ในรอบนี้
+  var _zones = _getCarrierZones();
 
   var lang = 'none', isCOD = rawMsg.toLowerCase().includes('cod'), userMsg = rawMsg.toLowerCase();
   if (userMsg.startsWith('th ')) { lang = 'th'; userMsg = userMsg.replace('th ', '').trim(); }
@@ -351,11 +380,14 @@ function doPost(e) {
     var shipBase = 39 + (totalWeightKg > 5 ? Math.ceil(totalWeightKg - 5) * 10 : 0);
     var extra = 0;
     if (targetZip !== '') {
-      if (bothRemote.includes(targetZip)) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [Flash+SPX] +50)'; }
-      else if (flashOnlyRemote.includes(targetZip)) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [Flash] +50)'; }
-      else if (spxOnlyRemote.includes(targetZip)) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [SPX] +50)'; }
-      else if (touristIslandZips.includes(targetZip)) { extra = totalWeightKg <= 7 ? 60 : (totalWeightKg <= 20 ? 130 : 230); feeNote = ' (ท่องเที่ยว+เกาะ ' + targetZip + ' [SPX] +' + extra + ')'; }
-      else if (touristZips.includes(targetZip)) { extra = totalWeightKg <= 7 ? 30 : (totalWeightKg <= 20 ? 100 : 200); feeNote = ' (ท่องเที่ยว ' + targetZip + ' [SPX] +' + extra + ')'; }
+      var inFlashRemote = !!_zones.flashRemote[targetZip];
+      var inSpxRemote   = !!_zones.spxRemote[targetZip];
+      if (inFlashRemote && inSpxRemote) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [Flash+SPX] +50)'; }
+      else if (inFlashRemote) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [Flash] +50)'; }
+      else if (inSpxRemote) { extra = 50; feeNote = ' (ห่างไกล ' + targetZip + ' [SPX] +50)'; }
+      else if (_zones.flashTouristIsland[targetZip]) { extra = totalWeightKg <= 7 ? 60 : (totalWeightKg <= 20 ? 130 : 230); feeNote = ' (ท่องเที่ยว+เกาะ ' + targetZip + ' [SPX] +' + extra + ')'; }
+      else if (_zones.flashTourist[targetZip]) { extra = totalWeightKg <= 7 ? 30 : (totalWeightKg <= 20 ? 100 : 200); feeNote = ' (ท่องเที่ยว ' + targetZip + ' [SPX] +' + extra + ')'; }
+      if (!_zones.ok) feeNote += ' ⚠️เช็คโซนพื้นที่ไม่ได้ตอนนี้ อาจไม่รวมค่าพื้นที่พิเศษ';
     }
     shipFinal = shipBase + extra;
   } else if (manualShipPrice !== -1) { hasShipping = true; shipFinal = manualShipPrice; feeNote = ' (ระบุเอง)'; }
