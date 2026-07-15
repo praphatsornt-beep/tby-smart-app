@@ -371,7 +371,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 19
         font-size: 0.9rem !important;
     }
     [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
-        flex-wrap: nowrap !important;
+        flex-wrap: wrap !important;
         gap: 2px !important;
         justify-content: center !important;
     }
@@ -1300,7 +1300,7 @@ if st.session_state["_sidebar_compact"]:
             font-size: 0.9rem !important;
         }
         [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
-            flex-wrap: nowrap !important;
+            flex-wrap: wrap !important;
             gap: 2px !important;
             justify-content: center !important;
         }
