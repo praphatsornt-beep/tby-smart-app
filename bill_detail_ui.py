@@ -346,9 +346,17 @@ def render(products, customers):
                         _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
                                    "ยอดรวม", "ค้างจ่าย", "สถานะจ่าย", "สถานะบิล"]
                         _id_map = grp["id"].reset_index(drop=True)
+                        # โชว์ "บิลหลัก" เฉพาะแถวที่เคยถูกแยกบิล (origin ≠ เลขที่บิลปัจจุบัน)
+                        # กันตารางรกด้วยค่าซ้ำเดิมทุกแถวตอนไม่มีการแยกบิล
+                        _grp_disp = grp[_dcols].reset_index(drop=True).copy()
+                        _grp_origin = grp["เลขอ้างอิงบิลหลัก"].reset_index(drop=True)
+                        _grp_bno = grp["เลขที่บิล"].reset_index(drop=True).fillna("")
+                        _has_family = (_grp_origin != "") & (_grp_origin != _grp_bno)
+                        if _has_family.any():
+                            _grp_disp.insert(1, "บิลหลัก", _grp_origin.where(_has_family, ""))
                         st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
                         _evt = st.dataframe(
-                            grp[_dcols].reset_index(drop=True).style
+                            _grp_disp.style
                                 .format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
                                 .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"])
                                 .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
@@ -1451,6 +1459,14 @@ def render(products, customers):
             chk_df.insert(0, "🗑️", False)
             _cleared_mask = all_df["เคลียร์แล้ว"].reset_index(drop=True)
             chk_df.insert(1, "สถานะ", _cleared_mask.map({True: "✅ เคลียร์", False: ""}))
+
+            # โชว์ "บิลหลัก" เฉพาะแถวที่เคยถูกแยกบิล (origin ≠ เลขที่บิลปัจจุบัน) กันตาราง
+            # รกด้วยค่าซ้ำเดิมทุกแถวตอนไม่มีการแยกบิล
+            _origin_h = all_df["เลขอ้างอิงบิลหลัก"].reset_index(drop=True)
+            _bno_h = chk_df["เลขที่บิล"].fillna("")
+            _has_family_h = (_origin_h != "") & (_origin_h != _bno_h)
+            if _has_family_h.any():
+                chk_df.insert(chk_df.columns.get_loc("เลขที่บิล") + 1, "บิลหลัก", _origin_h.where(_has_family_h, ""))
 
             _is_dup_bill = chk_df["เลขที่บิล"].ne("") & (chk_df["เลขที่บิล"] == chk_df["เลขที่บิล"].shift(1).fillna(""))
             for _col in ("เลขที่บิล", "วันที่", "ลูกค้า"):
