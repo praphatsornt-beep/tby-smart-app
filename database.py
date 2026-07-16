@@ -1146,7 +1146,12 @@ def shop_has_ecommerce_data(shop_name: str, platform: str = "shopee") -> bool:
 def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
     """สรุปว่าแต่ละร้านมีข้อมูลนำเข้าครอบคลุมช่วงวันไหนแล้วบ้าง แยกรายงานคำสั่งซื้อ
     (Order.all) กับรายงานรายได้ (Income) คนละคอลัมน์ — เช็คก่อนอัปโหลดว่ายังขาด
-    ช่วงไหน กันเผลออัปโหลดไม่ครอบคลุมออเดอร์ที่ต้องการ"""
+    ช่วงไหน กันเผลออัปโหลดไม่ครอบคลุมออเดอร์ที่ต้องการ
+
+    เพิ่มคอลัมน์ "ช่วงที่ Order.all ยังไม่ครอบคลุม": ปกติ Order.all จะครอบคลุมกว้างกว่า
+    Income เสมอ (เงินโอนช้ากว่าวันสั่งซื้อ) ถ้า Income มีช่วงวันที่ Order.all ไม่ครอบคลุม
+    (ก่อนหรือหลังช่วงของ Order.all) แปลว่ามีออเดอร์ที่ยืนยันยอดโอนแล้วแต่ไม่มีรายละเอียด
+    สินค้า — สัญญาณว่าอัปโหลด Order.all ไม่ครบ ควรอัปโหลดเพิ่ม"""
     sales = get_supabase().table("ecommerce_sales").select("shop_name,sale_date") \
         .eq("platform", platform).execute().data
     incomes = get_supabase().table("ecommerce_order_income").select("shop_name,transfer_date") \
@@ -1166,12 +1171,46 @@ def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
     for shop in shop_names:
         s_dates = by_shop_sales.get(shop, [])
         i_dates = by_shop_income.get(shop, [])
+        s_min, s_max = (min(s_dates), max(s_dates)) if s_dates else (None, None)
+        i_min, i_max = (min(i_dates), max(i_dates)) if i_dates else (None, None)
+
+        gaps = []
+        if i_dates and not s_dates:
+            gaps.append(f"{i_min} ถึง {i_max}")
+        elif i_dates and s_dates:
+            if i_min < s_min:
+                _before_end = (pd.to_datetime(s_min) - pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+                gaps.append(f"{i_min} ถึง {_before_end}")
+            if i_max > s_max:
+                _after_start = (pd.to_datetime(s_max) + pd.Timedelta(days=1)).strftime("%Y-%m-%d")
+                gaps.append(f"{_after_start} ถึง {i_max}")
+
         rows.append({
             "ร้าน": shop,
-            "รายงานคำสั่งซื้อ (Order.all)": f"{min(s_dates)} ถึง {max(s_dates)}" if s_dates else "ยังไม่มีข้อมูล",
-            "รายงานรายได้ (Income)": f"{min(i_dates)} ถึง {max(i_dates)}" if i_dates else "ยังไม่มีข้อมูล",
+            "รายงานคำสั่งซื้อ (Order.all)": f"{s_min} ถึง {s_max}" if s_dates else "ยังไม่มีข้อมูล",
+            "รายงานรายได้ (Income)": f"{i_min} ถึง {i_max}" if i_dates else "ยังไม่มีข้อมูล",
+            "ช่วงที่ Order.all ยังไม่ครอบคลุม": " | ".join(gaps) if gaps else "-",
         })
     return pd.DataFrame(rows)
+
+
+def check_ecommerce_shop_mismatch(order_sns: list[str], shop_name: str, platform: str = "shopee") -> dict[str, str]:
+    """เช็คว่าออเดอร์เหล่านี้เคยถูกบันทึกไว้เป็นร้านอื่นมาก่อนหรือไม่ — ไฟล์ Order.all
+    เองไม่มีชื่อร้านกำกับ (ต่างจาก Income ที่ดึงชื่อร้านจากหัวไฟล์ Shopee ได้เอง) ผู้ใช้
+    ต้องเลือกร้านจาก dropdown เอง จึงเสี่ยงเลือกผิดร้านโดยไม่รู้ตัว คืน {order_sn: ชื่อร้านเดิม}
+    เฉพาะที่ไม่ตรงกับ shop_name ที่กำลังจะนำเข้า"""
+    if not order_sns:
+        return {}
+    db = get_supabase()
+    mismatches: dict[str, str] = {}
+    for i in range(0, len(order_sns), 50):
+        chunk = order_sns[i:i + 50]
+        for _table in ("ecommerce_sales", "ecommerce_order_income"):
+            rows = db.table(_table).select("order_sn,shop_name").eq("platform", platform) \
+                .in_("order_sn", chunk).neq("shop_name", shop_name).execute().data
+            for r in rows:
+                mismatches.setdefault(r["order_sn"], r["shop_name"])
+    return mismatches
 
 
 def upsert_ecommerce_sales(rows: list[dict]) -> None:

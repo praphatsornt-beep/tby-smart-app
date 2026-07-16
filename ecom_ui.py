@@ -71,6 +71,13 @@ def render():
         if not coverage_df.empty:
             st.caption("ข้อมูลที่นำเข้าแล้วครอบคลุมช่วงวันไหนบ้าง (เช็คก่อนอัปโหลดเพิ่ม กันช่วงขาด/ซ้ำ)")
             st.dataframe(coverage_df, width="stretch", hide_index=True)
+            _gap_shops = coverage_df.loc[coverage_df["ช่วงที่ Order.all ยังไม่ครอบคลุม"] != "-", "ร้าน"].tolist()
+            if _gap_shops:
+                st.warning(
+                    f"⚠️ ร้าน {', '.join(_gap_shops)} มีรายงานรายได้ (Income) ครอบคลุมช่วงที่ยังไม่ได้อัปโหลด "
+                    "Order.all — ดูคอลัมน์ \"ช่วงที่ Order.all ยังไม่ครอบคลุม\" แล้วอัปโหลด Order.all "
+                    "เพิ่มให้ครบช่วงนั้น ไม่งั้นออเดอร์กลุ่มนี้จะไม่ถูกนับกำไรต่อสินค้า (ข้อ 4)"
+                )
         _order_ver = st.session_state.get("_ecom_order_file_ver", 0)
         _income_ver = st.session_state.get("_ecom_income_file_ver", 0)
         oc1, oc2 = st.columns(2)
@@ -80,23 +87,60 @@ def render():
             if _order_msg:
                 getattr(st, _order_msg[0])(_order_msg[1])
             _order_shop = st.selectbox("ร้าน", shop_names, key="ecom_order_shop")
-            _order_file = st.file_uploader("ไฟล์ Order.all...xlsx", type=["xlsx"], key=f"ecom_order_file_{_order_ver}")
-            if _order_file and st.button("นำเข้ารายงานคำสั่งซื้อ", key="ecom_import_orders", type="primary"):
-                with st.spinner("กำลังอ่านไฟล์..."):
-                    rows = shopee_import.parse_order_export(_order_file, _order_shop)
-                    if rows:
-                        prod_map = db.get_ecommerce_product_map()
-                        for r in rows:
-                            _m = prod_map.get(("shopee", r["item_id_platform"]))
-                            r["product_id"] = _m["product_id"] if _m else None
-                        db.upsert_ecommerce_sales(rows)
-                        _n_updated = db.allocate_ecommerce_order_income()
-                        st.session_state["_ecom_order_import_msg"] = (
-                            "success", f"✅ นำเข้า {len(rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
-                    else:
-                        st.session_state["_ecom_order_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
-                st.session_state["_ecom_order_file_ver"] = _order_ver + 1
-                st.rerun()
+            _pending = st.session_state.get("_ecom_order_pending_import")
+            if _pending:
+                _mismatch = _pending["mismatches"]
+                _examples = ", ".join(f"{sn} (เดิม: {nm})" for sn, nm in list(_mismatch.items())[:5])
+                st.warning(
+                    f"⚠️ พบ {len(_mismatch)} ออเดอร์ในไฟล์นี้ที่เคยถูกบันทึกเป็น**ร้านอื่น**มาก่อน "
+                    f"แต่ตอนนี้กำลังจะนำเข้าเป็นร้าน **{_pending['shop_name']}** — เช่น {_examples}"
+                    f"{' ...' if len(_mismatch) > 5 else ''}\n\n"
+                    "แน่ใจว่าเลือกร้านถูกต้องแล้ว หรือไฟล์นี้เป็นไฟล์ผิดร้าน?"
+                )
+                _pc1, _pc2 = st.columns(2)
+                if _pc1.button("✅ ยืนยันนำเข้าต่อ (ร้านถูกต้องแล้ว)", key="ecom_confirm_order_mismatch"):
+                    _rows = _pending["rows"]
+                    prod_map = db.get_ecommerce_product_map()
+                    for r in _rows:
+                        _m = prod_map.get(("shopee", r["item_id_platform"]))
+                        r["product_id"] = _m["product_id"] if _m else None
+                    db.upsert_ecommerce_sales(_rows)
+                    _n_updated = db.allocate_ecommerce_order_income()
+                    st.session_state["_ecom_order_import_msg"] = (
+                        "success", f"✅ นำเข้า {len(_rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
+                    del st.session_state["_ecom_order_pending_import"]
+                    st.session_state["_ecom_order_file_ver"] = _order_ver + 1
+                    st.rerun()
+                if _pc2.button("❌ ยกเลิก (ไฟล์/ร้านผิด)", key="ecom_cancel_order_mismatch"):
+                    del st.session_state["_ecom_order_pending_import"]
+                    st.session_state["_ecom_order_file_ver"] = _order_ver + 1
+                    st.rerun()
+            else:
+                _order_file = st.file_uploader("ไฟล์ Order.all...xlsx", type=["xlsx"], key=f"ecom_order_file_{_order_ver}")
+                if _order_file and st.button("นำเข้ารายงานคำสั่งซื้อ", key="ecom_import_orders", type="primary"):
+                    with st.spinner("กำลังอ่านไฟล์..."):
+                        rows = shopee_import.parse_order_export(_order_file, _order_shop)
+                        if not rows:
+                            st.session_state["_ecom_order_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+                            st.session_state["_ecom_order_file_ver"] = _order_ver + 1
+                        else:
+                            _order_sns = list({r["order_sn"] for r in rows})
+                            _mismatch = db.check_ecommerce_shop_mismatch(_order_sns, _order_shop)
+                            if _mismatch:
+                                st.session_state["_ecom_order_pending_import"] = {
+                                    "rows": rows, "mismatches": _mismatch, "shop_name": _order_shop,
+                                }
+                            else:
+                                prod_map = db.get_ecommerce_product_map()
+                                for r in rows:
+                                    _m = prod_map.get(("shopee", r["item_id_platform"]))
+                                    r["product_id"] = _m["product_id"] if _m else None
+                                db.upsert_ecommerce_sales(rows)
+                                _n_updated = db.allocate_ecommerce_order_income()
+                                st.session_state["_ecom_order_import_msg"] = (
+                                    "success", f"✅ นำเข้า {len(rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
+                                st.session_state["_ecom_order_file_ver"] = _order_ver + 1
+                    st.rerun()
 
         with oc2:
             st.markdown("**💰 รายงานรายได้** (การเงิน → รายได้ของฉัน → Export)")
