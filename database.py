@@ -1331,7 +1331,9 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
     return updated
 
 
-def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: str = "shopee") -> tuple[pd.DataFrame, int]:
+def get_ecommerce_product_margin_df(
+    start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
+) -> tuple[pd.DataFrame, int]:
     """สรุปต่อสินค้า (เฉพาะที่ map แล้ว): จำนวนขายผ่าน Shopee, ยอดเงินที่ได้รับจริง
     (เฉลี่ยจาก allocate_ecommerce_order_income), กำไร — เรียงขาดทุนมากสุดขึ้นก่อน
     (ไม่รวมสต็อกคงเหลือ/เงินจมในสต็อก เพราะเป็นสต็อกรวมทั้งร้าน ไม่ใช่เฉพาะที่ขาย
@@ -1340,15 +1342,20 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
     นับเฉพาะออเดอร์ที่มีรายงาน Income มายืนยันยอดโอนแล้วเท่านั้น (ไม่งั้นออเดอร์ที่
     ยังไม่ได้อัปโหลด Income มา จะถูกหักต้นทุนเต็มแต่ได้ยอดรับ=0 ทำให้กำไรผิดเพี้ยน
     เป็นลบหลอกๆ ทั้งที่จริงยังไม่ได้เงินแค่นั้นเอง) — คืน (df, จำนวนชิ้นที่ยังรอยืนยัน
-    ยอดเงิน ไม่รวมอยู่ใน df) ตัวคูณ units_per_pack ใช้กับ SKU ที่ map เป็นแพ็ครวม"""
-    settled_order_sns = {
-        r["order_sn"] for r in get_supabase().table("ecommerce_order_income")
-        .select("order_sn").eq("platform", platform).execute().data
-    }
-    sales = get_supabase().table("ecommerce_sales").select(
+    ยอดเงิน ไม่รวมอยู่ใน df) ตัวคูณ units_per_pack ใช้กับ SKU ที่ map เป็นแพ็ครวม
+    shop_name: ระบุเพื่อกรองดูเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+    _income_q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", platform)
+    if shop_name:
+        _income_q = _income_q.eq("shop_name", shop_name)
+    settled_order_sns = {r["order_sn"] for r in _income_q.execute().data}
+
+    _sales_q = get_supabase().table("ecommerce_sales").select(
         "order_sn,product_id,item_id_platform,qty,returned_qty,net_amount,item_price,order_status,sale_date"
     ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date) \
-     .not_.is_("product_id", "null").execute().data
+     .not_.is_("product_id", "null")
+    if shop_name:
+        _sales_q = _sales_q.eq("shop_name", shop_name)
+    sales = _sales_q.execute().data
     if not sales:
         return pd.DataFrame(), 0
 
@@ -1402,22 +1409,31 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
     return df.reset_index(drop=True), int(pending_qty)
 
 
-def _ecommerce_order_costs(start_date: str, end_date: str, platform: str = "shopee") -> tuple[dict, dict]:
+def _ecommerce_order_costs(
+    start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
+) -> tuple[dict, dict]:
     """เตรียมข้อมูลรายออเดอร์ (ยอดโอนสุทธิ + ต้นทุนรวม) ใช้ร่วมกันโดย
     get_ecommerce_order_anomaly_df และ get_ecommerce_order_profit_summary — นับเฉพาะ
     ออเดอร์ที่มี Income ยืนยันแล้วและทุก SKU ในออเดอร์ map ครบแล้ว (ถ้ามี SKU ไหนยังไม่
-    map จะ flag unmapped ไว้เพราะคำนวณต้นทุนไม่ครบ)"""
+    map จะ flag unmapped ไว้เพราะคำนวณต้นทุนไม่ครบ) shop_name: กรองเฉพาะร้านเดียว
+    (None = รวมทุกร้าน)"""
+    _income_q = get_supabase().table("ecommerce_order_income") \
+        .select("order_sn,shop_name,net_amount").eq("platform", platform)
+    if shop_name:
+        _income_q = _income_q.eq("shop_name", shop_name)
     incomes = {
         r["order_sn"]: (r["shop_name"], float(r.get("net_amount") or 0))
-        for r in get_supabase().table("ecommerce_order_income")
-        .select("order_sn,shop_name,net_amount").eq("platform", platform).execute().data
+        for r in _income_q.execute().data
     }
     if not incomes:
         return incomes, {}
 
-    sales = get_supabase().table("ecommerce_sales").select(
+    _sales_q = get_supabase().table("ecommerce_sales").select(
         "order_sn,product_id,item_id_platform,item_name,qty,returned_qty,order_status,sale_date"
-    ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date).execute().data
+    ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date)
+    if shop_name:
+        _sales_q = _sales_q.eq("shop_name", shop_name)
+    sales = _sales_q.execute().data
     if not sales:
         return incomes, {}
 
@@ -1443,10 +1459,11 @@ def _ecommerce_order_costs(start_date: str, end_date: str, platform: str = "shop
 
 
 def get_ecommerce_order_anomaly_df(
-    start_date: str, end_date: str, platform: str = "shopee", warn_pct: float = 10.0,
+    start_date: str, end_date: str, platform: str = "shopee", warn_pct: float = 10.0, shop_name: str = None,
 ) -> pd.DataFrame:
-    """หาออเดอร์ (ไม่ใช่สินค้ารวม) ที่กำไรติดลบ/ต่ำผิดปกติ พร้อมเลขที่ออเดอร์"""
-    incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform)
+    """หาออเดอร์ (ไม่ใช่สินค้ารวม) ที่กำไรติดลบ/ต่ำผิดปกติ พร้อมเลขที่ออเดอร์
+    shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+    incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform, shop_name)
     if not incomes or not by_order:
         return pd.DataFrame()
 
@@ -1475,13 +1492,16 @@ def get_ecommerce_order_anomaly_df(
     return df.reset_index(drop=True)
 
 
-def get_ecommerce_order_profit_summary(start_date: str, end_date: str, platform: str = "shopee") -> dict:
+def get_ecommerce_order_profit_summary(
+    start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
+) -> dict:
     """สรุปกำไรรวม/ขาดทุนรวมของช่วงเวลา โดยจัดกำไร-ขาดทุนเป็นรายออเดอร์ก่อนรวม (ไม่ใช่ net
     รายสินค้าทั้งช่วงแบบ get_ecommerce_product_margin_df) — รับประกันว่าตัวเลขนี้บวกกันได้
     ตรงๆ ข้ามช่วงเวลา (เช่น เดือน 6 + เดือน 7 = ช่วงรวม 6-7 พอดี) เพราะออเดอร์หนึ่งอยู่ในช่วง
     เดียวเสมอ ไม่ถูกแบ่งข้ามช่วง ต่างจากสินค้าที่กำไรเดือนหนึ่งแต่ขาดทุนอีกเดือนซึ่งพอ net รวม
-    ทั้งช่วงแล้วตัวเลขจะไม่เท่ากับเอาแต่ละเดือนมาบวกกัน"""
-    incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform)
+    ทั้งช่วงแล้วตัวเลขจะไม่เท่ากับเอาแต่ละเดือนมาบวกกัน shop_name: กรองเฉพาะร้านเดียว
+    (None = รวมทุกร้าน)"""
+    incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform, shop_name)
     total_profit = 0.0
     total_loss = 0.0
     for sn, o in by_order.items():
@@ -1502,15 +1522,20 @@ def get_ecommerce_order_profit_summary(start_date: str, end_date: str, platform:
 
 def get_ecommerce_shipping_overcharge_df(
     start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 0.0,
+    shop_name: str = None,
 ) -> pd.DataFrame:
     """หาออเดอร์ที่ Shopee หักค่าส่งจากร้านเกินกว่าที่ประเมินไว้ล่วงหน้า —
     Shopee ประเมิน "ค่าส่งที่ผู้ซื้อจ่าย + Shopee ออกให้" ไว้ตอนสั่งซื้อ แต่พอ
     ขนส่งชั่งพัสดุจริงแล้วแพงกว่าที่ประเมิน ส่วนต่างจะถูกหักเพิ่มจากร้านเงียบๆ
     (ไม่ได้เทียบกับน้ำหนักสินค้าที่เราคำนวณเอง — ใช้ตัวเลขที่ Shopee รายงานมา
-    ตรงๆ เท่านั้น จึงไม่ผิดเพี้ยนจากความแม่นยำของข้อมูลน้ำหนักในระบบเรา)"""
-    rows = get_supabase().table("ecommerce_order_income").select(
+    ตรงๆ เท่านั้น จึงไม่ผิดเพี้ยนจากความแม่นยำของข้อมูลน้ำหนักในระบบเรา)
+    shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+    _q = get_supabase().table("ecommerce_order_income").select(
         "order_sn,shop_name,transfer_date,buyer_paid_shipping,shopee_subsidized_shipping,shipping_fee_charged"
-    ).eq("platform", platform).gte("transfer_date", start_date).lte("transfer_date", end_date).execute().data
+    ).eq("platform", platform).gte("transfer_date", start_date).lte("transfer_date", end_date)
+    if shop_name:
+        _q = _q.eq("shop_name", shop_name)
+    rows = _q.execute().data
     if not rows:
         return pd.DataFrame()
 
@@ -1534,12 +1559,16 @@ def get_ecommerce_shipping_overcharge_df(
     return df.reset_index(drop=True)
 
 
-def get_ecommerce_problem_orders_df(platform: str = "shopee") -> pd.DataFrame:
-    """ออเดอร์ที่ตีกลับ/คืนสินค้า/ยกเลิก พร้อมเลขพัสดุ+ขนส่ง สำหรับตรวจสอบ"""
-    rows = get_supabase().table("ecommerce_sales").select(
+def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = None) -> pd.DataFrame:
+    """ออเดอร์ที่ตีกลับ/คืนสินค้า/ยกเลิก พร้อมเลขพัสดุ+ขนส่ง สำหรับตรวจสอบ
+    shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+    _q = get_supabase().table("ecommerce_sales").select(
         "order_sn,shop_name,sale_date,order_status,return_status,returned_qty,"
         "tracking_no,carrier_name,product_id,products(name)"
-    ).eq("platform", platform).execute().data
+    ).eq("platform", platform)
+    if shop_name:
+        _q = _q.eq("shop_name", shop_name)
+    rows = _q.execute().data
     problem = [
         r for r in rows
         if r.get("return_status") or r.get("order_status") == "ยกเลิกแล้ว" or float(r.get("returned_qty") or 0) > 0
@@ -1559,10 +1588,14 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee") -> pd.DataFrame:
     } for r in problem]).sort_values("วันที่", ascending=False).reset_index(drop=True)
 
 
-def get_ecommerce_sales_df(start_date: str, end_date: str) -> pd.DataFrame:
-    rows = get_supabase().table("ecommerce_sales").select(
+def get_ecommerce_sales_df(start_date: str, end_date: str, shop_name: str = None) -> pd.DataFrame:
+    """shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+    _q = get_supabase().table("ecommerce_sales").select(
         "order_sn,sale_date,platform,shop_name,qty,item_price,product_id,order_status,products(name)"
-    ).gte("sale_date", start_date).lte("sale_date", end_date).order("sale_date", desc=True).execute().data
+    ).gte("sale_date", start_date).lte("sale_date", end_date)
+    if shop_name:
+        _q = _q.eq("shop_name", shop_name)
+    rows = _q.order("sale_date", desc=True).execute().data
     if not rows:
         return pd.DataFrame()
 

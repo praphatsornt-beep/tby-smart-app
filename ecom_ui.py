@@ -238,12 +238,17 @@ def _render_sales_profit():
     if _unmapped_n:
         st.warning(f"⚠️ มี {_unmapped_n} รายการสินค้าที่ยังไม่ได้ map — ยอดขาย/กำไรของรายการนี้ยังไม่ถูกนับ ไปที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' เพื่อ map สินค้า")
 
+    _shops = db.get_ecommerce_shops()
+    _shop_opts = ["ทั้งหมด"] + [s["shop_name"] for s in _shops]
+    _sel_shop = st.selectbox("ร้าน", _shop_opts, key="ecom_profit_shop_filter")
+    _shop_filter = None if _sel_shop == "ทั้งหมด" else _sel_shop
+
     mc1, mc2, mc3 = st.columns([1, 1, 1])
     margin_from = mc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_margin_from")
     margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")
     margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
 
-    margin_df, pending_qty = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to))
+    margin_df, pending_qty = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), shop_name=_shop_filter)
     if pending_qty:
         st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน — ยังไม่รวมในตารางนี้ (อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
     if margin_df.empty:
@@ -252,7 +257,7 @@ def _render_sales_profit():
         # กำไรรวม/ขาดทุนรวม/สุทธิ จัด class เป็นรายออเดอร์ (ไม่ใช่ net รายสินค้าทั้งช่วง)
         # เพื่อให้บวกกันตรงๆ ข้ามช่วงเวลาได้ (เดือน 6 + เดือน 7 = ช่วงรวม 6-7 พอดี) — ดู
         # get_ecommerce_order_profit_summary
-        _profit_summary = db.get_ecommerce_order_profit_summary(str(margin_from), str(margin_to))
+        _profit_summary = db.get_ecommerce_order_profit_summary(str(margin_from), str(margin_to), shop_name=_shop_filter)
         _total_profit = _profit_summary["total_profit"]
         _total_loss   = _profit_summary["total_loss"]
         _net_total    = _profit_summary["net"]
@@ -292,11 +297,11 @@ def _render_sales_profit():
     st.divider()
 
     # ── ยอดขาย E-commerce (รายการดิบ) ────────────────────────────────────
-    with st.expander("ดูยอดขาย E-commerce (รายการดิบ)", expanded=False):
+    with st.expander("ดูยอดขาย E-commerce (รายการดิบ)", expanded=True):
         ev1, ev2 = st.columns(2)
         view_from = ev1.date_input("จาก", value=date.today().replace(day=1), key="ecom_vfrom")
         view_to   = ev2.date_input("ถึง",  value=date.today(), key="ecom_vto")
-        ecom_df   = db.get_ecommerce_sales_df(str(view_from), str(view_to))
+        ecom_df   = db.get_ecommerce_sales_df(str(view_from), str(view_to), shop_name=_shop_filter)
         if ecom_df.empty:
             st.info("ยังไม่มีข้อมูล — อัปโหลดรายงานคำสั่งซื้อก่อนครับ (แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล')")
         else:
@@ -305,6 +310,11 @@ def _render_sales_profit():
 
 
 def _render_issues():
+    _shops = db.get_ecommerce_shops()
+    _shop_opts = ["ทั้งหมด"] + [s["shop_name"] for s in _shops]
+    _sel_shop = st.selectbox("ร้าน", _shop_opts, key="ecom_issues_shop_filter")
+    _shop_filter = None if _sel_shop == "ทั้งหมด" else _sel_shop
+
     # ── ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) ───────────────────────
     st.subheader("ออเดอร์ที่กำไรผิดปกติ")
     st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")
@@ -312,7 +322,7 @@ def _render_issues():
     anomaly_from = ac1.date_input("จาก", value=date.today().replace(day=1), key="ecom_anomaly_from")
     anomaly_to   = ac2.date_input("ถึง",  value=date.today(), key="ecom_anomaly_to")
     anomaly_warn_pct = ac3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
-    anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), warn_pct=anomaly_warn_pct)
+    anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), warn_pct=anomaly_warn_pct, shop_name=_shop_filter)
     if anomaly_df.empty:
         st.success("✅ ไม่พบออเดอร์ที่กำไรผิดปกติในช่วงนี้")
     else:
@@ -328,7 +338,7 @@ def _render_issues():
 
     # ── ออเดอร์คืนสินค้า/ยกเลิก + tracking ────────────────────────────────
     st.subheader("ออเดอร์คืนสินค้า/ยกเลิก + ติดตามพัสดุ")
-    problem_df = db.get_ecommerce_problem_orders_df()
+    problem_df = db.get_ecommerce_problem_orders_df(shop_name=_shop_filter)
     if problem_df.empty:
         st.success("✅ ไม่มีออเดอร์คืนสินค้า/ยกเลิกที่บันทึกไว้")
     else:
@@ -348,7 +358,7 @@ def _render_issues():
     ship_from = sc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_ship_from")
     ship_to   = sc2.date_input("ถึง",  value=date.today(), key="ecom_ship_to")
     ship_threshold = sc3.number_input("เกณฑ์ส่วนต่าง (บาท)", min_value=0.0, value=0.0, step=5.0, key="ecom_ship_threshold")
-    overcharge_df = db.get_ecommerce_shipping_overcharge_df(str(ship_from), str(ship_to), overcharge_threshold=ship_threshold)
+    overcharge_df = db.get_ecommerce_shipping_overcharge_df(str(ship_from), str(ship_to), overcharge_threshold=ship_threshold, shop_name=_shop_filter)
     if overcharge_df.empty:
         st.success("✅ ไม่พบออเดอร์ที่ค่าส่งเกินเกณฑ์ในช่วงนี้")
     else:
