@@ -1430,7 +1430,7 @@ def get_ecommerce_order_anomaly_df(
         sn = r["order_sn"]
         if sn not in incomes or r.get("order_status") == "ยกเลิกแล้ว":
             continue
-        o = by_order.setdefault(sn, {"cost": 0.0, "unmapped": False, "items": []})
+        o = by_order.setdefault(sn, {"cost": 0.0, "unmapped": False, "items": [], "sale_date": r.get("sale_date")})
         pid = r["product_id"]
         if not pid:
             o["unmapped"] = True
@@ -1453,12 +1453,12 @@ def get_ecommerce_order_anomaly_df(
         rows.append({
             "สถานะ": "🔴 ขาดทุน" if profit < 0 else "🟡 กำไรต่ำ",
             "เลขออเดอร์": sn,
+            "วันที่สั่งซื้อ": o["sale_date"],
             "ร้าน": shop_name,
             "สินค้า": ", ".join(dict.fromkeys(o["items"])),
             "ต้นทุนรวม": round(o["cost"], 2),
             "ยอดเงินที่ได้รับจริง": round(net, 2),
             "กำไร": round(profit, 2),
-            "กำไร %": round(margin_pct, 1),
         })
     df = pd.DataFrame(rows)
     if not df.empty:
