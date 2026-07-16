@@ -7,7 +7,6 @@ import pandas as pd
 import database as db
 import carriers as carr
 import thai_address
-import shopee_api
 import line_api
 import iship_api
 import ecom_ui
@@ -22,38 +21,6 @@ from ui_helpers import _extract_tracking, _extract_iship_order_id, _build_succes
 thai_address._load_db()  # pre-warm cache
 
 st.set_page_config(page_title="TBY SMART APP", page_icon="🛍️", layout="wide")
-
-# ── Shopee OAuth callback ────────────────────────────────────────────────────
-_qp = st.query_params
-if "code" in _qp and "shop_id" in _qp:
-    _code    = _qp["code"]
-    _shop_id = int(_qp["shop_id"])
-    _cb_state      = _qp.get("state", "")
-    _expected_state = st.session_state.get("_shopee_oauth_state", "")
-    if _expected_state and _cb_state != _expected_state:
-        st.error("❌ OAuth state ไม่ตรง — request อาจถูก CSRF โจมตี กรุณาลองใหม่")
-    else:
-        try:
-            _tok = shopee_api.exchange_token(_shop_id, _code)
-            if "access_token" in _tok:
-                import datetime as _dt
-                expiry = _dt.datetime.utcnow() + _dt.timedelta(seconds=_tok.get("expire_in", 14400))
-                db.upsert_ecommerce_shop({
-                    "id":            str(_shop_id),
-                    "platform":      "shopee",
-                    "shop_name":     f"Shopee-{_shop_id}",
-                    "shop_id":       _shop_id,
-                    "access_token":  _tok["access_token"],
-                    "refresh_token": _tok["refresh_token"],
-                    "token_expiry":  expiry.isoformat(),
-                })
-                st.session_state.pop("_shopee_oauth_state", None)
-                st.success(f"✅ เชื่อมต่อร้าน shop_id={_shop_id} สำเร็จ")
-            else:
-                st.error(f"❌ ได้รับ code แต่ token ผิดพลาด: {_tok.get('message','')}")
-        except Exception as _e:
-            st.error(f"❌ OAuth error: {_e}")
-    st.query_params.clear()
 
 st.markdown(
     '<link rel="preconnect" href="https://fonts.googleapis.com">'

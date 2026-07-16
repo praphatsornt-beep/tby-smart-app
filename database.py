@@ -1093,9 +1093,148 @@ def upsert_ecommerce_shop(data: dict) -> None:
     _retry(lambda: db.table("ecommerce_shops").insert(data).execute())
 
 
-def insert_ecommerce_sales(rows: list[dict]) -> None:
-    if rows:
-        _retry(lambda: get_supabase().table("ecommerce_sales").insert(rows).execute())
+def upsert_ecommerce_sales(rows: list[dict]) -> None:
+    """upsert ตาม (platform, order_sn, item_id_platform) — กันแถวซ้ำถ้าอัปโหลด
+    ไฟล์ Order.all ซ้ำ/ช่วงวันที่ export ทับกัน"""
+    if not rows:
+        return
+    db = get_supabase()
+    for i in range(0, len(rows), 50):
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("ecommerce_sales").upsert(
+            _chunk, on_conflict="platform,order_sn,item_id_platform"
+        ).execute())
+
+
+def upsert_ecommerce_order_income(rows: list[dict]) -> None:
+    """upsert ตาม order_sn — ยอดโอนสุทธิจากไฟล์ Income (คนละไฟล์กับ Order.all)"""
+    if not rows:
+        return
+    db = get_supabase()
+    for i in range(0, len(rows), 50):
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("ecommerce_order_income").upsert(
+            _chunk, on_conflict="order_sn"
+        ).execute())
+
+
+def apply_ecommerce_product_map(mappings: list[dict], platform: str = "shopee") -> None:
+    """หลัง map SKU → product_id ใหม่ ผลักค่า product_id เข้า ecommerce_sales
+    ที่ import มาก่อนแล้วด้วย (mappings: [{platform_item_id, product_id}])"""
+    if not mappings:
+        return
+    db = get_supabase()
+    for m in mappings:
+        _retry(lambda _m=m: db.table("ecommerce_sales").update({"product_id": _m["product_id"]})
+               .eq("platform", platform).eq("item_id_platform", _m["platform_item_id"]).execute())
+
+
+def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
+    """แบ่งยอดโอนสุทธิต่อออเดอร์ (ecommerce_order_income) ลงในแต่ละ SKU
+    (ecommerce_sales.net_amount) ตามสัดส่วน item_price ของแต่ละ SKU ในออเดอร์
+    เดียวกัน — แถวสุดท้ายรับเศษปัดเหลือ (หลักการเดียวกับแบ่งจ่ายบางส่วนใน
+    บันทึกขาย) เรียกซ้ำได้ปลอดภัย (คำนวณใหม่ทับของเดิมทุกครั้ง)"""
+    db = get_supabase()
+    incomes = db.table("ecommerce_order_income").select("order_sn,net_amount") \
+        .eq("platform", platform).execute().data
+    if not incomes:
+        return 0
+    income_map = {r["order_sn"]: float(r["net_amount"]) for r in incomes}
+    order_sns = list(income_map.keys())
+    updated = 0
+    for i in range(0, len(order_sns), 50):
+        chunk = order_sns[i:i + 50]
+        sales = db.table("ecommerce_sales").select("id,order_sn,item_price") \
+            .eq("platform", platform).in_("order_sn", chunk).execute().data
+        by_order: dict[str, list[dict]] = {}
+        for s in sales:
+            by_order.setdefault(s["order_sn"], []).append(s)
+        for order_sn, lines in by_order.items():
+            net = income_map[order_sn]
+            total_weight = sum(float(line_item["item_price"]) for line_item in lines) or 1
+            remaining = net
+            for idx, line_item in enumerate(lines):
+                if idx == len(lines) - 1:
+                    share = round(remaining, 2)
+                else:
+                    share = round(net * (float(line_item["item_price"]) / total_weight), 2)
+                    remaining -= share
+                _retry(lambda _id=line_item["id"], _share=share:
+                       db.table("ecommerce_sales").update({"net_amount": _share}).eq("id", _id).execute())
+                updated += 1
+    return updated
+
+
+def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: str = "shopee") -> pd.DataFrame:
+    """สรุปต่อสินค้า (เฉพาะที่ map แล้ว): จำนวนขายผ่าน Shopee, ยอดเงินที่ได้รับจริง
+    (เฉลี่ยจาก allocate_ecommerce_order_income), กำไร, สต็อกคงเหลือ, เงินจมในสต็อก
+    — เรียงขาดทุนมากสุด+สต็อกจมเยอะสุดขึ้นก่อน"""
+    sales = get_supabase().table("ecommerce_sales").select(
+        "product_id,qty,returned_qty,net_amount,order_status,sale_date"
+    ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date) \
+     .not_.is_("product_id", "null").execute().data
+    if not sales:
+        return pd.DataFrame()
+
+    products = {p["id"]: p for p in get_products()}
+    stock = get_latest_stock_counts()
+
+    agg: dict[str, dict] = {}
+    for r in sales:
+        if r.get("order_status") == "ยกเลิกแล้ว":
+            continue
+        pid = r["product_id"]
+        a = agg.setdefault(pid, {"qty": 0.0, "net": 0.0})
+        a["qty"] += float(r["qty"] or 0) - float(r.get("returned_qty") or 0)
+        a["net"] += float(r.get("net_amount") or 0)
+
+    rows = []
+    for pid, a in agg.items():
+        prod = products.get(pid, {})
+        cost = float(prod.get("cost_price") or 0)
+        qty_sold = a["qty"]
+        profit = a["net"] - cost * qty_sold
+        stock_qty = float((stock.get(pid) or {}).get("qty_physical") or 0)
+        rows.append({
+            "รหัสสินค้า": pid,
+            "ชื่อสินค้า": prod.get("name", pid),
+            "ต้นทุน/ชิ้น": cost,
+            "ขายผ่าน Shopee (ชิ้น)": qty_sold,
+            "ยอดเงินที่ได้รับจริง": round(a["net"], 2),
+            "กำไรรวม": round(profit, 2),
+            "กำไร/ชิ้น": round(profit / qty_sold, 2) if qty_sold else 0,
+            "สต็อกคงเหลือ": stock_qty,
+            "เงินจมในสต็อก": round(stock_qty * cost, 2),
+        })
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df.sort_values(["กำไรรวม", "เงินจมในสต็อก"], ascending=[True, False], inplace=True)
+    return df.reset_index(drop=True)
+
+
+def get_ecommerce_problem_orders_df(platform: str = "shopee") -> pd.DataFrame:
+    """ออเดอร์ที่ตีกลับ/คืนสินค้า/ยกเลิก พร้อมเลขพัสดุ+ขนส่ง สำหรับตรวจสอบ"""
+    rows = get_supabase().table("ecommerce_sales").select(
+        "order_sn,shop_name,sale_date,order_status,return_status,returned_qty,"
+        "tracking_no,carrier_name,product_id,products(name)"
+    ).eq("platform", platform).execute().data
+    problem = [
+        r for r in rows
+        if r.get("return_status") or r.get("order_status") == "ยกเลิกแล้ว" or float(r.get("returned_qty") or 0) > 0
+    ]
+    if not problem:
+        return pd.DataFrame()
+    return pd.DataFrame([{
+        "วันที่": r["sale_date"],
+        "ร้าน": r["shop_name"],
+        "เลขออเดอร์": r["order_sn"],
+        "สินค้า": (r.get("products") or {}).get("name", r.get("product_id") or "ยังไม่ map"),
+        "สถานะออเดอร์": r.get("order_status") or "",
+        "สถานะคืนสินค้า": r.get("return_status") or "",
+        "จำนวนที่คืน": r.get("returned_qty") or 0,
+        "เลขพัสดุ": r.get("tracking_no") or "",
+        "ขนส่ง": r.get("carrier_name") or "",
+    } for r in problem]).sort_values("วันที่", ascending=False).reset_index(drop=True)
 
 
 def get_ecommerce_sales_df(start_date: str, end_date: str) -> pd.DataFrame:

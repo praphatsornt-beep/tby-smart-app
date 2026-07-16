@@ -86,9 +86,9 @@ def render():
     if _md_active == _MD_TABS[0]:
         products = db.get_products()
 
-        prod_cols = ["id", "name", "price", "points_per_unit", "bv_per_unit", "weight_grams", "max_units_per_box"]
+        prod_cols = ["id", "name", "price", "cost_price", "points_per_unit", "bv_per_unit", "weight_grams", "max_units_per_box"]
         col_rename = {
-            "id": "รหัส", "name": "ชื่อสินค้า", "price": "ราคา (บาท)",
+            "id": "รหัส", "name": "ชื่อสินค้า", "price": "ราคา (บาท)", "cost_price": "ต้นทุน (บาท)",
             "points_per_unit": "PV/หน่วย", "bv_per_unit": "BV/หน่วย", "weight_grams": "น้ำหนัก (g)",
             "max_units_per_box": "จำนวนสูงสุด/กล่อง",
         }
@@ -111,6 +111,7 @@ def render():
                 "รหัส":        st.column_config.TextColumn("รหัส", required=True),
                 "ชื่อสินค้า":  st.column_config.TextColumn("ชื่อสินค้า", required=True),
                 "ราคา (บาท)":  st.column_config.NumberColumn("ราคา (บาท)", min_value=0, step=10.0, format="%.2f"),
+                "ต้นทุน (บาท)": st.column_config.NumberColumn("ต้นทุน (บาท)", min_value=0, step=10.0, format="%.2f"),
                 "PV/หน่วย":    st.column_config.NumberColumn("PV/หน่วย",   min_value=0, step=1.0,  format="%.2f"),
                 "BV/หน่วย":    st.column_config.NumberColumn("BV/หน่วย",   min_value=0, step=1.0,  format="%.2f"),
                 "น้ำหนัก (g)": st.column_config.NumberColumn("น้ำหนัก (g)", min_value=0, step=10.0, format="%.0f"),
@@ -133,6 +134,7 @@ def render():
                         "id":                str(row["รหัส"]).strip(),
                         "name":              str(row["ชื่อสินค้า"]).strip(),
                         "price":             float(row["ราคา (บาท)"]  or 0),
+                        "cost_price":        float(row["ต้นทุน (บาท)"] or 0),
                         "points_per_unit":   float(row["PV/หน่วย"]    or 0),
                         "bv_per_unit":       float(row["BV/หน่วย"]    or 0),
                         "weight_grams":      float(row["น้ำหนัก (g)"] or 0),

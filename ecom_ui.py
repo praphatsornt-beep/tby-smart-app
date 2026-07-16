@@ -1,6 +1,11 @@
-"""UI สำหรับแท็บ E-commerce (Shopee) — แยกจาก app.py"""
-import datetime as _dt
-import secrets as _sec
+"""UI สำหรับแท็บ 🛒 E-commerce (Shopee) — แยกจาก app.py
+
+เดิมใช้ Shopee Open API (OAuth) แต่ Shopee เปิด Open API ให้เฉพาะร้านระดับ
+Managed Seller เท่านั้น (ร้านทั่วไปสมัครไม่ได้ ยืนยันแล้ว 2026-07-15) จึงเปลี่ยน
+มาใช้การอัปโหลดรายงาน export จาก Shopee Seller Centre แทน (ดู shopee_import.py):
+- "Order.all" (คำสั่งซื้อ > Export) — รายการสินค้าต่อออเดอร์ + สถานะ + เลขพัสดุ
+- "Income" (การเงิน > รายได้ของฉัน > Export) — ยอดโอนสุทธิจริงต่อออเดอร์
+"""
 import uuid
 
 import streamlit as st
@@ -8,158 +13,129 @@ import pandas as pd
 from datetime import date
 
 import database as db
-import shopee_api
+import shopee_import
 
 
 def render():
-    if not shopee_api.is_configured():
-        st.warning("⚙️ ยังไม่ได้ตั้งค่า Shopee Partner ID/Key — กรอกใน `.streamlit/secrets.toml` ก่อนครับ")
-        st.code('SHOPEE_PARTNER_ID = "12345"\nSHOPEE_PARTNER_KEY = "xxxxx"', language="toml")
-        return
-
-    # ── Section 1: เชื่อมต่อร้าน ────────────────────────────────────────
-    st.markdown("### 1. เชื่อมต่อร้าน Shopee")
-    redirect_url = st.text_input(
-        "Redirect URL (URL ของแอปนี้)", value="https://your-app.streamlit.app",
-        key="ecom_redirect", help="ต้องตรงกับที่ลงทะเบียนใน Shopee Open Platform"
-    )
-    _oauth_state = st.session_state.get("_shopee_oauth_state") or _sec.token_urlsafe(16)
-    st.session_state["_shopee_oauth_state"] = _oauth_state
-    auth_url = shopee_api.get_auth_url(redirect_url, state=_oauth_state)
-    st.link_button("🔗 Authorize ร้านใหม่", url=auth_url)
-    st.caption("กดปุ่มด้านบน → เข้า Shopee → เลือกร้าน → ระบบจะ redirect กลับมาพร้อม token อัตโนมัติ")
-
+    # ── Section 1: จัดการรายชื่อร้าน ────────────────────────────────────
+    st.markdown("### 1. ร้านค้า")
     shops = db.get_ecommerce_shops()
-    if shops:
-        st.divider()
-        shops_df = pd.DataFrame([{
-            "ชื่อร้าน": s["shop_name"], "Shop ID": s["shop_id"],
-            "Token หมดอายุ": (s.get("token_expiry") or "")[:16],
-        } for s in shops])
-        st.dataframe(shops_df, width="stretch", hide_index=True)
-
-        # rename shop
-        with st.expander("✏️ เปลี่ยนชื่อร้าน"):
-            for s in shops:
-                new_name = st.text_input(f"Shop ID {s['shop_id']}", value=s["shop_name"], key=f"sname_{s['id']}")
-                if new_name != s["shop_name"] and st.button("บันทึก", key=f"sname_btn_{s['id']}"):
-                    s["shop_name"] = new_name
-                    db.upsert_ecommerce_shop(s)
-                    st.rerun()
-
-    st.divider()
-
-    # ── Section 2: Sync orders ────────────────────────────────────────────
-    st.markdown("### 2. ดึงยอดขาย (Sync)")
-    if not shops:
-        st.info("เพิ่มร้านก่อนครับ")
-    else:
-        shop_options = {s["shop_name"]: s for s in shops}
-        sel_shops = st.multiselect("เลือกร้าน", list(shop_options.keys()), default=list(shop_options.keys()), key="ecom_shops_sel")
-        sc1, sc2 = st.columns(2)
-        sync_from = sc1.date_input("วันที่เริ่ม", value=date.today().replace(day=1), key="sync_from")
-        sync_to   = sc2.date_input("ถึง", value=date.today(), key="sync_to")
-
-        if st.button("🔄 Sync Orders", type="primary", width="stretch", key="ecom_sync"):
-            prod_map     = db.get_ecommerce_product_map()
-            new_items    = []
-            new_unmapped = []
-            from_ts = int(_dt.datetime.combine(sync_from, _dt.time.min).timestamp())
-            to_ts   = int(_dt.datetime.combine(sync_to,   _dt.time.max).timestamp())
-            total   = len(sel_shops)
-
-            _prog = st.progress(0, text=f"เตรียม sync {total} ร้าน...")
-            with st.status(f"กำลัง sync {total} ร้าน...", expanded=True) as _sync_status:
-                for idx, shop_name in enumerate(sel_shops):
-                    _prog.progress(idx / total, text=f"กำลังดึง {shop_name} ({idx+1}/{total})...")
-                    st.write(f"⏳ **{shop_name}** ({idx+1}/{total})...")
-                    shop = shop_options[shop_name]
-
-                    # refresh token ถ้าใกล้หมดอายุ
-                    if shop.get("token_expiry"):
-                        exp = _dt.datetime.fromisoformat(shop["token_expiry"].replace("Z", ""))
-                        if exp - _dt.datetime.utcnow() < _dt.timedelta(hours=1):
-                            r = shopee_api.do_refresh_token(shop["shop_id"], shop["refresh_token"])
-                            if "access_token" in r:
-                                shop["access_token"]  = r["access_token"]
-                                shop["refresh_token"] = r["refresh_token"]
-                                new_exp = _dt.datetime.utcnow() + _dt.timedelta(seconds=r.get("expire_in", 14400))
-                                shop["token_expiry"] = new_exp.isoformat()
-                                db.upsert_ecommerce_shop(shop)
-
-                    orders = shopee_api.get_orders(shop["shop_id"], shop["access_token"], from_ts, to_ts)
-                    if not orders:
-                        st.write(f"⚪ **{shop_name}**: ไม่มี order ในช่วงนี้")
-                        _prog.progress((idx + 1) / total, text=f"ดึง {shop_name} เสร็จ ({idx+1}/{total})")
-                        continue
-
-                    order_sns = [o["order_sn"] for o in orders]
-                    details   = shopee_api.get_order_details(shop["shop_id"], shop["access_token"], order_sns)
-                    shop_count = 0
-
-                    for order in details:
-                        order_date = str(_dt.date.fromtimestamp(order.get("create_time", 0)))
-                        for item in order.get("item_list", []):
-                            item_id = str(item.get("item_id", ""))
-                            qty     = item.get("model_quantity_purchased", 0)
-                            price   = float(item.get("item_price", 0))
-                            mapped_pid = prod_map.get(("shopee", item_id))
-                            new_items.append({
-                                "id":               str(uuid.uuid4()),
-                                "platform":         "shopee",
-                                "shop_name":        shop_name,
-                                "order_sn":         order["order_sn"],
-                                "sale_date":        order_date,
-                                "product_id":       mapped_pid,
-                                "item_id_platform": item_id,
-                                "qty":              qty,
-                                "item_price":       price,
-                            })
-                            if not mapped_pid:
-                                new_unmapped.append((item_id, item.get("item_name", ""), shop_name))
-                            shop_count += 1
-
-                    st.write(f"✅ **{shop_name}**: {len(orders)} orders / {shop_count} items")
-                    _prog.progress((idx + 1) / total, text=f"ดึง {shop_name} เสร็จ ({idx+1}/{total})")
-
-                if new_items:
-                    db.insert_ecommerce_sales(new_items)
-                _prog.progress(1.0, text="✅ Sync เสร็จสิ้น")
-                _final = f"✅ Sync เสร็จสิ้น — {len(new_items)} รายการ" if new_items else "ℹ️ Sync เสร็จสิ้น — ไม่มี order ใหม่"
-                _sync_status.update(label=_final, state="complete", expanded=False)
-
-            if new_items:
-                st.success(f"✅ Sync แล้ว {len(new_items)} รายการ")
-            else:
-                st.info("ไม่มี order ใหม่ในช่วงเวลานี้")
-            if new_unmapped:
-                st.warning(f"⚠️ {len(set(i[0] for i in new_unmapped))} สินค้ายังไม่ได้ map — ไปที่ Section 4")
+    shop_names = [s["shop_name"] for s in shops]
+    with st.expander("➕ เพิ่มร้านใหม่", expanded=not shops):
+        _new_shop = st.text_input("ชื่อร้าน", key="ecom_new_shop_name", placeholder="เช่น Shopee ร้าน 1")
+        if st.button("บันทึกร้าน", key="ecom_add_shop") and _new_shop.strip():
+            db.upsert_ecommerce_shop({
+                "id": str(uuid.uuid4()), "platform": "shopee",
+                "shop_name": _new_shop.strip(), "shop_id": 0,
+            })
+            st.success(f"✅ เพิ่มร้าน {_new_shop.strip()} แล้ว")
             st.rerun()
+    if shops:
+        st.dataframe(pd.DataFrame([{"ชื่อร้าน": s["shop_name"]} for s in shops]),
+                      width="stretch", hide_index=True)
 
     st.divider()
 
-    # ── Section 3: ยอดขาย ────────────────────────────────────────────────
+    # ── Section 2: อัปโหลดรายงาน ─────────────────────────────────────────
+    st.markdown("### 2. อัปโหลดรายงานจาก Shopee Seller Centre")
+    if not shops:
+        st.info("เพิ่มร้านก่อนครับ (ข้อ 1)")
+    else:
+        oc1, oc2 = st.columns(2)
+        with oc1:
+            st.markdown("**📦 รายงานคำสั่งซื้อ** (คำสั่งซื้อ → Export)")
+            _order_shop = st.selectbox("ร้าน", shop_names, key="ecom_order_shop")
+            _order_file = st.file_uploader("ไฟล์ Order.all...xlsx", type=["xlsx"], key="ecom_order_file")
+            if _order_file and st.button("นำเข้ารายงานคำสั่งซื้อ", key="ecom_import_orders", type="primary"):
+                with st.spinner("กำลังอ่านไฟล์..."):
+                    rows = shopee_import.parse_order_export(_order_file, _order_shop)
+                    if rows:
+                        prod_map = db.get_ecommerce_product_map()
+                        for r in rows:
+                            r["product_id"] = prod_map.get(("shopee", r["item_id_platform"]))
+                        db.upsert_ecommerce_sales(rows)
+                        _n_updated = db.allocate_ecommerce_order_income()
+                        st.success(f"✅ นำเข้า {len(rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
+                    else:
+                        st.warning("ไม่พบข้อมูลในไฟล์")
+                st.rerun()
+
+        with oc2:
+            st.markdown("**💰 รายงานรายได้** (การเงิน → รายได้ของฉัน → Export)")
+            _income_file = st.file_uploader("ไฟล์ Income...xlsx", type=["xlsx"], key="ecom_income_file")
+            if _income_file and st.button("นำเข้ารายงานรายได้", key="ecom_import_income", type="primary"):
+                with st.spinner("กำลังอ่านไฟล์..."):
+                    rows, _detected_shop = shopee_import.parse_income_export(_income_file)
+                    if rows:
+                        db.upsert_ecommerce_order_income(rows)
+                        _n_updated = db.allocate_ecommerce_order_income()
+                        st.success(f"✅ นำเข้า {len(rows)} ออเดอร์ (ร้าน {_detected_shop}) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
+                    else:
+                        st.warning("ไม่พบข้อมูลในไฟล์")
+                st.rerun()
+
+    st.divider()
+
+    # ── Section 3: ยอดขาย E-commerce (รายการดิบ) ───────────────────────
     st.markdown("### 3. ยอดขาย E-commerce")
     ev1, ev2 = st.columns(2)
     view_from = ev1.date_input("จาก", value=date.today().replace(day=1), key="ecom_vfrom")
     view_to   = ev2.date_input("ถึง",  value=date.today(), key="ecom_vto")
     ecom_df   = db.get_ecommerce_sales_df(str(view_from), str(view_to))
     if ecom_df.empty:
-        st.info("ยังไม่มีข้อมูล — กด Sync ก่อนครับ")
+        st.info("ยังไม่มีข้อมูล — อัปโหลดรายงานคำสั่งซื้อก่อนครับ (ข้อ 2)")
     else:
         st.dataframe(ecom_df.style.format({"ยอด": "{:,.2f}"}), width="stretch", hide_index=True)
         st.caption(f"รวม {ecom_df['จำนวน'].sum():,} ชิ้น | ยอดรวม {ecom_df['ยอด'].sum():,.2f} บาท")
-        st.dataframe(
-            ecom_df.groupby("สินค้า")[["จำนวน", "ยอด"]].sum().reset_index()
-                .sort_values("จำนวน", ascending=False),
-            width="stretch", hide_index=True,
-        )
 
     st.divider()
 
-    # ── Section 4: Map สินค้า ─────────────────────────────────────────────
-    st.markdown("### 4. Map สินค้า Shopee → ระบบ")
-    unmapped_rows = db.get_unmapped_ecommerce_items("shopee") if shops else []
+    # ── Section 4: กำไรจริง + เงินจมในสต็อก ต่อสินค้า ──────────────────
+    st.markdown("### 4. กำไรจริง + เงินจมในสต็อก (ต่อสินค้า)")
+    st.caption("กำไร = ยอดเงินที่ Shopee โอนเข้าจริง (หลังหักค่าธรรมเนียม/ค่าส่ง/ภาษีแล้ว) − ต้นทุน × จำนวนที่ขาย")
+    mc1, mc2, mc3 = st.columns([1, 1, 1])
+    margin_from = mc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_margin_from")
+    margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")
+    margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
+
+    margin_df = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to))
+    if margin_df.empty:
+        st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (ดูข้อ 6)")
+    else:
+        def _flag(row):
+            if row["กำไรรวม"] < 0:
+                return "🔴 ขาดทุน"
+            if row["ยอดเงินที่ได้รับจริง"] > 0 and row["กำไรรวม"] / row["ยอดเงินที่ได้รับจริง"] * 100 < margin_warn_pct:
+                return "🟡 กำไรต่ำ"
+            return "✅"
+        margin_df.insert(0, "สถานะ", margin_df.apply(_flag, axis=1))
+        st.dataframe(
+            margin_df.style.format({
+                "ต้นทุน/ชิ้น": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}",
+                "กำไรรวม": "{:,.2f}", "กำไร/ชิ้น": "{:,.2f}",
+                "สต็อกคงเหลือ": "{:,.0f}", "เงินจมในสต็อก": "{:,.2f}",
+            }),
+            width="stretch", hide_index=True,
+        )
+        _n_loss = (margin_df["กำไรรวม"] < 0).sum()
+        if _n_loss:
+            st.warning(f"⚠️ มี {_n_loss} สินค้าที่ขาดทุนในช่วงนี้")
+
+    st.divider()
+
+    # ── Section 5: ออเดอร์ผิดปกติ / คืนสินค้า / tracking ───────────────
+    st.markdown("### 5. ออเดอร์คืนสินค้า/ยกเลิก + ติดตามพัสดุ")
+    problem_df = db.get_ecommerce_problem_orders_df()
+    if problem_df.empty:
+        st.success("✅ ไม่มีออเดอร์คืนสินค้า/ยกเลิกที่บันทึกไว้")
+    else:
+        st.dataframe(problem_df, width="stretch", hide_index=True)
+
+    st.divider()
+
+    # ── Section 6: Map สินค้า Shopee → ระบบ ────────────────────────────
+    st.markdown("### 6. Map สินค้า Shopee → ระบบ")
+    unmapped_rows = db.get_unmapped_ecommerce_items("shopee")
 
     if unmapped_rows:
         st.warning(f"มี {len(unmapped_rows)} รายการที่ยังไม่ได้ map")
@@ -180,6 +156,7 @@ def render():
                 })
         if map_rows and st.button("💾 บันทึก Mapping", type="primary", key="ecom_map_save"):
             db.upsert_ecommerce_product_map(map_rows)
+            db.apply_ecommerce_product_map(map_rows)
             st.success(f"✅ Map แล้ว {len(map_rows)} รายการ")
             st.rerun()
     else:
