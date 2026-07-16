@@ -1402,25 +1402,24 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
     return df.reset_index(drop=True), int(pending_qty)
 
 
-def get_ecommerce_order_anomaly_df(
-    start_date: str, end_date: str, platform: str = "shopee", warn_pct: float = 10.0,
-) -> pd.DataFrame:
-    """หาออเดอร์ (ไม่ใช่สินค้ารวม) ที่กำไรติดลบ/ต่ำผิดปกติ พร้อมเลขที่ออเดอร์ —
-    นับเฉพาะออเดอร์ที่มี Income ยืนยันแล้วและทุก SKU ในออเดอร์ map ครบแล้ว
-    (ถ้ามี SKU ไหนยังไม่ map จะข้ามออเดอร์นั้นเพราะคำนวณต้นทุนไม่ครบ)"""
+def _ecommerce_order_costs(start_date: str, end_date: str, platform: str = "shopee") -> tuple[dict, dict]:
+    """เตรียมข้อมูลรายออเดอร์ (ยอดโอนสุทธิ + ต้นทุนรวม) ใช้ร่วมกันโดย
+    get_ecommerce_order_anomaly_df และ get_ecommerce_order_profit_summary — นับเฉพาะ
+    ออเดอร์ที่มี Income ยืนยันแล้วและทุก SKU ในออเดอร์ map ครบแล้ว (ถ้ามี SKU ไหนยังไม่
+    map จะ flag unmapped ไว้เพราะคำนวณต้นทุนไม่ครบ)"""
     incomes = {
         r["order_sn"]: (r["shop_name"], float(r.get("net_amount") or 0))
         for r in get_supabase().table("ecommerce_order_income")
         .select("order_sn,shop_name,net_amount").eq("platform", platform).execute().data
     }
     if not incomes:
-        return pd.DataFrame()
+        return incomes, {}
 
     sales = get_supabase().table("ecommerce_sales").select(
         "order_sn,product_id,item_id_platform,item_name,qty,returned_qty,order_status,sale_date"
     ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date).execute().data
     if not sales:
-        return pd.DataFrame()
+        return incomes, {}
 
     products = {p["id"]: p for p in get_products()}
     prod_map = get_ecommerce_product_map()
@@ -1440,6 +1439,16 @@ def get_ecommerce_order_anomaly_df(
         cost = float(products.get(pid, {}).get("cost_price") or 0)
         o["cost"] += cost * qty
         o["items"].append(products.get(pid, {}).get("name") or r.get("item_name") or pid)
+    return incomes, by_order
+
+
+def get_ecommerce_order_anomaly_df(
+    start_date: str, end_date: str, platform: str = "shopee", warn_pct: float = 10.0,
+) -> pd.DataFrame:
+    """หาออเดอร์ (ไม่ใช่สินค้ารวม) ที่กำไรติดลบ/ต่ำผิดปกติ พร้อมเลขที่ออเดอร์"""
+    incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform)
+    if not incomes or not by_order:
+        return pd.DataFrame()
 
     rows = []
     for sn, o in by_order.items():
@@ -1464,6 +1473,31 @@ def get_ecommerce_order_anomaly_df(
     if not df.empty:
         df.sort_values("กำไร", ascending=True, inplace=True)
     return df.reset_index(drop=True)
+
+
+def get_ecommerce_order_profit_summary(start_date: str, end_date: str, platform: str = "shopee") -> dict:
+    """สรุปกำไรรวม/ขาดทุนรวมของช่วงเวลา โดยจัดกำไร-ขาดทุนเป็นรายออเดอร์ก่อนรวม (ไม่ใช่ net
+    รายสินค้าทั้งช่วงแบบ get_ecommerce_product_margin_df) — รับประกันว่าตัวเลขนี้บวกกันได้
+    ตรงๆ ข้ามช่วงเวลา (เช่น เดือน 6 + เดือน 7 = ช่วงรวม 6-7 พอดี) เพราะออเดอร์หนึ่งอยู่ในช่วง
+    เดียวเสมอ ไม่ถูกแบ่งข้ามช่วง ต่างจากสินค้าที่กำไรเดือนหนึ่งแต่ขาดทุนอีกเดือนซึ่งพอ net รวม
+    ทั้งช่วงแล้วตัวเลขจะไม่เท่ากับเอาแต่ละเดือนมาบวกกัน"""
+    incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform)
+    total_profit = 0.0
+    total_loss = 0.0
+    for sn, o in by_order.items():
+        if o["unmapped"] or not o["items"]:
+            continue
+        _, net = incomes[sn]
+        profit = net - o["cost"]
+        if profit >= 0:
+            total_profit += profit
+        else:
+            total_loss += profit
+    return {
+        "total_profit": round(total_profit, 2),
+        "total_loss": round(total_loss, 2),
+        "net": round(total_profit + total_loss, 2),
+    }
 
 
 def get_ecommerce_shipping_overcharge_df(

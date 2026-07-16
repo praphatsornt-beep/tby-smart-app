@@ -192,9 +192,13 @@ def render():
     if margin_df.empty:
         st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (ดูข้อ 6)")
     else:
-        _total_profit = margin_df.loc[margin_df["กำไรรวม"] > 0, "กำไรรวม"].sum()
-        _total_loss   = margin_df.loc[margin_df["กำไรรวม"] < 0, "กำไรรวม"].sum()
-        _net_total    = margin_df["กำไรรวม"].sum()
+        # กำไรรวม/ขาดทุนรวม/สุทธิ จัด class เป็นรายออเดอร์ (ไม่ใช่ net รายสินค้าทั้งช่วง)
+        # เพื่อให้บวกกันตรงๆ ข้ามช่วงเวลาได้ (เดือน 6 + เดือน 7 = ช่วงรวม 6-7 พอดี) — ดู
+        # get_ecommerce_order_profit_summary
+        _profit_summary = db.get_ecommerce_order_profit_summary(str(margin_from), str(margin_to))
+        _total_profit = _profit_summary["total_profit"]
+        _total_loss   = _profit_summary["total_loss"]
+        _net_total    = _profit_summary["net"]
         _total_qty    = margin_df["ขายผ่าน Shopee (ชิ้น)"].sum()
         _total_pv     = margin_df["PV"].sum()
         _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
@@ -203,6 +207,11 @@ def render():
         _sm3.metric("สุทธิ", f"{_net_total:,.0f} ฿")
         _sm4.metric("ขายรวม", f"{_total_qty:,.0f} ชิ้น")
         _sm5.metric("PV รวม", f"{_total_pv:,.0f}")
+        st.caption(
+            "กำไรรวม/ขาดทุนรวม จัดเป็นรายออเดอร์ (บวกกันตรงๆ ข้ามช่วงเวลาได้) — ต่างจากตาราง "
+            "ด้านล่างที่สรุปสุทธิรายสินค้าตลอดทั้งช่วง สินค้าที่กำไรเดือนหนึ่งแต่ขาดทุนอีกเดือน "
+            "อาจทำให้ผลรวมในตารางไม่เท่ากับเอาแต่ละเดือนมาบวกกันตรงๆ"
+        )
 
         def _flag(row):
             if row["กำไรรวม"] < 0:
