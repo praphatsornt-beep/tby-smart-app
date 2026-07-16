@@ -1167,8 +1167,9 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
 
 def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: str = "shopee") -> tuple[pd.DataFrame, int]:
     """สรุปต่อสินค้า (เฉพาะที่ map แล้ว): จำนวนขายผ่าน Shopee, ยอดเงินที่ได้รับจริง
-    (เฉลี่ยจาก allocate_ecommerce_order_income), กำไร, สต็อกคงเหลือ, เงินจมในสต็อก
-    — เรียงขาดทุนมากสุด+สต็อกจมเยอะสุดขึ้นก่อน
+    (เฉลี่ยจาก allocate_ecommerce_order_income), กำไร — เรียงขาดทุนมากสุดขึ้นก่อน
+    (ไม่รวมสต็อกคงเหลือ/เงินจมในสต็อก เพราะเป็นสต็อกรวมทั้งร้าน ไม่ใช่เฉพาะที่ขาย
+    ผ่าน Shopee — คนละสโคปกัน)
 
     นับเฉพาะออเดอร์ที่มีรายงาน Income มายืนยันยอดโอนแล้วเท่านั้น (ไม่งั้นออเดอร์ที่
     ยังไม่ได้อัปโหลด Income มา จะถูกหักต้นทุนเต็มแต่ได้ยอดรับ=0 ทำให้กำไรผิดเพี้ยน
@@ -1186,7 +1187,6 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
         return pd.DataFrame(), 0
 
     products = {p["id"]: p for p in get_products()}
-    stock = get_latest_stock_counts()
     prod_map = get_ecommerce_product_map()
 
     agg: dict[str, dict] = {}
@@ -1210,7 +1210,6 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
         cost = float(prod.get("cost_price") or 0)
         qty_sold = a["qty"]
         profit = a["net"] - cost * qty_sold
-        stock_qty = float((stock.get(pid) or {}).get("qty_physical") or 0)
         rows.append({
             "รหัสสินค้า": pid,
             "ชื่อสินค้า": prod.get("name", pid),
@@ -1219,12 +1218,10 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
             "ยอดเงินที่ได้รับจริง": round(a["net"], 2),
             "กำไรรวม": round(profit, 2),
             "กำไร/ชิ้น": round(profit / qty_sold, 2) if qty_sold else 0,
-            "สต็อกคงเหลือ": stock_qty,
-            "เงินจมในสต็อก": round(stock_qty * cost, 2),
         })
     df = pd.DataFrame(rows)
     if not df.empty:
-        df.sort_values(["กำไรรวม", "เงินจมในสต็อก"], ascending=[True, False], inplace=True)
+        df.sort_values("กำไรรวม", ascending=True, inplace=True)
     return df.reset_index(drop=True), int(pending_qty)
 
 
