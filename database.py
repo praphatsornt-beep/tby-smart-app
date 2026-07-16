@@ -1527,16 +1527,28 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee") -> pd.DataFrame:
 
 def get_ecommerce_sales_df(start_date: str, end_date: str) -> pd.DataFrame:
     rows = get_supabase().table("ecommerce_sales").select(
-        "sale_date,platform,shop_name,qty,item_price,product_id,products(name)"
+        "order_sn,sale_date,platform,shop_name,qty,item_price,product_id,order_status,products(name)"
     ).gte("sale_date", start_date).lte("sale_date", end_date).order("sale_date", desc=True).execute().data
     if not rows:
         return pd.DataFrame()
+
+    order_sns = list({r["order_sn"] for r in rows})
+    settled: set[str] = set()
+    db = get_supabase()
+    for i in range(0, len(order_sns), 50):
+        chunk = order_sns[i:i + 50]
+        inc = db.table("ecommerce_order_income").select("order_sn").in_("order_sn", chunk).execute().data
+        settled.update(x["order_sn"] for x in inc)
+
     return pd.DataFrame([{
         "วันที่": r["sale_date"],
         "ร้าน": r["shop_name"],
+        "เลขออเดอร์": r["order_sn"],
         "สินค้า": (r.get("products") or {}).get("name", r.get("product_id") or "ยังไม่ map"),
         "จำนวน": r["qty"],
         "ยอด": float(r["item_price"] or 0),
+        "สถานะออเดอร์": r.get("order_status") or "-",
+        "สถานะการโอนเงิน": "✅ โอนแล้ว" if r["order_sn"] in settled else "⏳ รอยืนยัน",
     } for r in rows])
 
 
