@@ -24,15 +24,41 @@ def render():
     with st.expander("➕ เพิ่มร้านใหม่", expanded=not shops):
         _new_shop = st.text_input("ชื่อร้าน", key="ecom_new_shop_name", placeholder="เช่น Shopee ร้าน 1")
         if st.button("บันทึกร้าน", key="ecom_add_shop") and _new_shop.strip():
-            db.upsert_ecommerce_shop({
-                "id": str(uuid.uuid4()), "platform": "shopee",
-                "shop_name": _new_shop.strip(), "shop_id": 0,
-            })
-            st.success(f"✅ เพิ่มร้าน {_new_shop.strip()} แล้ว")
-            st.rerun()
+            if _new_shop.strip() in shop_names:
+                st.warning(f"⚠️ มีร้านชื่อ {_new_shop.strip()} อยู่แล้ว ไม่เพิ่มซ้ำ")
+            else:
+                db.upsert_ecommerce_shop({
+                    "id": str(uuid.uuid4()), "platform": "shopee",
+                    "shop_name": _new_shop.strip(), "shop_id": 0,
+                })
+                st.success(f"✅ เพิ่มร้าน {_new_shop.strip()} แล้ว")
+                st.rerun()
     if shops:
-        st.dataframe(pd.DataFrame([{"ชื่อร้าน": s["shop_name"]} for s in shops]),
-                      width="stretch", hide_index=True)
+        for _s in shops:
+            _sc1, _sc2 = st.columns([5, 1])
+            _sc1.write(_s["shop_name"])
+            if _sc2.button("🗑️ ลบ", key=f"ecom_del_shop_{_s['id']}"):
+                st.session_state["_ecom_confirm_del_shop"] = _s["id"]
+                st.rerun()
+        _del_id = st.session_state.get("_ecom_confirm_del_shop")
+        if _del_id:
+            _del_shop = next((s for s in shops if s["id"] == _del_id), None)
+            if _del_shop:
+                _has_data = db.shop_has_ecommerce_data(_del_shop["shop_name"])
+                st.warning(
+                    f"⚠️ ยืนยันลบร้าน **{_del_shop['shop_name']}**"
+                    + (" — ร้านนี้มีข้อมูลขาย/รายได้ผูกอยู่แล้ว ข้อมูลจะยังอยู่ในระบบแต่จะไม่มีชื่อร้านนี้ให้เลือกอัปโหลดเพิ่ม"
+                       if _has_data else " (ยังไม่มีข้อมูลขาย/รายได้ผูกอยู่)")
+                )
+                _cc1, _cc2 = st.columns(2)
+                if _cc1.button("✅ ยืนยันลบ", key="ecom_confirm_del_shop_yes"):
+                    db.delete_ecommerce_shop(_del_id)
+                    del st.session_state["_ecom_confirm_del_shop"]
+                    st.success(f"ลบร้าน {_del_shop['shop_name']} แล้ว")
+                    st.rerun()
+                if _cc2.button("ยกเลิก", key="ecom_confirm_del_shop_no"):
+                    del st.session_state["_ecom_confirm_del_shop"]
+                    st.rerun()
 
     st.divider()
 
@@ -45,11 +71,16 @@ def render():
         if not coverage_df.empty:
             st.caption("ข้อมูลที่นำเข้าแล้วครอบคลุมช่วงวันไหนบ้าง (เช็คก่อนอัปโหลดเพิ่ม กันช่วงขาด/ซ้ำ)")
             st.dataframe(coverage_df, width="stretch", hide_index=True)
+        _order_ver = st.session_state.get("_ecom_order_file_ver", 0)
+        _income_ver = st.session_state.get("_ecom_income_file_ver", 0)
         oc1, oc2 = st.columns(2)
         with oc1:
             st.markdown("**📦 รายงานคำสั่งซื้อ** (คำสั่งซื้อ → Export)")
+            _order_msg = st.session_state.pop("_ecom_order_import_msg", None)
+            if _order_msg:
+                getattr(st, _order_msg[0])(_order_msg[1])
             _order_shop = st.selectbox("ร้าน", shop_names, key="ecom_order_shop")
-            _order_file = st.file_uploader("ไฟล์ Order.all...xlsx", type=["xlsx"], key="ecom_order_file")
+            _order_file = st.file_uploader("ไฟล์ Order.all...xlsx", type=["xlsx"], key=f"ecom_order_file_{_order_ver}")
             if _order_file and st.button("นำเข้ารายงานคำสั่งซื้อ", key="ecom_import_orders", type="primary"):
                 with st.spinner("กำลังอ่านไฟล์..."):
                     rows = shopee_import.parse_order_export(_order_file, _order_shop)
@@ -60,23 +91,31 @@ def render():
                             r["product_id"] = _m["product_id"] if _m else None
                         db.upsert_ecommerce_sales(rows)
                         _n_updated = db.allocate_ecommerce_order_income()
-                        st.success(f"✅ นำเข้า {len(rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
+                        st.session_state["_ecom_order_import_msg"] = (
+                            "success", f"✅ นำเข้า {len(rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
                     else:
-                        st.warning("ไม่พบข้อมูลในไฟล์")
+                        st.session_state["_ecom_order_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+                st.session_state["_ecom_order_file_ver"] = _order_ver + 1
                 st.rerun()
 
         with oc2:
             st.markdown("**💰 รายงานรายได้** (การเงิน → รายได้ของฉัน → Export)")
-            _income_file = st.file_uploader("ไฟล์ Income...xlsx", type=["xlsx"], key="ecom_income_file")
+            _income_msg = st.session_state.pop("_ecom_income_import_msg", None)
+            if _income_msg:
+                getattr(st, _income_msg[0])(_income_msg[1])
+            _income_file = st.file_uploader("ไฟล์ Income...xlsx", type=["xlsx"], key=f"ecom_income_file_{_income_ver}")
             if _income_file and st.button("นำเข้ารายงานรายได้", key="ecom_import_income", type="primary"):
                 with st.spinner("กำลังอ่านไฟล์..."):
                     rows, _detected_shop = shopee_import.parse_income_export(_income_file)
                     if rows:
                         db.upsert_ecommerce_order_income(rows)
                         _n_updated = db.allocate_ecommerce_order_income()
-                        st.success(f"✅ นำเข้า {len(rows)} ออเดอร์ (ร้าน {_detected_shop}) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
+                        st.session_state["_ecom_income_import_msg"] = (
+                            "success",
+                            f"✅ นำเข้า {len(rows)} ออเดอร์ (ร้าน {_detected_shop}) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
                     else:
-                        st.warning("ไม่พบข้อมูลในไฟล์")
+                        st.session_state["_ecom_income_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+                st.session_state["_ecom_income_file_ver"] = _income_ver + 1
                 st.rerun()
 
     st.divider()
@@ -132,13 +171,13 @@ def render():
             margin_df.style.format({
                 "ต้นทุน/ชิ้น": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}",
                 "กำไรรวม": "{:,.2f}", "กำไร/ชิ้น": "{:,.2f}", "PV": "{:,.2f}",
-                "ราคาตั้งขายที่ควรตั้ง (คุ้มทุน)": "{:,.2f}",
+                "ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)": "{:,.2f}",
             }),
             width="stretch", hide_index=True,
         )
         _n_loss = (margin_df["กำไรรวม"] < 0).sum()
         if _n_loss:
-            st.warning(f"⚠️ มี {_n_loss} สินค้าที่ขาดทุนในช่วงนี้ — ดูคอลัมน์ \"ราคาตั้งขายที่ควรตั้ง (คุ้มทุน)\" เพื่อดูว่าควรปรับราคาขายเท่าไหร่ถึงจะไม่ขาดทุน (คำนวณจากอัตราหักค่าธรรมเนียม Shopee เฉลี่ยของสินค้านั้น)")
+            st.warning(f"⚠️ มี {_n_loss} สินค้าที่ขาดทุนในช่วงนี้ — คอลัมน์ \"ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)\" คือราคาขายจริงเฉลี่ยหลังหักโค้ดส่วนลด/โปรโมชัน (ไม่ใช่ราคาที่ตั้งในหน้าสินค้า) ที่ต้องได้อย่างน้อยเท่านี้ถึงจะไม่ขาดทุน — ถ้ามักมีโค้ดส่วนลดมาหักอีก ราคาหน้าสินค้าอาจต้องตั้งสูงกว่านี้")
 
     st.divider()
 

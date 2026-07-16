@@ -1126,6 +1126,23 @@ def upsert_ecommerce_shop(data: dict) -> None:
     _retry(lambda: db.table("ecommerce_shops").insert(data).execute())
 
 
+def delete_ecommerce_shop(shop_id: str) -> None:
+    _retry(lambda: get_supabase().table("ecommerce_shops").delete().eq("id", shop_id).execute())
+
+
+def shop_has_ecommerce_data(shop_name: str, platform: str = "shopee") -> bool:
+    """เช็คว่าร้านนี้มีข้อมูลขาย/รายได้ผูกอยู่แล้วหรือยัง (อ้างอิงด้วย shop_name ไม่ใช่ id) —
+    ใช้เตือนก่อนลบร้านออกจากทะเบียน กันลบร้านที่มีข้อมูลจริงอยู่โดยไม่รู้ตัว"""
+    db = get_supabase()
+    sales = db.table("ecommerce_sales").select("order_sn").eq("shop_name", shop_name) \
+        .eq("platform", platform).limit(1).execute().data
+    if sales:
+        return True
+    income = db.table("ecommerce_order_income").select("order_sn").eq("shop_name", shop_name) \
+        .eq("platform", platform).limit(1).execute().data
+    return bool(income)
+
+
 def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
     """สรุปว่าแต่ละร้านมีข้อมูลนำเข้าครอบคลุมช่วงวันไหนแล้วบ้าง แยกรายงานคำสั่งซื้อ
     (Order.all) กับรายงานรายได้ (Income) คนละคอลัมน์ — เช็คก่อนอัปโหลดว่ายังขาด
@@ -1276,8 +1293,11 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
         pv = float(prod.get("points_per_unit") or 0)
         qty_sold = a["qty"]
         profit = a["net"] - cost * qty_sold
-        # อัตราส่วนยอดเงินที่ได้รับจริงเทียบกับราคาที่ตั้งขาย (หลังหักค่าธรรมเนียม
-        # Shopee ทั้งหมดแล้ว) ใช้ย้อนคำนวณราคาตั้งขายที่ควรตั้งให้คุ้มทุน
+        # อัตราส่วนยอดเงินที่ได้รับจริงเทียบกับ "ราคาขายสุทธิ" ต่อบรรทัด (item_price
+        # จาก Order.all — ราคาที่ขายจริงในแต่ละออเดอร์ หลังหักโค้ดส่วนลด/โปรโมชัน
+        # ที่ Shopee/ผู้ซื้อใช้ ณ ตอนนั้น ไม่ใช่ราคาที่ตั้งไว้ในหน้าสินค้า) ใช้ย้อน
+        # คำนวณว่าราคาขายสุทธิเฉลี่ยต่อชิ้นต้องได้อย่างน้อยเท่าไหร่ถึงจะคุ้มทุน —
+        # ถ้ามีโค้ดส่วนลดเพิ่มอีกตอนขายจริง ราคาที่ตั้งในหน้าสินค้าอาจต้องสูงกว่านี้
         _net_rate = (a["net"] / a["gross"]) if a["gross"] else 0
         breakeven_price = round(cost / _net_rate, 2) if _net_rate > 0 else None
         rows.append({
@@ -1289,7 +1309,7 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
             "ยอดเงินที่ได้รับจริง": round(a["net"], 2),
             "กำไรรวม": round(profit, 2),
             "กำไร/ชิ้น": round(profit / qty_sold, 2) if qty_sold else 0,
-            "ราคาตั้งขายที่ควรตั้ง (คุ้มทุน)": breakeven_price,
+            "ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)": breakeven_price,
         })
     df = pd.DataFrame(rows)
     if not df.empty:
