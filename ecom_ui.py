@@ -109,6 +109,18 @@ def render():
     if margin_df.empty:
         st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (ดูข้อ 6)")
     else:
+        _total_profit = margin_df.loc[margin_df["กำไรรวม"] > 0, "กำไรรวม"].sum()
+        _total_loss   = margin_df.loc[margin_df["กำไรรวม"] < 0, "กำไรรวม"].sum()
+        _net_total    = margin_df["กำไรรวม"].sum()
+        _total_qty    = margin_df["ขายผ่าน Shopee (ชิ้น)"].sum()
+        _total_pv     = margin_df["PV"].sum()
+        _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
+        _sm1.metric("กำไรรวม", f"{_total_profit:,.0f} ฿")
+        _sm2.metric("ขาดทุนรวม", f"{_total_loss:,.0f} ฿")
+        _sm3.metric("สุทธิ", f"{_net_total:,.0f} ฿")
+        _sm4.metric("ขายรวม", f"{_total_qty:,.0f} ชิ้น")
+        _sm5.metric("PV รวม", f"{_total_pv:,.0f}")
+
         def _flag(row):
             if row["กำไรรวม"] < 0:
                 return "🔴 ขาดทุน"
@@ -119,13 +131,14 @@ def render():
         st.dataframe(
             margin_df.style.format({
                 "ต้นทุน/ชิ้น": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}",
-                "กำไรรวม": "{:,.2f}", "กำไร/ชิ้น": "{:,.2f}",
+                "กำไรรวม": "{:,.2f}", "กำไร/ชิ้น": "{:,.2f}", "PV": "{:,.2f}",
+                "ราคาตั้งขายที่ควรตั้ง (คุ้มทุน)": "{:,.2f}",
             }),
             width="stretch", hide_index=True,
         )
         _n_loss = (margin_df["กำไรรวม"] < 0).sum()
         if _n_loss:
-            st.warning(f"⚠️ มี {_n_loss} สินค้าที่ขาดทุนในช่วงนี้")
+            st.warning(f"⚠️ มี {_n_loss} สินค้าที่ขาดทุนในช่วงนี้ — ดูคอลัมน์ \"ราคาตั้งขายที่ควรตั้ง (คุ้มทุน)\" เพื่อดูว่าควรปรับราคาขายเท่าไหร่ถึงจะไม่ขาดทุน (คำนวณจากอัตราหักค่าธรรมเนียม Shopee เฉลี่ยของสินค้านั้น)")
 
     st.divider()
 

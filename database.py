@@ -1244,7 +1244,7 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
         .select("order_sn").eq("platform", platform).execute().data
     }
     sales = get_supabase().table("ecommerce_sales").select(
-        "order_sn,product_id,item_id_platform,qty,returned_qty,net_amount,order_status,sale_date"
+        "order_sn,product_id,item_id_platform,qty,returned_qty,net_amount,item_price,order_status,sale_date"
     ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date) \
      .not_.is_("product_id", "null").execute().data
     if not sales:
@@ -1264,24 +1264,32 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
         if r["order_sn"] not in settled_order_sns:
             pending_qty += net_qty
             continue
-        a = agg.setdefault(pid, {"qty": 0.0, "net": 0.0})
+        a = agg.setdefault(pid, {"qty": 0.0, "net": 0.0, "gross": 0.0})
         a["qty"] += net_qty
         a["net"] += float(r.get("net_amount") or 0)
+        a["gross"] += float(r.get("item_price") or 0)
 
     rows = []
     for pid, a in agg.items():
         prod = products.get(pid, {})
         cost = float(prod.get("cost_price") or 0)
+        pv = float(prod.get("points_per_unit") or 0)
         qty_sold = a["qty"]
         profit = a["net"] - cost * qty_sold
+        # อัตราส่วนยอดเงินที่ได้รับจริงเทียบกับราคาที่ตั้งขาย (หลังหักค่าธรรมเนียม
+        # Shopee ทั้งหมดแล้ว) ใช้ย้อนคำนวณราคาตั้งขายที่ควรตั้งให้คุ้มทุน
+        _net_rate = (a["net"] / a["gross"]) if a["gross"] else 0
+        breakeven_price = round(cost / _net_rate, 2) if _net_rate > 0 else None
         rows.append({
             "รหัสสินค้า": pid,
             "ชื่อสินค้า": prod.get("name", pid),
             "ต้นทุน/ชิ้น": cost,
             "ขายผ่าน Shopee (ชิ้น)": qty_sold,
+            "PV": round(pv * qty_sold, 2),
             "ยอดเงินที่ได้รับจริง": round(a["net"], 2),
             "กำไรรวม": round(profit, 2),
             "กำไร/ชิ้น": round(profit / qty_sold, 2) if qty_sold else 0,
+            "ราคาตั้งขายที่ควรตั้ง (คุ้มทุน)": breakeven_price,
         })
     df = pd.DataFrame(rows)
     if not df.empty:
