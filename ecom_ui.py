@@ -129,8 +129,30 @@ def render():
 
     st.divider()
 
-    # ── Section 5: ออเดอร์ผิดปกติ / คืนสินค้า / tracking ───────────────
-    st.markdown("### 5. ออเดอร์คืนสินค้า/ยกเลิก + ติดตามพัสดุ")
+    # ── Section 5: ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) ──────────
+    st.markdown("### 5. ออเดอร์ที่กำไรผิดปกติ")
+    st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")
+    ac1, ac2, ac3 = st.columns([1, 1, 1])
+    anomaly_from = ac1.date_input("จาก", value=date.today().replace(day=1), key="ecom_anomaly_from")
+    anomaly_to   = ac2.date_input("ถึง",  value=date.today(), key="ecom_anomaly_to")
+    anomaly_warn_pct = ac3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
+    anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), warn_pct=anomaly_warn_pct)
+    if anomaly_df.empty:
+        st.success("✅ ไม่พบออเดอร์ที่กำไรผิดปกติในช่วงนี้")
+    else:
+        st.warning(f"⚠️ พบ {len(anomaly_df)} ออเดอร์ที่กำไรผิดปกติ")
+        st.dataframe(
+            anomaly_df.style.format({
+                "ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}",
+                "กำไร": "{:,.2f}", "กำไร %": "{:,.1f}",
+            }),
+            width="stretch", hide_index=True,
+        )
+
+    st.divider()
+
+    # ── Section 6: ออเดอร์คืนสินค้า/ยกเลิก + tracking ───────────────────
+    st.markdown("### 6. ออเดอร์คืนสินค้า/ยกเลิก + ติดตามพัสดุ")
     problem_df = db.get_ecommerce_problem_orders_df()
     if problem_df.empty:
         st.success("✅ ไม่มีออเดอร์คืนสินค้า/ยกเลิกที่บันทึกไว้")
@@ -139,8 +161,8 @@ def render():
 
     st.divider()
 
-    # ── Section 6: ตรวจสอบค่าส่งเกิน ────────────────────────────────────
-    st.markdown("### 6. ตรวจสอบค่าส่งเกิน")
+    # ── Section 7: ตรวจสอบค่าส่งเกิน ────────────────────────────────────
+    st.markdown("### 7. ตรวจสอบค่าส่งเกิน")
     st.caption(
         "Shopee ประเมินค่าส่ง (ผู้ซื้อจ่าย + Shopee ออกให้) ไว้ล่วงหน้าตอนสั่งซื้อ "
         "แต่พอขนส่งชั่งพัสดุจริงแล้วแพงกว่าที่ประเมิน ส่วนต่างจะถูกหักเพิ่มจากร้าน "
@@ -160,8 +182,8 @@ def render():
 
     st.divider()
 
-    # ── Section 7: Map สินค้า Shopee → ระบบ ────────────────────────────
-    st.markdown("### 7. Map สินค้า Shopee → ระบบ")
+    # ── Section 8: Map สินค้า Shopee → ระบบ ────────────────────────────
+    st.markdown("### 8. Map สินค้า Shopee → ระบบ")
     unmapped_rows = db.get_unmapped_ecommerce_items("shopee")
 
     if unmapped_rows:

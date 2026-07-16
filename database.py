@@ -1256,6 +1256,70 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
     return df.reset_index(drop=True), int(pending_qty)
 
 
+def get_ecommerce_order_anomaly_df(
+    start_date: str, end_date: str, platform: str = "shopee", warn_pct: float = 10.0,
+) -> pd.DataFrame:
+    """หาออเดอร์ (ไม่ใช่สินค้ารวม) ที่กำไรติดลบ/ต่ำผิดปกติ พร้อมเลขที่ออเดอร์ —
+    นับเฉพาะออเดอร์ที่มี Income ยืนยันแล้วและทุก SKU ในออเดอร์ map ครบแล้ว
+    (ถ้ามี SKU ไหนยังไม่ map จะข้ามออเดอร์นั้นเพราะคำนวณต้นทุนไม่ครบ)"""
+    incomes = {
+        r["order_sn"]: (r["shop_name"], float(r.get("net_amount") or 0))
+        for r in get_supabase().table("ecommerce_order_income")
+        .select("order_sn,shop_name,net_amount").eq("platform", platform).execute().data
+    }
+    if not incomes:
+        return pd.DataFrame()
+
+    sales = get_supabase().table("ecommerce_sales").select(
+        "order_sn,product_id,item_id_platform,item_name,qty,returned_qty,order_status,sale_date"
+    ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date).execute().data
+    if not sales:
+        return pd.DataFrame()
+
+    products = {p["id"]: p for p in get_products()}
+    prod_map = get_ecommerce_product_map()
+
+    by_order: dict[str, dict] = {}
+    for r in sales:
+        sn = r["order_sn"]
+        if sn not in incomes or r.get("order_status") == "ยกเลิกแล้ว":
+            continue
+        o = by_order.setdefault(sn, {"cost": 0.0, "unmapped": False, "items": []})
+        pid = r["product_id"]
+        if not pid:
+            o["unmapped"] = True
+            continue
+        mult = prod_map.get((platform, r["item_id_platform"]), {}).get("units_per_pack", 1)
+        qty = (float(r["qty"] or 0) - float(r.get("returned_qty") or 0)) * mult
+        cost = float(products.get(pid, {}).get("cost_price") or 0)
+        o["cost"] += cost * qty
+        o["items"].append(products.get(pid, {}).get("name") or r.get("item_name") or pid)
+
+    rows = []
+    for sn, o in by_order.items():
+        if o["unmapped"] or not o["items"]:
+            continue
+        shop_name, net = incomes[sn]
+        profit = net - o["cost"]
+        margin_pct = (profit / net * 100) if net else 0
+        if profit >= 0 and margin_pct >= warn_pct:
+            continue
+        rows.append({
+            "สถานะ": "🔴 ขาดทุน" if profit < 0 else "🟡 กำไรต่ำ",
+            "เลขออเดอร์": sn,
+            "ร้าน": shop_name,
+            "สินค้า": ", ".join(dict.fromkeys(o["items"])),
+            "ต้นทุนรวม": round(o["cost"], 2),
+            "ยอดเงินที่ได้รับจริง": round(net, 2),
+            "กำไร": round(profit, 2),
+            "กำไร %": round(margin_pct, 1),
+        })
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df.sort_values("กำไร", ascending=True, inplace=True)
+    return df.reset_index(drop=True)
+
+
 def get_ecommerce_shipping_overcharge_df(
     start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 0.0,
 ) -> pd.DataFrame:
