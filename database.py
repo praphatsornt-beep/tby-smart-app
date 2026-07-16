@@ -1194,6 +1194,34 @@ def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def get_ecommerce_unmatched_income_orders_df(platform: str = "shopee") -> pd.DataFrame:
+    """หาออเดอร์ที่มีรายงานยอดโอน (Income) แล้วแต่ไม่มีแถวใน ecommerce_sales เลย (Order.all
+    ยังไม่ครอบคลุมออเดอร์นี้ หรือหลุดหายตอนอัปโหลด) — เช็คทีละออเดอร์จริง แม่นยำกว่า
+    get_ecommerce_import_coverage_df ที่เทียบแค่ช่วง min/max วันที่รวม เพราะ transfer_date
+    อาจตกอยู่ในช่วงที่ Order.all "ดูเหมือน" ครอบคลุมแล้ว แต่ออเดอร์เฉพาะนั้นกลับหายไปจริงๆ"""
+    incomes = get_supabase().table("ecommerce_order_income").select(
+        "order_sn,shop_name,transfer_date,net_amount"
+    ).eq("platform", platform).execute().data
+    if not incomes:
+        return pd.DataFrame()
+    income_sns = [r["order_sn"] for r in incomes]
+    matched: set[str] = set()
+    for i in range(0, len(income_sns), 50):
+        chunk = income_sns[i:i + 50]
+        rows = get_supabase().table("ecommerce_sales").select("order_sn").eq("platform", platform) \
+            .in_("order_sn", chunk).execute().data
+        matched.update(r["order_sn"] for r in rows)
+    out = [
+        {"เลขออเดอร์": r["order_sn"], "ร้าน": r["shop_name"], "วันที่โอนเงิน": r["transfer_date"],
+         "ยอดโอนสุทธิ": r["net_amount"]}
+        for r in incomes if r["order_sn"] not in matched
+    ]
+    df = pd.DataFrame(out)
+    if not df.empty:
+        df.sort_values("วันที่โอนเงิน", ascending=False, inplace=True)
+    return df.reset_index(drop=True)
+
+
 def check_ecommerce_shop_mismatch(order_sns: list[str], shop_name: str, platform: str = "shopee") -> dict[str, str]:
     """เช็คว่าออเดอร์เหล่านี้เคยถูกบันทึกไว้เป็นร้านอื่นมาก่อนหรือไม่ — ไฟล์ Order.all
     เองไม่มีชื่อร้านกำกับ (ต่างจาก Income ที่ดึงชื่อร้านจากหัวไฟล์ Shopee ได้เอง) ผู้ใช้
@@ -1213,11 +1241,28 @@ def check_ecommerce_shop_mismatch(order_sns: list[str], shop_name: str, platform
     return mismatches
 
 
+def _dedupe_by_key(rows: list[dict], key_fields: tuple[str, ...], sum_fields: tuple[str, ...]) -> list[dict]:
+    """รวมแถวที่มี key ซ้ำกันภายในไฟล์เดียวกันก่อน upsert (เช่น สินค้าไม่มี SKU กำกับ
+    หลายตัวเลือกในออเดอร์เดียวกัน fallback ไปใช้ชื่อสินค้าเหมือนกัน ชนเป็น key เดียว) —
+    ไม่งั้น Postgres upsert จะ error 'ON CONFLICT DO UPDATE command cannot affect row a
+    second time' เพราะมี conflict target ซ้ำในสเตทเมนต์เดียว"""
+    merged: dict[tuple, dict] = {}
+    for r in rows:
+        key = tuple(r[f] for f in key_fields)
+        if key in merged:
+            for f in sum_fields:
+                merged[key][f] = merged[key].get(f, 0) + (r.get(f) or 0)
+        else:
+            merged[key] = dict(r)
+    return list(merged.values())
+
+
 def upsert_ecommerce_sales(rows: list[dict]) -> None:
     """upsert ตาม (platform, order_sn, item_id_platform) — กันแถวซ้ำถ้าอัปโหลด
     ไฟล์ Order.all ซ้ำ/ช่วงวันที่ export ทับกัน"""
     if not rows:
         return
+    rows = _dedupe_by_key(rows, ("platform", "order_sn", "item_id_platform"), ("qty", "item_price", "returned_qty"))
     db = get_supabase()
     for i in range(0, len(rows), 50):
         _chunk = rows[i:i + 50]
@@ -1230,6 +1275,7 @@ def upsert_ecommerce_order_income(rows: list[dict]) -> None:
     """upsert ตาม order_sn — ยอดโอนสุทธิจากไฟล์ Income (คนละไฟล์กับ Order.all)"""
     if not rows:
         return
+    rows = _dedupe_by_key(rows, ("order_sn",), ())
     db = get_supabase()
     for i in range(0, len(rows), 50):
         _chunk = rows[i:i + 50]
