@@ -8,8 +8,6 @@ from collections import defaultdict
 from math import floor
 import uuid
 
-from flash_zones import flash_base_fee
-
 
 def _retry(fn, attempts: int = 2, delay: float = 0.5):
     """เรียก fn() ซ้ำถ้าเกิด network error"""
@@ -1095,6 +1093,37 @@ def upsert_ecommerce_shop(data: dict) -> None:
     _retry(lambda: db.table("ecommerce_shops").insert(data).execute())
 
 
+def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
+    """สรุปว่าแต่ละร้านมีข้อมูลนำเข้าครอบคลุมช่วงวันไหนแล้วบ้าง แยกรายงานคำสั่งซื้อ
+    (Order.all) กับรายงานรายได้ (Income) คนละคอลัมน์ — เช็คก่อนอัปโหลดว่ายังขาด
+    ช่วงไหน กันเผลออัปโหลดไม่ครอบคลุมออเดอร์ที่ต้องการ"""
+    sales = get_supabase().table("ecommerce_sales").select("shop_name,sale_date") \
+        .eq("platform", platform).execute().data
+    incomes = get_supabase().table("ecommerce_order_income").select("shop_name,transfer_date") \
+        .eq("platform", platform).execute().data
+
+    by_shop_sales: dict[str, list[str]] = {}
+    for r in sales:
+        if r.get("sale_date"):
+            by_shop_sales.setdefault(r["shop_name"], []).append(r["sale_date"])
+    by_shop_income: dict[str, list[str]] = {}
+    for r in incomes:
+        if r.get("transfer_date"):
+            by_shop_income.setdefault(r["shop_name"], []).append(r["transfer_date"])
+
+    shop_names = sorted(set(by_shop_sales) | set(by_shop_income))
+    rows = []
+    for shop in shop_names:
+        s_dates = by_shop_sales.get(shop, [])
+        i_dates = by_shop_income.get(shop, [])
+        rows.append({
+            "ร้าน": shop,
+            "รายงานคำสั่งซื้อ (Order.all)": f"{min(s_dates)} ถึง {max(s_dates)}" if s_dates else "ยังไม่มีข้อมูล",
+            "รายงานรายได้ (Income)": f"{min(i_dates)} ถึง {max(i_dates)}" if i_dates else "ยังไม่มีข้อมูล",
+        })
+    return pd.DataFrame(rows)
+
+
 def upsert_ecommerce_sales(rows: list[dict]) -> None:
     """upsert ตาม (platform, order_sn, item_id_platform) — กันแถวซ้ำถ้าอัปโหลด
     ไฟล์ Order.all ซ้ำ/ช่วงวันที่ export ทับกัน"""
@@ -1228,64 +1257,36 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
 
 
 def get_ecommerce_shipping_overcharge_df(
-    start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 20.0,
+    start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 0.0,
 ) -> pd.DataFrame:
-    """เทียบค่าส่งที่ Shopee หักจริงต่อออเดอร์ (จากไฟล์ Income) กับค่าส่งที่ควรจะ
-    เป็นตามน้ำหนักรวมของสินค้าที่ map แล้วในออเดอร์นั้น (สูตรฐานเดียวกับที่ใช้
-    ฝั่งหน้าร้าน — ไม่รวมค่าพื้นที่พิเศษตามรหัสไปรษณีย์ ตามที่ตกลงกันไว้) — คืน
-    เฉพาะออเดอร์ที่ต่างกันเกิน threshold ที่กำหนด เรียงต่างมากสุดก่อน"""
-    incomes = {
-        r["order_sn"]: float(r.get("shipping_fee_charged") or 0)
-        for r in get_supabase().table("ecommerce_order_income")
-        .select("order_sn,shipping_fee_charged").eq("platform", platform).execute().data
-    }
-    if not incomes:
+    """หาออเดอร์ที่ Shopee หักค่าส่งจากร้านเกินกว่าที่ประเมินไว้ล่วงหน้า —
+    Shopee ประเมิน "ค่าส่งที่ผู้ซื้อจ่าย + Shopee ออกให้" ไว้ตอนสั่งซื้อ แต่พอ
+    ขนส่งชั่งพัสดุจริงแล้วแพงกว่าที่ประเมิน ส่วนต่างจะถูกหักเพิ่มจากร้านเงียบๆ
+    (ไม่ได้เทียบกับน้ำหนักสินค้าที่เราคำนวณเอง — ใช้ตัวเลขที่ Shopee รายงานมา
+    ตรงๆ เท่านั้น จึงไม่ผิดเพี้ยนจากความแม่นยำของข้อมูลน้ำหนักในระบบเรา)"""
+    rows = get_supabase().table("ecommerce_order_income").select(
+        "order_sn,shop_name,transfer_date,buyer_paid_shipping,shopee_subsidized_shipping,shipping_fee_charged"
+    ).eq("platform", platform).gte("transfer_date", start_date).lte("transfer_date", end_date).execute().data
+    if not rows:
         return pd.DataFrame()
 
-    sales = get_supabase().table("ecommerce_sales").select(
-        "order_sn,shop_name,product_id,item_id_platform,qty,sale_date,order_status"
-    ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date).execute().data
-    if not sales:
-        return pd.DataFrame()
-
-    products = {p["id"]: p for p in get_products()}
-    prod_map = get_ecommerce_product_map()
-
-    by_order: dict[str, dict] = {}
-    for r in sales:
-        sn = r["order_sn"]
-        if sn not in incomes or r.get("order_status") == "ยกเลิกแล้ว":
+    out = []
+    for r in rows:
+        estimated = float(r.get("buyer_paid_shipping") or 0) + float(r.get("shopee_subsidized_shipping") or 0)
+        actual = float(r.get("shipping_fee_charged") or 0)
+        extra = actual - estimated
+        if extra <= overcharge_threshold:
             continue
-        o = by_order.setdefault(sn, {"weight_g": 0.0, "unmapped": False, "shop_name": r["shop_name"]})
-        pid = r["product_id"]
-        if not pid:
-            o["unmapped"] = True
-            continue
-        mult = prod_map.get((platform, r["item_id_platform"]), {}).get("units_per_pack", 1)
-        w = float(products.get(pid, {}).get("weight_grams") or 0)
-        o["weight_g"] += w * float(r["qty"] or 0) * mult
-
-    rows = []
-    for sn, o in by_order.items():
-        if o["unmapped"]:
-            continue
-        weight_kg = (o["weight_g"] + 500) / 1000
-        expected = flash_base_fee(weight_kg)
-        actual = incomes[sn]
-        diff = actual - expected
-        if diff < overcharge_threshold:
-            continue
-        rows.append({
-            "เลขออเดอร์": sn,
-            "ร้าน": o["shop_name"],
-            "น้ำหนักรวม (kg)": round(weight_kg, 2),
-            "ค่าส่งที่ควรจะเป็น": round(expected, 2),
+        out.append({
+            "เลขออเดอร์": r["order_sn"],
+            "ร้าน": r["shop_name"],
+            "ค่าส่งที่ประเมินไว้ (ผู้ซื้อ+Shopee)": round(estimated, 2),
             "ค่าส่งที่หักจริง": round(actual, 2),
-            "ส่วนต่าง": round(diff, 2),
+            "ส่วนต่างที่โดนหักเพิ่ม": round(extra, 2),
         })
-    df = pd.DataFrame(rows)
+    df = pd.DataFrame(out)
     if not df.empty:
-        df.sort_values("ส่วนต่าง", ascending=False, inplace=True)
+        df.sort_values("ส่วนต่างที่โดนหักเพิ่ม", ascending=False, inplace=True)
     return df.reset_index(drop=True)
 
 

@@ -41,6 +41,10 @@ def render():
     if not shops:
         st.info("เพิ่มร้านก่อนครับ (ข้อ 1)")
     else:
+        coverage_df = db.get_ecommerce_import_coverage_df()
+        if not coverage_df.empty:
+            st.caption("ข้อมูลที่นำเข้าแล้วครอบคลุมช่วงวันไหนบ้าง (เช็คก่อนอัปโหลดเพิ่ม กันช่วงขาด/ซ้ำ)")
+            st.dataframe(coverage_df, width="stretch", hide_index=True)
         oc1, oc2 = st.columns(2)
         with oc1:
             st.markdown("**📦 รายงานคำสั่งซื้อ** (คำสั่งซื้อ → Export)")
@@ -138,14 +142,15 @@ def render():
     # ── Section 6: ตรวจสอบค่าส่งเกิน ────────────────────────────────────
     st.markdown("### 6. ตรวจสอบค่าส่งเกิน")
     st.caption(
-        "เทียบค่าส่งที่ Shopee หักจริงต่อออเดอร์ กับค่าส่งที่ควรจะเป็นตามน้ำหนัก "
-        "สินค้ารวมในออเดอร์นั้น (สูตรฐานเดียวกับหน้าร้าน — ไม่รวมค่าพื้นที่พิเศษ "
-        "ตามรหัสไปรษณีย์) — แสดงเฉพาะออเดอร์ที่ต่างกันเกินเกณฑ์ที่กำหนด"
+        "Shopee ประเมินค่าส่ง (ผู้ซื้อจ่าย + Shopee ออกให้) ไว้ล่วงหน้าตอนสั่งซื้อ "
+        "แต่พอขนส่งชั่งพัสดุจริงแล้วแพงกว่าที่ประเมิน ส่วนต่างจะถูกหักเพิ่มจากร้าน "
+        "เงียบๆ — ใช้ตัวเลขที่ Shopee รายงานมาโดยตรง ไม่ได้เทียบกับน้ำหนักสินค้าที่ "
+        "คำนวณเอง (ช่วงวันที่ = วันที่โอนเงิน ไม่ใช่วันที่สั่งซื้อ)"
     )
     sc1, sc2, sc3 = st.columns(3)
     ship_from = sc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_ship_from")
     ship_to   = sc2.date_input("ถึง",  value=date.today(), key="ecom_ship_to")
-    ship_threshold = sc3.number_input("เกณฑ์ส่วนต่าง (บาท)", min_value=0.0, value=20.0, step=5.0, key="ecom_ship_threshold")
+    ship_threshold = sc3.number_input("เกณฑ์ส่วนต่าง (บาท)", min_value=0.0, value=0.0, step=5.0, key="ecom_ship_threshold")
     overcharge_df = db.get_ecommerce_shipping_overcharge_df(str(ship_from), str(ship_to), overcharge_threshold=ship_threshold)
     if overcharge_df.empty:
         st.success("✅ ไม่พบออเดอร์ที่ค่าส่งเกินเกณฑ์ในช่วงนี้")
