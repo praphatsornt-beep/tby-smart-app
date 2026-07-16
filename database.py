@@ -1270,7 +1270,7 @@ def upsert_ecommerce_product_map(rows: list[dict]) -> None:
 
 def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
     rows = get_supabase().table("ecommerce_sales").select(
-        "item_id_platform,shop_name"
+        "item_id_platform,shop_name,item_name"
     ).eq("platform", platform).is_("product_id", "null").execute().data
     seen = set()
     result = []
@@ -1278,7 +1278,10 @@ def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
         key = (r["item_id_platform"], r["shop_name"])
         if key not in seen:
             seen.add(key)
-            result.append({"item_id": r["item_id_platform"], "shop_name": r["shop_name"]})
+            result.append({
+                "item_id": r["item_id_platform"], "shop_name": r["shop_name"],
+                "item_name": r.get("item_name") or "",
+            })
     return result
 
 

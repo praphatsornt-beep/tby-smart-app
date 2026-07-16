@@ -35,6 +35,9 @@ def parse_order_export(file, shop_name: str) -> list[dict]:
                    or _str_or_none(r.get("ชื่อสินค้า")))
         if not order_sn or not item_id:
             continue
+        _prod_name = _str_or_none(r.get("ชื่อสินค้า")) or ""
+        _variant = _str_or_none(r.get("ชื่อตัวเลือก"))
+        item_name = f"{_prod_name} - {_variant}" if _variant else _prod_name
         rows.append({
             "id": str(uuid.uuid4()),
             "platform": "shopee",
@@ -43,6 +46,7 @@ def parse_order_export(file, shop_name: str) -> list[dict]:
             "sale_date": _parse_date(r.get("วันที่ทำการสั่งซื้อ")),
             "product_id": None,
             "item_id_platform": item_id,
+            "item_name": item_name,
             "qty": float(r.get("จำนวน") or 0),
             "item_price": float(r.get("จำนวนเงินทั้งหมด") or 0),
             "order_status": _str_or_none(r.get("สถานะการสั่งซื้อ")),

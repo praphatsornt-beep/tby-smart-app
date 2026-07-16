@@ -144,7 +144,8 @@ def render():
         map_rows     = []
         for i, row in enumerate(unmapped_rows):
             mc1, mc2 = st.columns([2, 3])
-            mc1.write(f"`{row['item_id']}` ({row['shop_name']})")
+            _label = row["item_name"] or row["item_id"]
+            mc1.write(f"**{_label}**\n\n`{row['item_id']}` ({row['shop_name']})")
             sel = mc2.selectbox("สินค้าในระบบ", list(prod_opts.keys()), key=f"map_{i}")
             if prod_opts[sel]:
                 map_rows.append({
@@ -152,7 +153,7 @@ def render():
                     "platform": "shopee",
                     "platform_item_id": row["item_id"],
                     "product_id": prod_opts[sel],
-                    "platform_product_name": row["item_id"],
+                    "platform_product_name": row["item_name"] or row["item_id"],
                 })
         if map_rows and st.button("💾 บันทึก Mapping", type="primary", key="ecom_map_save"):
             db.upsert_ecommerce_product_map(map_rows)
