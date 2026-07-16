@@ -294,20 +294,28 @@ function doPost(e) {
   var orderMap = {}, manualShipPrice = -1, isAutoShip = false, targetZip = '';
   for (var ti = 0; ti < tokens.length; ti++) {
     var token = tokens[ti];
+
+    // คำนวณค่าส่งแบบชั่งน้ำหนัก (auto) — ตัดคำว่า "kg" ออกแล้ว รองรับ "SH12170"
+    // (ติดกัน), "SH-12170" (มีขีด), "SH 12170" (เว้นวรรค), และของเดิม
+    // "SH-kg12170"/"SH-kg 12170" (ยังรองรับไว้เผื่อลูกค้าเคยชิน) — รหัสไปรษณีย์ไทย
+    // มี 5 หลักเสมอ จึงใช้ความยาว 5 หลักแยกจากค่าส่งกำหนดเอง (เช่น SH-5000 ด้านล่าง)
+    var shZipMatch = /^SH-?(?:KG)?(\d{5})?$/i.exec(token);
+    if (shZipMatch) {
+      isAutoShip = true;
+      var z = shZipMatch[1];
+      if (!z && ti + 1 < tokens.length && /^\d{5}$/.test(tokens[ti + 1])) {
+        z = tokens[ti + 1];
+        ti++;
+      }
+      if (z) targetZip = z;
+      continue;
+    }
+
     if (token.includes('-')) {
       var parts = token.split('-'), code = parts[0].trim().toUpperCase(), val = parts[1].trim();
       if (code === 'SH') {
-        if (val.startsWith('kg')) {
-          isAutoShip = true;
-          var z = val.replace('kg', '');
-          if (z.length !== 5 && ti + 1 < tokens.length && /^\d{5}$/.test(tokens[ti + 1])) {
-            // รองรับ "SH-kg 12170" (เว้นวรรค) เช่นเดียวกับ "SH-kg12170"
-            z = tokens[ti + 1];
-            ti++;
-          }
-          if (z.length === 5) targetZip = z;
-        }
-        else { manualShipPrice = parseFloat(val) || 0; }
+        // กำหนดค่าส่งเอง เช่น "SH-5000" — ค่าที่ไม่ใช่รหัสไปรษณีย์ 5 หลัก (เช็คแล้วด้านบน)
+        manualShipPrice = parseFloat(val) || 0;
       } else { orderMap[code] = (orderMap[code] || 0) + (parseFloat(val) || 0); }
     }
   }
@@ -648,7 +656,7 @@ function handleManual(replyToken, staffTag) {
   msg += '  • สมัคร เบอร์โทร  — ผูกไลน์กับบัญชีลูกค้า\n';
   msg += '  • ยอด / สรุปยอด  — ดูยอดค้างจ่าย/ค้างรับของตัวเอง\n';
   msg += '  • qr  — ดูข้อมูลโอนเงิน\n';
-  msg += '  • คำนวณออเดอร์ เช่น CODE-จำนวน SH-kgรหัสไปรษณีย์ cod plan ... — คำนวณราคา/PV/ค่าส่ง\n';
+  msg += '  • คำนวณออเดอร์ เช่น CODE-จำนวน SHรหัสไปรษณีย์ cod plan ... (กำหนดค่าส่งเองใช้ SH-ตัวเลข เช่น SH-5000) — คำนวณราคา/PV/ค่าส่ง\n';
 
   sendReply(replyToken, msg);
 }
