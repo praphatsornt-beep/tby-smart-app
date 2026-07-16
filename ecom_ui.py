@@ -52,7 +52,8 @@ def render():
                     if rows:
                         prod_map = db.get_ecommerce_product_map()
                         for r in rows:
-                            r["product_id"] = prod_map.get(("shopee", r["item_id_platform"]))
+                            _m = prod_map.get(("shopee", r["item_id_platform"]))
+                            r["product_id"] = _m["product_id"] if _m else None
                         db.upsert_ecommerce_sales(rows)
                         _n_updated = db.allocate_ecommerce_order_income()
                         st.success(f"✅ นำเข้า {len(rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
@@ -98,7 +99,9 @@ def render():
     margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")
     margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
 
-    margin_df = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to))
+    margin_df, pending_qty = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to))
+    if pending_qty:
+        st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน — ยังไม่รวมในตารางนี้ (อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
     if margin_df.empty:
         st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (ดูข้อ 6)")
     else:
@@ -143,10 +146,15 @@ def render():
         prod_opts    = {"— ยังไม่ map —": None} | {p["name"]: p["id"] for p in all_products}
         map_rows     = []
         for i, row in enumerate(unmapped_rows):
-            mc1, mc2 = st.columns([2, 3])
+            mc1, mc2, mc3 = st.columns([2, 2, 1])
             _label = row["item_name"] or row["item_id"]
             mc1.write(f"**{_label}**\n\n`{row['item_id']}` ({row['shop_name']})")
             sel = mc2.selectbox("สินค้าในระบบ", list(prod_opts.keys()), key=f"map_{i}")
+            units = mc3.number_input(
+                "จำนวนต่อแพ็ค", min_value=1, value=1, step=1, key=f"map_units_{i}",
+                help="ใส่มากกว่า 1 ถ้า SKU นี้คือแพ็ครวม เช่น ยาสีฟัน 3 หลอด ใส่ 3 "
+                     "ระบบจะคูณจำนวน/ต้นทุนให้อัตโนมัติตอนคำนวณกำไร-สต็อก",
+            )
             if prod_opts[sel]:
                 map_rows.append({
                     "id": str(uuid.uuid4()),
@@ -154,6 +162,7 @@ def render():
                     "platform_item_id": row["item_id"],
                     "product_id": prod_opts[sel],
                     "platform_product_name": row["item_name"] or row["item_id"],
+                    "units_per_pack": units,
                 })
         if map_rows and st.button("💾 บันทึก Mapping", type="primary", key="ecom_map_save"):
             db.upsert_ecommerce_product_map(map_rows)

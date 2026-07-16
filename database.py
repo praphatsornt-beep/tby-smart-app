@@ -1165,27 +1165,43 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
     return updated
 
 
-def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: str = "shopee") -> pd.DataFrame:
+def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: str = "shopee") -> tuple[pd.DataFrame, int]:
     """สรุปต่อสินค้า (เฉพาะที่ map แล้ว): จำนวนขายผ่าน Shopee, ยอดเงินที่ได้รับจริง
     (เฉลี่ยจาก allocate_ecommerce_order_income), กำไร, สต็อกคงเหลือ, เงินจมในสต็อก
-    — เรียงขาดทุนมากสุด+สต็อกจมเยอะสุดขึ้นก่อน"""
+    — เรียงขาดทุนมากสุด+สต็อกจมเยอะสุดขึ้นก่อน
+
+    นับเฉพาะออเดอร์ที่มีรายงาน Income มายืนยันยอดโอนแล้วเท่านั้น (ไม่งั้นออเดอร์ที่
+    ยังไม่ได้อัปโหลด Income มา จะถูกหักต้นทุนเต็มแต่ได้ยอดรับ=0 ทำให้กำไรผิดเพี้ยน
+    เป็นลบหลอกๆ ทั้งที่จริงยังไม่ได้เงินแค่นั้นเอง) — คืน (df, จำนวนชิ้นที่ยังรอยืนยัน
+    ยอดเงิน ไม่รวมอยู่ใน df) ตัวคูณ units_per_pack ใช้กับ SKU ที่ map เป็นแพ็ครวม"""
+    settled_order_sns = {
+        r["order_sn"] for r in get_supabase().table("ecommerce_order_income")
+        .select("order_sn").eq("platform", platform).execute().data
+    }
     sales = get_supabase().table("ecommerce_sales").select(
-        "product_id,qty,returned_qty,net_amount,order_status,sale_date"
+        "order_sn,product_id,item_id_platform,qty,returned_qty,net_amount,order_status,sale_date"
     ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date) \
      .not_.is_("product_id", "null").execute().data
     if not sales:
-        return pd.DataFrame()
+        return pd.DataFrame(), 0
 
     products = {p["id"]: p for p in get_products()}
     stock = get_latest_stock_counts()
+    prod_map = get_ecommerce_product_map()
 
     agg: dict[str, dict] = {}
+    pending_qty = 0.0
     for r in sales:
         if r.get("order_status") == "ยกเลิกแล้ว":
             continue
         pid = r["product_id"]
+        mult = prod_map.get((platform, r["item_id_platform"]), {}).get("units_per_pack", 1)
+        net_qty = (float(r["qty"] or 0) - float(r.get("returned_qty") or 0)) * mult
+        if r["order_sn"] not in settled_order_sns:
+            pending_qty += net_qty
+            continue
         a = agg.setdefault(pid, {"qty": 0.0, "net": 0.0})
-        a["qty"] += float(r["qty"] or 0) - float(r.get("returned_qty") or 0)
+        a["qty"] += net_qty
         a["net"] += float(r.get("net_amount") or 0)
 
     rows = []
@@ -1209,7 +1225,7 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
     df = pd.DataFrame(rows)
     if not df.empty:
         df.sort_values(["กำไรรวม", "เงินจมในสต็อก"], ascending=[True, False], inplace=True)
-    return df.reset_index(drop=True)
+    return df.reset_index(drop=True), int(pending_qty)
 
 
 def get_ecommerce_problem_orders_df(platform: str = "shopee") -> pd.DataFrame:
@@ -1253,8 +1269,13 @@ def get_ecommerce_sales_df(start_date: str, end_date: str) -> pd.DataFrame:
 
 
 def get_ecommerce_product_map() -> dict:
+    """คืน dict {(platform, platform_item_id): {"product_id", "units_per_pack"}} —
+    units_per_pack ใช้กับ SKU ที่เป็นแพ็ครวม (เช่น ยาสีฟัน 3 หลอด) ที่ 1 ออเดอร์
+    จริงคือสินค้าเดี่ยวหลายชิ้น (ค่าเริ่มต้น 1 = ไม่ใช่แพ็ครวม)"""
     rows = get_supabase().table("ecommerce_product_map").select("*").execute().data
-    return {(r["platform"], r["platform_item_id"]): r["product_id"] for r in rows}
+    return {(r["platform"], r["platform_item_id"]): {
+        "product_id": r["product_id"], "units_per_pack": float(r.get("units_per_pack") or 1),
+    } for r in rows}
 
 
 def upsert_ecommerce_product_map(rows: list[dict]) -> None:
