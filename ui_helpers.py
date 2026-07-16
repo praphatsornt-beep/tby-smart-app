@@ -690,6 +690,38 @@ def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
     return _bills
 
 
+def merge_bill_family_products(df: pd.DataFrame, origin: str) -> pd.DataFrame:
+    """รวมแถวที่แยกจากการเปิดบิลบางส่วน (เลขอ้างอิงบิลหลัก origin เดียวกัน คนละ
+    เลขที่บิลจริง) ให้เหลือแถวเดียวต่อสินค้า พร้อมคอลัมน์ "เปิดบิลแล้ว"/"ยังไม่เปิด"
+    แยกให้เห็นว่าสินค้าตัวไหนเปิดบิลไปแล้วเท่าไหร่ — df ต้องมีคอลัมน์ตาม
+    get_all_transactions_df()/_ledger_to_txn_df() (เลขอ้างอิงบิลหลัก, สถานะบิล,
+    รหัส, สินค้า, วันที่, สั่ง, รับแล้ว, ยอดรวม, จ่ายแล้ว, ค้างจ่าย, ค้างรับ,
+    หมายเหตุ ถ้ามี) — ใช้ร่วมกันโดยบัตรลูกค้าและยอดค้าง/จัดการบิล"""
+    fam_df = df[df["เลขอ้างอิงบิลหลัก"] == origin].copy()
+    fam_df["เปิดบิลแล้ว"] = fam_df["สั่ง"].where(fam_df["สถานะบิล"] == "เปิดบิลแล้ว", 0)
+    fam_df["ยังไม่เปิด"]  = fam_df["สั่ง"].where(fam_df["สถานะบิล"] != "เปิดบิลแล้ว", 0)
+    _agg = {
+        "วันที่": ("วันที่", "min"), "สั่ง": ("สั่ง", "sum"), "รับแล้ว": ("รับแล้ว", "sum"),
+        "ยอดรวม": ("ยอดรวม", "sum"), "จ่ายแล้ว": ("จ่ายแล้ว", "sum"),
+        "ค้างจ่าย": ("ค้างจ่าย", "sum"), "ค้างรับ": ("ค้างรับ", "sum"),
+        "เปิดบิลแล้ว": ("เปิดบิลแล้ว", "sum"), "ยังไม่เปิด": ("ยังไม่เปิด", "sum"),
+    }
+    if "หมายเหตุ" in fam_df.columns:
+        _agg["หมายเหตุ"] = ("หมายเหตุ", lambda s: ", ".join(dict.fromkeys(x for x in s if x)))
+    fam_prod = fam_df.groupby(["รหัส", "สินค้า"], as_index=False).agg(**_agg)
+
+    def _fam_bill_status(row):
+        if row["ยังไม่เปิด"] == 0:
+            return "เปิดบิลแล้ว"
+        if row["เปิดบิลแล้ว"] == 0:
+            return "ยังไม่เปิดบิล"
+        return "เปิดบางส่วน"
+    fam_prod["สถานะบิล"]   = fam_prod.apply(_fam_bill_status, axis=1)
+    fam_prod["สถานะจ่าย"]  = fam_prod["ค้างจ่าย"].apply(lambda v: "จ่ายแล้ว" if v <= 0.01 else "ค้างจ่าย")
+    fam_prod["สถานะรับของ"] = fam_prod["ค้างรับ"].apply(lambda v: "รับแล้ว" if v <= 0 else "ค้างรับ")
+    return fam_prod.sort_values("วันที่")
+
+
 def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix, preselected_bill=None):
     """แสดงส่วนเลือกบิล / พิมพ์บิล / จัดการบิล สำหรับลูกค้า sel_p
     preselected_bill: ถ้าระบุ ข้ามตัวเลือกบิล แสดงบิลนี้ตรง ๆ (ใช้กับค้นด้วยเลขที่บิล)

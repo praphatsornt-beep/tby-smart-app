@@ -12,6 +12,7 @@ from ui_helpers import (
     _to_bkk, _to_excel_bytes, BOX_WEIGHT_G,
     _style_status, _fmt_note, _guard_double_submit,
     _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
+    merge_bill_family_products,
 )
 
 
@@ -342,6 +343,39 @@ def render(products, customers):
                                     st.success("✅ ส่ง LINE แล้ว")
                                 else:
                                     st.error(f"❌ {_r.get('error')}")
+                        # ── บิลหลัก: รวมสินค้าที่แยกบิลบางส่วน (origin ≠ เลขที่บิล
+                        # ปัจจุบัน) เป็นแถวเดียวต่อสินค้า พร้อมคอลัมน์เปิดบิลแล้ว/
+                        # ยังไม่เปิด — ใช้ _all_txn_cache (ไม่ใช่ grp/outstanding_df)
+                        # เพราะส่วนที่เปิดบิล+จ่าย/รับครบแล้วอาจหลุดจากยอดค้างไปแล้ว
+                        # แต่ยังต้องรวมยอดสั่งทั้งหมดให้เห็นถูกต้อง
+                        _grp_origin = grp["เลขอ้างอิงบิลหลัก"].reset_index(drop=True)
+                        _grp_bno = grp["เลขที่บิล"].reset_index(drop=True).fillna("")
+                        _has_family = (_grp_origin != "") & (_grp_origin != _grp_bno)
+                        for _origin in _grp_origin[_has_family].unique().tolist():
+                            _fam_full_df = _all_txn_cache[
+                                (_all_txn_cache["ลูกค้า"] == customer_name)
+                                & (_all_txn_cache["เลขอ้างอิงบิลหลัก"] == _origin)
+                            ]
+                            _fam_prod = merge_bill_family_products(_fam_full_df, _origin)
+                            if _fam_prod.empty:
+                                continue
+                            st.markdown(f"#### 🗂️ บิลหลัก {_origin}")
+                            _om1, _om2, _om3, _om4 = st.columns(4)
+                            _om1.metric("สั่งทั้งหมด", f"{_fam_prod['สั่ง'].sum():,.0f} ชิ้น")
+                            _om2.metric("รับแล้ว", f"{_fam_prod['รับแล้ว'].sum():,.0f} ชิ้น")
+                            _om3.metric("ค้างจ่ายรวม", f"{_fam_prod['ค้างจ่าย'].sum():,.0f} ฿")
+                            _om4.metric("เหลือเปิดบิล", f"{_fam_prod['ยังไม่เปิด'].sum():,.0f} ชิ้น")
+                            st.dataframe(
+                                _fam_prod[[
+                                    "วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม", "จ่ายแล้ว",
+                                    "ค้างจ่าย", "ค้างรับ", "เปิดบิลแล้ว", "ยังไม่เปิด",
+                                    "สถานะบิล", "สถานะจ่าย", "สถานะรับของ",
+                                ]].style.format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"}),
+                                width="stretch", hide_index=True,
+                            )
+                        if _has_family.any():
+                            st.divider()
+
                         # ── Styled table + row selection ──────────────────────
                         _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
                                    "ยอดรวม", "ค้างจ่าย", "สถานะจ่าย", "สถานะบิล"]
@@ -349,9 +383,6 @@ def render(products, customers):
                         # โชว์ "บิลหลัก" เฉพาะแถวที่เคยถูกแยกบิล (origin ≠ เลขที่บิลปัจจุบัน)
                         # กันตารางรกด้วยค่าซ้ำเดิมทุกแถวตอนไม่มีการแยกบิล
                         _grp_disp = grp[_dcols].reset_index(drop=True).copy()
-                        _grp_origin = grp["เลขอ้างอิงบิลหลัก"].reset_index(drop=True)
-                        _grp_bno = grp["เลขที่บิล"].reset_index(drop=True).fillna("")
-                        _has_family = (_grp_origin != "") & (_grp_origin != _grp_bno)
                         if _has_family.any():
                             _grp_disp.insert(1, "บิลหลัก", _grp_origin.where(_has_family, ""))
                         st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
@@ -1201,27 +1232,7 @@ def render(products, customers):
                         # ── ตารางรวมรายสินค้า: รวมแถวที่แยกจากการเปิดบิลบางส่วน
                         # (สินค้าเดียวกัน คนละบิลจริงคนละแถว) ให้เหลือแถวเดียวต่อสินค้า
                         # พร้อมคอลัมน์เปิดบิลแล้ว/ยังไม่เปิด แยกให้เห็นว่าส่วนไหนเปิดไปแล้ว
-                        _fam_df = _l_all_df[_l_all_df["เลขอ้างอิงบิลหลัก"] == _origin].copy()
-                        _fam_df["เปิดบิลแล้ว"] = _fam_df["สั่ง"].where(_fam_df["สถานะบิล"] == "เปิดบิลแล้ว", 0)
-                        _fam_df["ยังไม่เปิด"]  = _fam_df["สั่ง"].where(_fam_df["สถานะบิล"] != "เปิดบิลแล้ว", 0)
-                        _fam_prod = _fam_df.groupby(["รหัส", "สินค้า"], as_index=False).agg(
-                            วันที่=("วันที่", "min"), สั่ง=("สั่ง", "sum"), รับแล้ว=("รับแล้ว", "sum"),
-                            ยอดรวม=("ยอดรวม", "sum"), จ่ายแล้ว=("จ่ายแล้ว", "sum"),
-                            ค้างจ่าย=("ค้างจ่าย", "sum"), ค้างรับ=("ค้างรับ", "sum"),
-                            เปิดบิลแล้ว=("เปิดบิลแล้ว", "sum"), ยังไม่เปิด=("ยังไม่เปิด", "sum"),
-                            หมายเหตุ=("หมายเหตุ", lambda s: ", ".join(dict.fromkeys(x for x in s if x))),
-                        )
-
-                        def _fam_bill_status(row):
-                            if row["ยังไม่เปิด"] == 0:
-                                return "เปิดบิลแล้ว"
-                            if row["เปิดบิลแล้ว"] == 0:
-                                return "ยังไม่เปิดบิล"
-                            return "เปิดบางส่วน"
-                        _fam_prod["สถานะบิล"]   = _fam_prod.apply(_fam_bill_status, axis=1)
-                        _fam_prod["สถานะจ่าย"]  = _fam_prod["ค้างจ่าย"].apply(lambda v: "จ่ายแล้ว" if v <= 0.01 else "ค้างจ่าย")
-                        _fam_prod["สถานะรับของ"] = _fam_prod["ค้างรับ"].apply(lambda v: "รับแล้ว" if v <= 0 else "ค้างรับ")
-                        _fam_prod = _fam_prod.sort_values("วันที่")
+                        _fam_prod = merge_bill_family_products(_l_all_df, _origin)
                         st.dataframe(
                             _fam_prod[[
                                 "วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม", "จ่ายแล้ว",
@@ -1782,11 +1793,15 @@ def render(products, customers):
                                 "pay_status": e_pay,
                                 "notes": e_notes,
                             }
-                            if e_bill == "ยังไม่เปิดบิล" and et["bill_status"] == "เปิดบิลแล้ว":
-                                # ย้อนเปิดบิล — ล้างเลขที่บิลจริง/วันที่เปิดเดิมทิ้งด้วย
-                                _e_upd["bill_no"] = None
-                                _e_upd["bill_opened_at"] = None
+                            _e_reverting_bill = e_bill == "ยังไม่เปิดบิล" and et["bill_status"] == "เปิดบิลแล้ว"
+                            if _e_reverting_bill:
+                                # ย้อนเปิดบิล — ใช้ revert_bill_open เดียวกับจุดอื่น (คืน
+                                # bill_no กลับเป็น origin_bill_no แทนการล้างทิ้งเฉยๆ กันไม่
+                                # ให้พฤติกรรมต่างจากปุ่มยกเลิกเปิดบิลที่อื่น)
+                                del _e_upd["bill_status"]
                             db.update_transaction(edit_txn_id, _e_upd)
+                            if _e_reverting_bill:
+                                db.revert_bill_open(edit_txn_id)
                             st.success("✅ แก้ไขแล้ว")
                             st.rerun()
 

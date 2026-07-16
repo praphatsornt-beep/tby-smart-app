@@ -357,18 +357,6 @@ def update_transaction(transaction_id: str, data: dict) -> None:
     _clear_transaction_caches()
 
 
-def revert_bill_open(transaction_id: str) -> None:
-    """ย้อนรายการที่เปิดบิลแล้วกลับเป็นยังไม่เปิดบิล (เช่น เผลอเปิดผิดเลข/ผิดวัน) —
-    ล้าง bill_no/bill_opened_at ทิ้งด้วย ไม่ใช่แค่เปลี่ยน bill_status เฉยๆ เพราะไม่งั้น
-    แถวจะโชว์ "ยังไม่เปิดบิล" แต่ยังพ่วงเลขบิลจริง/วันที่เปิดเดิมค้างอยู่"""
-    _retry(lambda: get_supabase().table("transactions").update({
-        "bill_status": "ยังไม่เปิดบิล",
-        "bill_no": None,
-        "bill_opened_at": None,
-    }).eq("id", transaction_id).execute())
-    _clear_transaction_caches()
-
-
 def update_transaction_status(transaction_id: str, bill_status: str = None, pay_status: str = None,
                                bill_no: str = None, bill_opened_at: str = None) -> None:
     updates = {}
