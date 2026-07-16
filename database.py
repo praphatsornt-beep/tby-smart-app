@@ -8,6 +8,8 @@ from collections import defaultdict
 from math import floor
 import uuid
 
+from flash_zones import flash_base_fee
+
 
 def _retry(fn, attempts: int = 2, delay: float = 0.5):
     """เรียก fn() ซ้ำถ้าเกิด network error"""
@@ -1223,6 +1225,68 @@ def get_ecommerce_product_margin_df(start_date: str, end_date: str, platform: st
     if not df.empty:
         df.sort_values("กำไรรวม", ascending=True, inplace=True)
     return df.reset_index(drop=True), int(pending_qty)
+
+
+def get_ecommerce_shipping_overcharge_df(
+    start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 20.0,
+) -> pd.DataFrame:
+    """เทียบค่าส่งที่ Shopee หักจริงต่อออเดอร์ (จากไฟล์ Income) กับค่าส่งที่ควรจะ
+    เป็นตามน้ำหนักรวมของสินค้าที่ map แล้วในออเดอร์นั้น (สูตรฐานเดียวกับที่ใช้
+    ฝั่งหน้าร้าน — ไม่รวมค่าพื้นที่พิเศษตามรหัสไปรษณีย์ ตามที่ตกลงกันไว้) — คืน
+    เฉพาะออเดอร์ที่ต่างกันเกิน threshold ที่กำหนด เรียงต่างมากสุดก่อน"""
+    incomes = {
+        r["order_sn"]: float(r.get("shipping_fee_charged") or 0)
+        for r in get_supabase().table("ecommerce_order_income")
+        .select("order_sn,shipping_fee_charged").eq("platform", platform).execute().data
+    }
+    if not incomes:
+        return pd.DataFrame()
+
+    sales = get_supabase().table("ecommerce_sales").select(
+        "order_sn,shop_name,product_id,item_id_platform,qty,sale_date,order_status"
+    ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date).execute().data
+    if not sales:
+        return pd.DataFrame()
+
+    products = {p["id"]: p for p in get_products()}
+    prod_map = get_ecommerce_product_map()
+
+    by_order: dict[str, dict] = {}
+    for r in sales:
+        sn = r["order_sn"]
+        if sn not in incomes or r.get("order_status") == "ยกเลิกแล้ว":
+            continue
+        o = by_order.setdefault(sn, {"weight_g": 0.0, "unmapped": False, "shop_name": r["shop_name"]})
+        pid = r["product_id"]
+        if not pid:
+            o["unmapped"] = True
+            continue
+        mult = prod_map.get((platform, r["item_id_platform"]), {}).get("units_per_pack", 1)
+        w = float(products.get(pid, {}).get("weight_grams") or 0)
+        o["weight_g"] += w * float(r["qty"] or 0) * mult
+
+    rows = []
+    for sn, o in by_order.items():
+        if o["unmapped"]:
+            continue
+        weight_kg = (o["weight_g"] + 500) / 1000
+        expected = flash_base_fee(weight_kg)
+        actual = incomes[sn]
+        diff = actual - expected
+        if diff < overcharge_threshold:
+            continue
+        rows.append({
+            "เลขออเดอร์": sn,
+            "ร้าน": o["shop_name"],
+            "น้ำหนักรวม (kg)": round(weight_kg, 2),
+            "ค่าส่งที่ควรจะเป็น": round(expected, 2),
+            "ค่าส่งที่หักจริง": round(actual, 2),
+            "ส่วนต่าง": round(diff, 2),
+        })
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df.sort_values("ส่วนต่าง", ascending=False, inplace=True)
+    return df.reset_index(drop=True)
 
 
 def get_ecommerce_problem_orders_df(platform: str = "shopee") -> pd.DataFrame:

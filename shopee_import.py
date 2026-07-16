@@ -82,5 +82,8 @@ def parse_income_export(file) -> tuple[list[dict], str]:
             "shop_name": shop_name,
             "net_amount": float(r.get("จำนวนเงินทั้งหมดที่โอนแล้ว (฿)") or 0),
             "transfer_date": _parse_date(r.get("วันที่โอนชำระเงินสำเร็จ")),
+            # ค่าส่งที่ Shopee หักจากเราจริง (คอลัมน์เก็บเป็นค่าลบ เก็บเป็นบวกไว้
+            # ให้เทียบกับค่าส่งที่ควรจะเป็นได้ตรงๆ) — ใช้ตรวจสอบค่าส่งเกิน
+            "shipping_fee_charged": abs(float(r.get("ค่าจัดส่งที่ Shopee ชำระโดยชื่อของคุณ") or 0)),
         })
     return rows, shop_name

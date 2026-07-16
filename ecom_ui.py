@@ -135,8 +135,28 @@ def render():
 
     st.divider()
 
-    # ── Section 6: Map สินค้า Shopee → ระบบ ────────────────────────────
-    st.markdown("### 6. Map สินค้า Shopee → ระบบ")
+    # ── Section 6: ตรวจสอบค่าส่งเกิน ────────────────────────────────────
+    st.markdown("### 6. ตรวจสอบค่าส่งเกิน")
+    st.caption(
+        "เทียบค่าส่งที่ Shopee หักจริงต่อออเดอร์ กับค่าส่งที่ควรจะเป็นตามน้ำหนัก "
+        "สินค้ารวมในออเดอร์นั้น (สูตรฐานเดียวกับหน้าร้าน — ไม่รวมค่าพื้นที่พิเศษ "
+        "ตามรหัสไปรษณีย์) — แสดงเฉพาะออเดอร์ที่ต่างกันเกินเกณฑ์ที่กำหนด"
+    )
+    sc1, sc2, sc3 = st.columns(3)
+    ship_from = sc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_ship_from")
+    ship_to   = sc2.date_input("ถึง",  value=date.today(), key="ecom_ship_to")
+    ship_threshold = sc3.number_input("เกณฑ์ส่วนต่าง (บาท)", min_value=0.0, value=20.0, step=5.0, key="ecom_ship_threshold")
+    overcharge_df = db.get_ecommerce_shipping_overcharge_df(str(ship_from), str(ship_to), overcharge_threshold=ship_threshold)
+    if overcharge_df.empty:
+        st.success("✅ ไม่พบออเดอร์ที่ค่าส่งเกินเกณฑ์ในช่วงนี้")
+    else:
+        st.warning(f"⚠️ พบ {len(overcharge_df)} ออเดอร์ที่ค่าส่งเกินเกณฑ์")
+        st.dataframe(overcharge_df, width="stretch", hide_index=True)
+
+    st.divider()
+
+    # ── Section 7: Map สินค้า Shopee → ระบบ ────────────────────────────
+    st.markdown("### 7. Map สินค้า Shopee → ระบบ")
     unmapped_rows = db.get_unmapped_ecommerce_items("shopee")
 
     if unmapped_rows:
