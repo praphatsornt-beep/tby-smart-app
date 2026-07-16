@@ -144,17 +144,28 @@ def render():
         st.warning(f"มี {len(unmapped_rows)} รายการที่ยังไม่ได้ map")
         all_products = db.get_products()
         prod_opts    = {"— ยังไม่ map —": None} | {p["name"]: p["id"] for p in all_products}
+        st.caption(
+            "สินค้าบางตัวขายไม่เท่ากับ 1 หน่วยสต็อกในระบบ เช่น ขายเป็นแพ็ครวม "
+            "(ยาสีฟัน 3 หลอด) หรือแบ่งขายจากแพ็คใหญ่ (แบ่งขาย 30 ซอง จากแพ็ค 180 ซอง) "
+            "— กรอก 2 ช่องขวาให้ตรงความจริง ระบบจะคำนวณสัดส่วนให้เอง"
+        )
         map_rows     = []
         for i, row in enumerate(unmapped_rows):
-            mc1, mc2, mc3 = st.columns([2, 2, 1])
+            mc1, mc2, mc3, mc4 = st.columns([2, 2, 1, 1])
             _label = row["item_name"] or row["item_id"]
             mc1.write(f"**{_label}**\n\n`{row['item_id']}` ({row['shop_name']})")
             sel = mc2.selectbox("สินค้าในระบบ", list(prod_opts.keys()), key=f"map_{i}")
-            units = mc3.number_input(
-                "จำนวนต่อแพ็ค", min_value=1, value=1, step=1, key=f"map_units_{i}",
-                help="ใส่มากกว่า 1 ถ้า SKU นี้คือแพ็ครวม เช่น ยาสีฟัน 3 หลอด ใส่ 3 "
-                     "ระบบจะคูณจำนวน/ต้นทุนให้อัตโนมัติตอนคำนวณกำไร-สต็อก",
+            sold_qty = mc3.number_input(
+                "ขายจริงกี่หน่วย/ออเดอร์", min_value=1, value=1, step=1, key=f"map_sold_{i}",
+                help="เช่น ยาสีฟัน 3 หลอด ใส่ 3, แบ่งขาย 30 ซอง ใส่ 30, ปกติ (1 ต่อ 1) ใส่ 1",
             )
+            pack_size = mc4.number_input(
+                "1 หน่วยสต็อกในระบบ = กี่หน่วย", min_value=1, value=1, step=1, key=f"map_pack_{i}",
+                help="ดูจากชื่อสินค้าที่เลือก เช่น 'บียางค์ 180' ใส่ 180, ถ้าสินค้าปกติ (ไม่แบ่งขาย) ใส่ 1",
+            )
+            ratio = sold_qty / pack_size
+            if ratio != 1:
+                mc1.caption(f"→ เทียบเท่า {ratio:.4f} หน่วยสต็อก/ออเดอร์")
             if prod_opts[sel]:
                 map_rows.append({
                     "id": str(uuid.uuid4()),
@@ -162,7 +173,7 @@ def render():
                     "platform_item_id": row["item_id"],
                     "product_id": prod_opts[sel],
                     "platform_product_name": row["item_name"] or row["item_id"],
-                    "units_per_pack": units,
+                    "units_per_pack": ratio,
                 })
         if map_rows and st.button("💾 บันทึก Mapping", type="primary", key="ecom_map_save"):
             db.upsert_ecommerce_product_map(map_rows)
