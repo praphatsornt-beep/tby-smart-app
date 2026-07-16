@@ -1363,7 +1363,13 @@ def render(products, customers):
                         (i, str(r.get("event_id") or ""))
                         for i, r in enumerate(_l_data) if r.get("event_id")
                     ]
-                    if _ldel_rows:
+                    # ── ยกเลิกเปิดบิล (undo) — คืน bill_status/bill_no กลับเป็นก่อน
+                    # เปิดบิล เหมือน "ลบ" เหตุการณ์เปิดบิลออกจากประวัติ
+                    _lopened_rows = [
+                        (i, r["txn_id"]) for i, r in enumerate(_l_data)
+                        if r.get("type") == "สั่งซื้อ" and r.get("bill_status") == "เปิดบิลแล้ว"
+                    ]
+                    if _ldel_rows or _lopened_rows:
                         with st.expander("🗑️ ลบรายการ"):
                             for _ldi, _leid in _ldel_rows:
                                 _llr = _l_data[_ldi]
@@ -1373,6 +1379,13 @@ def render(products, customers):
                                            f"{_llr.get('product','') or ''}  {_lamt_str}")
                                 if st.button(f"🗑️ {_llabel}", key=f"ldel_{_ldi}_{_l_sel}"):
                                     db.delete_partial_event(_leid_real)
+                                    st.rerun()
+                            for _loi, _ltid in _lopened_rows:
+                                _llr = _l_data[_loi]
+                                _lbno = _llr.get("bill_no") or ""
+                                _llabel = f"{_llr['date'][:10]}  เปิดบิล {_lbno}  {_llr.get('product','') or ''}"
+                                if st.button(f"🗑️ {_llabel}", key=f"lundo_open_{_loi}_{_l_sel}"):
+                                    db.revert_bill_open(_ltid)
                                     st.rerun()
                 else:
                     st.caption("ไม่มีประวัติ")

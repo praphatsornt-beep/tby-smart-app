@@ -392,6 +392,22 @@ def update_transaction_status(transaction_id: str, bill_status: str = None, pay_
         _clear_transaction_caches()
 
 
+def revert_bill_open(transaction_id: str) -> None:
+    """ยกเลิกการเปิดบิล (undo) — คืน bill_status เป็น 'ยังไม่เปิดบิล', เคลียร์
+    bill_opened_at, และคืน bill_no กลับเป็น origin_bill_no (เลขอ้างอิงเดิมก่อน
+    เปิดบิล) ทำให้กลับไปรวมกลุ่มกับส่วนที่เหลือ (ถ้าเคยแยกบิลบางส่วนไว้) ภายใต้
+    เลขอ้างอิงเดียวกันเหมือนก่อนเปิดบิล — ถ้าไม่มี origin_bill_no (แถวเก่าก่อนมี
+    ฟีเจอร์นี้) จะคง bill_no เดิมไว้ แค่เปลี่ยนสถานะกลับเป็นยังไม่เปิดบิล"""
+    db = get_supabase()
+    txn = _retry(lambda: db.table("transactions").select("bill_no,origin_bill_no")
+                 .eq("id", transaction_id).single().execute()).data
+    _revert_to = txn.get("origin_bill_no") or txn.get("bill_no")
+    _retry(lambda: db.table("transactions").update({
+        "bill_status": "ยังไม่เปิดบิล", "bill_no": _revert_to, "bill_opened_at": None,
+    }).eq("id", transaction_id).execute())
+    _clear_transaction_caches()
+
+
 # ─── Calculations ────────────────────────────────────────────────────────────
 
 _FULLY_PAID_STATUSES = ("จ่ายแล้ว", "COD จ่ายแล้ว")
