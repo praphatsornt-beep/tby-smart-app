@@ -16,9 +16,26 @@ import database as db
 import shopee_import
 
 
+_ECOM_TABS = ["⚙️ ตั้งค่า/นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🔍 ตรวจสอบปัญหา"]
+
+
 def render():
-    # ── Section 1: จัดการรายชื่อร้าน ────────────────────────────────────
-    st.markdown("### 1. ร้านค้า")
+    try:
+        _ecom_active = st.pills(" ", _ECOM_TABS, key="_ecom_active_sub", default=_ECOM_TABS[0], label_visibility="collapsed") or _ECOM_TABS[0]
+    except AttributeError:
+        _ecom_active = st.radio(" ", _ECOM_TABS, horizontal=True, key="_ecom_active_sub", label_visibility="collapsed")
+
+    if _ecom_active == _ECOM_TABS[0]:
+        _render_setup()
+    elif _ecom_active == _ECOM_TABS[1]:
+        _render_sales_profit()
+    elif _ecom_active == _ECOM_TABS[2]:
+        _render_issues()
+
+
+def _render_setup():
+    # ── ร้านค้า ────────────────────────────────────────────────────────
+    st.subheader("ร้านค้า")
     shops = db.get_ecommerce_shops()
     shop_names = [s["shop_name"] for s in shops]
     with st.expander("➕ เพิ่มร้านใหม่", expanded=not shops):
@@ -62,10 +79,10 @@ def render():
 
     st.divider()
 
-    # ── Section 2: อัปโหลดรายงาน ─────────────────────────────────────────
-    st.markdown("### 2. อัปโหลดรายงานจาก Shopee Seller Centre")
+    # ── อัปโหลดรายงาน ─────────────────────────────────────────────────
+    st.subheader("อัปโหลดรายงานจาก Shopee Seller Centre")
     if not shops:
-        st.info("เพิ่มร้านก่อนครับ (ข้อ 1)")
+        st.info("เพิ่มร้านก่อนครับ (ด้านบน)")
     else:
         coverage_df = db.get_ecommerce_import_coverage_df()
         if not coverage_df.empty:
@@ -76,7 +93,7 @@ def render():
                 st.warning(
                     f"⚠️ ร้าน {', '.join(_gap_shops)} มีรายงานรายได้ (Income) ครอบคลุมช่วงที่ยังไม่ได้อัปโหลด "
                     "Order.all — ดูคอลัมน์ \"ช่วงที่ Order.all ยังไม่ครอบคลุม\" แล้วอัปโหลด Order.all "
-                    "เพิ่มให้ครบช่วงนั้น ไม่งั้นออเดอร์กลุ่มนี้จะไม่ถูกนับกำไรต่อสินค้า (ข้อ 4)"
+                    "เพิ่มให้ครบช่วงนั้น ไม่งั้นออเดอร์กลุ่มนี้จะไม่ถูกนับกำไรต่อสินค้า (ดูแท็บ '💰 ยอดขาย/กำไร')"
                 )
         _order_ver = st.session_state.get("_ecom_order_file_ver", 0)
         _income_ver = st.session_state.get("_ecom_income_file_ver", 0)
@@ -164,130 +181,8 @@ def render():
 
     st.divider()
 
-    # ── Section 3: ยอดขาย E-commerce (รายการดิบ) ───────────────────────
-    st.markdown("### 3. ยอดขาย E-commerce")
-    ev1, ev2 = st.columns(2)
-    view_from = ev1.date_input("จาก", value=date.today().replace(day=1), key="ecom_vfrom")
-    view_to   = ev2.date_input("ถึง",  value=date.today(), key="ecom_vto")
-    ecom_df   = db.get_ecommerce_sales_df(str(view_from), str(view_to))
-    if ecom_df.empty:
-        st.info("ยังไม่มีข้อมูล — อัปโหลดรายงานคำสั่งซื้อก่อนครับ (ข้อ 2)")
-    else:
-        st.dataframe(ecom_df.style.format({"ยอด": "{:,.2f}"}), width="stretch", hide_index=True)
-        st.caption(f"รวม {ecom_df['จำนวน'].sum():,} ชิ้น | ยอดรวม {ecom_df['ยอด'].sum():,.2f} บาท")
-
-    st.divider()
-
-    # ── Section 4: กำไรจริงต่อสินค้า (เฉพาะที่ขายผ่าน Shopee) ──────────
-    st.markdown("### 4. กำไรจริง (ต่อสินค้า)")
-    st.caption("กำไร = ยอดเงินที่ Shopee โอนเข้าจริง (หลังหักค่าธรรมเนียม/ค่าส่ง/ภาษีแล้ว) − ต้นทุน × จำนวนที่ขาย")
-    mc1, mc2, mc3 = st.columns([1, 1, 1])
-    margin_from = mc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_margin_from")
-    margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")
-    margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
-
-    margin_df, pending_qty = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to))
-    if pending_qty:
-        st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน — ยังไม่รวมในตารางนี้ (อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
-    if margin_df.empty:
-        st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (ดูข้อ 6)")
-    else:
-        # กำไรรวม/ขาดทุนรวม/สุทธิ จัด class เป็นรายออเดอร์ (ไม่ใช่ net รายสินค้าทั้งช่วง)
-        # เพื่อให้บวกกันตรงๆ ข้ามช่วงเวลาได้ (เดือน 6 + เดือน 7 = ช่วงรวม 6-7 พอดี) — ดู
-        # get_ecommerce_order_profit_summary
-        _profit_summary = db.get_ecommerce_order_profit_summary(str(margin_from), str(margin_to))
-        _total_profit = _profit_summary["total_profit"]
-        _total_loss   = _profit_summary["total_loss"]
-        _net_total    = _profit_summary["net"]
-        _total_qty    = margin_df["ขายผ่าน Shopee (ชิ้น)"].sum()
-        _total_pv     = margin_df["PV"].sum()
-        _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
-        _sm1.metric("กำไรรวม", f"{_total_profit:,.0f} ฿")
-        _sm2.metric("ขาดทุนรวม", f"{_total_loss:,.0f} ฿")
-        _sm3.metric("สุทธิ", f"{_net_total:,.0f} ฿")
-        _sm4.metric("ขายรวม", f"{_total_qty:,.0f} ชิ้น")
-        _sm5.metric("PV รวม", f"{_total_pv:,.0f}")
-        st.caption(
-            "กำไรรวม/ขาดทุนรวม จัดเป็นรายออเดอร์ (บวกกันตรงๆ ข้ามช่วงเวลาได้) — ต่างจากตาราง "
-            "ด้านล่างที่สรุปสุทธิรายสินค้าตลอดทั้งช่วง สินค้าที่กำไรเดือนหนึ่งแต่ขาดทุนอีกเดือน "
-            "อาจทำให้ผลรวมในตารางไม่เท่ากับเอาแต่ละเดือนมาบวกกันตรงๆ"
-        )
-
-        def _flag(row):
-            if row["กำไรรวม"] < 0:
-                return "🔴 ขาดทุน"
-            if row["ยอดเงินที่ได้รับจริง"] > 0 and row["กำไรรวม"] / row["ยอดเงินที่ได้รับจริง"] * 100 < margin_warn_pct:
-                return "🟡 กำไรต่ำ"
-            return "✅"
-        margin_df.insert(0, "สถานะ", margin_df.apply(_flag, axis=1))
-        st.dataframe(
-            margin_df.style.format({
-                "ต้นทุน/ชิ้น": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}",
-                "กำไรรวม": "{:,.2f}", "กำไร/ชิ้น": "{:,.2f}", "PV": "{:,.2f}",
-                "ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)": "{:,.2f}",
-            }),
-            width="stretch", hide_index=True,
-        )
-        _n_loss = (margin_df["กำไรรวม"] < 0).sum()
-        if _n_loss:
-            st.warning(f"⚠️ มี {_n_loss} สินค้าที่ขาดทุนในช่วงนี้ — คอลัมน์ \"ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)\" คือราคาขายจริงเฉลี่ยหลังหักโค้ดส่วนลด/โปรโมชัน (ไม่ใช่ราคาที่ตั้งในหน้าสินค้า) ที่ต้องได้อย่างน้อยเท่านี้ถึงจะไม่ขาดทุน — ถ้ามักมีโค้ดส่วนลดมาหักอีก ราคาหน้าสินค้าอาจต้องตั้งสูงกว่านี้")
-
-    st.divider()
-
-    # ── Section 5: ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) ──────────
-    st.markdown("### 5. ออเดอร์ที่กำไรผิดปกติ")
-    st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")
-    ac1, ac2, ac3 = st.columns([1, 1, 1])
-    anomaly_from = ac1.date_input("จาก", value=date.today().replace(day=1), key="ecom_anomaly_from")
-    anomaly_to   = ac2.date_input("ถึง",  value=date.today(), key="ecom_anomaly_to")
-    anomaly_warn_pct = ac3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
-    anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), warn_pct=anomaly_warn_pct)
-    if anomaly_df.empty:
-        st.success("✅ ไม่พบออเดอร์ที่กำไรผิดปกติในช่วงนี้")
-    else:
-        st.warning(f"⚠️ พบ {len(anomaly_df)} ออเดอร์ที่กำไรผิดปกติ")
-        st.dataframe(
-            anomaly_df.style.format({
-                "ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}", "กำไร": "{:,.2f}",
-            }),
-            width="stretch", hide_index=True,
-        )
-
-    st.divider()
-
-    # ── Section 6: ออเดอร์คืนสินค้า/ยกเลิก + tracking ───────────────────
-    st.markdown("### 6. ออเดอร์คืนสินค้า/ยกเลิก + ติดตามพัสดุ")
-    problem_df = db.get_ecommerce_problem_orders_df()
-    if problem_df.empty:
-        st.success("✅ ไม่มีออเดอร์คืนสินค้า/ยกเลิกที่บันทึกไว้")
-    else:
-        st.dataframe(problem_df, width="stretch", hide_index=True)
-
-    st.divider()
-
-    # ── Section 7: ตรวจสอบค่าส่งเกิน ────────────────────────────────────
-    st.markdown("### 7. ตรวจสอบค่าส่งเกิน")
-    st.caption(
-        "Shopee ประเมินค่าส่ง (ผู้ซื้อจ่าย + Shopee ออกให้) ไว้ล่วงหน้าตอนสั่งซื้อ "
-        "แต่พอขนส่งชั่งพัสดุจริงแล้วแพงกว่าที่ประเมิน ส่วนต่างจะถูกหักเพิ่มจากร้าน "
-        "เงียบๆ — ใช้ตัวเลขที่ Shopee รายงานมาโดยตรง ไม่ได้เทียบกับน้ำหนักสินค้าที่ "
-        "คำนวณเอง (ช่วงวันที่ = วันที่โอนเงิน ไม่ใช่วันที่สั่งซื้อ)"
-    )
-    sc1, sc2, sc3 = st.columns(3)
-    ship_from = sc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_ship_from")
-    ship_to   = sc2.date_input("ถึง",  value=date.today(), key="ecom_ship_to")
-    ship_threshold = sc3.number_input("เกณฑ์ส่วนต่าง (บาท)", min_value=0.0, value=0.0, step=5.0, key="ecom_ship_threshold")
-    overcharge_df = db.get_ecommerce_shipping_overcharge_df(str(ship_from), str(ship_to), overcharge_threshold=ship_threshold)
-    if overcharge_df.empty:
-        st.success("✅ ไม่พบออเดอร์ที่ค่าส่งเกินเกณฑ์ในช่วงนี้")
-    else:
-        st.warning(f"⚠️ พบ {len(overcharge_df)} ออเดอร์ที่ค่าส่งเกินเกณฑ์")
-        st.dataframe(overcharge_df, width="stretch", hide_index=True)
-
-    st.divider()
-
-    # ── Section 8: Map สินค้า Shopee → ระบบ ────────────────────────────
-    st.markdown("### 8. Map สินค้า Shopee → ระบบ")
+    # ── Map สินค้า Shopee → ระบบ ─────────────────────────────────────────
+    st.subheader("Map สินค้า Shopee → ระบบ")
     unmapped_rows = db.get_unmapped_ecommerce_items("shopee")
 
     if unmapped_rows:
@@ -332,3 +227,130 @@ def render():
             st.rerun()
     else:
         st.success("✅ สินค้าทุกรายการ map แล้ว")
+
+
+def _render_sales_profit():
+    # ── กำไรจริงต่อสินค้า (เฉพาะที่ขายผ่าน Shopee) ──────────────────────
+    st.subheader("กำไรจริง (ต่อสินค้า)")
+    st.caption("กำไร = ยอดเงินที่ Shopee โอนเข้าจริง (หลังหักค่าธรรมเนียม/ค่าส่ง/ภาษีแล้ว) − ต้นทุน × จำนวนที่ขาย")
+
+    _unmapped_n = len(db.get_unmapped_ecommerce_items("shopee"))
+    if _unmapped_n:
+        st.warning(f"⚠️ มี {_unmapped_n} รายการสินค้าที่ยังไม่ได้ map — ยอดขาย/กำไรของรายการนี้ยังไม่ถูกนับ ไปที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' เพื่อ map สินค้า")
+
+    mc1, mc2, mc3 = st.columns([1, 1, 1])
+    margin_from = mc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_margin_from")
+    margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")
+    margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
+
+    margin_df, pending_qty = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to))
+    if pending_qty:
+        st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน — ยังไม่รวมในตารางนี้ (อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
+    if margin_df.empty:
+        st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' → Map สินค้า)")
+    else:
+        # กำไรรวม/ขาดทุนรวม/สุทธิ จัด class เป็นรายออเดอร์ (ไม่ใช่ net รายสินค้าทั้งช่วง)
+        # เพื่อให้บวกกันตรงๆ ข้ามช่วงเวลาได้ (เดือน 6 + เดือน 7 = ช่วงรวม 6-7 พอดี) — ดู
+        # get_ecommerce_order_profit_summary
+        _profit_summary = db.get_ecommerce_order_profit_summary(str(margin_from), str(margin_to))
+        _total_profit = _profit_summary["total_profit"]
+        _total_loss   = _profit_summary["total_loss"]
+        _net_total    = _profit_summary["net"]
+        _total_qty    = margin_df["ขายผ่าน Shopee (ชิ้น)"].sum()
+        _total_pv     = margin_df["PV"].sum()
+        _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
+        _sm1.metric("กำไรรวม", f"{_total_profit:,.0f} ฿")
+        _sm2.metric("ขาดทุนรวม", f"{_total_loss:,.0f} ฿")
+        _sm3.metric("สุทธิ", f"{_net_total:,.0f} ฿")
+        _sm4.metric("ขายรวม", f"{_total_qty:,.0f} ชิ้น")
+        _sm5.metric("PV รวม", f"{_total_pv:,.0f}")
+        st.caption(
+            "กำไรรวม/ขาดทุนรวม จัดเป็นรายออเดอร์ (บวกกันตรงๆ ข้ามช่วงเวลาได้) — ต่างจากตาราง "
+            "ด้านล่างที่สรุปสุทธิรายสินค้าตลอดทั้งช่วง สินค้าที่กำไรเดือนหนึ่งแต่ขาดทุนอีกเดือน "
+            "อาจทำให้ผลรวมในตารางไม่เท่ากับเอาแต่ละเดือนมาบวกกันตรงๆ"
+        )
+
+        def _flag(row):
+            if row["กำไรรวม"] < 0:
+                return "🔴 ขาดทุน"
+            if row["ยอดเงินที่ได้รับจริง"] > 0 and row["กำไรรวม"] / row["ยอดเงินที่ได้รับจริง"] * 100 < margin_warn_pct:
+                return "🟡 กำไรต่ำ"
+            return "✅"
+        margin_df.insert(0, "สถานะ", margin_df.apply(_flag, axis=1))
+        st.dataframe(
+            margin_df.style.format({
+                "ต้นทุน/ชิ้น": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}",
+                "กำไรรวม": "{:,.2f}", "กำไร/ชิ้น": "{:,.2f}", "PV": "{:,.2f}",
+                "ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)": "{:,.2f}",
+            }),
+            width="stretch", hide_index=True,
+        )
+        _n_loss = (margin_df["กำไรรวม"] < 0).sum()
+        if _n_loss:
+            st.warning(f"⚠️ มี {_n_loss} สินค้าที่ขาดทุนในช่วงนี้ — คอลัมน์ \"ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)\" คือราคาขายจริงเฉลี่ยหลังหักโค้ดส่วนลด/โปรโมชัน (ไม่ใช่ราคาที่ตั้งในหน้าสินค้า) ที่ต้องได้อย่างน้อยเท่านี้ถึงจะไม่ขาดทุน — ถ้ามักมีโค้ดส่วนลดมาหักอีก ราคาหน้าสินค้าอาจต้องตั้งสูงกว่านี้")
+
+    st.divider()
+
+    # ── ยอดขาย E-commerce (รายการดิบ) ────────────────────────────────────
+    with st.expander("ดูยอดขาย E-commerce (รายการดิบ)", expanded=False):
+        ev1, ev2 = st.columns(2)
+        view_from = ev1.date_input("จาก", value=date.today().replace(day=1), key="ecom_vfrom")
+        view_to   = ev2.date_input("ถึง",  value=date.today(), key="ecom_vto")
+        ecom_df   = db.get_ecommerce_sales_df(str(view_from), str(view_to))
+        if ecom_df.empty:
+            st.info("ยังไม่มีข้อมูล — อัปโหลดรายงานคำสั่งซื้อก่อนครับ (แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล')")
+        else:
+            st.dataframe(ecom_df.style.format({"ยอด": "{:,.2f}"}), width="stretch", hide_index=True)
+            st.caption(f"รวม {ecom_df['จำนวน'].sum():,} ชิ้น | ยอดรวม {ecom_df['ยอด'].sum():,.2f} บาท")
+
+
+def _render_issues():
+    # ── ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) ───────────────────────
+    st.subheader("ออเดอร์ที่กำไรผิดปกติ")
+    st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")
+    ac1, ac2, ac3 = st.columns([1, 1, 1])
+    anomaly_from = ac1.date_input("จาก", value=date.today().replace(day=1), key="ecom_anomaly_from")
+    anomaly_to   = ac2.date_input("ถึง",  value=date.today(), key="ecom_anomaly_to")
+    anomaly_warn_pct = ac3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
+    anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), warn_pct=anomaly_warn_pct)
+    if anomaly_df.empty:
+        st.success("✅ ไม่พบออเดอร์ที่กำไรผิดปกติในช่วงนี้")
+    else:
+        st.warning(f"⚠️ พบ {len(anomaly_df)} ออเดอร์ที่กำไรผิดปกติ")
+        st.dataframe(
+            anomaly_df.style.format({
+                "ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}", "กำไร": "{:,.2f}",
+            }),
+            width="stretch", hide_index=True,
+        )
+
+    st.divider()
+
+    # ── ออเดอร์คืนสินค้า/ยกเลิก + tracking ────────────────────────────────
+    st.subheader("ออเดอร์คืนสินค้า/ยกเลิก + ติดตามพัสดุ")
+    problem_df = db.get_ecommerce_problem_orders_df()
+    if problem_df.empty:
+        st.success("✅ ไม่มีออเดอร์คืนสินค้า/ยกเลิกที่บันทึกไว้")
+    else:
+        st.dataframe(problem_df, width="stretch", hide_index=True)
+
+    st.divider()
+
+    # ── ตรวจสอบค่าส่งเกิน ────────────────────────────────────────────────
+    st.subheader("ตรวจสอบค่าส่งเกิน")
+    st.caption(
+        "Shopee ประเมินค่าส่ง (ผู้ซื้อจ่าย + Shopee ออกให้) ไว้ล่วงหน้าตอนสั่งซื้อ "
+        "แต่พอขนส่งชั่งพัสดุจริงแล้วแพงกว่าที่ประเมิน ส่วนต่างจะถูกหักเพิ่มจากร้าน "
+        "เงียบๆ — ใช้ตัวเลขที่ Shopee รายงานมาโดยตรง ไม่ได้เทียบกับน้ำหนักสินค้าที่ "
+        "คำนวณเอง (ช่วงวันที่ = วันที่โอนเงิน ไม่ใช่วันที่สั่งซื้อ)"
+    )
+    sc1, sc2, sc3 = st.columns(3)
+    ship_from = sc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_ship_from")
+    ship_to   = sc2.date_input("ถึง",  value=date.today(), key="ecom_ship_to")
+    ship_threshold = sc3.number_input("เกณฑ์ส่วนต่าง (บาท)", min_value=0.0, value=0.0, step=5.0, key="ecom_ship_threshold")
+    overcharge_df = db.get_ecommerce_shipping_overcharge_df(str(ship_from), str(ship_to), overcharge_threshold=ship_threshold)
+    if overcharge_df.empty:
+        st.success("✅ ไม่พบออเดอร์ที่ค่าส่งเกินเกณฑ์ในช่วงนี้")
+    else:
+        st.warning(f"⚠️ พบ {len(overcharge_df)} ออเดอร์ที่ค่าส่งเกินเกณฑ์")
+        st.dataframe(overcharge_df, width="stretch", hide_index=True)
