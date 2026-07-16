@@ -48,7 +48,11 @@ def parse_order_export(file, shop_name: str) -> list[dict]:
             "item_id_platform": item_id,
             "item_name": item_name,
             "qty": float(r.get("จำนวน") or 0),
-            "item_price": float(r.get("จำนวนเงินทั้งหมด") or 0),
+            # "ราคาขายสุทธิ" คือยอดต่อบรรทัดสินค้าจริง (ราคาขาย×จำนวน) — ต่างจาก
+            # "จำนวนเงินทั้งหมด"/"ค่าจัดส่งโดยประมาณ" ที่เป็นยอดรวมทั้งออเดอร์
+            # (ซ้ำกันทุกบรรทัดสินค้าในออเดอร์เดียวกัน) ใช้ตัวหลังจะแบ่งยอดเงินผิด
+            # เท่าๆ กันทุกบรรทัดโดยไม่สนราคาจริงของแต่ละสินค้า
+            "item_price": float(r.get("ราคาขายสุทธิ") or 0),
             "order_status": _str_or_none(r.get("สถานะการสั่งซื้อ")),
             "return_status": _str_or_none(r.get("สถานะการคืนเงินหรือคืนสินค้า")),
             "returned_qty": float(r.get("จำนวนที่ส่งคืน") or 0),
