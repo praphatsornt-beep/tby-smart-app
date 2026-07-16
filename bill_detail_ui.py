@@ -1124,6 +1124,39 @@ def render(products, customers):
                         _bv["events"].sort(key=lambda e: (e["date"], e["order"]))
 
                     # ── render expanders ──────────────────────────────────────
+                    def _render_event_line(_r, _tag=""):
+                        _tagstr = f"{_tag} " if _tag else ""
+                        if _r["type"] == "เปิดบิล":
+                            _is_billed_evt = _r.get("bill_status") == "เปิดบิลแล้ว"
+                            _evt_icon  = "📋" if _is_billed_evt else "📦"
+                            _evt_label = "เปิดบิล" if _is_billed_evt else "เบิกของ (ยังไม่เปิดบิล)"
+                            st.caption(
+                                f"{_evt_icon} {_r['date']} {_tagstr}{_evt_label} — {_r['detail']}  "
+                                f"(รวม {_r['total']:,.0f}฿"
+                                + (f", {_r['pv']:.0f} PV" if _r['pv'] > 0 else "")
+                                + ")"
+                            )
+                        elif _r["type"] == "จ่ายเงิน":
+                            _pay_details = _r.get("details", [])
+                            if _pay_details:
+                                _pd_str = " + ".join(f"{a:,.0f}" for a in _pay_details)
+                                st.caption(
+                                    f"💰 {_r['date']} {_tagstr}จ่ายเงิน {_r['amount']:,.0f}฿ "
+                                    f"({_pd_str}) — คงค้าง {_r['remaining']:,.0f}฿"
+                                )
+                            else:
+                                st.caption(
+                                    f"💰 {_r['date']} {_tagstr}จ่ายเงิน {_r['amount']:,.0f}฿ "
+                                    f"(คงค้าง {_r['remaining']:,.0f}฿)"
+                                )
+                        elif _r["type"] == "รับของ":
+                            st.caption(
+                                f"📦 {_r['date']} {_tagstr}รับของ {_r['detail']} "
+                                f"(ค้างรับเหลือ {_r['remaining_qty']} ชิ้น)"
+                            )
+                        elif _r["type"] == "ส่งพัสดุ":
+                            st.caption(f"🚚 {_r['date']} {_tagstr}ส่งพัสดุ {_r['detail']}  Tracking: {_r['tracking']}")
+
                     _l_table_cols = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
                                      "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
                     _l_table_cols_disp = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
@@ -1156,15 +1189,49 @@ def render(products, customers):
                         _fm2.metric("รับแล้ว", f"{_fam_recv:,} ชิ้น")
                         _fm3.metric("ค้างจ่ายรวม", f"{_fam_owed:,.0f} ฿")
                         _fm4.metric("เหลือเปิดบิล", f"{max(0, _fam_qty - _fam_opened_qty):,} ชิ้น")
-                        _fam_rows = [{
-                            "เลขที่บิล": m, "วันที่": _bills_tl[m]["date"],
-                            "จำนวน": _bills_tl[m]["qty"], "ยอดรวม": _bills_tl[m]["total"],
-                            "สถานะบิล": _bills_tl[m]["bill_status"], "ค้างจ่าย": _owed_map.get(m, 0.0),
-                        } for m in sorted(_members, key=lambda k: _bills_tl[k]["date"], reverse=True)]
+
+                        # ── ตารางรวมรายสินค้า: รวมแถวที่แยกจากการเปิดบิลบางส่วน
+                        # (สินค้าเดียวกัน คนละบิลจริงคนละแถว) ให้เหลือแถวเดียวต่อสินค้า
+                        # พร้อมคอลัมน์เปิดบิลแล้ว/ยังไม่เปิด แยกให้เห็นว่าส่วนไหนเปิดไปแล้ว
+                        _fam_df = _l_all_df[_l_all_df["เลขอ้างอิงบิลหลัก"] == _origin].copy()
+                        _fam_df["เปิดบิลแล้ว"] = _fam_df["สั่ง"].where(_fam_df["สถานะบิล"] == "เปิดบิลแล้ว", 0)
+                        _fam_df["ยังไม่เปิด"]  = _fam_df["สั่ง"].where(_fam_df["สถานะบิล"] != "เปิดบิลแล้ว", 0)
+                        _fam_prod = _fam_df.groupby(["รหัส", "สินค้า"], as_index=False).agg(
+                            วันที่=("วันที่", "min"), สั่ง=("สั่ง", "sum"), รับแล้ว=("รับแล้ว", "sum"),
+                            ยอดรวม=("ยอดรวม", "sum"), จ่ายแล้ว=("จ่ายแล้ว", "sum"),
+                            ค้างจ่าย=("ค้างจ่าย", "sum"), ค้างรับ=("ค้างรับ", "sum"),
+                            เปิดบิลแล้ว=("เปิดบิลแล้ว", "sum"), ยังไม่เปิด=("ยังไม่เปิด", "sum"),
+                            หมายเหตุ=("หมายเหตุ", lambda s: ", ".join(dict.fromkeys(x for x in s if x))),
+                        )
+
+                        def _fam_bill_status(row):
+                            if row["ยังไม่เปิด"] == 0:
+                                return "เปิดบิลแล้ว"
+                            if row["เปิดบิลแล้ว"] == 0:
+                                return "ยังไม่เปิดบิล"
+                            return "เปิดบางส่วน"
+                        _fam_prod["สถานะบิล"]   = _fam_prod.apply(_fam_bill_status, axis=1)
+                        _fam_prod["สถานะจ่าย"]  = _fam_prod["ค้างจ่าย"].apply(lambda v: "จ่ายแล้ว" if v <= 0.01 else "ค้างจ่าย")
+                        _fam_prod["สถานะรับของ"] = _fam_prod["ค้างรับ"].apply(lambda v: "รับแล้ว" if v <= 0 else "ค้างรับ")
+                        _fam_prod = _fam_prod.sort_values("วันที่")
                         st.dataframe(
-                            pd.DataFrame(_fam_rows).style.format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"}),
+                            _fam_prod[[
+                                "วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม", "จ่ายแล้ว",
+                                "ค้างจ่าย", "ค้างรับ", "เปิดบิลแล้ว", "ยังไม่เปิด",
+                                "สถานะบิล", "สถานะจ่าย", "สถานะรับของ", "หมายเหตุ",
+                            ]].style.format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"}),
                             width="stretch", hide_index=True,
                         )
+
+                        # ── ประวัติรวมทุกบิลย่อยในกลุ่มนี้ เรียงตามวันที่ mark เลขบิล ──
+                        st.markdown("**📜 ประวัติ**")
+                        _fam_events = []
+                        for m in _members:
+                            for _ev in _bills_tl[m]["events"]:
+                                _fam_events.append({**_ev, "_bill": m})
+                        _fam_events.sort(key=lambda e: (e["date"], e["order"]))
+                        for _fev in _fam_events:
+                            _render_event_line(_fev, _tag=f"[{_fev['_bill']}]")
                         st.divider()
 
                     # ── ตารางสรุปทุกบิล (เห็นรวดเดียวไม่ต้องเปิดทีละบิล) ──────
@@ -1204,7 +1271,10 @@ def render(products, customers):
                             f"📋 **{_bk}** &nbsp; {_bv['date']} &nbsp;|&nbsp; "
                             f"{_pay_ico} ค้างจ่าย **{_b_owed:,.0f}฿**{_recv_lbl}{_pv_lbl}"
                         )
-                        with st.expander(_exp_hdr, expanded=True):
+                        # ถ้าเป็นสมาชิกของ "บิลหลัก" (โชว์ตารางรวม+ประวัติรวมไปแล้วด้านบน)
+                        # ให้ย่อ expander นี้ไว้ก่อน — เปิดดูเพิ่มได้เมื่อต้องการ (ลบบิล/ส่ง LINE)
+                        _in_family = len(_families.get(_bk_to_origin.get(_bk, _bk), [])) > 1
+                        with st.expander(_exp_hdr, expanded=not _in_family):
                             _pv_unbilled = _bv["pv"] if _bv["bill_status"] == "ยังไม่เปิดบิล" else 0.0
                             st.caption(
                                 f"📦 ค้างรับ {_b_pend} ชิ้น  |  "
@@ -1235,36 +1305,7 @@ def render(products, customers):
                             # ── ประวัติเหตุการณ์ของบิลนี้ เรียงตามวันที่ ──────────
                             st.markdown("**📜 ประวัติ**")
                             for _r in _bv["events"]:
-                                if _r["type"] == "เปิดบิล":
-                                    _is_billed_evt = _r.get("bill_status") == "เปิดบิลแล้ว"
-                                    _evt_icon  = "📋" if _is_billed_evt else "📦"
-                                    _evt_label = "เปิดบิล" if _is_billed_evt else "เบิกของ (ยังไม่เปิดบิล)"
-                                    st.caption(
-                                        f"{_evt_icon} {_r['date']}  {_evt_label} — {_r['detail']}  "
-                                        f"(รวม {_r['total']:,.0f}฿"
-                                        + (f", {_r['pv']:.0f} PV" if _r['pv'] > 0 else "")
-                                        + ")"
-                                    )
-                                elif _r["type"] == "จ่ายเงิน":
-                                    _pay_details = _r.get("details", [])
-                                    if _pay_details:
-                                        _pd_str = " + ".join(f"{a:,.0f}" for a in _pay_details)
-                                        st.caption(
-                                            f"💰 {_r['date']}  จ่ายเงิน {_r['amount']:,.0f}฿ "
-                                            f"({_pd_str}) — คงค้าง {_r['remaining']:,.0f}฿"
-                                        )
-                                    else:
-                                        st.caption(
-                                            f"💰 {_r['date']}  จ่ายเงิน {_r['amount']:,.0f}฿ "
-                                            f"(คงค้าง {_r['remaining']:,.0f}฿)"
-                                        )
-                                elif _r["type"] == "รับของ":
-                                    st.caption(
-                                        f"📦 {_r['date']}  รับของ {_r['detail']} "
-                                        f"(ค้างรับเหลือ {_r['remaining_qty']} ชิ้น)"
-                                    )
-                                elif _r["type"] == "ส่งพัสดุ":
-                                    st.caption(f"🚚 {_r['date']}  ส่งพัสดุ {_r['detail']}  Tracking: {_r['tracking']}")
+                                _render_event_line(_r)
 
                             # ── ส่งสรุปบิล LINE ──────────────────────────────────
                             _bl_luid = _l_cust.get("line_user_id") or ""
