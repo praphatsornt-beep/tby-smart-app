@@ -654,6 +654,7 @@ def _ledger_to_txn_df(ledger_data: list) -> pd.DataFrame:
             "สถานะบิล": o.get("bill_status") or "ยังไม่เปิดบิล", "สถานะจ่าย": pay_status,
             "หมายเหตุ": o.get("notes", "") or "", "PV รวม": o.get("pv", 0.0),
             "เลขที่บิล": o.get("bill_no") or "", "เคลียร์แล้ว": cleared,
+            "เลขอ้างอิงบิลหลัก": o.get("origin_bill_no") or o.get("bill_no") or "",
         })
     df = pd.DataFrame(rows)
     df.sort_values("วันที่", ascending=False, inplace=True)

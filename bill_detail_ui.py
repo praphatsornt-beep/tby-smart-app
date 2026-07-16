@@ -1018,10 +1018,12 @@ def render(products, customers):
 
                     # ── สร้าง timeline per bill ──────────────────────────────
                     _bills_tl: dict = {}  # bill_no → {date, total, pv, qty, events[]}
+                    _bk_to_origin: dict = {}  # bill_no → เลขอ้างอิงบิลหลัก (origin_bill_no)
 
                     # Phase 1: orders → bill header (ยอดรวม/PV/qty ของทั้งบิล ไม่ว่าจะเปิดแล้วหรือยัง)
                     for _r in _l_orders:
                         _bk = _r["bill_no"] or "—"
+                        _bk_to_origin[_bk] = _r.get("origin_bill_no") or _bk
                         if _bk not in _bills_tl:
                             _bills_tl[_bk] = {
                                 "date": _r["date"], "total": 0.0, "pv": 0.0,
@@ -1132,6 +1134,38 @@ def render(products, customers):
                         _l_bills_owed["เลขที่บิล"].replace("", "—"),
                         _l_bills_owed["ค้างจ่าย"],
                     ))
+
+                    # ── บิลหลัก: กลุ่มบิลที่แยกมาจากเลขอ้างอิงเดียวกัน (เปิดบิล
+                    # บางส่วนแล้วแยกเลขบิลจริงออกไป) — โชว์สรุปรวมทั้งกลุ่มก่อน
+                    # แล้วค่อยแสดงบิลย่อยแต่ละใบ (expander) ตามปกติด้านล่าง
+                    _families: dict = {}
+                    for _bk in _bills_tl:
+                        _families.setdefault(_bk_to_origin.get(_bk, _bk), []).append(_bk)
+                    for _origin, _members in _families.items():
+                        if len(_members) <= 1:
+                            continue
+                        _fam_qty = sum(_bills_tl[m]["qty"] for m in _members)
+                        _fam_recv = sum(_recv_cumul.get(m, 0) for m in _members)
+                        _fam_owed = sum(_owed_map.get(m, 0.0) for m in _members)
+                        _fam_opened_qty = sum(
+                            _bills_tl[m]["qty"] for m in _members if _bills_tl[m]["bill_status"] == "เปิดบิลแล้ว"
+                        )
+                        st.markdown(f"#### 🗂️ บิลหลัก {_origin}")
+                        _fm1, _fm2, _fm3, _fm4 = st.columns(4)
+                        _fm1.metric("สั่งทั้งหมด", f"{_fam_qty:,} ชิ้น")
+                        _fm2.metric("รับแล้ว", f"{_fam_recv:,} ชิ้น")
+                        _fm3.metric("ค้างจ่ายรวม", f"{_fam_owed:,.0f} ฿")
+                        _fm4.metric("เหลือเปิดบิล", f"{max(0, _fam_qty - _fam_opened_qty):,} ชิ้น")
+                        _fam_rows = [{
+                            "เลขที่บิล": m, "วันที่": _bills_tl[m]["date"],
+                            "จำนวน": _bills_tl[m]["qty"], "ยอดรวม": _bills_tl[m]["total"],
+                            "สถานะบิล": _bills_tl[m]["bill_status"], "ค้างจ่าย": _owed_map.get(m, 0.0),
+                        } for m in sorted(_members, key=lambda k: _bills_tl[k]["date"], reverse=True)]
+                        st.dataframe(
+                            pd.DataFrame(_fam_rows).style.format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"}),
+                            width="stretch", hide_index=True,
+                        )
+                        st.divider()
 
                     # ── ตารางสรุปทุกบิล (เห็นรวดเดียวไม่ต้องเปิดทีละบิล) ──────
                     if len(_bills_tl) > 1:

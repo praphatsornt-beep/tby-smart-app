@@ -232,9 +232,27 @@ def update_transaction_statuses_batch(transaction_ids: list[str],
     if not updates or not transaction_ids:
         return
     db = get_supabase()
-    for i in range(0, len(transaction_ids), 50):
-        chunk = transaction_ids[i:i + 50]
-        _retry(lambda: db.table("transactions").update(updates).in_("id", chunk).execute())
+    if bill_status == "เปิดบิลแล้ว" and bill_no:
+        # แต่ละแถวอาจมีเลขอ้างอิง (บิลหลัก) เดิมไม่เหมือนกัน ก่อนโดน bill_no ทับ
+        # เป็นค่าเดียวกันทั้งชุด ต้องดึงมาคำนวณ origin_bill_no แยกต่อแถว แล้ว
+        # gruop ตาม origin ที่ได้ เพื่ออัปเดตเป็นชุดย่อยแทนการอัปเดตทีเดียวทั้งหมด
+        by_origin: dict[str, list[str]] = defaultdict(list)
+        for i in range(0, len(transaction_ids), 50):
+            chunk = transaction_ids[i:i + 50]
+            rows = _retry(lambda: db.table("transactions").select("id,bill_no,origin_bill_no")
+                           .in_("id", chunk).execute()).data
+            for r in rows:
+                origin = r.get("origin_bill_no") or r.get("bill_no")
+                by_origin[origin].append(r["id"])
+        for origin, ids in by_origin.items():
+            _row_updates = {**updates, "origin_bill_no": origin}
+            for i in range(0, len(ids), 50):
+                chunk = ids[i:i + 50]
+                _retry(lambda: db.table("transactions").update(_row_updates).in_("id", chunk).execute())
+    else:
+        for i in range(0, len(transaction_ids), 50):
+            chunk = transaction_ids[i:i + 50]
+            _retry(lambda: db.table("transactions").update(updates).in_("id", chunk).execute())
     _clear_transaction_caches()
 
 
@@ -254,12 +272,17 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = No
     pv = float(txn["points_per_unit"])
     billed_total = price * qty_to_bill
     _is_paid_flag = txn["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว")
+    # เก็บเลขอ้างอิงเดิม (บิลหลัก) ไว้ทั้งฝั่งที่เปิดบิลแล้วและฝั่งที่เหลือ ให้ตาม
+    # กลุ่มกันได้แม้แยกไปหลายรอบ — ถ้าแถวนี้เคยถูกแยกมาก่อนแล้ว (มี origin_bill_no
+    # อยู่แล้ว) ใช้ต้นตอเดิมต่อ ไม่ใช้ bill_no ปัจจุบันซึ่งอาจเป็นแค่ parent ชั้นกลาง
+    _origin_bill_no = txn.get("origin_bill_no") or txn.get("bill_no")
 
     _billed_updates = {
         "qty": qty_to_bill,
         "total_amount": billed_total,
         "bill_status": "เปิดบิลแล้ว",
         "initial_qty_received": min(txn["initial_qty_received"], qty_to_bill),
+        "origin_bill_no": _origin_bill_no,
     }
     if bill_no:
         _billed_updates["bill_no"] = bill_no
@@ -297,6 +320,7 @@ def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = No
             "pay_status": _remainder_pay_status,
             "notes": txn.get("notes", "") or "",
             "bill_no": txn.get("bill_no"),
+            "origin_bill_no": _origin_bill_no,
         }
         _retry(lambda: db.table("transactions").insert(_remainder_row).execute())
 
@@ -356,6 +380,13 @@ def update_transaction_status(transaction_id: str, bill_status: str = None, pay_
         updates["bill_no"] = bill_no
     if bill_opened_at:
         updates["bill_opened_at"] = bill_opened_at
+    if bill_status == "เปิดบิลแล้ว" and bill_no:
+        # เก็บเลขอ้างอิงเดิม (บิลหลัก) ไว้ก่อนโดน bill_no ทับ ให้ยอดค้าง/บัตร
+        # ลูกค้าตามกลุ่มกันได้ (ดู split_and_open_bill สำหรับกรณีเปิดบางส่วน)
+        db = get_supabase()
+        _txn = _retry(lambda: db.table("transactions").select("bill_no,origin_bill_no")
+                       .eq("id", transaction_id).single().execute()).data
+        updates["origin_bill_no"] = _txn.get("origin_bill_no") or _txn.get("bill_no")
     if updates:
         _retry(lambda: get_supabase().table("transactions").update(updates).eq("id", transaction_id).execute())
         _clear_transaction_caches()
@@ -534,7 +565,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     """
     db = get_supabase()
     txns = _retry(lambda: db.table("transactions").select(
-        "id, date, bill_no, product_id, product_name, qty, total_amount, pay_status, "
+        "id, date, bill_no, origin_bill_no, product_id, product_name, qty, total_amount, pay_status, "
         "bill_status, points_per_unit, initial_qty_received, notes, bill_opened_at"
     ).eq("customer_id", customer_id).order("date").execute().data)
     txn_ids = [t["id"] for t in txns]
@@ -562,6 +593,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
             "date":             t["date"][:10],
             "type":             "สั่งซื้อ",
             "bill_no":          t.get("bill_no") or "",
+            "origin_bill_no":   t.get("origin_bill_no") or t.get("bill_no") or "",
             "product":          t["product_name"],
             "product_id":       t.get("product_id") or "",
             "qty_in":           t["qty"],
@@ -746,7 +778,7 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
 
     _TXN_COLS = ["id","วันที่","ลูกค้า","รหัส","สินค้า","สั่ง","รับแล้ว","ยอดรวม",
                  "จ่ายแล้ว","ค้างจ่าย","ค้างรับ","สถานะบิล","สถานะจ่าย","หมายเหตุ",
-                 "PV รวม","เลขที่บิล","เคลียร์แล้ว","last_payment_date"]
+                 "PV รวม","เลขที่บิล","เคลียร์แล้ว","last_payment_date","เลขอ้างอิงบิลหลัก"]
     if not txns:
         return pd.DataFrame(columns=_TXN_COLS)
 
@@ -795,6 +827,7 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
             "เลขที่บิล": t.get("bill_no") or "",
             "เคลียร์แล้ว": cleared,
             "last_payment_date": max(paid_dates) if paid_dates else "",
+            "เลขอ้างอิงบิลหลัก": t.get("origin_bill_no") or t.get("bill_no") or "",
         })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=_TXN_COLS)
