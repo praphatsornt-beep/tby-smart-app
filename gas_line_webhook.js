@@ -500,14 +500,25 @@ function sendCustomerSummary(userId, replyToken) {
 // ─── buildAndSendSummary (ใช้ร่วมกัน) ────────────────────────────────────────
 
 function buildAndSendSummary(custId, custName, replyToken) {
-  // คะแนนที่ยังไม่เปิดบิล
+  // คะแนนที่ยังไม่เปิดบิล — นับเฉพาะจำนวนที่ยังไม่เปิดจริงต่อแถว (qty -
+  // Σbill_open_events.qty_opened) ไม่ใช่ทั้งแถว เพราะตอนนี้เปิดบิลบางส่วนได้
+  // โดยไม่แยกแถวแล้ว (bill_status ยังเป็น "ยังไม่เปิดบิล" จนกว่าจะเปิดครบ)
   var unbilledTxns = _sbGet(
     '/rest/v1/transactions?customer_id=eq.' + custId
     + '&bill_status=eq.' + encodeURIComponent('ยังไม่เปิดบิล')
     + '&select=id,qty,points_per_unit'
   ) || [];
+  var unbilledTxnIds = unbilledTxns.map(function(t) { return t.id; });
+  var openEvents = unbilledTxnIds.length > 0 ? (_sbGet(
+    '/rest/v1/bill_open_events?transaction_id=in.(' + unbilledTxnIds.join(',') + ')&select=transaction_id,qty_opened'
+  ) || []) : [];
+  var openedMap = {};
+  openEvents.forEach(function(e) {
+    openedMap[e.transaction_id] = (openedMap[e.transaction_id] || 0) + parseInt(e.qty_opened || 0, 10);
+  });
   var unbilledPV = unbilledTxns.reduce(function(s, t) {
-    return s + parseFloat(t.points_per_unit || 0) * t.qty;
+    var unbilledQty = Math.max(0, t.qty - Math.max(0, openedMap[t.id] || 0));
+    return s + parseFloat(t.points_per_unit || 0) * unbilledQty;
   }, 0);
 
   // ดึง 6 เดือนล่าสุดโดยไม่กรอง pay_status

@@ -85,10 +85,12 @@ CREATE TABLE transactions (
     -- ที่แปลว่ายังไม่ได้โอน
     pay_status TEXT NOT NULL CHECK (pay_status IN ('จ่ายแล้ว', 'ค้างจ่าย', 'COD', 'COD จ่ายแล้ว')),
     notes TEXT,
-    bill_no TEXT,  -- เลขที่บิล — ตอนยังไม่เปิดบิลเป็นเลขอ้างอิงภายในอัตโนมัติ (get_next_bill_no,
-                   -- YYMMDD-NNN), พอเปิดบิลจริงจะถูกเขียนทับด้วยเลขบิลจริงจากระบบหลัก (Zhulian)
-                   -- ที่ staff พิมพ์เอง — คนละความหมายกันคนละช่วง ดู find_bill_no_conflict()
-    bill_opened_at DATE,  -- วันที่ "เปิดบิล" จริงในระบบหลัก แยกจาก date (วันที่เบิกของ/สั่งซื้อ)
+    bill_no TEXT,  -- เลขอ้างอิงภายในอัตโนมัติ (get_next_bill_no, YYMMDD-NNN) — ไม่ถูกเขียนทับ
+                   -- อีกต่อไป คงค่าเดิมตลอดอายุแถว เลขบิลจริงจาก Zhulian (ถ้ามี) เก็บเป็น
+                   -- โน้ต optional ที่ bill_open_events.note แทน ดู database.py:open_bill_partial()
+    bill_opened_at DATE,  -- วันที่เปิดบิลครบเต็มจำนวนล่าสุด (bill_status ขยับเป็น "เปิดบิลแล้ว")
+                          -- แยกจาก date (วันที่เบิกของ/สั่งซื้อ) — เปิดบิลบางส่วนดูละเอียดได้ที่
+                          -- bill_open_events แทน (ไม่แยกแถวแล้วเหมือนกลไกเดิม)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

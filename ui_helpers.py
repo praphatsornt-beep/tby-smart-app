@@ -1177,12 +1177,14 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                     _clr_sel.append(_clr_bno)
             if _clr_sel:
                 if st.button(f"✅ เคลียร์ {len(_clr_sel)} บิล", type="primary", key=f"{key_prefix}_clear_bills"):
-                    _clr_all_tids = _t7_all_cust_df[
-                        _t7_all_cust_df["เลขที่บิล"].isin(_clr_sel)
-                    ]["id"].tolist()
-                    db.update_transaction_statuses_batch(
-                        _clr_all_tids, pay_status="จ่ายแล้ว", bill_status="เปิดบิลแล้ว",
-                    )
+                    _clr_rows = _t7_all_cust_df[_t7_all_cust_df["เลขที่บิล"].isin(_clr_sel)]
+                    db.update_transaction_statuses_batch(_clr_rows["id"].tolist(), pay_status="จ่ายแล้ว")
+                    for _, _cr in _clr_rows.iterrows():
+                        if _cr["สถานะบิล"] != "ยังไม่เปิดบิล":
+                            continue
+                        _cr_qty = int(_cr["ยังไม่เปิด"]) if "ยังไม่เปิด" in _cr else int(_cr["สั่ง"])
+                        if _cr_qty > 0:
+                            db.open_bill_partial(_cr["id"], _cr_qty)
                     st.success(f"✅ เคลียร์ {len(_clr_sel)} บิลแล้ว")
                     st.rerun()
 

@@ -281,7 +281,7 @@ def render(tab1, products, customers, customer_map):
                         st.divider()
                         with st.container(key="sale_status_bill_row"):
                             m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
-                            m_bill_no = st.text_input("เลขที่บิล", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
+                            m_bill_no = st.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
 
                 with _cart_col:
                     _qtext_ver = st.session_state.get("_qtext_ver", 0)
@@ -605,13 +605,6 @@ def render(tab1, products, customers, customer_map):
                 if valid_items:
                     if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก การจ่าย")
                     if m_bill is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")
-                    if m_bill == "เปิดบิลแล้ว" and not m_bill_no.strip():
-                        m_errors.append("⚠️ ยังไม่ได้ใส่เลขที่บิล")
-                    elif m_bill == "เปิดบิลแล้ว" and m_bill_no.strip() and m_customer != "— เลือกลูกค้า —":
-                        _bn_conflict = db.find_bill_no_conflict(
-                            m_bill_no.strip(), customer_map[m_customer]["id"])
-                        if _bn_conflict:
-                            m_errors.append(f"⚠️ เลขที่บิล {m_bill_no.strip()} ถูกใช้แล้วโดย {_bn_conflict}")
 
                 if m_errors:
                     st.markdown(
@@ -667,7 +660,7 @@ def render(tab1, products, customers, customer_map):
                             cod_amount = 0
                             collect    = total_amt + ship_fee
                             cod_tag    = ""
-                        bill_no = m_bill_no.strip() if m_bill == "เปิดบิลแล้ว" else db.get_next_bill_no(str(m_date))
+                        bill_no = db.get_next_bill_no(str(m_date))
                         _m_batch = [{
                             "id":                   str(uuid.uuid4()),
                             "date":                 str(m_date),
@@ -692,6 +685,15 @@ def render(tab1, products, customers, customer_map):
                             st.error(f"❌ Error: {_e}")
                             st.json(_m_batch)
                             st.stop()
+                        if m_bill == "เปิดบิลแล้ว":
+                            # บันทึกเป็น bill_open_events ด้วย (เลขบิลจริงเป็นโน้ต optional)
+                            # ให้ประวัติ/LINE เห็นเลขบิลจริงได้เหมือนเปิดบิลผ่านจุดอื่น —
+                            # bill_status ที่ตั้งไว้แล้วตอน insert ทำให้ open_bill_partial
+                            # ไม่ไป update ซ้ำ (แค่ insert event เพิ่ม)
+                            for _row in _m_batch:
+                                db.open_bill_partial(
+                                    _row["id"], _row["qty"],
+                                    note=m_bill_no.strip() or None, date=str(m_date))
                         if m_pay == "จ่ายบางส่วน" and m_partial_amount > 0:
                             _alloc_left = m_partial_amount
                             _pe_rows, _paid_full_ids = [], []

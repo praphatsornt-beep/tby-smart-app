@@ -170,23 +170,6 @@ def get_next_bill_no(date_str: str) -> str:
     return f"{prefix}-{max(nums, default=0) + 1:03d}"
 
 
-def find_bill_no_conflict(bill_no: str, customer_id: str) -> str | None:
-    """เช็คเลขบิลจริง (ที่ staff พิมพ์เองตอนกด "เปิดบิล" — คือเลขบิลจากระบบหลัก/
-    Zhulian ไม่ใช่เลขอ้างอิงอัตโนมัติตอนเบิกของ) ว่าถูกใช้โดยลูกค้าคนอื่นอยู่แล้ว
-    หรือไม่ (กันพิมพ์ชนกันข้ามลูกค้าโดยไม่ตั้งใจ — จะกระทบเอกสารจริงที่ใช้ยื่นภาษี)
-    คืนชื่อลูกค้าที่ใช้เลขนี้ชนอยู่ถ้ามี, None ถ้าไม่ชน (ไม่มีใครใช้ หรือเป็นบิลของ
-    ลูกค้าคนนี้เอง — เปิดบิลเดิมเพิ่มเติมได้ตามปกติ)"""
-    if not bill_no:
-        return None
-    rows = (get_supabase().table("transactions").select("customer_id")
-            .eq("bill_no", bill_no).neq("customer_id", customer_id).limit(1).execute().data)
-    if not rows:
-        return None
-    other_cid = rows[0]["customer_id"]
-    cust = get_supabase().table("customers").select("name").eq("id", other_cid).limit(1).execute().data
-    return cust[0]["name"] if cust else other_cid
-
-
 def _clear_partial_event_caches() -> None:
     get_all_transactions_df.clear()
     get_outstanding_df.clear()
@@ -215,140 +198,77 @@ def insert_partial_events_batch(rows: list[dict]) -> None:
     _clear_partial_event_caches()
 
 
-def update_transaction_statuses_batch(transaction_ids: list[str],
-                                       bill_status: str = None, pay_status: str = None,
-                                       bill_no: str = None, bill_opened_at: str = None) -> None:
-    """อัปเดต bill_status/pay_status/bill_no/bill_opened_at ให้หลาย transaction พร้อมกัน
-    (ค่าเดียวกันทุกแถว) batch แทนการลูปทีละรายการ (ลด round-trip)"""
-    updates = {}
-    if bill_status:
-        updates["bill_status"] = bill_status
-    if pay_status:
-        updates["pay_status"] = pay_status
-    if bill_no:
-        updates["bill_no"] = bill_no
-    if bill_opened_at:
-        updates["bill_opened_at"] = bill_opened_at
-    if not updates or not transaction_ids:
+def update_transaction_statuses_batch(transaction_ids: list[str], pay_status: str = None) -> None:
+    """อัปเดต pay_status ให้หลาย transaction พร้อมกัน (ค่าเดียวกันทุกแถว) batch
+    แทนการลูปทีละรายการ (ลด round-trip) — เปิดบิลไม่ใช้ฟังก์ชันนี้แล้ว (ดู
+    open_bill_partial ที่ insert bill_open_events ทีละแถว เพราะแต่ละแถวอาจมี
+    จำนวนที่จะเปิดบิลไม่เท่ากัน)"""
+    if not pay_status or not transaction_ids:
         return
     db = get_supabase()
-    if bill_status == "เปิดบิลแล้ว" and bill_no:
-        # แต่ละแถวอาจมีเลขอ้างอิง (บิลหลัก) เดิมไม่เหมือนกัน ก่อนโดน bill_no ทับ
-        # เป็นค่าเดียวกันทั้งชุด ต้องดึงมาคำนวณ origin_bill_no แยกต่อแถว แล้ว
-        # gruop ตาม origin ที่ได้ เพื่ออัปเดตเป็นชุดย่อยแทนการอัปเดตทีเดียวทั้งหมด
-        by_origin: dict[str, list[str]] = defaultdict(list)
-        for i in range(0, len(transaction_ids), 50):
-            chunk = transaction_ids[i:i + 50]
-            rows = _retry(lambda: db.table("transactions").select("id,bill_no,origin_bill_no")
-                           .in_("id", chunk).execute()).data
-            for r in rows:
-                origin = r.get("origin_bill_no") or r.get("bill_no")
-                by_origin[origin].append(r["id"])
-        for origin, ids in by_origin.items():
-            _row_updates = {**updates, "origin_bill_no": origin}
-            for i in range(0, len(ids), 50):
-                chunk = ids[i:i + 50]
-                _retry(lambda: db.table("transactions").update(_row_updates).in_("id", chunk).execute())
-    else:
-        for i in range(0, len(transaction_ids), 50):
-            chunk = transaction_ids[i:i + 50]
-            _retry(lambda: db.table("transactions").update(updates).in_("id", chunk).execute())
+    for i in range(0, len(transaction_ids), 50):
+        chunk = transaction_ids[i:i + 50]
+        _retry(lambda: db.table("transactions").update({"pay_status": pay_status}).in_("id", chunk).execute())
     _clear_transaction_caches()
 
 
-def split_and_open_bill(transaction_id: str, qty_to_bill: int, bill_no: str = None,
-                         bill_opened_at: str = None) -> None:
-    """แยกรายการ: เปิดบิล qty_to_bill ชิ้น แล้วสร้างรายการใหม่สำหรับที่เหลือ
-    เงิน/บิล/การรับของ เป็นสถานะอิสระจากกัน — ถ้ารายการเดิม (ก่อนแยก) จ่าย/
-    รับของไปแล้วมากกว่าที่ใช้กับส่วนที่เปิดบิล ส่วนเกินจะถูกโอนไปให้ remainder
-    ด้วย (เช่น จ่ายเงินครบ 10 ชิ้นแล้ว แต่เปิดบิลแค่ 6 ชิ้น — remainder 4 ชิ้น
-    ต้องขึ้นว่าจ่ายแล้วด้วย ไม่ใช่ค้างจ่ายเต็มจำนวนใหม่). bill_no/bill_opened_at
-    (ถ้าระบุ) จะ override เลขบิล/วันที่เปิดบิลของส่วนที่เปิดบิล — remainder
-    (ยังไม่เปิดบิล) ยังคงเลขเดิมไว้"""
+def _bill_open_qty_sum(transaction_id: str) -> int:
+    """ผลรวม qty_opened จาก bill_open_events ทั้งหมดของแถวนี้ (รวม correction
+    event ติดลบจาก undo_last_bill_open_event ด้วย) — floor ที่ 0"""
     db = get_supabase()
-    txn = _retry(lambda: db.table("transactions").select("*").eq("id", transaction_id).single().execute()).data
-    qty_remaining = txn["qty"] - qty_to_bill
-    price = float(txn["price_per_unit"])
-    pv = float(txn["points_per_unit"])
-    billed_total = price * qty_to_bill
-    _is_paid_flag = txn["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว")
-    # เก็บเลขอ้างอิงเดิม (บิลหลัก) ไว้ทั้งฝั่งที่เปิดบิลแล้วและฝั่งที่เหลือ ให้ตาม
-    # กลุ่มกันได้แม้แยกไปหลายรอบ — ถ้าแถวนี้เคยถูกแยกมาก่อนแล้ว (มี origin_bill_no
-    # อยู่แล้ว) ใช้ต้นตอเดิมต่อ ไม่ใช้ bill_no ปัจจุบันซึ่งอาจเป็นแค่ parent ชั้นกลาง
-    _origin_bill_no = txn.get("origin_bill_no") or txn.get("bill_no")
+    evts = _retry(lambda: db.table("bill_open_events").select("qty_opened").eq(
+        "transaction_id", transaction_id).execute()).data
+    return max(0, sum(int(e["qty_opened"] or 0) for e in evts))
 
-    _billed_updates = {
-        "qty": qty_to_bill,
-        "total_amount": billed_total,
-        "bill_status": "เปิดบิลแล้ว",
-        "initial_qty_received": min(txn["initial_qty_received"], qty_to_bill),
-        "origin_bill_no": _origin_bill_no,
-    }
-    if bill_no:
-        _billed_updates["bill_no"] = bill_no
-    if bill_opened_at:
-        _billed_updates["bill_opened_at"] = bill_opened_at
-    # retry แต่ละ call แยกกัน (ไม่ retry ทั้งฟังก์ชัน) — payload/id ของแต่ละ call
-    # คำนวณคงที่ไว้ก่อนแล้ว (เช่น _new_id ด้านล่าง) การ retry เฉพาะ call ที่พังจึง
-    # idempotent จริง ต่างจากการ retry ทั้งฟังก์ชันที่จะสุ่ม id ใหม่ทุกรอบ เสี่ยง
-    # insert ซ้ำถ้ารอบแรกสำเร็จจริงแต่ response หลุด
-    _retry(lambda: db.table("transactions").update(_billed_updates).eq("id", transaction_id).execute())
 
-    if qty_remaining > 0:
-        _new_id = str(uuid.uuid4())
-        # ถ้าเดิมจ่ายครบทั้งรายการแล้ว (ผ่าน flag ไม่ใช่ partial_events) ให้
-        # remainder รับ flag เดียวกันไปตรงๆ — ถ้ายังไม่ครบ (ยังต้องอิง
-        # partial_events) ค่อยคำนวณส่วนเกินด้านล่าง
-        _remainder_pay_status = txn["pay_status"] if _is_paid_flag else "ค้างจ่าย"
-        # รับของ: ส่วนเกินจากที่รับไปแล้วเทียบกับจำนวนที่เปิดบิล ก็ยกไปให้
-        # remainder เหมือนกัน (สมมาตรกับที่ initial_qty_received ของส่วนเปิด
-        # บิลถูก cap ไว้ที่ qty_to_bill ด้านบน)
-        _remainder_received = max(0, int(txn["initial_qty_received"]) - qty_to_bill)
-        _remainder_row = {
-            "id": _new_id,
-            "date": txn["date"],
-            "customer_id": txn["customer_id"],
-            "product_id": txn["product_id"],
-            "product_name": txn["product_name"],
-            "qty": qty_remaining,
-            "price_per_unit": price,
-            "points_per_unit": pv,
-            "total_amount": price * qty_remaining,
-            "initial_qty_received": _remainder_received,
-            "transaction_type": txn["transaction_type"],
-            "bill_status": "ยังไม่เปิดบิล",
-            "pay_status": _remainder_pay_status,
-            "notes": txn.get("notes", "") or "",
-            "bill_no": txn.get("bill_no"),
-            "origin_bill_no": _origin_bill_no,
-        }
-        _retry(lambda: db.table("transactions").insert(_remainder_row).execute())
+def open_bill_partial(transaction_id: str, qty_to_open: int, note: str = None, date: str = None) -> None:
+    """เปิดบิล qty_to_open ชิ้นของแถวนี้ — ไม่แยกแถวอีกต่อไป (เทียบเท่า
+    split_and_open_bill เดิม แต่เป็น event-based เหมือน partial_events) เลขบิล
+    จริงจาก Zhulian (ถ้ามี) เก็บเป็นแค่โน้ต optional ไม่ validate/ไม่เช็คซ้ำข้าม
+    ลูกค้า — bill_no ของแถว transactions ไม่ถูกแตะต้องเลย คงเป็นเลขอ้างอิงภายใน
+    ตลอดอายุแถว bill_status จะเปลี่ยนเป็น "เปิดบิลแล้ว" ก็ต่อเมื่อผลรวมที่เปิดบิล
+    สะสมครบเท่ากับ qty ทั้งหมดของแถว (แบบเดียวกับที่ pay_status เปลี่ยนเป็น
+    "จ่ายแล้ว" ก็ต่อเมื่อยอดจ่ายสะสมครบ total_amount)"""
+    db = get_supabase()
+    txn = _retry(lambda: db.table("transactions").select("qty,bill_status").eq(
+        "id", transaction_id).single().execute()).data
+    from datetime import date as _dateclass
+    _date = date or _dateclass.today().isoformat()
+    _retry(lambda: db.table("bill_open_events").insert({
+        "id": str(uuid.uuid4()), "date": _date, "transaction_id": transaction_id,
+        "qty_opened": qty_to_open, "note": note,
+    }).execute())
+    _opened_sum = _bill_open_qty_sum(transaction_id)
+    if _opened_sum >= int(txn["qty"]) and txn["bill_status"] != "เปิดบิลแล้ว":
+        _retry(lambda: db.table("transactions").update({
+            "bill_status": "เปิดบิลแล้ว", "bill_opened_at": _date,
+        }).eq("id", transaction_id).execute())
+    _clear_transaction_caches()
 
-        if not _is_paid_flag:
-            # ยอดที่จ่ายไปแล้วผ่าน partial_events (ก่อนแยก) อาจมากกว่าที่ใช้
-            # กับส่วนที่เปิดบิล — โอนส่วนเกินไปให้ remainder ด้วย correction
-            # event คู่ตรงข้ามกัน (หักออกจากส่วนเปิดบิล + บวกให้ remainder)
-            # กันยอดรวมทั้งระบบเพี้ยน (ไม่มีผลตอน pay_status เป็น "จ่ายแล้ว"
-            # อยู่แล้ว เพราะ flag นั้นถูกอ่านตรงๆ ไม่ผ่าน partial_events)
-            _evts = _retry(lambda: db.table("partial_events").select("amount_paid").eq(
-                "transaction_id", transaction_id).execute()).data
-            _paid_before = sum(float(e["amount_paid"] or 0) for e in _evts)
-            _leftover_paid = max(0.0, _paid_before - billed_total)
-            if _leftover_paid > 0.01:
-                _corr_out = {
-                    "id": str(uuid.uuid4()), "date": txn["date"], "transaction_id": transaction_id,
-                    "qty_received": 0, "amount_paid": -round(_leftover_paid, 2),
-                    "event_type": "จ่ายเงิน",
-                    "notes": "โอนยอดจ่ายส่วนเกินไปให้รายการที่แยกเปิดบิลบางส่วน",
-                }
-                _corr_in = {
-                    "id": str(uuid.uuid4()), "date": txn["date"], "transaction_id": _new_id,
-                    "qty_received": 0, "amount_paid": round(_leftover_paid, 2),
-                    "event_type": "จ่ายเงิน",
-                    "notes": "ยอดจ่ายที่โอนมาจากรายการเดิมตอนแยกเปิดบิลบางส่วน",
-                }
-                _retry(lambda: db.table("partial_events").insert(_corr_out).execute())
-                _retry(lambda: db.table("partial_events").insert(_corr_in).execute())
+
+def undo_last_bill_open_event(transaction_id: str) -> None:
+    """ยกเลิกการเปิดบิลครั้งล่าสุด (undo) — insert correction event ติดลบหักล้าง
+    event ล่าสุด (ไม่ลบ/ไม่แก้ของเดิม เก็บ audit trail ไว้เหมือน partial_events)
+    แล้วเช็คยอดเปิดบิลสะสมใหม่ ถ้าต่ำกว่า qty ทั้งหมดของแถว ให้คืน bill_status
+    เป็น "ยังไม่เปิดบิล" และเคลียร์ bill_opened_at"""
+    db = get_supabase()
+    _last = _retry(lambda: db.table("bill_open_events").select("*").eq(
+        "transaction_id", transaction_id).order("created_at", desc=True).limit(1).execute()).data
+    if not _last:
+        return
+    _last = _last[0]
+    _retry(lambda: db.table("bill_open_events").insert({
+        "id": str(uuid.uuid4()), "date": _last["date"], "transaction_id": transaction_id,
+        "qty_opened": -int(_last["qty_opened"]),
+        "note": "ยกเลิกเปิดบิล (undo)",
+    }).execute())
+    txn = _retry(lambda: db.table("transactions").select("qty").eq(
+        "id", transaction_id).single().execute()).data
+    _opened_sum = _bill_open_qty_sum(transaction_id)
+    if _opened_sum < int(txn["qty"]):
+        _retry(lambda: db.table("transactions").update({
+            "bill_status": "ยังไม่เปิดบิล", "bill_opened_at": None,
+        }).eq("id", transaction_id).execute())
     _clear_transaction_caches()
 
 
@@ -357,42 +277,13 @@ def update_transaction(transaction_id: str, data: dict) -> None:
     _clear_transaction_caches()
 
 
-def update_transaction_status(transaction_id: str, bill_status: str = None, pay_status: str = None,
-                               bill_no: str = None, bill_opened_at: str = None) -> None:
-    updates = {}
-    if bill_status:
-        updates["bill_status"] = bill_status
-    if pay_status:
-        updates["pay_status"] = pay_status
-    if bill_no:
-        updates["bill_no"] = bill_no
-    if bill_opened_at:
-        updates["bill_opened_at"] = bill_opened_at
-    if bill_status == "เปิดบิลแล้ว" and bill_no:
-        # เก็บเลขอ้างอิงเดิม (บิลหลัก) ไว้ก่อนโดน bill_no ทับ ให้ยอดค้าง/บัตร
-        # ลูกค้าตามกลุ่มกันได้ (ดู split_and_open_bill สำหรับกรณีเปิดบางส่วน)
-        db = get_supabase()
-        _txn = _retry(lambda: db.table("transactions").select("bill_no,origin_bill_no")
-                       .eq("id", transaction_id).single().execute()).data
-        updates["origin_bill_no"] = _txn.get("origin_bill_no") or _txn.get("bill_no")
-    if updates:
-        _retry(lambda: get_supabase().table("transactions").update(updates).eq("id", transaction_id).execute())
-        _clear_transaction_caches()
-
-
-def revert_bill_open(transaction_id: str) -> None:
-    """ยกเลิกการเปิดบิล (undo) — คืน bill_status เป็น 'ยังไม่เปิดบิล', เคลียร์
-    bill_opened_at, และคืน bill_no กลับเป็น origin_bill_no (เลขอ้างอิงเดิมก่อน
-    เปิดบิล) ทำให้กลับไปรวมกลุ่มกับส่วนที่เหลือ (ถ้าเคยแยกบิลบางส่วนไว้) ภายใต้
-    เลขอ้างอิงเดียวกันเหมือนก่อนเปิดบิล — ถ้าไม่มี origin_bill_no (แถวเก่าก่อนมี
-    ฟีเจอร์นี้) จะคง bill_no เดิมไว้ แค่เปลี่ยนสถานะกลับเป็นยังไม่เปิดบิล"""
-    db = get_supabase()
-    txn = _retry(lambda: db.table("transactions").select("bill_no,origin_bill_no")
-                 .eq("id", transaction_id).single().execute()).data
-    _revert_to = txn.get("origin_bill_no") or txn.get("bill_no")
-    _retry(lambda: db.table("transactions").update({
-        "bill_status": "ยังไม่เปิดบิล", "bill_no": _revert_to, "bill_opened_at": None,
-    }).eq("id", transaction_id).execute())
+def update_transaction_status(transaction_id: str, pay_status: str = None) -> None:
+    """อัปเดต pay_status — เปิด/ย้อนเปิดบิลไม่ใช้ฟังก์ชันนี้แล้ว (ดู
+    open_bill_partial/undo_last_bill_open_event)"""
+    if not pay_status:
+        return
+    _retry(lambda: get_supabase().table("transactions").update(
+        {"pay_status": pay_status}).eq("id", transaction_id).execute())
     _clear_transaction_caches()
 
 
@@ -497,13 +388,17 @@ def update_bill_customer(bill_no: str, new_customer_id: str) -> None:
 
 @st.cache_data(ttl=60)
 def bill_has_partial_events(bill_no: str) -> bool:
-    """True ถ้าบิลนี้มีการจ่าย/รับของแล้ว"""
+    """True ถ้าบิลนี้มีการจ่าย/รับของ/เปิดบิลบางส่วนไปแล้ว — กันย้ายบิลข้ามลูกค้า
+    ทั้งที่มีประวัติผูกอยู่แล้ว"""
     db = get_supabase()
     txn_ids = [r["id"] for r in db.table("transactions").select("id").eq("bill_no", bill_no).execute().data]
     if not txn_ids:
         return False
     events = db.table("partial_events").select("id").in_("transaction_id", txn_ids).limit(1).execute().data
-    return bool(events)
+    if events:
+        return True
+    open_events = db.table("bill_open_events").select("id").in_("transaction_id", txn_ids).limit(1).execute().data
+    return bool(open_events)
 
 
 def delete_bill(bill_no: str, customer_id: str = None) -> int:
@@ -570,10 +465,19 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     db = get_supabase()
     txns = _retry(lambda: db.table("transactions").select(
         "id, date, bill_no, origin_bill_no, product_id, product_name, qty, total_amount, pay_status, "
-        "bill_status, points_per_unit, initial_qty_received, notes, bill_opened_at"
+        "bill_status, points_per_unit, price_per_unit, initial_qty_received, notes, bill_opened_at"
     ).eq("customer_id", customer_id).order("date").execute().data)
     txn_ids = [t["id"] for t in txns]
     txn_map = {t["id"]: t for t in txns}
+
+    # bill_open_events in batches — เหตุการณ์เปิดบิลจริงแต่ละครั้ง (event-based,
+    # ไม่ใช่การ infer จาก bill_status เหมือนบิลเก่าที่แยกด้วย split_and_open_bill)
+    all_open_events = []
+    for _i in range(0, len(txn_ids), 50):
+        _chunk = txn_ids[_i:_i + 50]
+        all_open_events.extend(_retry(lambda: db.table("bill_open_events").select(
+            "id, date, transaction_id, qty_opened, note"
+        ).in_("transaction_id", _chunk).order("date").execute().data))
 
     # partial_events in batches
     all_events = []
@@ -611,6 +515,28 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
             "notes":            t.get("notes", "") or "",
             "bill_opened_at":   (t.get("bill_opened_at") or "")[:10],
             "txn_id":           t["id"],
+        })
+    # bill-open event rows (เปิดบิลจริงแต่ละครั้ง — qty_opened ติดลบ = event
+    # ยกเลิกเปิดบิล/undo, ไม่โชว์เป็นเหตุการณ์แยก แค่หักออกจากยอดสะสม)
+    for oe in all_open_events:
+        _qo = int(oe.get("qty_opened") or 0)
+        if _qo <= 0:
+            continue
+        txn = txn_map.get(oe["transaction_id"], {})
+        rows.append({
+            "date":         oe["date"][:10],
+            "type":         "เปิดบิล",
+            "bill_no":      txn.get("bill_no") or "",
+            "product":      txn.get("product_name", ""),
+            "qty_in":       0,
+            "qty_out":      0,
+            "amount":       0.0,
+            "qty_opened":   _qo,
+            "note":         oe.get("note") or "",
+            "amount_opened": _qo * float(txn.get("price_per_unit") or 0),
+            "pv_opened":    _qo * float(txn.get("points_per_unit") or 0),
+            "txn_id":       oe["transaction_id"],
+            "event_id":     oe["id"] + "-o",
         })
     # partial event rows
     for e in all_events:
@@ -732,19 +658,42 @@ def delete_customer(customer_id: str) -> None:
 
 @st.cache_data(ttl=60)
 def get_unbilled_pv_summary() -> dict:
-    """สรุป PV และยอดเงินของรายการที่ยังไม่เปิดบิล"""
+    """สรุป PV และยอดเงินของ "ส่วนที่ยังไม่เปิดบิล" — นับเฉพาะจำนวนที่ยังไม่เปิด
+    จริงต่อแถว (qty - Σbill_open_events.qty_opened) ไม่ใช่ทั้งแถว เพราะแถวที่
+    เปิดบิลบางส่วนแล้ว (bill_status ยังเป็น "ยังไม่เปิดบิล" จนกว่าจะครบ) ต้องหัก
+    ส่วนที่เปิดไปแล้วออกก่อน ไม่งั้นจะนับ PV/ยอดเงินเกินจริง"""
+    db = get_supabase()
     try:
-        rows = _retry(lambda: get_supabase().table("transactions").select(
-            "qty, points_per_unit, total_amount, customers(name)"
+        rows = _retry(lambda: db.table("transactions").select(
+            "id, qty, price_per_unit, points_per_unit"
         ).eq("bill_status", "ยังไม่เปิดบิล").execute().data)
     except Exception:
         # ลอง _retry แล้วยังไม่สำเร็จ — คืนศูนย์เพื่อไม่ให้หน้าแรก crash
         # (ค่า 0 อาจไม่ตรงความจริงถ้า query ล้มเหลวจริง ไม่ใช่แค่ไม่มีรายการ)
         return {"count": 0, "total_pv": 0.0, "total_amount": 0.0}
 
-    total_pv = sum(float(r["points_per_unit"]) * r["qty"] for r in rows)
-    total_amount = sum(float(r["total_amount"]) for r in rows)
-    count = len(rows)
+    if not rows:
+        return {"count": 0, "total_pv": 0.0, "total_amount": 0.0}
+
+    txn_ids = [r["id"] for r in rows]
+    opened_sum: dict = defaultdict(int)
+    for i in range(0, len(txn_ids), 50):
+        chunk = txn_ids[i:i + 50]
+        evts = _retry(lambda: db.table("bill_open_events").select(
+            "transaction_id, qty_opened").in_("transaction_id", chunk).execute().data)
+        for e in evts:
+            opened_sum[e["transaction_id"]] += int(e["qty_opened"] or 0)
+
+    total_pv = 0.0
+    total_amount = 0.0
+    count = 0
+    for r in rows:
+        unbilled_qty = max(0, int(r["qty"]) - max(0, opened_sum.get(r["id"], 0)))
+        if unbilled_qty <= 0:
+            continue
+        total_pv += float(r["points_per_unit"]) * unbilled_qty
+        total_amount += float(r["price_per_unit"]) * unbilled_qty
+        count += 1
     return {"count": count, "total_pv": total_pv, "total_amount": total_amount}
 
 
@@ -782,19 +731,27 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
 
     _TXN_COLS = ["id","วันที่","ลูกค้า","รหัส","สินค้า","สั่ง","รับแล้ว","ยอดรวม",
                  "จ่ายแล้ว","ค้างจ่าย","ค้างรับ","สถานะบิล","สถานะจ่าย","หมายเหตุ",
-                 "PV รวม","เลขที่บิล","เคลียร์แล้ว","last_payment_date","เลขอ้างอิงบิลหลัก"]
+                 "PV รวม","เลขที่บิล","เคลียร์แล้ว","last_payment_date","เลขอ้างอิงบิลหลัก",
+                 "เปิดบิลแล้ว","ยังไม่เปิด"]
     if not txns:
         return pd.DataFrame(columns=_TXN_COLS)
 
     txn_ids = [t["id"] for t in txns]
     all_events: list = []
+    all_open_events: list = []
     for _i in range(0, len(txn_ids), 50):
         _chunk = txn_ids[_i:_i+50]
         all_events += _retry(lambda: db.table("partial_events").select("*").in_("transaction_id", _chunk).execute().data)
+        all_open_events += _retry(lambda: db.table("bill_open_events").select(
+            "transaction_id,qty_opened").in_("transaction_id", _chunk).execute().data)
 
     events_by_txn: dict[str, list] = defaultdict(list)
     for e in all_events:
         events_by_txn[e["transaction_id"]].append(e)
+
+    opened_sum_by_txn: dict[str, int] = defaultdict(int)
+    for oe in all_open_events:
+        opened_sum_by_txn[oe["transaction_id"]] += int(oe["qty_opened"] or 0)
 
     rows = []
     for t in txns:
@@ -808,6 +765,16 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
         total_received = bal["total_received"]
         outstanding_amount = bal["outstanding_amount"]
         outstanding_qty = bal["outstanding_qty"]
+
+        # แถวเก่าที่เคยแยกด้วย split_and_open_bill (ก่อนมี bill_open_events) ไม่มี
+        # event เปิดบิลผูกอยู่เลย แต่ bill_status ก็ถูกตั้งเป็น "เปิดบิลแล้ว" ไปแล้ว
+        # ตอนแยก — ให้ยึด flag เดิมเป็นหลักถ้าเปิดครบแล้ว กันไม่ให้โชว์ "ยังไม่เปิด"
+        # เต็มจำนวนทั้งที่จริงเปิดบิลไปแล้ว (bill_open_events sum จะเป็น 0 สำหรับแถวนี้)
+        if t["bill_status"] == "เปิดบิลแล้ว":
+            _opened_qty = int(t["qty"])
+        else:
+            _opened_qty = max(0, min(int(t["qty"]), opened_sum_by_txn.get(tid, 0)))
+        _unopened_qty = max(0, int(t["qty"]) - _opened_qty)
 
         cleared = outstanding_amount <= 0.01 and outstanding_qty <= 0 and t["bill_status"] == "เปิดบิลแล้ว"
         customer_name = (t.get("customers") or {}).get("name", t["customer_id"])
@@ -832,6 +799,8 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
             "เคลียร์แล้ว": cleared,
             "last_payment_date": max(paid_dates) if paid_dates else "",
             "เลขอ้างอิงบิลหลัก": t.get("origin_bill_no") or t.get("bill_no") or "",
+            "เปิดบิลแล้ว": _opened_qty,
+            "ยังไม่เปิด": _unopened_qty,
         })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame(columns=_TXN_COLS)
@@ -1051,21 +1020,30 @@ def return_stock_deposit(deposit_id: str) -> None:
 
 @st.cache_data(ttl=60)
 def get_unbilled_received_qty_by_product() -> dict:
+    """qty ที่ลูกค้ารับไปแล้วแต่ยังไม่เปิดบิล (เบิกของ) ต่อสินค้า — สุทธิด้วย
+    bill_open_events ต่อแถว (received - opened, floor 0) เพราะแถวที่เปิดบิล
+    บางส่วนแล้วยังอยู่ใน bill_status="ยังไม่เปิดบิล" จนกว่าจะครบ ถ้านับ received
+    ทั้งแถวจะเกินจริง (ส่วนที่เปิดบิลไปแล้วไม่ควรนับเป็นเบิกของค้างอีก)"""
     db = get_supabase()
-    txns = _retry(lambda: db.table("transactions").select("id, product_id, initial_qty_received").eq("bill_status", "ยังไม่เปิดบิล").execute().data)
+    txns = _retry(lambda: db.table("transactions").select(
+        "id, product_id, initial_qty_received").eq("bill_status", "ยังไม่เปิดบิล").execute().data)
     if not txns:
         return {}
     txn_ids = [t["id"] for t in txns]
     events_by_txn = defaultdict(int)
+    opened_by_txn = defaultdict(int)
     for _i in range(0, len(txn_ids), 50):
         _chunk = txn_ids[_i:_i+50]
         for e in _retry(lambda: db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", _chunk).execute().data):
             events_by_txn[e["transaction_id"]] += e["qty_received"]
+        for oe in _retry(lambda: db.table("bill_open_events").select("transaction_id, qty_opened").in_("transaction_id", _chunk).execute().data):
+            opened_by_txn[oe["transaction_id"]] += int(oe["qty_opened"] or 0)
     result = defaultdict(int)
     for t in txns:
         received = t["initial_qty_received"] + events_by_txn[t["id"]]
-        if received > 0:
-            result[t["product_id"]] += received
+        unbilled_received = max(0, received - max(0, opened_by_txn[t["id"]]))
+        if unbilled_received > 0:
+            result[t["product_id"]] += unbilled_received
     return dict(result)
 
 
@@ -1079,21 +1057,36 @@ def get_deposit_qty_by_product() -> dict:
 
 @st.cache_data(ttl=60)
 def get_billed_not_received_qty_by_product() -> dict:
-    """qty ที่เปิดบิลแล้วแต่ลูกค้ายังไม่รับของ (ของยังอยู่ที่สาขา)"""
+    """qty ที่เปิดบิลแล้วแต่ลูกค้ายังไม่รับของ (ของยังอยู่ที่สาขา) — ต้องดูทุกแถว
+    ไม่ใช่แค่แถวที่ bill_status="เปิดบิลแล้ว" เพราะแถวที่เปิดบิลบางส่วนแล้ว (ยังไม่
+    ครบ qty) ก็มีส่วนที่ "เปิดบิลไปแล้ว" นับรวมได้เหมือนกัน แม้ตัว flag ทั้งแถวจะ
+    ยังเป็น "ยังไม่เปิดบิล" อยู่ก็ตาม"""
     db = get_supabase()
-    txns = _retry(lambda: db.table("transactions").select("id, product_id, qty, initial_qty_received").eq("bill_status", "เปิดบิลแล้ว").execute().data)
+    txns = _retry(lambda: db.table("transactions").select(
+        "id, product_id, qty, initial_qty_received, bill_status").execute().data)
     if not txns:
         return {}
     txn_ids = [t["id"] for t in txns]
     events_by_txn: dict[str, int] = defaultdict(int)
+    opened_by_txn: dict[str, int] = defaultdict(int)
     for _i in range(0, len(txn_ids), 50):
         _chunk = txn_ids[_i:_i + 50]
         _evts = _retry(lambda: db.table("partial_events").select("transaction_id, qty_received").in_("transaction_id", _chunk).execute().data)
         for e in _evts:
             events_by_txn[e["transaction_id"]] += e["qty_received"]
+        _oevts = _retry(lambda: db.table("bill_open_events").select("transaction_id, qty_opened").in_("transaction_id", _chunk).execute().data)
+        for oe in _oevts:
+            opened_by_txn[oe["transaction_id"]] += int(oe["qty_opened"] or 0)
     result = defaultdict(int)
     for t in txns:
-        outstanding = t["qty"] - (t["initial_qty_received"] + events_by_txn[t["id"]])
+        if t["bill_status"] == "เปิดบิลแล้ว":
+            opened = int(t["qty"])  # แถวเก่าที่แยกก่อนมี bill_open_events ก็นับเต็มแถว
+        else:
+            opened = max(0, min(int(t["qty"]), opened_by_txn[t["id"]]))
+        if opened <= 0:
+            continue
+        received = t["initial_qty_received"] + events_by_txn[t["id"]]
+        outstanding = opened - received
         if outstanding > 0:
             result[t["product_id"]] += outstanding
     return dict(result)
