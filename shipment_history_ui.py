@@ -126,12 +126,14 @@ def render(customers):
         return float(r.get("cod_amount") or 0) > 0 and not r.get("cod_transferred_at")
 
     def _is_billing_anomaly(r):
+        # นับเป็น "ผิดปกติ" เฉพาะฝั่งขาดทุน (ขนส่งคิดจริงแพงกว่าที่ประเมิน) — ฝั่งกำไร
+        # (คิดจริงถูกกว่า) ไม่ต้องเตือน ไม่ใช่ปัญหาที่ต้องรีบเช็ค
         tn = r.get("tracking_no", "") or ""
         if not tn or tn not in _sh_billing_map:
             return False
         actual = float(_sh_billing_map[tn].get("discount_price") or 0)
         est    = float(r.get("shipping_cost") or 0)
-        return actual > 0 and est > 0 and abs(actual - est) > 2
+        return actual > 0 and est > 0 and (actual - est) > 2
 
     _f1, _f2, _f3 = st.columns(3)
     _filter_delayed = _f1.checkbox("🚚 ล่าช้า (>3 วัน)", key="sh_filter_delayed")
