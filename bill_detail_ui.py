@@ -517,15 +517,19 @@ def render(products, customers):
                                     _open_qty_input = None
                                     if is_unbilled:
                                         _unopened_qty = int(sel_row["ยังไม่เปิด"]) if "ยังไม่เปิด" in sel_row else int(txn["qty"])
-                                        _also_open_bill = st.checkbox(
+                                        # เช็คบ็อกซ์กับช่องจำนวนต้องโชว์พร้อมกันเสมอ (ไม่ซ่อนตามค่า
+                                        # เช็คบ็อกซ์) เพราะอยู่ใน st.form — widget ข้างในฟอร์มไม่ rerun
+                                        # ตอนคลิก จะ sync ค่าจริงตอนกด "บันทึก" ทีเดียว ถ้าซ่อนไว้ก่อน
+                                        # ผู้ใช้จะกรอกจำนวนไม่ได้เลยในรอบเดียวกับที่ติ๊ก
+                                        _oc1, _oc2 = st.columns([1, 1])
+                                        _also_open_bill = _oc1.checkbox(
                                             "📄 เปิดบิลด้วย", value=False,
                                             key=f"also_open_{txn_id}",
                                         )
-                                        if _also_open_bill:
-                                            _open_qty_input = st.number_input(
-                                                "เปิดบิลกี่ชิ้น", min_value=1, max_value=_unopened_qty,
-                                                value=_unopened_qty, step=1, key=f"also_open_qty_{txn_id}",
-                                            )
+                                        _open_qty_input = _oc2.number_input(
+                                            "เปิดบิลกี่ชิ้น", min_value=1, max_value=_unopened_qty,
+                                            value=_unopened_qty, step=1, key=f"also_open_qty_{txn_id}",
+                                        )
                                         _open_bill_no = st.text_input(
                                             "เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key=f"also_open_bn_{txn_id}"
                                         )
