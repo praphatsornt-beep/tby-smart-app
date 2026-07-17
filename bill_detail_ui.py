@@ -381,7 +381,8 @@ def render(products, customers):
 
                         # ── Styled table + row selection ──────────────────────
                         _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
-                                   "ยอดรวม", "ค้างจ่าย", "สถานะจ่าย", "สถานะบิล"]
+                                   "ยอดรวม", "ค้างจ่าย", "เปิดบิลแล้ว", "ยังไม่เปิด",
+                                   "สถานะจ่าย", "สถานะบิล"]
                         _id_map = grp["id"].reset_index(drop=True)
                         # "เลขที่บิล" ในตารางนี้โชว์เลขอ้างอิงภายในที่คงที่เสมอ (origin_bill_no
                         # ถ้ามี ไม่งั้น bill_no ของแถวเอง) ไม่ใช่ bill_no ดิบๆ — เพราะแถวเก่าที่
@@ -513,11 +514,18 @@ def render(products, customers):
                                     event_notes = st.text_input("หมายเหตุ", key=f"enotes_{txn_id}")
                                     _also_open_bill = False
                                     _open_bill_no   = ""
+                                    _open_qty_input = None
                                     if is_unbilled:
+                                        _unopened_qty = int(sel_row["ยังไม่เปิด"]) if "ยังไม่เปิด" in sel_row else int(txn["qty"])
                                         _also_open_bill = st.checkbox(
                                             "📄 เปิดบิลด้วย", value=False,
                                             key=f"also_open_{txn_id}",
                                         )
+                                        if _also_open_bill:
+                                            _open_qty_input = st.number_input(
+                                                "เปิดบิลกี่ชิ้น", min_value=1, max_value=_unopened_qty,
+                                                value=_unopened_qty, step=1, key=f"also_open_qty_{txn_id}",
+                                            )
                                         _open_bill_no = st.text_input(
                                             "เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key=f"also_open_bn_{txn_id}"
                                         )
@@ -552,7 +560,7 @@ def render(products, customers):
                                             st.error(f"❌ DB error: {_pe}")
                                             st.stop()
                                         if _also_open_bill:
-                                            _open_qty = int(sel_row["ยังไม่เปิด"]) if "ยังไม่เปิด" in sel_row else int(txn["qty"])
+                                            _open_qty = int(_open_qty_input) if _open_qty_input is not None else int(txn["qty"])
                                             db.open_bill_partial(
                                                 txn_id, _open_qty,
                                                 note=_open_bill_no.strip() or None, date=str(event_date))
