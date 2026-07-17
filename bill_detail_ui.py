@@ -351,6 +351,9 @@ def render(products, customers):
                         _grp_origin = grp["เลขอ้างอิงบิลหลัก"].reset_index(drop=True)
                         _grp_bno = grp["เลขที่บิล"].reset_index(drop=True).fillna("")
                         _has_family = (_grp_origin != "") & (_grp_origin != _grp_bno)
+                        # หลายบิลเก่าที่เคยแยกไว้พร้อมกันจะทำให้บล็อกนี้เด้งซ้อนกันหลายอัน
+                        # จนงง — เก็บไว้ใน expander ปิดไว้ก่อน (บิลใหม่จากนี้ไปไม่แยกแถว
+                        # แล้ว บล็อกนี้จะโผล่เฉพาะข้อมูลเก่าก่อน 2026-07-17 เท่านั้น)
                         for _origin in _grp_origin[_has_family].unique().tolist():
                             _fam_full_df = _all_txn_cache[
                                 (_all_txn_cache["ลูกค้า"] == customer_name)
@@ -359,20 +362,20 @@ def render(products, customers):
                             _fam_prod = merge_bill_family_products(_fam_full_df, _origin)
                             if _fam_prod.empty:
                                 continue
-                            st.markdown(f"#### 🗂️ บิลหลัก {_origin}")
-                            _om1, _om2, _om3, _om4 = st.columns(4)
-                            _om1.metric("สั่งทั้งหมด", f"{_fam_prod['สั่ง'].sum():,.0f} ชิ้น")
-                            _om2.metric("รับแล้ว", f"{_fam_prod['รับแล้ว'].sum():,.0f} ชิ้น")
-                            _om3.metric("ค้างจ่ายรวม", f"{_fam_prod['ค้างจ่าย'].sum():,.0f} ฿")
-                            _om4.metric("เหลือเปิดบิล", f"{_fam_prod['ยังไม่เปิด'].sum():,.0f} ชิ้น")
-                            st.dataframe(
-                                _fam_prod[[
-                                    "วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม", "จ่ายแล้ว",
-                                    "ค้างจ่าย", "ค้างรับ", "เปิดบิลแล้ว", "ยังไม่เปิด",
-                                    "สถานะบิล", "สถานะจ่าย", "สถานะรับของ",
-                                ]].style.format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"}),
-                                width="stretch", hide_index=True,
-                            )
+                            with st.expander(f"🗂️ บิลหลัก {_origin} (เคยแยกเปิดบิลบางส่วน)"):
+                                _om1, _om2, _om3, _om4 = st.columns(4)
+                                _om1.metric("สั่งทั้งหมด", f"{_fam_prod['สั่ง'].sum():,.0f} ชิ้น")
+                                _om2.metric("รับแล้ว", f"{_fam_prod['รับแล้ว'].sum():,.0f} ชิ้น")
+                                _om3.metric("ค้างจ่ายรวม", f"{_fam_prod['ค้างจ่าย'].sum():,.0f} ฿")
+                                _om4.metric("เหลือเปิดบิล", f"{_fam_prod['ยังไม่เปิด'].sum():,.0f} ชิ้น")
+                                st.dataframe(
+                                    _fam_prod[[
+                                        "วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม", "จ่ายแล้ว",
+                                        "ค้างจ่าย", "ค้างรับ", "เปิดบิลแล้ว", "ยังไม่เปิด",
+                                        "สถานะบิล", "สถานะจ่าย", "สถานะรับของ",
+                                    ]].style.format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"}),
+                                    width="stretch", hide_index=True,
+                                )
                         if _has_family.any():
                             st.divider()
 
@@ -380,11 +383,15 @@ def render(products, customers):
                         _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
                                    "ยอดรวม", "ค้างจ่าย", "สถานะจ่าย", "สถานะบิล"]
                         _id_map = grp["id"].reset_index(drop=True)
-                        # โชว์ "บิลหลัก" เฉพาะแถวที่เคยถูกแยกบิล (origin ≠ เลขที่บิลปัจจุบัน)
-                        # กันตารางรกด้วยค่าซ้ำเดิมทุกแถวตอนไม่มีการแยกบิล
+                        # "เลขที่บิล" ในตารางนี้โชว์เลขอ้างอิงภายในที่คงที่เสมอ (origin_bill_no
+                        # ถ้ามี ไม่งั้น bill_no ของแถวเอง) ไม่ใช่ bill_no ดิบๆ — เพราะแถวเก่าที่
+                        # เคยเปิดบิลจริงไปแล้ว (ก่อน 2026-07-17) bill_no ของแถวจะเป็นเลขบิลจริง
+                        # ไม่ใช่เลขอ้างอิง ถ้าโชว์ตรงๆ จะสลับความหมายกับแถวใหม่ที่ bill_no คงที่
+                        # เสมอ — เลขบิลจริง (ถ้ามี) ย้ายไปโชว์ที่คอลัมน์ "เลขบิลจริง" แทน
                         _grp_disp = grp[_dcols].reset_index(drop=True).copy()
+                        _grp_disp["เลขที่บิล"] = _grp_origin.where(_grp_origin != "", _grp_bno)
                         if _has_family.any():
-                            _grp_disp.insert(1, "บิลหลัก", _grp_origin.where(_has_family, ""))
+                            _grp_disp.insert(1, "เลขบิลจริง", _grp_bno.where(_has_family, ""))
                         st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
                         _evt = st.dataframe(
                             _grp_disp.style
