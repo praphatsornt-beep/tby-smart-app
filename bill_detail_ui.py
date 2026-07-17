@@ -446,9 +446,12 @@ def render(products, customers):
                             )
 
                             is_unbilled = txn["bill_status"] == "ยังไม่เปิดบิล"
-                            radio_opts  = (["📄 เปิดบิล"] if is_unbilled else ["↩️ ย้อนกลับเป็นยังไม่เปิดบิล"]) + [
-                                "💵 จ่ายเงิน", "📦 รับของ", "💵+📦 จ่ายเงิน + รับของ"
-                            ]
+                            # ลำดับ/ชื่อโหมดตรงกับตัวเลือกหลายรายการด้านล่าง (กำหนดเอง / ...
+                            # อย่างเดียว) — กำหนดเองคือโหมดเดียวที่เปิดบิลพร้อมกับรับของ/จ่ายเงินได้
+                            # ในคราวเดียว ส่วนโหมด "อย่างเดียว" ทำเฉพาะอย่างนั้นจริงๆ ไม่ผสม
+                            radio_opts  = ["🛠️ กำหนดเอง", "💵 จ่ายเงินอย่างเดียว", "📦 รับของอย่างเดียว"] + (
+                                ["📄 เปิดบิลอย่างเดียว"] if is_unbilled else ["↩️ ย้อนกลับเป็นยังไม่เปิดบิล"]
+                            )
                             action = st.radio("บันทึก", radio_opts, horizontal=True, key=f"etype_{txn_id}")
 
                             if action == "↩️ ย้อนกลับเป็นยังไม่เปิดบิล":
@@ -463,7 +466,7 @@ def render(products, customers):
                                     db.undo_last_bill_open_event(txn_id)
                                     st.success("✅ ย้อนกลับเป็นยังไม่เปิดบิลแล้ว")
                                     st.rerun()
-                            elif action == "📄 เปิดบิล":
+                            elif action == "📄 เปิดบิลอย่างเดียว":
                                 _remaining_to_open = int(sel_row["ยังไม่เปิด"]) if "ยังไม่เปิด" in sel_row else int(txn["qty"])
                                 with st.form(f"bill_{txn_id}", clear_on_submit=True):
                                     bn1, bn2 = st.columns(2)
@@ -485,9 +488,9 @@ def render(products, customers):
                                     st.rerun()
                             else:
                                 evt_map  = {
-                                    "💵 จ่ายเงิน": "จ่ายเงิน",
-                                    "📦 รับของ": "รับของ",
-                                    "💵+📦 จ่ายเงิน + รับของ": "ทั้งคู่",
+                                    "💵 จ่ายเงินอย่างเดียว": "จ่ายเงิน",
+                                    "📦 รับของอย่างเดียว": "รับของ",
+                                    "🛠️ กำหนดเอง": "ทั้งคู่",
                                 }
                                 evt_type = evt_map[action]
                                 _price   = float(txn["price_per_unit"])
@@ -515,7 +518,7 @@ def render(products, customers):
                                     _also_open_bill = False
                                     _open_bill_no   = ""
                                     _open_qty_input = None
-                                    if is_unbilled:
+                                    if is_unbilled and evt_type == "ทั้งคู่":
                                         _unopened_qty = int(sel_row["ยังไม่เปิด"]) if "ยังไม่เปิด" in sel_row else int(txn["qty"])
                                         # เช็คบ็อกซ์กับช่องจำนวนต้องโชว์พร้อมกันเสมอ (ไม่ซ่อนตามค่า
                                         # เช็คบ็อกซ์) เพราะอยู่ใน st.form — widget ข้างในฟอร์มไม่ rerun
@@ -538,7 +541,7 @@ def render(products, customers):
                                     )
                                 if submit_evt:
                                     error = None
-                                    if evt_type == "จ่ายเงิน + รับของ" and qty_received > 0:
+                                    if evt_type == "ทั้งคู่" and qty_received > 0:
                                         new_paid = balance["total_paid"] + amount_paid
                                         price    = float(txn["price_per_unit"])
                                         max_ok   = floor(new_paid / price) if price > 0 else 0
