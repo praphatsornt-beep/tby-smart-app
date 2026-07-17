@@ -232,19 +232,19 @@ def render(customers):
                 "ลบ":       st.column_config.CheckboxColumn("ลบ", default=False, width=45),
                 "📤":       st.column_config.CheckboxColumn("📤", default=False, width=45,
                                 help="เลือกเพื่อส่ง iShip ใหม่"),
-                "แหล่ง":    st.column_config.TextColumn("แหล่ง", width="small",
+                "แหล่ง":    st.column_config.TextColumn("แหล่ง", width=50,
                                 help="🛒 = บันทึกขาย  📦 = ส่งของ"),
-                "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width="small"),
-                "💸":       st.column_config.TextColumn("💸", width="small"),
-                "💰 เทียบยอด": st.column_config.TextColumn("💰 เทียบยอด", width="medium",
+                "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width=75),
+                "💸":       st.column_config.TextColumn("💸", width=45),
+                "💰 เทียบยอด": st.column_config.TextColumn("💰 เทียบยอด", width=90,
                                 help="เทียบยอดที่ขนส่งหักจริงกับราคาที่เราประเมินไว้ (=ราคาที่คิดลูกค้าด้วย "
                                      "เพราะบันทึกขาย/ส่งของคิดลูกค้าตามราคาขนส่งจริงตรงๆ ไม่มีบวกเพิ่ม) "
                                      "? = ไม่มีราคาประเมินไว้ให้เทียบ  ⏳ = iShip ยังไม่ตีราคาจริงมา  "
                                      "+ = เก็บลูกค้าไว้มากกว่าที่ขนส่งคิดจริง (กำไร)  "
                                      "❗- = เก็บลูกค้าไม่พอ ขนส่งคิดแพงกว่า (ขาดทุนค่าส่ง)"),
-                "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width="medium"),
-                "Tracking": st.column_config.TextColumn("Tracking", width="small"),
-                "🔗":       st.column_config.LinkColumn("🔗", width="small", display_text="🔗"),
+                "สถานะส่ง": st.column_config.TextColumn("สถานะส่ง", width=130),
+                "Tracking": st.column_config.TextColumn("Tracking", width=110),
+                "🔗":       st.column_config.LinkColumn("🔗", width=40, display_text="🔗"),
                 "บ้านเลขที่/ถนน": st.column_config.TextColumn("บ้านเลขที่/ถนน", width=140),
             },
         )
