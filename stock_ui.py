@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import date
 
 import database as db
+import stock_import
 
 
 _T6_TABS = ["📦 สต๊อก", "📋 ของฝาก"]
@@ -76,6 +77,50 @@ def render():
 
     elif _t6_active == "📦 สต๊อก":
         st.subheader("สรุปสต๊อก")
+
+        with st.expander("📥 นำเข้า \"คอม\" จากรายงานบริษัท (.xls)"):
+            st.caption(
+                "อัปโหลดไฟล์ \"รายงานสินค้าคงเหลือปัจจุบัน/มูลค่า\" จากระบบบริษัท จะอัปเดตคอลัมน์ "
+                "\"คอม\" ให้อัตโนมัติ (ไม่แตะ \"นับจริง\" ที่คีย์ไว้เดิม) — สินค้าที่มีอยู่แล้วในระบบ "
+                "แต่ไม่ปรากฏในไฟล์นี้จะถูกตั้ง \"คอม\" เป็น 0 ให้ด้วย ส่วนรหัสสินค้าในไฟล์ที่ยังไม่มีใน"
+                "ระบบจะถูกเพิ่มเป็นสินค้าใหม่อัตโนมัติ (ราคาขาย/PV เป็น 0 ไว้ก่อน ต้องไปแก้ที่ ⚙️ จัดการ"
+                "ข้อมูล → 🏷️ สินค้า เอง)"
+            )
+            _imp_date = st.date_input("วันที่นับ (ของรายงานนี้)", value=date.today(), key="stock_import_date")
+            _imp_file = st.file_uploader("ไฟล์รายงานสินค้าคงเหลือ (.xls)", type=["xls"], key="stock_import_file")
+            if _imp_file and st.button("นำเข้า \"คอม\" จากไฟล์", key="stock_import_btn", type="primary"):
+                with st.spinner("กำลังอ่านไฟล์..."):
+                    parsed = stock_import.parse_stock_report(_imp_file)
+                    if not parsed:
+                        st.warning("⚠️ ไม่พบข้อมูลสินค้าในไฟล์")
+                    else:
+                        _existing_products = {p["id"]: p for p in db.get_products()}
+                        _latest = db.get_latest_stock_counts()
+                        _new_products = []
+                        _qty_by_code: dict[str, float] = {}
+                        for r in parsed:
+                            code = r["code"]
+                            _qty_by_code[code] = _qty_by_code.get(code, 0) + r["qty"]
+                            if code not in _existing_products and code not in {p["id"] for p in _new_products}:
+                                _new_products.append({
+                                    "id": code, "name": r["name"], "price": 0, "cost_price": r["member_price"],
+                                    "points_per_unit": 0, "bv_per_unit": 0, "weight_grams": 0, "show_in_liff": False,
+                                })
+                        for _np_row in _new_products:
+                            db.upsert_product(_np_row)
+                        _all_ids = set(_existing_products.keys()) | {r["id"] for r in _new_products}
+                        _sc_rows = [{
+                            "id": str(uuid.uuid4()), "product_id": pid, "count_date": str(_imp_date),
+                            "qty_system": int(_qty_by_code.get(pid, 0)),
+                            "qty_physical": int(_latest.get(pid, {}).get("qty_physical", 0) or 0),
+                            "notes": "นำเข้าจากไฟล์บริษัท",
+                        } for pid in _all_ids]
+                        db.upsert_stock_counts_batch(_sc_rows)
+                        st.success(
+                            f"✅ นำเข้าแล้ว {len(parsed)} รายการจากไฟล์ ({len(_new_products)} สินค้าใหม่) "
+                            f"— อัปเดต \"คอม\" ครบ {len(_sc_rows)} สินค้า (ที่ไม่มีในไฟล์ตั้งเป็น 0)"
+                        )
+                        st.rerun()
 
         products = db.get_products()
         if not products:

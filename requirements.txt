@@ -7,3 +7,4 @@ numpy==2.4.4
 pyarrow==24.0.0
 python-dotenv
 openpyxl>=3.1.0
+xlrd>=2.0.1
