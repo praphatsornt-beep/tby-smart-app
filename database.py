@@ -1585,11 +1585,13 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = N
     } for r in problem]).sort_values("วันที่", ascending=False).reset_index(drop=True)
 
 
-def get_ecommerce_sales_df(start_date: str, end_date: str, shop_name: str = None) -> pd.DataFrame:
-    """shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None, shop_name: str = None) -> pd.DataFrame:
+    """platform: กรองเฉพาะแพลตฟอร์มเดียว (None = รวมทุกแพลตฟอร์ม) shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
     _q = get_supabase().table("ecommerce_sales").select(
         "order_sn,sale_date,platform,shop_name,qty,item_price,product_id,order_status,products(name)"
     ).gte("sale_date", start_date).lte("sale_date", end_date)
+    if platform:
+        _q = _q.eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
     rows = _q.order("sale_date", desc=True).execute().data
