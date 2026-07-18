@@ -309,6 +309,19 @@ def _render_sales_profit():
     _sel_shop = st.selectbox("ร้าน", _shop_opts, key=f"ecom_profit_shop_filter_{_platform}")
     _shop_filter = None if _sel_shop == "ทั้งหมด" else _sel_shop
 
+    with st.expander("📅 สรุปยอดขาย/กำไรรายเดือน"):
+        monthly_df = db.get_ecommerce_monthly_summary(platform=_platform, shop_name=_shop_filter)
+        if monthly_df.empty:
+            st.info("ยังไม่มีข้อมูล")
+        else:
+            st.dataframe(
+                monthly_df.style.format({
+                    "ยอดขาย": "{:,.2f}", "กำไรรวม": "{:,.2f}", "ขาดทุนรวม": "{:,.2f}", "สุทธิ": "{:,.2f}",
+                }),
+                width="stretch", hide_index=True,
+            )
+            st.caption("กำไร/ขาดทุนคำนวณแบบรายออเดอร์ต่อเดือน (สูตรเดียวกับตัวเลขสรุปด้านล่าง) — เดือนที่ยังไม่มีรายงาน Income มายืนยันครบ ตัวเลขกำไรของเดือนนั้นอาจยังไม่นิ่ง")
+
     mc1, mc2, mc3 = st.columns([1, 1, 1])
     margin_from = mc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_margin_from")
     margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")

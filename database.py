@@ -1517,6 +1517,41 @@ def get_ecommerce_order_profit_summary(
     }
 
 
+def get_ecommerce_monthly_summary(platform: str = "shopee", shop_name: str = None) -> pd.DataFrame:
+    """สรุปยอดขาย/กำไร E-commerce รายเดือน (ตาม sale_date) — กำไร/ขาดทุนใช้สูตรเดียวกับ
+    get_ecommerce_order_profit_summary (รายออเดอร์ ไม่ใช่ net รายสินค้า) จึงบวกข้ามเดือน
+    ได้ตรงๆ shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน) เรียงเดือนล่าสุดขึ้นก่อน"""
+    _q = get_supabase().table("ecommerce_sales").select("sale_date,item_price").eq("platform", platform)
+    if shop_name:
+        _q = _q.eq("shop_name", shop_name)
+    rows = _q.execute().data
+    if not rows:
+        return pd.DataFrame()
+
+    sales_by_month: dict[str, float] = {}
+    for r in rows:
+        d = r.get("sale_date")
+        if not d:
+            continue
+        ym = d[:7]
+        sales_by_month[ym] = sales_by_month.get(ym, 0.0) + float(r.get("item_price") or 0)
+
+    out = []
+    for ym in sorted(sales_by_month, reverse=True):
+        period = pd.Period(ym, freq="M")
+        start = period.start_time.strftime("%Y-%m-%d")
+        end = period.end_time.strftime("%Y-%m-%d")
+        summary = get_ecommerce_order_profit_summary(start, end, platform=platform, shop_name=shop_name)
+        out.append({
+            "เดือน": ym,
+            "ยอดขาย": round(sales_by_month[ym], 2),
+            "กำไรรวม": summary["total_profit"],
+            "ขาดทุนรวม": summary["total_loss"],
+            "สุทธิ": summary["net"],
+        })
+    return pd.DataFrame(out)
+
+
 def get_ecommerce_shipping_overcharge_df(
     start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 0.0,
     shop_name: str = None,
