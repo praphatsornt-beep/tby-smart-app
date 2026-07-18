@@ -1588,7 +1588,7 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = N
 def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None, shop_name: str = None) -> pd.DataFrame:
     """platform: กรองเฉพาะแพลตฟอร์มเดียว (None = รวมทุกแพลตฟอร์ม) shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
     _q = get_supabase().table("ecommerce_sales").select(
-        "order_sn,sale_date,platform,shop_name,qty,item_price,product_id,order_status,products(name)"
+        "order_sn,sale_date,platform,shop_name,qty,item_price,net_amount,product_id,order_status,products(name)"
     ).gte("sale_date", start_date).lte("sale_date", end_date)
     if platform:
         _q = _q.eq("platform", platform)
@@ -1613,6 +1613,7 @@ def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None,
         "สินค้า": (r.get("products") or {}).get("name", r.get("product_id") or "ยังไม่ map"),
         "จำนวน": r["qty"],
         "ยอด": float(r["item_price"] or 0),
+        "ยอดเงินที่ได้รับจริง": float(r["net_amount"] or 0) if r["order_sn"] in settled else None,
         "สถานะออเดอร์": r.get("order_status") or "-",
         "สถานะการโอนเงิน": "✅ โอนแล้ว" if r["order_sn"] in settled else "⏳ รอยืนยัน",
     } for r in rows])
