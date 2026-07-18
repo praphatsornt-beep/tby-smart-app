@@ -262,7 +262,7 @@ def _render_lazada_upload(shop_names: list[str]):
         "ให้เช็ค \"ค่าส่งเกิน\" เหมือน Shopee — Lazada ไม่รายงานค่าส่งมาในไฟล์นี้)"
     )
     _laz_ver = st.session_state.get("_ecom_lazada_file_ver", 0)
-    st.markdown("**📊 รายงาน Income Overview** (การเงิน → ใบแจ้งยอดรายได้ → Export)")
+    st.markdown("**📊 รายงาน Income Overview** (รายรับของฉัน → โอนเงินแล้ว → เลือกวันที่ → ดาวน์โหลด)")
     _laz_msg = st.session_state.pop("_ecom_lazada_import_msg", None)
     if _laz_msg:
         getattr(st, _laz_msg[0])(_laz_msg[1])
