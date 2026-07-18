@@ -45,13 +45,13 @@ def _render_setup():
     # ── ร้านค้า ────────────────────────────────────────────────────────
     st.subheader("ร้านค้า")
     shops = db.get_ecommerce_shops()
-    shop_names = [s["shop_name"] for s in shops]
     with st.expander("➕ เพิ่มร้านใหม่", expanded=not shops):
         _new_plat = st.selectbox("แพลตฟอร์ม", list(_PLATFORMS.keys()), format_func=lambda p: _PLATFORMS[p], key="ecom_new_shop_platform")
         _new_shop = st.text_input("ชื่อร้าน", key="ecom_new_shop_name", placeholder="เช่น Shopee ร้าน 1")
         if st.button("บันทึกร้าน", key="ecom_add_shop") and _new_shop.strip():
-            if _new_shop.strip() in shop_names:
-                st.warning(f"⚠️ มีร้านชื่อ {_new_shop.strip()} อยู่แล้ว ไม่เพิ่มซ้ำ")
+            _same_plat_names = [s["shop_name"] for s in shops if s["platform"] == _new_plat]
+            if _new_shop.strip() in _same_plat_names:
+                st.warning(f"⚠️ มีร้านชื่อ {_new_shop.strip()} อยู่แล้วใน {_PLATFORMS[_new_plat]} ไม่เพิ่มซ้ำ")
             else:
                 db.upsert_ecommerce_shop({
                     "id": str(uuid.uuid4()), "platform": _new_plat,
