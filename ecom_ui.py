@@ -21,9 +21,10 @@ from datetime import date
 import database as db
 import shopee_import
 import lazada_import
+import tiktok_affiliate_import
 
 
-_ECOM_TABS = ["⚙️ ตั้งค่า/นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🔍 ตรวจสอบปัญหา"]
+_ECOM_TABS = ["⚙️ ตั้งค่า/นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🔍 ตรวจสอบปัญหา", "🎥 ค่าคอมนายหน้า TikTok"]
 _PLATFORMS = {"shopee": "Shopee", "lazada": "Lazada"}
 
 
@@ -39,6 +40,8 @@ def render():
         _render_sales_profit()
     elif _ecom_active == _ECOM_TABS[2]:
         _render_issues()
+    elif _ecom_active == _ECOM_TABS[3]:
+        _render_tiktok_affiliate()
 
 
 def _render_setup():
@@ -285,6 +288,96 @@ def _render_lazada_upload(shop_names: list[str]):
                     "success",
                     f"✅ นำเข้า {len(sales_rows)} รายการ ({len(income_rows)} ออเดอร์) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
             st.session_state["_ecom_lazada_file_ver"] = _laz_ver + 1
+        st.rerun()
+
+
+def _render_tiktok_affiliate():
+    st.caption(
+        "รายงานเฉพาะออเดอร์ที่มาจากนายหน้า/ครีเอเตอร์ (TikTok Shop Seller Center → "
+        "Affiliate Marketing → Orders → Export) ไม่ใช่ยอดขายทั้งหมดของร้าน "
+        "\"ยอดที่เราได้โดยประมาณ\" หักแค่ค่าคอมนายหน้าออกจากยอดขาย ยังไม่รวมค่าธรรมเนียม "
+        "อื่นๆ ของ TikTok เอง (ไฟล์นี้ไม่มีข้อมูลนั้น)"
+    )
+    _tt_ver = st.session_state.get("_ecom_tiktok_file_ver", 0)
+    _tt_msg = st.session_state.pop("_ecom_tiktok_import_msg", None)
+    if _tt_msg:
+        getattr(st, _tt_msg[0])(_tt_msg[1])
+    _tt_shop = st.text_input("ชื่อร้าน", value="zhulian.shop", key="ecom_tiktok_shop")
+    _tt_file = st.file_uploader("ไฟล์ affiliate_orders...xlsx", type=["xlsx"], key=f"ecom_tiktok_file_{_tt_ver}")
+    if _tt_file and st.button("นำเข้ารายงานนายหน้า TikTok", key="ecom_import_tiktok", type="primary"):
+        with st.spinner("กำลังอ่านไฟล์..."):
+            _tt_rows = tiktok_affiliate_import.parse_affiliate_orders(_tt_file, _tt_shop.strip() or "zhulian.shop")
+            if not _tt_rows:
+                st.session_state["_ecom_tiktok_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+            else:
+                db.upsert_tiktok_affiliate_orders(_tt_rows)
+                st.session_state["_ecom_tiktok_import_msg"] = ("success", f"✅ นำเข้า {len(_tt_rows)} รายการแล้ว")
+            st.session_state["_ecom_tiktok_file_ver"] = _tt_ver + 1
+        st.rerun()
+
+    st.divider()
+
+    _tt_df = db.get_tiktok_affiliate_orders_df()
+    if _tt_df.empty:
+        st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ด้านบนก่อนครับ")
+        return
+
+    _tt_df["วันที่"] = pd.to_datetime(_tt_df["order_created_at"]).dt.strftime("%d/%m/%Y")
+
+    # ── สรุปยอดต่อนายหน้า ─────────────────────────────────────────────
+    st.subheader("สรุปยอดต่อนายหน้า")
+    _tt_summary = _tt_df.groupby("creator_username").agg(
+        จำนวนออเดอร์=("order_id", "nunique"),
+        ยอดขายรวม=("payment_amount", "sum"),
+        ยอดนายหน้า=("commission_payable_actual", "sum"),
+        ยอดที่เราได้โดยประมาณ=("net_amount", "sum"),
+    ).reset_index().rename(columns={"creator_username": "นายหน้า"}).sort_values("ยอดนายหน้า", ascending=False)
+    st.dataframe(
+        _tt_summary.style.format({
+            "ยอดขายรวม": "{:,.2f}", "ยอดนายหน้า": "{:,.2f}", "ยอดที่เราได้โดยประมาณ": "{:,.2f}",
+        }),
+        hide_index=True, width="stretch",
+    )
+    _tt_m1, _tt_m2, _tt_m3 = st.columns(3)
+    _tt_m1.metric("ยอดขายรวม", f"{_tt_df['payment_amount'].sum():,.0f} ฿")
+    _tt_m2.metric("ยอดนายหน้ารวม", f"{_tt_df['commission_payable_actual'].sum():,.0f} ฿")
+    _tt_m3.metric("ยอดที่เราได้โดยประมาณ", f"{_tt_df['net_amount'].sum():,.0f} ฿")
+
+    st.divider()
+
+    # ── รายละเอียดออเดอร์ + เปิดบิลแล้วหรือยัง ──────────────────────────
+    st.subheader("รายละเอียดออเดอร์")
+    _tt_only_unbilled = st.checkbox("แสดงเฉพาะที่ยังไม่เปิดบิล", key="ecom_tiktok_only_unbilled")
+    _tt_detail_df = _tt_df[~_tt_df["billed_in_system"]] if _tt_only_unbilled else _tt_df
+    _tt_detail_df = _tt_detail_df.sort_values("order_created_at", ascending=False)
+
+    _tt_edit_cols = ["order_id", "sku_id", "วันที่", "item_name", "creator_username",
+                      "payment_amount", "commission_payable_actual", "net_amount",
+                      "order_status", "billed_in_system"]
+    _tt_edit_df = _tt_detail_df[_tt_edit_cols].rename(columns={
+        "order_id": "เลขที่ออเดอร์", "sku_id": "SKU", "item_name": "สินค้า",
+        "creator_username": "นายหน้า", "payment_amount": "ยอดขาย",
+        "commission_payable_actual": "ยอดนายหน้า", "net_amount": "ยอดที่เราได้โดยประมาณ",
+        "order_status": "สถานะออเดอร์", "billed_in_system": "เปิดบิลแล้ว",
+    }).reset_index(drop=True)
+
+    _tt_edited = st.data_editor(
+        _tt_edit_df, hide_index=True, width="stretch", key="ecom_tiktok_detail_editor",
+        disabled=["เลขที่ออเดอร์", "SKU", "วันที่", "สินค้า", "นายหน้า", "ยอดขาย",
+                  "ยอดนายหน้า", "ยอดที่เราได้โดยประมาณ", "สถานะออเดอร์"],
+        column_config={
+            "ยอดขาย": st.column_config.NumberColumn(format="%.2f ฿"),
+            "ยอดนายหน้า": st.column_config.NumberColumn(format="%.2f ฿"),
+            "ยอดที่เราได้โดยประมาณ": st.column_config.NumberColumn(format="%.2f ฿"),
+            "เปิดบิลแล้ว": st.column_config.CheckboxColumn("เปิดบิลแล้ว"),
+        },
+    )
+
+    _tt_changed = _tt_edited[_tt_edited["เปิดบิลแล้ว"] != _tt_edit_df["เปิดบิลแล้ว"]]
+    if not _tt_changed.empty:
+        for _, _tt_row in _tt_changed.iterrows():
+            db.set_tiktok_affiliate_billed(_tt_row["เลขที่ออเดอร์"], _tt_row["SKU"], bool(_tt_row["เปิดบิลแล้ว"]))
+        st.success(f"✅ อัปเดตสถานะเปิดบิล {len(_tt_changed)} รายการ")
         st.rerun()
 
 

@@ -1692,6 +1692,43 @@ def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
     return result
 
 
+# ─── TikTok Affiliate Orders ───────────────────────────────────────────────────
+
+def upsert_tiktok_affiliate_orders(rows: list[dict]) -> None:
+    """upsert ตาม (order_id, sku_id) — กันแถวซ้ำถ้าอัปโหลดไฟล์ affiliate_orders ซ้ำ/ช่วง
+    วันที่ export ทับกัน. สำคัญ: rows ต้องไม่มีคีย์ 'billed_in_system' เลย (ดู
+    tiktok_affiliate_import.parse_affiliate_orders) ไม่งั้นค่าที่ผู้ใช้ติ๊กไว้แล้วจะโดน
+    upsert ทับกลับเป็นค่า default ทุกครั้งที่อัปโหลดไฟล์ใหม่"""
+    if not rows:
+        return
+    rows = _dedupe_by_key(rows, ("order_id", "sku_id"), ("qty", "payment_amount", "commission_payable_actual", "net_amount"))
+    db = get_supabase()
+    for i in range(0, len(rows), 50):
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("tiktok_affiliate_orders").upsert(
+            _chunk, on_conflict="order_id,sku_id"
+        ).execute())
+    get_tiktok_affiliate_orders_df.clear()
+
+
+@st.cache_data(ttl=120)
+def get_tiktok_affiliate_orders_df(shop_name: str = None) -> pd.DataFrame:
+    q = get_supabase().table("tiktok_affiliate_orders").select("*")
+    if shop_name:
+        q = q.eq("shop_name", shop_name)
+    data = q.order("order_created_at", desc=True).execute().data
+    return pd.DataFrame(data)
+
+
+def set_tiktok_affiliate_billed(order_id: str, sku_id: str, billed: bool) -> None:
+    """แก้เฉพาะ billed_in_system ทีละแถว — ใช้ upsert คีย์เดียวกับข้อมูลหลักแต่ส่งแค่
+    คอลัมน์นี้ไป ไม่กระทบคอลัมน์อื่น (ต้องมีแถว order_id+sku_id นี้อยู่แล้วจากการนำเข้าไฟล์)"""
+    _retry(lambda: get_supabase().table("tiktok_affiliate_orders").update(
+        {"billed_in_system": billed}
+    ).eq("order_id", order_id).eq("sku_id", sku_id).execute())
+    get_tiktok_affiliate_orders_df.clear()
+
+
 # ─── Shipments ────────────────────────────────────────────────────────────────
 
 def create_shipment(data: dict) -> None:
