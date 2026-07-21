@@ -369,6 +369,8 @@ def _render_tiktok_affiliate():
 
     _tt_edited = st.data_editor(
         _tt_edit_df, hide_index=True, width="stretch", key="ecom_tiktok_detail_editor",
+        column_order=["เปิดบิลแล้ว", "เลขที่ออเดอร์", "วันที่", "สินค้า", "นายหน้า",
+                      "ยอดขาย", "ยอดนายหน้า", "ยอดที่เราได้โดยประมาณ", "สถานะออเดอร์"],
         disabled=["เลขที่ออเดอร์", "SKU", "วันที่", "สินค้า", "นายหน้า", "ยอดขาย",
                   "ยอดนายหน้า", "ยอดที่เราได้โดยประมาณ", "สถานะออเดอร์"],
         column_config={

@@ -1793,8 +1793,11 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
     aff_rows = get_supabase().table("tiktok_affiliate_orders").select("*") \
         .eq("shop_name", shop_name).execute().data
     aff_by_order: dict[str, list[dict]] = defaultdict(list)
+    sku_name_lookup: dict[str, str] = {}
     for r in aff_rows:
         aff_by_order[r["order_id"]].append(r)
+        if r.get("item_name") and r["sku_id"] not in sku_name_lookup:
+            sku_name_lookup[r["sku_id"]] = r["item_name"]
 
     sales_rows = []
     income_out_rows = []
@@ -1820,10 +1823,14 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
             if not _m:
                 continue  # ไม่มี SKU ให้แม็ปเลย ข้ามแถวนี้ (นับใน income แต่ไม่มีรายการสินค้า)
             _sku, _qty = _m.group(1), int(_m.group(2))
+            # ชื่อสินค้า: หาจาก SKU เดียวกันในออเดอร์อื่นที่มีข้อมูลนายหน้า (SKU เดียวกัน
+            # ย่อมเป็นสินค้าเดียวกันไม่ว่าจะออเดอร์ไหน) ก่อน — ไม่งั้นจะเห็นแค่รหัส SKU
+            # ล้วนๆ ใน "Map สินค้า" หาไม่เจอว่าคือสินค้าอะไร (ผู้ใช้เจอปัญหานี้จริง)
+            _item_name = sku_name_lookup.get(_sku) or f"TikTok SKU {_sku}"
             sales_rows.append({
                 "id": str(uuid.uuid4()), "platform": "tiktok", "shop_name": shop_name,
                 "order_sn": oid, "sale_date": _sale_date, "product_id": None,
-                "item_id_platform": _sku, "item_name": f"TikTok SKU {_sku}",
+                "item_id_platform": _sku, "item_name": _item_name,
                 "qty": _qty, "item_price": inc.get("gross_revenue") or 0,
                 "order_status": inc.get("transaction_type"), "net_amount": 0,
             })
