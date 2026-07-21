@@ -176,7 +176,7 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 19
 /* Below Streamlit's own internal ~768px breakpoint, it switches stMain to
    position:absolute; left:0; width:100vw — an "overlay drawer" layout that
    assumes the sidebar is fully hidden underneath. Since we now force the
-   sidebar to stay open (as the 72px icon rail) instead of letting it fully
+   sidebar to stay open (as the 88px icon rail) instead of letting it fully
    collapse there, offset the content so the rail doesn't sit on top of it.
    Explicitly scoped to that same narrow range (rather than left as a
    theoretical "no-op at wider widths") since an unconditional width:calc()
@@ -184,8 +184,8 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 19
    sidebar was manually toggled to the compact rail. */
 @media (max-width: 768px) {
     [data-testid="stMain"] {
-        left: 72px !important;
-        width: calc(100% - 72px) !important;
+        left: 88px !important;
+        width: calc(100% - 88px) !important;
     }
 }
 [data-testid="stSidebar"] h3 {
@@ -313,13 +313,13 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 19
    centers the icon — icon-only, no hover tooltip. ── */
 @media (max-width: 1100px) {
     [data-testid="stSidebar"] {
-        width: 72px !important;
-        min-width: 72px !important;
-        max-width: 72px !important;
+        width: 88px !important;
+        min-width: 88px !important;
+        max-width: 88px !important;
     }
     [data-testid="stSidebarContent"] {
-        padding-left: 12px !important;
-        padding-right: 12px !important;
+        padding-left: 8px !important;
+        padding-right: 8px !important;
     }
     [data-testid="stSidebar"] [data-testid="stElementContainer"],
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
@@ -337,10 +337,14 @@ h3 { font-weight: 600 !important; margin: 0 0 0.3rem 0 !important; font-size: 19
         border-radius: 11px !important;
         font-size: 0.9rem !important;
     }
+    /* Keep the TBY badge and the ย่อ/ขยาย arrow on the same row instead of
+       the arrow wrapping onto its own row below — the rail is widened
+       (72px → 88px) to fit both at full size, no shrinking needed. */
     [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-        gap: 2px !important;
+        flex-wrap: nowrap !important;
+        gap: 4px !important;
         justify-content: center !important;
+        align-items: center !important;
     }
     [class*="st-key-sidebar_brand_row"] [data-testid="stColumn"] {
         width: auto !important;
@@ -528,6 +532,32 @@ button[kind="secondary"]:hover {
     font-weight: 500 !important;
     color: var(--tby-muted) !important;
 }
+/* Streamlit truncates the label to one line with "…" by default — fine at
+   full width, but at narrower widths (half-screen window, 3-4 metrics
+   squeezed into one row) that hides most of the label. Let it wrap instead. */
+[data-testid="stMetricLabel"] p {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+}
+/* ── Metric-card rows self-protect on their OWN rendered width (container
+   query) — reflow from "N across" to a 2-per-row grid once they'd otherwise
+   get too narrow to read (e.g. 3-4 stat cards on a half-screen window),
+   rather than squeezing every card until the label truncates/overlaps. ── */
+[data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+    container-type: inline-size;
+}
+@container (max-width: 560px) {
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) {
+        flex-wrap: wrap !important;
+        row-gap: 12px !important;
+    }
+    [data-testid="stHorizontalBlock"]:has([data-testid="stMetric"]) > [data-testid="stColumn"] {
+        flex: 1 1 calc(50% - 6px) !important;
+        width: calc(50% - 6px) !important;
+        min-width: 140px !important;
+    }
+}
 
 /* ── Expanders — flat bordered cards ── */
 [data-testid="stExpander"] {
@@ -614,7 +644,12 @@ button[kind="secondary"]:hover {
     border-radius: 8px !important;
     padding: 7px 16px !important;
     margin: 0 !important;
-    flex: 1 1 auto;
+    /* Don't grow to fill leftover space on its own wrapped row — with
+       flex-wrap, a lone option left dangling alone on the last row would
+       otherwise stretch to 100% while its siblings on the row above stay
+       pill-sized, an uneven, broken-looking mix. Keep every option the
+       same natural size whether it wraps or not. */
+    flex: 0 1 auto;
     justify-content: center;
     cursor: pointer;
     transition: background 0.18s !important;
@@ -1229,6 +1264,9 @@ with st.sidebar:
             width="stretch",
             type=("primary" if _nav_is_active else "secondary"),
             icon=_TAB_ICONS[_nav_i],
+            help=_nav_text,  # icon-only compact rail (<1100px / manual toggle)
+                              # hides the label text — this native tooltip is
+                              # the only way to tell the icons apart there.
         ):
             st.session_state["active_tab"] = _nav_label
             st.rerun()
@@ -1242,13 +1280,13 @@ if st.session_state["_sidebar_compact"]:
         """
         <style>
         [data-testid="stSidebar"] {
-            width: 72px !important;
-            min-width: 72px !important;
-            max-width: 72px !important;
+            width: 88px !important;
+            min-width: 88px !important;
+            max-width: 88px !important;
         }
         [data-testid="stSidebarContent"] {
-            padding-left: 12px !important;
-            padding-right: 12px !important;
+            padding-left: 8px !important;
+            padding-right: 8px !important;
         }
         [data-testid="stSidebar"] [data-testid="stElementContainer"],
         [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
@@ -1267,9 +1305,10 @@ if st.session_state["_sidebar_compact"]:
             font-size: 0.9rem !important;
         }
         [class*="st-key-sidebar_brand_row"] [data-testid="stHorizontalBlock"] {
-            flex-wrap: wrap !important;
-            gap: 2px !important;
+            flex-wrap: nowrap !important;
+            gap: 4px !important;
             justify-content: center !important;
+            align-items: center !important;
         }
         [class*="st-key-sidebar_brand_row"] [data-testid="stColumn"] {
             width: auto !important;

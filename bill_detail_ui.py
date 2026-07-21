@@ -695,6 +695,7 @@ def render(products, customers):
                                 _combo_rows = [{
                                     "_id":       r["id"],
                                     "สินค้า":    r["สินค้า"],
+                                    "รหัส":      r.get("รหัส", ""),
                                     "เลขที่บิล": r["เลขที่บิล"] or "—",
                                     "ค้างรับ":   int(r["ค้างรับ"]),
                                     "รับจริง":   0 if _recv_disabled else int(r["ค้างรับ"]),
