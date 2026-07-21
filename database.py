@@ -1729,6 +1729,29 @@ def set_tiktok_affiliate_billed(order_id: str, sku_id: str, billed: bool) -> Non
     get_tiktok_affiliate_orders_df.clear()
 
 
+def upsert_tiktok_order_income(rows: list[dict]) -> None:
+    """upsert ตาม order_id — กันแถวซ้ำถ้าอัปโหลดไฟล์ income ซ้ำ/ช่วงวันที่ export ทับกัน"""
+    if not rows:
+        return
+    rows = _dedupe_by_key(rows, ("order_id",), ())
+    db = get_supabase()
+    for i in range(0, len(rows), 50):
+        _chunk = rows[i:i + 50]
+        _retry(lambda: db.table("tiktok_order_income").upsert(
+            _chunk, on_conflict="order_id"
+        ).execute())
+    get_tiktok_order_income_df.clear()
+
+
+@st.cache_data(ttl=120)
+def get_tiktok_order_income_df(shop_name: str = None) -> pd.DataFrame:
+    q = get_supabase().table("tiktok_order_income").select("*")
+    if shop_name:
+        q = q.eq("shop_name", shop_name)
+    data = q.order("order_created_at", desc=True).execute().data
+    return pd.DataFrame(data)
+
+
 # ─── Shipments ────────────────────────────────────────────────────────────────
 
 def create_shipment(data: dict) -> None:

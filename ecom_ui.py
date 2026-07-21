@@ -22,9 +22,10 @@ import database as db
 import shopee_import
 import lazada_import
 import tiktok_affiliate_import
+import tiktok_income_import
 
 
-_ECOM_TABS = ["⚙️ ตั้งค่า/นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🔍 ตรวจสอบปัญหา", "🎥 ค่าคอมนายหน้า TikTok"]
+_ECOM_TABS = ["⚙️ ตั้งค่า/นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🔍 ตรวจสอบปัญหา", "🎥 TikTok"]
 _PLATFORMS = {"shopee": "Shopee", "lazada": "Lazada"}
 
 
@@ -42,6 +43,8 @@ def render():
         _render_issues()
     elif _ecom_active == _ECOM_TABS[3]:
         _render_tiktok_affiliate()
+        st.divider()
+        _render_tiktok_income()
 
 
 def _render_setup():
@@ -292,6 +295,7 @@ def _render_lazada_upload(shop_names: list[str]):
 
 
 def _render_tiktok_affiliate():
+    st.subheader("🎥 ค่าคอมนายหน้า (Affiliate)")
     st.caption(
         "รายงานเฉพาะออเดอร์ที่มาจากนายหน้า/ครีเอเตอร์ (TikTok Shop Seller Center → "
         "Affiliate Marketing → Orders → Export) ไม่ใช่ยอดขายทั้งหมดของร้าน "
@@ -379,6 +383,63 @@ def _render_tiktok_affiliate():
             db.set_tiktok_affiliate_billed(_tt_row["เลขที่ออเดอร์"], _tt_row["SKU"], bool(_tt_row["เปิดบิลแล้ว"]))
         st.success(f"✅ อัปเดตสถานะเปิดบิล {len(_tt_changed)} รายการ")
         st.rerun()
+
+
+def _render_tiktok_income():
+    st.subheader("💰 ยอดขายสุทธิระดับออเดอร์ (Income)")
+    st.caption(
+        "รายงานยอดขายสุทธิทั้งร้าน (TikTok Shop Seller Center → การเงิน → รายได้ → Export "
+        "→ ชีต \"รายละเอียดคำสั่งซื้อ\") ครอบคลุมทุกออเดอร์ (ไม่ใช่แค่ที่มาจากนายหน้าเหมือน "
+        "ด้านบน) แต่เป็นยอดระดับออเดอร์เท่านั้น ไม่มีราคาต่อสินค้า เลยแบ่งกำไรรายสินค้า "
+        "แบบ Shopee/Lazada ไม่ได้"
+    )
+    _ti_ver = st.session_state.get("_ecom_tiktok_income_file_ver", 0)
+    _ti_msg = st.session_state.pop("_ecom_tiktok_income_import_msg", None)
+    if _ti_msg:
+        getattr(st, _ti_msg[0])(_ti_msg[1])
+    _ti_shop = st.text_input("ชื่อร้าน", value="zhulian.shop", key="ecom_tiktok_income_shop")
+    _ti_file = st.file_uploader("ไฟล์ income...xlsx", type=["xlsx"], key=f"ecom_tiktok_income_file_{_ti_ver}")
+    if _ti_file and st.button("นำเข้ารายงานยอดขายสุทธิ TikTok", key="ecom_import_tiktok_income", type="primary"):
+        with st.spinner("กำลังอ่านไฟล์..."):
+            _ti_rows = tiktok_income_import.parse_income_report(_ti_file, _ti_shop.strip() or "zhulian.shop")
+            if not _ti_rows:
+                st.session_state["_ecom_tiktok_income_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+            else:
+                db.upsert_tiktok_order_income(_ti_rows)
+                st.session_state["_ecom_tiktok_income_import_msg"] = ("success", f"✅ นำเข้า {len(_ti_rows)} ออเดอร์แล้ว")
+            st.session_state["_ecom_tiktok_income_file_ver"] = _ti_ver + 1
+        st.rerun()
+
+    st.divider()
+
+    _ti_df = db.get_tiktok_order_income_df()
+    if _ti_df.empty:
+        st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ด้านบนก่อนครับ")
+        return
+
+    _ti_m1, _ti_m2, _ti_m3, _ti_m4 = st.columns(4)
+    _ti_m1.metric("จำนวนออเดอร์", f"{len(_ti_df):,}")
+    _ti_m2.metric("รายได้รวม", f"{_ti_df['gross_revenue'].sum():,.0f} ฿")
+    _ti_m3.metric("ค่าธรรมเนียมรวม", f"{_ti_df['total_fees'].sum():,.0f} ฿")
+    _ti_m4.metric("ยอดสุทธิที่ได้รับ", f"{_ti_df['net_settlement'].sum():,.0f} ฿")
+
+    _ti_df["วันที่สั่งซื้อ"] = pd.to_datetime(_ti_df["order_created_at"]).dt.strftime("%d/%m/%Y")
+    _ti_show_cols = ["order_id", "วันที่สั่งซื้อ", "gross_revenue", "tiktok_commission",
+                      "affiliate_commission", "shipping_fee_paid_by_shop", "total_fees",
+                      "net_settlement", "product_summary"]
+    _ti_show_df = _ti_df[_ti_show_cols].rename(columns={
+        "order_id": "เลขที่ออเดอร์", "gross_revenue": "รายได้รวม",
+        "tiktok_commission": "ค่าคอม TikTok", "affiliate_commission": "ค่าคอมนายหน้า",
+        "shipping_fee_paid_by_shop": "ค่าส่ง", "total_fees": "ค่าธรรมเนียมรวม",
+        "net_settlement": "ยอดสุทธิ", "product_summary": "สินค้า (อ้างอิง)",
+    })
+    st.dataframe(
+        _ti_show_df.style.format({
+            "รายได้รวม": "{:,.2f}", "ค่าคอม TikTok": "{:,.2f}", "ค่าคอมนายหน้า": "{:,.2f}",
+            "ค่าส่ง": "{:,.2f}", "ค่าธรรมเนียมรวม": "{:,.2f}", "ยอดสุทธิ": "{:,.2f}",
+        }),
+        hide_index=True, width="stretch",
+    )
 
 
 def _render_sales_profit():
