@@ -26,7 +26,7 @@ import tiktok_income_import
 
 
 _ECOM_TABS = ["⚙️ ตั้งค่า/นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🔍 ตรวจสอบปัญหา", "🎥 TikTok"]
-_PLATFORMS = {"shopee": "Shopee", "lazada": "Lazada"}
+_PLATFORMS = {"shopee": "Shopee", "lazada": "Lazada", "tiktok": "TikTok"}
 
 
 def render():
@@ -107,8 +107,10 @@ def _render_setup():
         _plat_shop_names = [s["shop_name"] for s in shops if s["platform"] == _upload_platform]
         if _upload_platform == "shopee":
             _render_shopee_upload(_plat_shop_names)
-        else:
+        elif _upload_platform == "lazada":
             _render_lazada_upload(_plat_shop_names)
+        else:
+            st.info("อัปโหลดรายงาน TikTok ได้ที่แท็บ '🎥 TikTok' ด้านบน — แท็บนี้ใช้แค่ผูก/ลบร้านเท่านั้น")
 
     st.divider()
 
@@ -390,8 +392,10 @@ def _render_tiktok_income():
     st.caption(
         "รายงานยอดขายสุทธิทั้งร้าน (TikTok Shop Seller Center → การเงิน → รายได้ → Export "
         "→ ชีต \"รายละเอียดคำสั่งซื้อ\") ครอบคลุมทุกออเดอร์ (ไม่ใช่แค่ที่มาจากนายหน้าเหมือน "
-        "ด้านบน) แต่เป็นยอดระดับออเดอร์เท่านั้น ไม่มีราคาต่อสินค้า เลยแบ่งกำไรรายสินค้า "
-        "แบบ Shopee/Lazada ไม่ได้"
+        "ด้านบน) เป็นยอดระดับออเดอร์ ไม่มีราคาต่อสินค้าในไฟล์นี้เอง — แต่เช็คข้อมูลจริงแล้วว่า "
+        "ทุกออเดอร์ของร้านนี้มีแค่ 1 สินค้าต่อออเดอร์ ระบบเลยจับคู่ยอดสุทธิเข้ากับสินค้าแต่ละ "
+        "SKU ให้อัตโนมัติได้ (ปุ่ม '🔗 ซิงค์เข้าระบบกำไรสินค้า' ด้านล่าง) แล้วดูกำไรจริงต่อ "
+        "สินค้าที่แท็บ '💰 ยอดขาย/กำไร' ได้เหมือน Shopee/Lazada"
     )
     _ti_ver = st.session_state.get("_ecom_tiktok_income_file_ver", 0)
     _ti_msg = st.session_state.pop("_ecom_tiktok_income_import_msg", None)
@@ -440,6 +444,21 @@ def _render_tiktok_income():
         }),
         hide_index=True, width="stretch",
     )
+
+    st.divider()
+    st.caption(
+        "จับคู่ยอดสุทธิแต่ละออเดอร์เข้ากับสินค้า (SKU) — ใช้ข้อมูลนายหน้าด้านบนถ้ามี "
+        "ไม่งั้นแกะจากคอลัมน์ \"สินค้า (อ้างอิง)\" (ใช้ได้เพราะทุกออเดอร์มีแค่ 1 สินค้า) "
+        "กดครั้งเดียวหลังอัปโหลดไฟล์ใหม่ทุกครั้ง แล้วไป map SKU → สินค้าในระบบที่แท็บ "
+        "'⚙️ ตั้งค่า/นำเข้าข้อมูล' → Map สินค้า ก่อนดูกำไรที่แท็บ '💰 ยอดขาย/กำไร'"
+    )
+    if st.button("🔗 ซิงค์เข้าระบบกำไรสินค้า", key="ecom_tiktok_sync"):
+        with st.spinner("กำลังซิงค์..."):
+            _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop.strip() or "zhulian.shop")
+        if _sync_result["sales_rows"]:
+            st.success(f"✅ ซิงค์แล้ว {_sync_result['synced_orders']} ออเดอร์ ({_sync_result['sales_rows']} รายการสินค้า)")
+        else:
+            st.warning("⚠️ ไม่มีออเดอร์ที่ซิงค์ได้ — เช็คว่าชื่อร้านตรงกับที่อัปโหลดไฟล์ไว้ไหม")
 
 
 def _render_sales_profit():

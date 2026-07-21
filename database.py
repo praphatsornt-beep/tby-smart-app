@@ -1,4 +1,5 @@
 import os
+import re
 import time
 import streamlit as st
 from dotenv import load_dotenv
@@ -1750,6 +1751,82 @@ def get_tiktok_order_income_df(shop_name: str = None) -> pd.DataFrame:
         q = q.eq("shop_name", shop_name)
     data = q.order("order_created_at", desc=True).execute().data
     return pd.DataFrame(data)
+
+
+_TT_PRODUCT_SUMMARY_RE = re.compile(r"(\d+)\s*\*\s*(\d+)")
+
+
+def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
+    """เชื่อมข้อมูล TikTok (tiktok_affiliate_orders + tiktok_order_income) เข้า pipeline
+    กำไรจริงต่อสินค้าเดียวกับ Shopee/Lazada (ecommerce_sales/ecommerce_order_income,
+    platform='tiktok') — ทำได้เพราะเช็คข้อมูลจริงแล้วว่าทุกออเดอร์ของร้านนี้มีแค่ 1 สินค้า
+    ต่อออเดอร์ (ไม่มีออเดอร์ไหนซื้อหลายสินค้าพร้อมกันเลยสักออเดอร์) เลยไม่ต้องมีไฟล์ราคา
+    ต่อ SKU แยกมาแบ่งสัดส่วนแบบ Shopee — ยอดสุทธิทั้งออเดอร์เป็นของสินค้าตัวเดียวนั้น
+    100% ได้เลย ถ้าในอนาคตมีออเดอร์หลายสินค้าจริง แถวแบบนี้จะแตกเป็นหลาย sales_row ต่อ
+    ออเดอร์ตามที่มีในตาราง affiliate อยู่แล้ว (ถูกต้อง) แต่ถ้าออเดอร์นั้นไม่มีข้อมูล
+    affiliate เลย (organic + หลายสินค้า) จะจับได้แค่ SKU แรกจาก product_summary — เคส
+    นี้ยังไม่เจอจริงในข้อมูลที่มี (ดู tests/ไม่ครอบ เป็น edge case ที่รู้ตัวไว้)"""
+    income_rows = get_supabase().table("tiktok_order_income").select("*") \
+        .eq("shop_name", shop_name).execute().data
+    if not income_rows:
+        return {"synced_orders": 0, "sales_rows": 0}
+    aff_rows = get_supabase().table("tiktok_affiliate_orders").select("*") \
+        .eq("shop_name", shop_name).execute().data
+    aff_by_order: dict[str, list[dict]] = defaultdict(list)
+    for r in aff_rows:
+        aff_by_order[r["order_id"]].append(r)
+
+    sales_rows = []
+    income_out_rows = []
+    for inc in income_rows:
+        oid = inc["order_id"]
+        _sale_date = inc.get("order_created_at") or inc.get("order_paid_at")
+        _aff = aff_by_order.get(oid)
+        if _aff:
+            # มีข้อมูลนายหน้า — ใช้ SKU/ราคา/ชื่อ/สถานะจากตรงนั้น (แม่นสุด)
+            for a in _aff:
+                sales_rows.append({
+                    "id": str(uuid.uuid4()), "platform": "tiktok", "shop_name": shop_name,
+                    "order_sn": oid, "sale_date": _sale_date, "product_id": None,
+                    "item_id_platform": a["sku_id"], "item_name": a.get("item_name") or a["sku_id"],
+                    "qty": a.get("qty") or 1, "item_price": a.get("payment_amount") or 0,
+                    "order_status": a.get("order_status"), "net_amount": 0,
+                })
+        else:
+            # ออเดอร์ organic (ไม่ผ่านนายหน้า) — แกะ SKU จาก product_summary ของไฟล์
+            # income เอง ("SKU_ID * qty;") ยืนยันจากข้อมูลจริงแล้วว่าออเดอร์แบบนี้มีแค่
+            # 1 SKU เสมอ เลยให้ยอดทั้งออเดอร์ (gross_revenue) เป็นของ SKU นั้น 100% ได้
+            _m = _TT_PRODUCT_SUMMARY_RE.search(inc.get("product_summary") or "")
+            if not _m:
+                continue  # ไม่มี SKU ให้แม็ปเลย ข้ามแถวนี้ (นับใน income แต่ไม่มีรายการสินค้า)
+            _sku, _qty = _m.group(1), int(_m.group(2))
+            sales_rows.append({
+                "id": str(uuid.uuid4()), "platform": "tiktok", "shop_name": shop_name,
+                "order_sn": oid, "sale_date": _sale_date, "product_id": None,
+                "item_id_platform": _sku, "item_name": f"TikTok SKU {_sku}",
+                "qty": _qty, "item_price": inc.get("gross_revenue") or 0,
+                "order_status": inc.get("transaction_type"), "net_amount": 0,
+            })
+        income_out_rows.append({
+            "order_sn": oid, "platform": "tiktok", "shop_name": shop_name,
+            "net_amount": inc.get("net_settlement") or 0,
+            "transfer_date": inc.get("order_paid_at") or inc.get("order_created_at"),
+        })
+
+    if not sales_rows:
+        return {"synced_orders": 0, "sales_rows": 0}
+
+    # ให้แน่ใจว่ามีร้านนี้ลงทะเบียนใน ecommerce_shops แล้ว ไม่งั้น dropdown เลือกร้าน
+    # ในแท็บ ยอดขาย/กำไร กับ Map สินค้า จะไม่เห็นร้านนี้เป็นตัวเลือก
+    _existing = get_supabase().table("ecommerce_shops").select("id").eq(
+        "platform", "tiktok").eq("shop_name", shop_name).limit(1).execute().data
+    if not _existing:
+        upsert_ecommerce_shop({"id": str(uuid.uuid4()), "platform": "tiktok", "shop_name": shop_name, "shop_id": 0})
+
+    upsert_ecommerce_sales(sales_rows)
+    upsert_ecommerce_order_income(income_out_rows)
+    _n_alloc = allocate_ecommerce_order_income("tiktok")
+    return {"synced_orders": len(income_out_rows), "sales_rows": len(sales_rows), "allocated": _n_alloc}
 
 
 # ─── Shipments ────────────────────────────────────────────────────────────────
