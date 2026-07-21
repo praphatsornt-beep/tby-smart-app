@@ -9,6 +9,7 @@ import database as db
 import line_api
 import shipment_history_ui
 import history_all_ui
+import cod_tracking_ui
 from ui_helpers import (
     _to_bkk, _to_excel_bytes,
     _style_status, _fmt_note, _guard_double_submit,
@@ -17,7 +18,7 @@ from ui_helpers import (
 )
 
 
-_T5_TABS = ["💰 ยอดค้าง / จัดการบิล", "👤 บัตรลูกค้า", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง"]
+_T5_TABS = ["💰 ยอดค้าง / จัดการบิล", "👤 บัตรลูกค้า", "📋 ประวัติทั้งหมด", "🚚 ประวัติการส่ง", "📮 COD"]
 
 _PILL_GOOD = "background-color:oklch(0.94 0.03 155);color:oklch(0.4 0.1 155);"
 _PILL_WARN = "background-color:oklch(0.94 0.04 55);color:oklch(0.5 0.14 50);"
@@ -1438,3 +1439,6 @@ def render(products, customers):
 
     elif _t5_active == _T5_TABS[3]:
         shipment_history_ui.render(customers)
+
+    elif _t5_active == _T5_TABS[4]:
+        cod_tracking_ui.render()

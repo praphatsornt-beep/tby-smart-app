@@ -1112,6 +1112,26 @@ def get_outstanding_df(customer_id: str = None) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+_COD_PAY_STATUSES = ("COD", "COD จ่ายแล้ว")
+
+
+@st.cache_data(ttl=60)
+def get_cod_orders_df() -> pd.DataFrame:
+    """รายการ COD ทั้งหมด (รอรับโอน + รับโอนแล้ว) พร้อมสถานะเปิดบิล — derive จาก
+    get_all_transactions_df() (cache เดียวกันกับ get_outstanding_df ไม่ query ซ้ำ)
+    ไม่ผูกกับตาราง shipments เลย เพราะ pay_status/bill_status อยู่ใน transactions
+    โดยตรง — ใช้เช็คยอด COD ได้แม้ shipments จะไม่มีข้อมูล (เช่นตอนตารางว่าง)"""
+    all_df = get_all_transactions_df()
+    if all_df.empty:
+        return pd.DataFrame()
+    df = all_df[all_df["สถานะจ่าย"].isin(_COD_PAY_STATUSES)].drop(
+        columns=["เคลียร์แล้ว", "last_payment_date"], errors="ignore").copy()
+    if df.empty:
+        return pd.DataFrame()
+    df.sort_values(["วันที่", "ลูกค้า"], ascending=[False, True], inplace=True)
+    return df.reset_index(drop=True)
+
+
 # ─── E-commerce ──────────────────────────────────────────────────────────────
 
 def get_ecommerce_shops() -> list[dict]:
