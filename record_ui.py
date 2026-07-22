@@ -10,7 +10,7 @@ import line_api
 import iship_api
 from flash_zones import carrier_fees
 from ui_helpers import (
-    _PROVINCES, BOX_WEIGHT_G, _tambon_selectbox, _postcode_suggest,
+    _PROVINCES, BOX_WEIGHT_G, _tambon_selectbox, _amphure_selectbox, _postcode_suggest,
     _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
@@ -421,6 +421,8 @@ def render(tab1, products, customers, customer_map):
                                         if _v: st.session_state[_k] = _v
                                     if _rph_addr.get("district"):
                                         st.session_state["r_dt_searchbox"] = _rph_addr["district"]
+                                    if _rph_addr.get("amphure"):
+                                        st.session_state["r_am_searchbox"] = _rph_addr["amphure"]
                                     if _rph_addr.get("postal_code"):
                                         st.session_state["m_postcode"] = _rph_addr["postal_code"]
                                     _rph_cust = (_rph_addr.get("customers") or {}).get("name", "")
@@ -441,13 +443,15 @@ def render(tab1, products, customers, customer_map):
                             col_c, col_d, col_e = st.columns(3)
                             with col_c:
                                 r_district = _tambon_selectbox("r_dt", "r_am", "r_pv", "m_postcode", "r_dt_searchbox")
-                            r_amphure   = col_d.text_input("อำเภอ/เขต",    key="r_am")
+                            with col_d:
+                                r_amphure = _amphure_selectbox("r_am", "r_pv", "r_am_searchbox")
                             r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
                             m_postcode  = st.text_input("รหัสไปรษณีย์", max_chars=5,
                                                         key="m_postcode", placeholder="เช่น 10400")
                             _postcode_suggest(m_postcode, "r_dt", "r_am", "r_pv",
                                               "r_dt_searchbox", "r_pc_suggest",
-                                              stage_dt="_fr_dt", stage_am="_fr_am", stage_pv="_fr_pv")
+                                              stage_dt="_fr_dt", stage_am="_fr_am", stage_pv="_fr_pv",
+                                              am_searchbox_key="r_am_searchbox")
                             if m_customer != "— เลือกลูกค้า —":
                                 if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                     try:
@@ -1258,6 +1262,8 @@ def render(tab1, products, customers, customer_map):
                                 if _v: st.session_state[_k] = _v
                             if _sp_rph_addr.get("district"):
                                 st.session_state[f"sp_dt_searchbox_v{_sp_av}"] = _sp_rph_addr["district"]
+                            if _sp_rph_addr.get("amphure"):
+                                st.session_state[f"sp_am_searchbox_v{_sp_av}"] = _sp_rph_addr["amphure"]
                             if _sp_rph_addr.get("postal_code"):
                                 _sp_rph_pc = _sp_rph_addr["postal_code"]
                                 st.session_state[f"sp_pc_v{_sp_av}"] = _sp_rph_pc
@@ -1276,12 +1282,14 @@ def render(tab1, products, customers, customer_map):
                     with _sb1:
                         _sp_dt = _tambon_selectbox(f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
                                                     f"sp_pc_v{_sp_av}", f"sp_dt_searchbox_v{_sp_av}")
-                    _sp_am = _sb2.text_input("อำเภอ/เขต",   key=f"sp_am_v{_sp_av}")
+                    with _sb2:
+                        _sp_am = _amphure_selectbox(f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}", f"sp_am_searchbox_v{_sp_av}")
                     _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
                     _sp_pc = st.text_input("รหัสไปรษณีย์", max_chars=5, key=f"sp_pc_v{_sp_av}", placeholder="เช่น 10400")
                     _postcode_suggest(_sp_pc, f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
                                       f"sp_dt_searchbox_v{_sp_av}", f"sp_pc_suggest_v{_sp_av}",
-                                      stage_dt="_fsp_dt", stage_am="_fsp_am", stage_pv="_fsp_pv")
+                                      stage_dt="_fsp_dt", stage_am="_fsp_am", stage_pv="_fsp_pv",
+                                      am_searchbox_key=f"sp_am_searchbox_v{_sp_av}")
                     if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                         db.upsert_customer_address({
                             "id":             str(uuid.uuid4()),
@@ -1864,6 +1872,7 @@ def render(tab1, products, customers, customer_map):
                                     # ตั้งค่า searchbox ของตำบลตรงๆ (ไม่ใช้ value= เฉยๆ เพราะถ้า
                                     # key นี้เคยมีอยู่แล้ว Streamlit จะไม่ยอมอัปเดตค่าที่แสดงให้)
                                     st.session_state["_lbl_dt_searchbox"] = _lbl_seed.get("district", "") or ""
+                                    st.session_state["_lbl_amphure_searchbox"] = _lbl_seed.get("amphure", "") or ""
                                     st.rerun()
 
                                 _lc1, _lc2 = st.columns(2)
@@ -1876,12 +1885,14 @@ def render(tab1, products, customers, customer_map):
                                         "_lbl_district", "_lbl_amphure", "_lbl_province", "_lbl_zip",
                                         "_lbl_dt_searchbox",
                                     )
-                                _lbl_amphure  = _la2.text_input("อำเภอ/เขต", key="_lbl_amphure")
+                                with _la2:
+                                    _lbl_amphure = _amphure_selectbox("_lbl_amphure", "_lbl_province", "_lbl_amphure_searchbox")
                                 _lbl_province = _la3.selectbox("จังหวัด", [""] + _PROVINCES, key="_lbl_province")
                                 _lbl_zip      = _la4.text_input("รหัสไปรษณีย์", max_chars=5, key="_lbl_zip")
                                 _postcode_suggest(_lbl_zip, "_lbl_district", "_lbl_amphure", "_lbl_province",
                                                   "_lbl_dt_searchbox", "_lbl_pc_suggest",
-                                                  stage_dt="_lbl_fr_dt", stage_am="_lbl_fr_am", stage_pv="_lbl_fr_pv")
+                                                  stage_dt="_lbl_fr_dt", stage_am="_lbl_fr_am", stage_pv="_lbl_fr_pv",
+                                                  am_searchbox_key="_lbl_amphure_searchbox")
 
                                 if _lbl_cust_id:
                                     if st.button("💾 บันทึกที่อยู่นี้", key="_lbl_save_addr_btn"):

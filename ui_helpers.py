@@ -33,6 +33,7 @@ _PROVINCES = [
 BOX_WEIGHT_G = 500  # น้ำหนักกล่อง 0.5 kg (ไม่แสดงในระบบ)
 
 _TAMBON_PREFIXES = ["ตำบล", "ต.", "แขวง"]
+_AMPHURE_PREFIXES = ["อำเภอ", "อ.", "เขต"]
 
 
 def get_bulky_presets() -> list[dict]:
@@ -176,9 +177,77 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
     return cur_val
 
 
+@st.cache_data
+def _amphure_select_options() -> list:
+    """[{amphure, province}, ...] อำเภอ/เขตแบบไม่ซ้ำ เรียงตามชื่อ"""
+    seen = set()
+    out = []
+    for o in _tambon_select_options():
+        key = (o["amphure"], o["province"])
+        if key not in seen:
+            seen.add(key)
+            out.append({"amphure": o["amphure"], "province": o["province"]})
+    return sorted(out, key=lambda r: r["amphure"])
+
+
+def _amphure_search(query: str, limit: int = 40) -> list:
+    q = _strip_admin_prefix(query, _AMPHURE_PREFIXES).strip().lower()
+    if len(q) < 2:
+        return []
+    return [o for o in _amphure_select_options() if q in o["amphure"].lower()][:limit]
+
+
+def _amphure_selectbox(am_key: str, pv_key: str, selectbox_key: str, label: str = "อำเภอ/เขต"):
+    """ช่อง อำเภอ/เขต แบบพิมพ์ค้นหา เหมือน _tambon_selectbox — เลือกแล้ว auto-fill จังหวัดให้ด้วย
+    (ไม่ auto-fill ตำบล/แขวง/รหัสไปรษณีย์ เพราะ 1 อำเภอ/เขต มีหลายตำบล/แขวง เดาไม่ได้ว่าใช่อันไหน)
+    """
+    cur_val = st.session_state.get(am_key, "")
+    if selectbox_key not in st.session_state:
+        st.session_state[selectbox_key] = cur_val
+
+    query = st.text_input(label, key=selectbox_key, placeholder="พิมพ์ชื่ออำเภอ/เขต เช่น บางรัก")
+
+    if not query.strip() or query.strip() == cur_val.strip():
+        return cur_val
+
+    matches = _amphure_search(query)
+    if not matches:
+        if len(query.strip()) >= 2:
+            st.caption("ไม่พบอำเภอ/เขตที่ตรงกับคำค้นหา")
+        return cur_val
+
+    if len(matches) == 1:
+        sel = matches[0]
+        st.session_state[am_key] = sel["amphure"]
+        st.session_state[pv_key] = sel["province"]
+        st.session_state.pop(selectbox_key, None)
+        st.rerun()
+
+    pick_key = f"_{selectbox_key}_pick"
+    idx_options = list(range(len(matches)))
+    _label = lambda i: f"{matches[i]['amphure']} / {matches[i]['province']}"
+
+    def _on_pick():
+        i = st.session_state.get(pick_key)
+        if i is not None:
+            sel = matches[i]
+            st.session_state[am_key] = sel["amphure"]
+            st.session_state[pv_key] = sel["province"]
+            st.session_state.pop(selectbox_key, None)
+            st.session_state.pop(pick_key, None)
+
+    st.selectbox(
+        "ผลการค้นหา — เลือกอำเภอ/เขต", idx_options, index=None,
+        format_func=_label, key=pick_key, on_change=_on_pick,
+    )
+
+    return cur_val
+
+
 def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
                        searchbox_key: str, suggest_key: str,
-                       stage_dt: str = "", stage_am: str = "", stage_pv: str = ""):
+                       stage_dt: str = "", stage_am: str = "", stage_pv: str = "",
+                       am_searchbox_key: str = ""):
     """ถ้ารหัสไปรษณีย์ตรงกับ ต./อ./จ. → auto-fill (1 ตำบล) หรือ selectbox (หลายตำบล)"""
     pc = (pc or "").strip()
     if len(pc) != 5:
@@ -190,7 +259,10 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
             # เคลียร์ searchbox ของตำบลด้วยเสมอ — ถ้า key นี้เคยมีอยู่แล้ว Streamlit
             # จะไม่ยอมอัปเดตค่าที่แสดง (value= ถูกมองข้ามเมื่อ key มีอยู่แล้วใน session_state)
             st.session_state.pop(searchbox_key, None)
-        if am: st.session_state[stage_am or am_key] = am
+        if am:
+            st.session_state[stage_am or am_key] = am
+            if am_searchbox_key:
+                st.session_state.pop(am_searchbox_key, None)
         if pv: st.session_state[stage_pv or pv_key] = pv
         if stage_dt or stage_am or stage_pv:
             st.rerun()
@@ -237,6 +309,8 @@ def _postcode_suggest(pc: str, value_key: str, am_key: str, pv_key: str,
             st.session_state[pv_key]    = sel["province"]
             st.session_state.pop(searchbox_key, None)
             st.session_state.pop(f"_{searchbox_key}_sig", None)
+            if am_searchbox_key:
+                st.session_state.pop(am_searchbox_key, None)
 
     st.selectbox(
         f"📍 ตำบล/อำเภอ/จังหวัด สำหรับรหัส {pc}", idx_options, index=None,
