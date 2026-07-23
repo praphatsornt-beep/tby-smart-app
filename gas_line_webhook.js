@@ -406,7 +406,7 @@ function doPost(e) {
   summaryText += '✨ ' + totalPV.toLocaleString() + ' PV | ⚖️ ' + totalWeightKg.toFixed(2) + ' kg\n\n';
   summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး: ฿' : '💵 สินค้า: ฿') + totalPrice.toLocaleString() + '\n';
   if (hasShipping) summaryText += (lang === 'mm' ? '🚚 ပို့ခ: ฿' : '🚚 ค่าส่ง: ฿') + shipFinal.toLocaleString() + feeNote + '\n';
-  if (isCOD) summaryText += '➕ COD (3%): ฿' + codFee.toLocaleString() + '\n';
+  if (isCOD) summaryText += '➕ COD: ฿' + codFee.toLocaleString() + '\n';
 
   var calcFormula = totalPrice.toString();
   if (shipFinal > 0) calcFormula += ' + ' + shipFinal;

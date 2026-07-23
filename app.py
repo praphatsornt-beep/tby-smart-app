@@ -959,7 +959,9 @@ def _show_carrier_select():
     _cs_already_sent = info["_submit_token"] in st.session_state.get("_iship_sent_tokens", set())
     tab       = info.get("tab", "ship")
     postcode  = info.get("postcode", "")
-    weight_kg = info.get("weight_kg", 0.5)
+    weight_kg = info.get("weight_kg", 0.5)  # รวมน้ำหนักกล่อง 0.5kg — ใช้คิดค่าส่งลูกค้า/เทียบราคาขนส่ง
+    # น้ำหนักที่ส่งจริงให้ iShip ไม่รวมน้ำหนักกล่อง (iShip ชั่งจริงหน้าคลังอยู่แล้ว)
+    weight_kg_iship = max(weight_kg - 0.5, 0)
     cod_amt   = float(info.get("cod_amount", 0))
 
     _old_track = st.session_state.pop("_change_carrier_old_track", None)
@@ -976,7 +978,8 @@ def _show_carrier_select():
             f"{it.get('name', it.get('product_name','?'))} ×{it.get('qty',0)}"
             for it in _items_disp
         ))
-    st.caption(f"⚖️ {weight_kg:.2f} kg" + (f"  |  COD: {int(cod_amt):,} ฿" if cod_amt else ""))
+    st.caption(f"⚖️ {weight_kg:.2f} kg (ส่งจริงให้ iShip {weight_kg_iship:.2f} kg)"
+               + (f"  |  COD: {int(cod_amt):,} ฿" if cod_amt else ""))
     st.divider()
 
     opts     = carr.get_shipping_options(weight_kg, postcode, cod_amt > 0, cod_amt)
@@ -1058,7 +1061,7 @@ def _show_carrier_select():
                     amphure      = info.get("amphure", ""),
                     province     = info.get("province", ""),
                     zipcode      = postcode,
-                    weight_kg    = weight_kg,
+                    weight_kg    = weight_kg_iship,
                     cod_amount   = cod_amt,
                     carrier      = _cs_carrier,
                     remark       = _cs_remark,
