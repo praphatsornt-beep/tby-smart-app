@@ -1573,6 +1573,49 @@ def get_ecommerce_monthly_summary(platform: str = "shopee", shop_name: str = Non
     return pd.DataFrame(out)
 
 
+def get_ecommerce_platform_totals_df(start_date: str, end_date: str) -> pd.DataFrame:
+    """ยอดขาย/จำนวนชิ้นรวม แยกตามแพลตฟอร์ม (Shopee/Lazada/TikTok พร้อมกันทุกร้าน) สำหรับ
+    ช่วงวันที่ที่กำหนด (ตาม sale_date) — ต่างจากฟังก์ชัน ecommerce อื่นๆ ที่กรองทีละ platform
+    เดียวเสมอ อันนี้ตั้งใจให้เห็นสัดส่วนเทียบกันข้าม platform คืน [{platform, ยอดขาย, จำนวนชิ้น}, ...]"""
+    rows = get_supabase().table("ecommerce_sales").select("platform,item_price,qty,returned_qty") \
+        .gte("sale_date", start_date).lte("sale_date", end_date).execute().data
+    if not rows:
+        return pd.DataFrame()
+
+    agg: dict[str, dict] = {}
+    for r in rows:
+        plat = r.get("platform") or ""
+        a = agg.setdefault(plat, {"sales": 0.0, "qty": 0.0})
+        a["sales"] += float(r.get("item_price") or 0)
+        a["qty"] += float(r.get("qty") or 0) - float(r.get("returned_qty") or 0)
+
+    out = [{"platform": p, "ยอดขาย": round(a["sales"], 2), "จำนวนชิ้น": a["qty"]} for p, a in agg.items()]
+    return pd.DataFrame(out)
+
+
+def get_ecommerce_units_trend_df(platform: str = "shopee", shop_name: str = None, months: int = 6) -> pd.DataFrame:
+    """จำนวนชิ้นที่ขายรายเดือน (ตาม sale_date) ย้อนหลัง `months` เดือนล่าสุด — ใช้ทำกราฟเทรนด์
+    จำนวนขาย เรียงเดือนเก่า→ใหม่ (ต่างจาก get_ecommerce_monthly_summary ที่เรียงใหม่→เก่าและ
+    ดูยอดขาย/กำไรแทนจำนวนชิ้น) shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+    _q = get_supabase().table("ecommerce_sales").select("sale_date,qty,returned_qty").eq("platform", platform)
+    if shop_name:
+        _q = _q.eq("shop_name", shop_name)
+    rows = _q.execute().data
+    if not rows:
+        return pd.DataFrame()
+
+    qty_by_month: dict[str, float] = {}
+    for r in rows:
+        d = r.get("sale_date")
+        if not d:
+            continue
+        ym = d[:7]
+        qty_by_month[ym] = qty_by_month.get(ym, 0.0) + float(r.get("qty") or 0) - float(r.get("returned_qty") or 0)
+
+    out = [{"เดือน": ym, "จำนวนชิ้น": qty_by_month[ym]} for ym in sorted(qty_by_month)]
+    return pd.DataFrame(out[-months:]) if out else pd.DataFrame()
+
+
 def get_ecommerce_shipping_overcharge_df(
     start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 0.0,
     shop_name: str = None,
@@ -1610,6 +1653,39 @@ def get_ecommerce_shipping_overcharge_df(
     if not df.empty:
         df.sort_values("ส่วนต่างที่โดนหักเพิ่ม", ascending=False, inplace=True)
     return df.reset_index(drop=True)
+
+
+def get_ecommerce_shipping_overcharge_monthly_df(
+    start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 0.0,
+    shop_name: str = None,
+) -> pd.DataFrame:
+    """ผลรวมส่วนต่างค่าส่งที่โดนหักเกิน รายเดือน (ตาม transfer_date) — logic การหาส่วนต่างเดียวกับ
+    get_ecommerce_shipping_overcharge_df แต่ sum รายเดือนแทนคืนรายออเดอร์ ใช้ทำกราฟแท่งรายเดือน
+    เรียงเดือนเก่า→ใหม่ shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+    _q = get_supabase().table("ecommerce_order_income").select(
+        "transfer_date,buyer_paid_shipping,shopee_subsidized_shipping,shipping_fee_charged"
+    ).eq("platform", platform).gte("transfer_date", start_date).lte("transfer_date", end_date)
+    if shop_name:
+        _q = _q.eq("shop_name", shop_name)
+    rows = _q.execute().data
+    if not rows:
+        return pd.DataFrame()
+
+    by_month: dict[str, float] = {}
+    for r in rows:
+        estimated = float(r.get("buyer_paid_shipping") or 0) + float(r.get("shopee_subsidized_shipping") or 0)
+        actual = float(r.get("shipping_fee_charged") or 0)
+        extra = actual - estimated
+        if extra <= overcharge_threshold:
+            continue
+        d = r.get("transfer_date")
+        if not d:
+            continue
+        ym = d[:7]
+        by_month[ym] = by_month.get(ym, 0.0) + extra
+
+    out = [{"เดือน": ym, "ส่วนต่างรวม": round(by_month[ym], 2)} for ym in sorted(by_month)]
+    return pd.DataFrame(out)
 
 
 def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = None) -> pd.DataFrame:
