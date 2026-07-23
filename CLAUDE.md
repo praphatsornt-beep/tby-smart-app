@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Project Is
 
-**TBY SMART APP** — A Streamlit business management app deployed on Streamlit Community Cloud for a Zhulian MLM distributor. It replaces manual spreadsheets for: recording sales/orders, shipping (iShip integration), tracking outstanding balances (ค้างจ่าย/ค้างรับ) and PV points, daily company-transfer/commission finance, stock counts, and Shopee e-commerce sync. Backend is Supabase (PostgreSQL). No local dev server needed for testing — changes go live via `git push origin main`.
+**TBY SMART APP** — A Streamlit business management app deployed on Streamlit Community Cloud for a Zhulian MLM distributor. It replaces manual spreadsheets for: recording sales/orders, shipping (iShip integration), tracking outstanding balances (ค้างจ่าย/ค้างรับ) and PV points, daily company-transfer/commission finance, stock counts, and Shopee/Lazada/TikTok e-commerce profit tracking. Backend is Supabase (PostgreSQL). No local dev server needed for testing — changes go live via `git push origin main`.
 
 ## Running & Deploying
 
@@ -18,21 +18,21 @@ git add . && git commit -m "..." && git push origin main
 
 Dependencies: `pip install -r requirements.txt`
 
-Credentials live in `.streamlit/secrets.toml` (local) and Streamlit Cloud Secrets (production). Required keys: `SUPABASE_URL`, `SUPABASE_KEY`. Optional: `ISHIP_TOKEN` + iShip sender address fields, `SHOPEE_PARTNER_ID`/`SHOPEE_PARTNER_KEY`, `LINE_CHANNEL_ACCESS_TOKEN`, `APP_PASSWORD` (enables a simple password login gate — see Authentication below), `DEBUG_MODE` (shows raw API-response debug expanders when truthy).
+Credentials live in `.streamlit/secrets.toml` (local) and Streamlit Cloud Secrets (production). Required keys: `SUPABASE_URL`, `SUPABASE_KEY`. Optional: `ISHIP_TOKEN` + iShip sender address fields, `LINE_CHANNEL_ACCESS_TOKEN`, `APP_PASSWORD` (enables a simple password login gate — see Authentication below), `DEBUG_MODE` (shows raw API-response debug expanders when truthy). No e-commerce API credentials needed — Shopee/Lazada/TikTok are all file-upload based (see 🛒 E-commerce below), not OAuth.
 
 ## Architecture
 
-`app.py` (~720 lines) is now a thin shell — page config/theme CSS, a password login gate, the Shopee OAuth callback handler, two `st.dialog` popups shared across tabs (iShip carrier-select and iShip success), and lazy tab routing. All per-tab UI lives in dedicated modules:
+`app.py` (~720 lines) is now a thin shell — page config/theme CSS, a password login gate, two `st.dialog` popups shared across tabs (iShip carrier-select and iShip success), and lazy tab routing. All per-tab UI lives in dedicated modules:
 
 | File | Role |
 |---|---|
-| `app.py` | Page shell: theme CSS, login gate, Shopee OAuth callback, shared `st.dialog`s (`_show_carrier_select`, `_show_iship_success_dialog` — driven by `st.session_state["_iship_carrier_select"]` / `["_iship_success_info"]`), lazy tab nav (`st.pills`, renders only the active tab). |
+| `app.py` | Page shell: theme CSS, login gate, shared `st.dialog`s (`_show_carrier_select`, `_show_iship_success_dialog` — driven by `st.session_state["_iship_carrier_select"]` / `["_iship_success_info"]`), lazy tab nav (`st.pills`, renders only the active tab). |
 | `record_ui.py` | UI for 📋 บันทึกรายการ (บันทึกขาย / ส่งของ / คำนวณยอด). `render(container, products, customers, customers_by_name)`. |
 | `bill_detail_ui.py` | UI for 🗂️ รายละเอียดบิล — sub-tabs ยอดค้าง+จัดการบิล / บัตรลูกค้า. `render(products, customers)`. The other 2 sub-tabs are split into their own files (below) for size. |
 | `shipment_history_ui.py` | UI for the 🚚 ประวัติการส่ง sub-tab of 🗂️ รายละเอียดบิล — split out of `bill_detail_ui.py` for size (delivery-status/COD-transfer/billing-report sync buttons, shipment table with tracking edit + delete + resend-to-iShip, label reprinting for both iShip and manual shipments, bulk-clear of delivered history). `render(customers)`. |
 | `history_all_ui.py` | UI for the 📋 ประวัติทั้งหมด sub-tab of 🗂️ รายละเอียดบิล — split out of `bill_detail_ui.py` for size (full/bulk-edit transactions table, per-transaction edit form, shipment-history-by-customer expander). `render(customers)`. |
 | `ui_helpers.py` | Shared helpers used by `record_ui.py` and `bill_detail_ui.py`: bill-print rendering (`_render_bill_panel`, `_bills_from_df`), address autocomplete (`_tambon_selectbox`, `_postcode_suggest`), iShip response/address parsing (`_extract_tracking`, `_build_success_info`, `_parse_iship_address`), `_quick_add_customer`, `_warn_duplicate_phone`, `calc_shipping`, `raw_weight_g`, `BOX_WEIGHT_G`, `get_bulky_presets()` (reads box-size presets from the `box_presets` table — managed in ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง, not editable at the point of use anymore). |
-| `ecom_ui.py` | UI for 🛒 E-commerce (Shopee) — `render()`. Fully wired: OAuth connect → sync orders → view sales → map platform SKUs to internal products. |
+| `ecom_ui.py` | UI for 🛒 E-commerce (Shopee/Lazada/TikTok) — `render()`. File-upload based (no OAuth/API — Shopee's Open API is gated to Managed/Mall Sellers, unusable for this shop): register a shop name, upload each platform's Seller Center export, view profit rollups, map platform SKUs to internal products. |
 | `fin_ui.py` | UI for 💵 การเงิน — `render()`. Daily finance ledger + commission/VAT-claim receipts. |
 | `dashboard_ui.py` | UI for 🏠 หน้าแรก — `render()`. Today's sales, outstanding, COD-pending, PV, slow/problem shipments. |
 | `stock_ui.py` | UI for 📦 สต๊อก — `render()`. Stock count sub-tab + ของฝาก (deposited items) sub-tab. |
@@ -45,7 +45,9 @@ Credentials live in `.streamlit/secrets.toml` (local) and Streamlit Cloud Secret
 | `bangkok_addresses.py` | Bangkok-specific lookups: `lookup_khet(แขวง, zipcode)→เขต` and `ZIPCODE_TO_AMPHURE` dict for nearby-province zipcodes (นนทบุรี, ปทุมธานี, สมุทรปราการ). Used as fallback when `thai_postcodes.json` returns ambiguous results. |
 | `flash_zones.py` | Flash Express zone surcharges and SPX surcharges by postcode/weight. |
 | `carriers.py` | Multi-carrier shipping rate cards (Flash Thunder, Bulky, etc.), rate comparison (`get_shipping_options`), and box planning (`plan_boxes`), built on top of `flash_zones.py` and `calc_logic.pack_boxes*`. |
-| `shopee_api.py` | Shopee Open Platform OAuth + order sync. Wired into `ecom_ui.py`. |
+| `shopee_import.py` | Parses Shopee Seller Centre exports ("Order.all" + "Income") into the shared `ecommerce_sales`/`ecommerce_order_income` rows. Only platform with shipping-fee data. |
+| `lazada_import.py` | Parses Lazada's single "Income Overview" export (line items + net amounts in one file) into the same shared tables. No shipping-fee data. |
+| `tiktok_affiliate_import.py` / `tiktok_income_import.py` | Parse TikTok's affiliate-commission-orders export and order-level income export respectively; joined by `db.sync_tiktok_to_ecommerce()` into the same shared tables. |
 
 ## Tests
 
@@ -67,7 +69,7 @@ Top nav is `st.pills` (falls back to `st.radio` on old Streamlit) in this order 
 🗂️ รายละเอียดบิล  — bill_detail_ui.py, sub-tabs: 💰 ยอดค้าง / จัดการบิล, 👤 บัตรลูกค้า, 📋 ประวัติทั้งหมด, 🚚 ประวัติการส่ง
 📦 สต๊อก          — stock_ui.py: 📦 สต๊อก (counts), 📋 ของฝาก (deposited items)
 💵 การเงิน        — fin_ui.py: 💰 ยอดขาย (daily finance), 📑 ใบเสร็จ/เคลม VAT (commission + VAT)
-🛒 E-commerce     — ecom_ui.py (Shopee)
+🛒 E-commerce     — ecom_ui.py (Shopee/Lazada/TikTok, all via file upload)
 ⚙️ จัดการข้อมูล   — master_data_ui.py
 ```
 
@@ -114,7 +116,13 @@ Today's sales total/count, total ค้างจ่าย + customer count, COD-
 
 ### 🛒 E-commerce (`ecom_ui.py`)
 
-Fully wired Shopee flow: OAuth connect (auth URL + CSRF `state` round-trip handled in `app.py`'s query-param callback) → per-shop token refresh-on-sync → order/item sync into an `ecommerce_sales`-style table → view rollups by product/date range → map unmapped Shopee `item_id`s to internal `product_id`s.
+File-upload based for all 3 platforms — **not OAuth/API**. Shopee's Open Platform API is gated to "Managed Seller"/"Mall Seller" accounts; a regular seller (this shop) is rejected outright at Shopee's own Seller Identification step, confirmed twice (2026-07-15, 2026-07-23). `shopee_api.py` (the old OAuth module) was deleted entirely — don't resurrect it or debug it as if it should work.
+
+4 sub-tabs: **⚙️ ตั้งค่า/นำเข้าข้อมูล** (register a shop name — just a label, `shop_id` stored as `0`, no tokens — then upload that platform's export), **💰 ยอดขาย/กำไร** (profit rollups by product/date range), **🔍 ตรวจสอบปัญหา** (unmapped SKUs, overcharged-shipping check — Shopee only, since Lazada/TikTok exports have no shipping-fee data), **🎥 TikTok** (affiliate + income upload, since TikTok needs 2 files unlike Lazada's single-file export).
+
+Per-platform export needed: **Shopee** — "Order.all" (คำสั่งซื้อ > Export) + "Income" (การเงิน > รายได้ของฉัน > Export), parsed by `shopee_import.py`. **Lazada** — single "Income Overview" (การเงิน > ใบแจ้งยอดรายได้ > Export), parsed by `lazada_import.py`. **TikTok** — affiliate-commission-orders export + order-income export, parsed by `tiktok_affiliate_import.py`/`tiktok_income_import.py` and joined via `db.sync_tiktok_to_ecommerce()` (per-product profit works without per-SKU pricing because this shop's real data confirmed no order ever mixes multiple products — verified, not assumed).
+
+All platforms funnel into the same `ecommerce_sales`/`ecommerce_order_income`/`ecommerce_product_map` tables (keyed by `platform`) and the same profit/mapping/issue-detection UI — no platform-specific pipeline code in `database.py`.
 
 ### ⚙️ จัดการข้อมูล (`master_data_ui.py`)
 
@@ -161,7 +169,7 @@ Products/customers/addresses/box-size presets editable via `st.data_editor` (`nu
 - `commission_records`: one row per period (`YYYY-MM`) — commission/WHT/receipt/VAT-claim tracking. RLS must be disabled (`commission_rls_fix.sql`) or inserts fail.
 - `company_info`: single-row(ish) table of TBY + HQ tax-ID/address used on printed receipts. Same RLS caveat as `commission_records`.
 - `box_presets`: box-size presets (name/length_cm/width_cm/height_cm) for Bulky-carrier shipping and manual label printing. Managed only in ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง (`db.replace_box_presets()` does a full delete+reinsert on save); everywhere else just reads via `ui_helpers.get_bulky_presets()`. Same RLS caveat — see `box_presets_setup.sql`.
-- Shopee tables (names inferred from `database.py` usage, not yet formalized in a setup SQL): ecommerce shops (OAuth tokens), ecommerce sales (synced order items), ecommerce product map (platform SKU → internal `product_id`).
+- E-commerce tables (formalized in `ecommerce_setup.sql` + `shopee_margin_setup*.sql`, RLS disabled): `ecommerce_shops` (shop-name registry, no tokens — `shop_id` is a placeholder `0`), `ecommerce_sales` (per-SKU line items from file uploads), `ecommerce_order_income` (net settlement per order), `ecommerce_product_map` (platform SKU → internal `product_id`). Shared across Shopee/Lazada/TikTok via a `platform` column. TikTok additionally has its own `tiktok_affiliate_orders`/`tiktok_order_income` tables that get synced into these shared ones via `db.sync_tiktok_to_ecommerce()`.
 
 ## LINE OA Integration
 
