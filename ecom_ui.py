@@ -16,7 +16,6 @@ import uuid
 
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from datetime import date
 
 import database as db
@@ -44,8 +43,6 @@ def render():
         _render_issues()
     elif _ecom_active == _ECOM_TABS[3]:
         _render_tiktok_affiliate()
-        st.divider()
-        _render_tiktok_income()
 
 
 def _render_setup():
@@ -111,7 +108,7 @@ def _render_setup():
         elif _upload_platform == "lazada":
             _render_lazada_upload(_plat_shop_names)
         else:
-            st.info("อัปโหลดรายงาน TikTok ได้ที่แท็บ '🎥 TikTok' ด้านบน — แท็บนี้ใช้แค่ผูก/ลบร้านเท่านั้น")
+            _render_tiktok_upload()
 
     st.divider()
 
@@ -297,13 +294,13 @@ def _render_lazada_upload(shop_names: list[str]):
         st.rerun()
 
 
-def _render_tiktok_affiliate():
-    st.subheader("🎥 ค่าคอมนายหน้า (Affiliate)")
+def _render_tiktok_upload():
+    st.markdown("**🎥 ค่าคอมนายหน้า (Affiliate)**")
     st.caption(
         "รายงานเฉพาะออเดอร์ที่มาจากนายหน้า/ครีเอเตอร์ (TikTok Shop Seller Center → "
         "Affiliate Marketing → Orders → Export) ไม่ใช่ยอดขายทั้งหมดของร้าน "
         "\"ยอดที่เราได้โดยประมาณ\" หักแค่ค่าคอมนายหน้าออกจากยอดขาย ยังไม่รวมค่าธรรมเนียม "
-        "อื่นๆ ของ TikTok เอง (ไฟล์นี้ไม่มีข้อมูลนั้น)"
+        "อื่นๆ ของ TikTok เอง (ไฟล์นี้ไม่มีข้อมูลนั้น) — ดูผลที่แท็บ '🎥 TikTok'"
     )
     _tt_ver = st.session_state.get("_ecom_tiktok_file_ver", 0)
     _tt_msg = st.session_state.pop("_ecom_tiktok_import_msg", None)
@@ -324,9 +321,55 @@ def _render_tiktok_affiliate():
 
     st.divider()
 
+    st.markdown("**💰 ยอดขายสุทธิระดับออเดอร์ (Income)**")
+    st.caption(
+        "รายงานยอดขายสุทธิทั้งร้าน (TikTok Shop Seller Center → การเงิน → รายได้ → Export "
+        "→ ชีต \"รายละเอียดคำสั่งซื้อ\") ครอบคลุมทุกออเดอร์ (ไม่ใช่แค่ที่มาจากนายหน้าเหมือน "
+        "ด้านบน) เป็นยอดระดับออเดอร์ ไม่มีราคาต่อสินค้าในไฟล์นี้เอง — แต่เช็คข้อมูลจริงแล้วว่า "
+        "ทุกออเดอร์ของร้านนี้มีแค่ 1 สินค้าต่อออเดอร์ ระบบเลยจับคู่ยอดสุทธิเข้ากับสินค้าแต่ละ "
+        "SKU ให้อัตโนมัติได้ (ปุ่มด้านล่าง) แล้วดูกำไรจริงต่อสินค้าที่แท็บ '💰 ยอดขาย/กำไร' "
+        "ได้เหมือน Shopee/Lazada"
+    )
+    _ti_ver = st.session_state.get("_ecom_tiktok_income_file_ver", 0)
+    _ti_msg = st.session_state.pop("_ecom_tiktok_income_import_msg", None)
+    if _ti_msg:
+        getattr(st, _ti_msg[0])(_ti_msg[1])
+    _ti_shop = st.text_input("ชื่อร้าน", value="zhulian.shop", key="ecom_tiktok_income_shop")
+    _ti_file = st.file_uploader("ไฟล์ income...xlsx", type=["xlsx"], key=f"ecom_tiktok_income_file_{_ti_ver}")
+    if _ti_file and st.button("นำเข้ารายงานยอดขายสุทธิ TikTok", key="ecom_import_tiktok_income", type="primary"):
+        with st.spinner("กำลังอ่านไฟล์..."):
+            _ti_rows = tiktok_income_import.parse_income_report(_ti_file, _ti_shop.strip() or "zhulian.shop")
+            if not _ti_rows:
+                st.session_state["_ecom_tiktok_income_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+            else:
+                db.upsert_tiktok_order_income(_ti_rows)
+                st.session_state["_ecom_tiktok_income_import_msg"] = ("success", f"✅ นำเข้า {len(_ti_rows)} ออเดอร์แล้ว")
+            st.session_state["_ecom_tiktok_income_file_ver"] = _ti_ver + 1
+        st.rerun()
+
+    _ti_df = db.get_tiktok_order_income_df()
+    if not _ti_df.empty:
+        st.caption(f"มีข้อมูลแล้ว {len(_ti_df):,} ออเดอร์")
+        st.caption(
+            "จับคู่ยอดสุทธิแต่ละออเดอร์เข้ากับสินค้า (SKU) — ใช้ข้อมูลนายหน้าด้านบนถ้ามี "
+            "ไม่งั้นแกะจากคอลัมน์สินค้าที่อ้างอิงในไฟล์ (ใช้ได้เพราะทุกออเดอร์มีแค่ 1 สินค้า) "
+            "กดครั้งเดียวหลังอัปโหลดไฟล์ใหม่ทุกครั้ง แล้วไป map SKU → สินค้าในระบบด้านบน "
+            "(Map สินค้า → ระบบ) ก่อนดูกำไรที่แท็บ '💰 ยอดขาย/กำไร'"
+        )
+        if st.button("🔗 ซิงค์เข้าระบบกำไรสินค้า", key="ecom_tiktok_sync"):
+            with st.spinner("กำลังซิงค์..."):
+                _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop.strip() or "zhulian.shop")
+            if _sync_result["sales_rows"]:
+                st.success(f"✅ ซิงค์แล้ว {_sync_result['synced_orders']} ออเดอร์ ({_sync_result['sales_rows']} รายการสินค้า)")
+            else:
+                st.warning("⚠️ ไม่มีออเดอร์ที่ซิงค์ได้ — เช็คว่าชื่อร้านตรงกับที่อัปโหลดไฟล์ไว้ไหม")
+
+
+def _render_tiktok_affiliate():
+    st.subheader("🎥 ค่าคอมนายหน้า (Affiliate)")
     _tt_df = db.get_tiktok_affiliate_orders_df()
     if _tt_df.empty:
-        st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ด้านบนก่อนครับ")
+        st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' ก่อนครับ")
         return
 
     _tt_df["วันที่"] = pd.to_datetime(_tt_df["order_created_at"]).dt.strftime("%d/%m/%Y")
@@ -390,85 +433,9 @@ def _render_tiktok_affiliate():
         st.rerun()
 
 
-def _render_tiktok_income():
-    st.subheader("💰 ยอดขายสุทธิระดับออเดอร์ (Income)")
-    st.caption(
-        "รายงานยอดขายสุทธิทั้งร้าน (TikTok Shop Seller Center → การเงิน → รายได้ → Export "
-        "→ ชีต \"รายละเอียดคำสั่งซื้อ\") ครอบคลุมทุกออเดอร์ (ไม่ใช่แค่ที่มาจากนายหน้าเหมือน "
-        "ด้านบน) เป็นยอดระดับออเดอร์ ไม่มีราคาต่อสินค้าในไฟล์นี้เอง — แต่เช็คข้อมูลจริงแล้วว่า "
-        "ทุกออเดอร์ของร้านนี้มีแค่ 1 สินค้าต่อออเดอร์ ระบบเลยจับคู่ยอดสุทธิเข้ากับสินค้าแต่ละ "
-        "SKU ให้อัตโนมัติได้ (ปุ่ม '🔗 ซิงค์เข้าระบบกำไรสินค้า' ด้านล่าง) แล้วดูกำไรจริงต่อ "
-        "สินค้าที่แท็บ '💰 ยอดขาย/กำไร' ได้เหมือน Shopee/Lazada"
-    )
-    _ti_ver = st.session_state.get("_ecom_tiktok_income_file_ver", 0)
-    _ti_msg = st.session_state.pop("_ecom_tiktok_income_import_msg", None)
-    if _ti_msg:
-        getattr(st, _ti_msg[0])(_ti_msg[1])
-    _ti_shop = st.text_input("ชื่อร้าน", value="zhulian.shop", key="ecom_tiktok_income_shop")
-    _ti_file = st.file_uploader("ไฟล์ income...xlsx", type=["xlsx"], key=f"ecom_tiktok_income_file_{_ti_ver}")
-    if _ti_file and st.button("นำเข้ารายงานยอดขายสุทธิ TikTok", key="ecom_import_tiktok_income", type="primary"):
-        with st.spinner("กำลังอ่านไฟล์..."):
-            _ti_rows = tiktok_income_import.parse_income_report(_ti_file, _ti_shop.strip() or "zhulian.shop")
-            if not _ti_rows:
-                st.session_state["_ecom_tiktok_income_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
-            else:
-                db.upsert_tiktok_order_income(_ti_rows)
-                st.session_state["_ecom_tiktok_income_import_msg"] = ("success", f"✅ นำเข้า {len(_ti_rows)} ออเดอร์แล้ว")
-            st.session_state["_ecom_tiktok_income_file_ver"] = _ti_ver + 1
-        st.rerun()
-
-    st.divider()
-
-    _ti_df = db.get_tiktok_order_income_df()
-    if _ti_df.empty:
-        st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ด้านบนก่อนครับ")
-        return
-
-    _ti_m1, _ti_m2, _ti_m3, _ti_m4 = st.columns(4)
-    _ti_m1.metric("จำนวนออเดอร์", f"{len(_ti_df):,}")
-    _ti_m2.metric("รายได้รวม", f"{_ti_df['gross_revenue'].sum():,.0f} ฿")
-    _ti_m3.metric("ค่าธรรมเนียมรวม", f"{_ti_df['total_fees'].sum():,.0f} ฿")
-    _ti_m4.metric("ยอดสุทธิที่ได้รับ", f"{_ti_df['net_settlement'].sum():,.0f} ฿")
-
-    _ti_df["วันที่สั่งซื้อ"] = pd.to_datetime(_ti_df["order_created_at"]).dt.strftime("%d/%m/%Y")
-    _ti_show_cols = ["order_id", "วันที่สั่งซื้อ", "gross_revenue", "tiktok_commission",
-                      "affiliate_commission", "shipping_fee_paid_by_shop", "total_fees",
-                      "net_settlement", "product_summary"]
-    _ti_show_df = _ti_df[_ti_show_cols].rename(columns={
-        "order_id": "เลขที่ออเดอร์", "gross_revenue": "รายได้รวม",
-        "tiktok_commission": "ค่าคอม TikTok", "affiliate_commission": "ค่าคอมนายหน้า",
-        "shipping_fee_paid_by_shop": "ค่าส่ง", "total_fees": "ค่าธรรมเนียมรวม",
-        "net_settlement": "ยอดสุทธิ", "product_summary": "สินค้า (อ้างอิง)",
-    })
-    st.dataframe(
-        _ti_show_df.style.format({
-            "รายได้รวม": "{:,.2f}", "ค่าคอม TikTok": "{:,.2f}", "ค่าคอมนายหน้า": "{:,.2f}",
-            "ค่าส่ง": "{:,.2f}", "ค่าธรรมเนียมรวม": "{:,.2f}", "ยอดสุทธิ": "{:,.2f}",
-        }),
-        hide_index=True, width="stretch",
-    )
-
-    st.divider()
-    st.caption(
-        "จับคู่ยอดสุทธิแต่ละออเดอร์เข้ากับสินค้า (SKU) — ใช้ข้อมูลนายหน้าด้านบนถ้ามี "
-        "ไม่งั้นแกะจากคอลัมน์ \"สินค้า (อ้างอิง)\" (ใช้ได้เพราะทุกออเดอร์มีแค่ 1 สินค้า) "
-        "กดครั้งเดียวหลังอัปโหลดไฟล์ใหม่ทุกครั้ง แล้วไป map SKU → สินค้าในระบบที่แท็บ "
-        "'⚙️ ตั้งค่า/นำเข้าข้อมูล' → Map สินค้า ก่อนดูกำไรที่แท็บ '💰 ยอดขาย/กำไร'"
-    )
-    if st.button("🔗 ซิงค์เข้าระบบกำไรสินค้า", key="ecom_tiktok_sync"):
-        with st.spinner("กำลังซิงค์..."):
-            _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop.strip() or "zhulian.shop")
-        if _sync_result["sales_rows"]:
-            st.success(f"✅ ซิงค์แล้ว {_sync_result['synced_orders']} ออเดอร์ ({_sync_result['sales_rows']} รายการสินค้า)")
-        else:
-            st.warning("⚠️ ไม่มีออเดอร์ที่ซิงค์ได้ — เช็คว่าชื่อร้านตรงกับที่อัปโหลดไฟล์ไว้ไหม")
-
-
 _PROFIT_GREEN = "#14874e"   # ตรงกับ --tby-green ใน app.py
 _LOSS_RED     = "#a83634"   # ตรงกับ --tby-badge-bad-fg ใน app.py
-_ACCENT       = "#E07B39"   # primaryColor ของแอป (.streamlit/config.toml)
 _PLATFORM_BRAND = {"shopee": ("#ee4d2d", "#fff"), "lazada": ("#0f156d", "#fff"), "tiktok": ("#111418", "#fff")}
-_PLOTLY_CONFIG = {"displayModeBar": False}
 
 
 def _metric_card(label: str, value: str, value_color: str = "var(--tby-text)", sub: str = "", sub_color: str = "var(--tby-muted)"):
@@ -481,17 +448,36 @@ def _metric_card(label: str, value: str, value_color: str = "var(--tby-text)", s
     """, unsafe_allow_html=True)
 
 
-def _plotly_layout(fig, height):
-    fig.update_layout(
-        height=height, margin=dict(l=0, r=10, t=10, b=10),
-        xaxis_title=None, yaxis_title=None,
-        plot_bgcolor="rgba(0,0,0,0)", paper_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Sarabun, sans-serif"),
-    )
-    return fig
+def _render_platform_totals_banner(date_from: str, date_to: str):
+    _plat_totals = db.get_ecommerce_platform_totals_df(date_from, date_to)
+    if _plat_totals.empty:
+        return
+    st.markdown("**ยอดขายแต่ละช่องทาง**")
+    _total_sales_all = _plat_totals["ยอดขาย"].sum() or 1
+    _rows = _plat_totals.sort_values("ยอดขาย", ascending=False).to_dict("records")
+    _cols = st.columns(len(_rows))
+    for _col, _r in zip(_cols, _rows):
+        _bg, _fg = _PLATFORM_BRAND.get(_r["platform"], ("var(--tby-muted)", "#fff"))
+        _pct = _r["ยอดขาย"] / _total_sales_all * 100
+        _label = _PLATFORMS.get(_r["platform"], _r["platform"])
+        with _col:
+            st.markdown(f"""
+            <div style="border-radius:10px;padding:16px 18px;background:{_bg};color:{_fg};text-align:center">
+              <div style="font:700 15px 'Sarabun',sans-serif">{_label} · {_pct:.0f}%</div>
+              <div style="font:600 13px 'Sarabun',sans-serif;opacity:0.9;margin-top:4px">฿{_r['ยอดขาย']:,.0f} · {_r['จำนวนชิ้น']:,.0f} ชิ้น</div>
+            </div>
+            """, unsafe_allow_html=True)
 
 
 def _render_sales_profit():
+    mc1, mc2, mc3 = st.columns([1, 1, 1])
+    margin_from = mc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_margin_from")
+    margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")
+    margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
+
+    _render_platform_totals_banner(str(margin_from), str(margin_to))
+    st.divider()
+
     _shops = db.get_ecommerce_shops()
     _plat_opts = sorted({s["platform"] for s in _shops}, key=list(_PLATFORMS.keys()).index) if _shops else list(_PLATFORMS.keys())
     _platform = st.radio(
@@ -518,11 +504,6 @@ def _render_sales_profit():
     if _view == _view_opts[2]:
         _render_ecom_shipping_view(_platform, _shop_filter)
     else:
-        mc1, mc2, mc3 = st.columns([1, 1, 1])
-        margin_from = mc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_margin_from")
-        margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")
-        margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
-
         margin_df, pending_qty = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), platform=_platform, shop_name=_shop_filter)
         if pending_qty:
             st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน — ยังไม่รวมในตารางด้านล่าง (อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
@@ -608,17 +589,6 @@ def _render_ecom_profit_view(margin_df, margin_warn_pct, platform, date_from, da
                 </div>
                 """, unsafe_allow_html=True)
 
-    st.markdown("**กำไร / ชิ้น เทียบรายสินค้า**")
-    _bar_df = margin_df.sort_values("กำไร/ชิ้น").copy()
-    _bar_df["สี"] = _bar_df["กำไร/ชิ้น"].apply(lambda v: "ขาดทุน" if v < 0 else "กำไร")
-    _fig = px.bar(
-        _bar_df, x="กำไร/ชิ้น", y="ชื่อสินค้า", orientation="h", color="สี",
-        color_discrete_map={"ขาดทุน": _LOSS_RED, "กำไร": _PROFIT_GREEN}, text="กำไร/ชิ้น",
-    )
-    _fig.update_traces(texttemplate="฿%{x:,.1f}", textposition="outside")
-    _plotly_layout(_fig, max(220, 34 * len(_bar_df))).update_layout(showlegend=False)
-    st.plotly_chart(_fig, width="stretch", config=_PLOTLY_CONFIG)
-
     _seg_opts = [f"ทั้งหมด ({len(margin_df)})", f"🔴 ขาดทุน ({(margin_df['สถานะ'] == '🔴 ขาดทุน').sum()})",
                  f"🟡 กำไรต่ำ ({(margin_df['สถานะ'] == '🟡 กำไรต่ำ').sum()})", f"✅ ปกติ ({(margin_df['สถานะ'] == '✅ ปกติ').sum()})"]
     _status_map = {_seg_opts[1]: "🔴 ขาดทุน", _seg_opts[2]: "🟡 กำไรต่ำ", _seg_opts[3]: "✅ ปกติ"}
@@ -673,46 +643,21 @@ def _render_ecom_units_view(margin_df, platform, date_from, date_to, shop_filter
     with _cols[1]: _metric_card("สินค้าที่ขายได้", f"{_n_products} รายการ")
     with _cols[2]: _metric_card("ขายดีสุด", _best["ชื่อสินค้า"], sub=f"{_best['ขาย (ชิ้น)']:,.0f} ชิ้น")
 
-    _c1, _c2 = st.columns([1.3, 1])
-    with _c1:
-        st.markdown("**จำนวนที่ขาย ต่อสินค้า**")
-        _bar_df = margin_df.sort_values("ขาย (ชิ้น)", ascending=True)
-        _fig = px.bar(_bar_df, x="ขาย (ชิ้น)", y="ชื่อสินค้า", orientation="h", text="ขาย (ชิ้น)")
-        _fig.update_traces(marker_color=_ACCENT, texttemplate="%{x:,.0f}", textposition="outside")
-        _plotly_layout(_fig, max(220, 34 * len(_bar_df)))
-        st.plotly_chart(_fig, width="stretch", config=_PLOTLY_CONFIG)
-
-    with _c2:
-        st.markdown("**สัดส่วนยอดขายตามช่องทาง**")
-        _plat_totals = db.get_ecommerce_platform_totals_df(str(date_from), str(date_to))
-        if _plat_totals.empty:
-            st.info("ยังไม่มีข้อมูล")
-        else:
-            _total_sales_all = _plat_totals["ยอดขาย"].sum() or 1
-            for _, _r in _plat_totals.sort_values("ยอดขาย", ascending=False).iterrows():
-                _bg, _fg = _PLATFORM_BRAND.get(_r["platform"], ("var(--tby-muted)", "#fff"))
-                _pct = _r["ยอดขาย"] / _total_sales_all * 100
-                _label = _PLATFORMS.get(_r["platform"], _r["platform"])
-                st.markdown(f"""
-                <div style="border-radius:10px;padding:14px 16px;background:{_bg};color:{_fg};margin-bottom:10px">
-                  <div style="display:flex;justify-content:space-between;font:700 14px 'Sarabun',sans-serif"><span>{_label}</span><span>{_pct:.0f}%</span></div>
-                  <div style="font:600 12.5px 'Sarabun',sans-serif;opacity:0.9;margin-top:2px">฿{_r['ยอดขาย']:,.0f} · {_r['จำนวนชิ้น']:,.0f} ชิ้น</div>
-                </div>
-                """, unsafe_allow_html=True)
+    st.markdown("**จำนวนที่ขาย ต่อสินค้า (เรียงมาก→น้อย)**")
+    _units_df = margin_df[["ชื่อสินค้า", "รหัสสินค้า", "ขาย (ชิ้น)"]].sort_values("ขาย (ชิ้น)", ascending=False)
+    st.dataframe(
+        _units_df, width="stretch", hide_index=True,
+        column_config={
+            "ขาย (ชิ้น)": st.column_config.ProgressColumn(format="%d", min_value=0, max_value=int(_units_df["ขาย (ชิ้น)"].max() or 1)),
+        },
+    )
 
     st.markdown("**แนวโน้มจำนวนที่ขาย (6 เดือนล่าสุด)**")
     _trend_df = db.get_ecommerce_units_trend_df(platform=platform, shop_name=shop_filter, months=6)
     if _trend_df.empty:
         st.info("ยังไม่มีข้อมูล")
     else:
-        # cast เป็น string ก่อนเพื่อกัน px auto-parse "YYYY-MM" เป็น datetime แล้วโชว์แกน x
-        # เป็นวันที่เต็มรูปแบบ (ต้องการแค่ label เดือนสั้นๆ)
-        _trend_df = _trend_df.assign(เดือน=_trend_df["เดือน"].astype(str))
-        _fig2 = px.line(_trend_df, x="เดือน", y="จำนวนชิ้น", markers=True)
-        _fig2.update_traces(line_color=_ACCENT, marker_color=_ACCENT)
-        _fig2.update_xaxes(type="category")
-        _plotly_layout(_fig2, 220)
-        st.plotly_chart(_fig2, width="stretch", config=_PLOTLY_CONFIG)
+        st.dataframe(_trend_df, width="stretch", hide_index=True)
 
 
 def _render_ecom_shipping_view(platform, shop_filter):
@@ -750,12 +695,10 @@ def _render_ecom_shipping_view(platform, shop_filter):
 
     if not monthly_df.empty:
         st.markdown("**ค่าส่งที่โดนหักเกิน รายเดือน**")
-        monthly_df = monthly_df.assign(เดือน=monthly_df["เดือน"].astype(str))
-        _fig = px.bar(monthly_df, x="เดือน", y="ส่วนต่างรวม", text="ส่วนต่างรวม")
-        _fig.update_traces(marker_color=_ACCENT, texttemplate="฿%{y:,.0f}", textposition="outside")
-        _fig.update_xaxes(type="category")
-        _plotly_layout(_fig, 220)
-        st.plotly_chart(_fig, width="stretch", config=_PLOTLY_CONFIG)
+        st.dataframe(
+            monthly_df, width="stretch", hide_index=True,
+            column_config={"ส่วนต่างรวม": st.column_config.NumberColumn(format="%.0f ฿")},
+        )
 
     st.markdown("**รายการที่โดนหักเกิน (เรียงมาก→น้อย)**")
     _max_diff = float(overcharge_df["ส่วนต่างที่โดนหักเพิ่ม"].max() or 1)
