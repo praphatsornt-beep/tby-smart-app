@@ -121,10 +121,11 @@ def _tambon_search(query: str, limit: int = 40) -> list:
 
 
 def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
-                       selectbox_key: str, label: str = "ตำบล/แขวง"):
+                       selectbox_key: str, label: str = "ตำบล/แขวง", am_searchbox_key: str = ""):
     """ช่อง ตำบล/แขวง แบบพิมพ์ค้นหา — พิมพ์อย่างน้อย 2 ตัวอักษรแล้วเลือกจากรายการที่กรองไว้
     (กรองฝั่งเซิร์ฟเวอร์ก่อนแสดง selectbox เพื่อไม่ให้เบราว์เซอร์ต้องแสดงตำบลทั้งประเทศทีเดียว)
-    เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย
+    เลือกแล้ว auto-fill อำเภอ/จังหวัด/รหัสไปรษณีย์ ให้ด้วย — ต้องเคลียร์ am_searchbox_key ด้วยเสมอ
+    (ช่องค้นหาอำเภอ/เขต แสดงค่าจาก session_state ของตัวเอง ไม่ได้ผูกตรงกับ am_key)
     """
     cur_val = st.session_state.get(value_key, "")
     # ใช้ session_state seeding ตรงๆ แทน value= — ในบริบทซ้อน column/expander
@@ -152,6 +153,8 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
         st.session_state[pv_key]    = sel["province"]
         st.session_state[pc_key]    = sel["zipcode"]
         st.session_state.pop(selectbox_key, None)
+        if am_searchbox_key:
+            st.session_state.pop(am_searchbox_key, None)
         st.rerun()
 
     pick_key = f"_{selectbox_key}_pick"
@@ -167,6 +170,8 @@ def _tambon_selectbox(value_key: str, am_key: str, pv_key: str, pc_key: str,
             st.session_state[pv_key]    = sel["province"]
             st.session_state[pc_key]    = sel["zipcode"]
             st.session_state.pop(selectbox_key, None)
+            if am_searchbox_key:
+                st.session_state.pop(am_searchbox_key, None)
             st.session_state.pop(pick_key, None)
 
     st.selectbox(

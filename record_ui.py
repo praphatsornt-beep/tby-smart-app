@@ -375,6 +375,7 @@ def render(tab1, products, customers, customer_map):
                                                 st.session_state["_r_last_pc"]     = _qa_pc
                                                 st.session_state["_last_rph_fill"] = _sa.get("phone", "")
                                                 st.session_state.pop("r_dt_searchbox", None)
+                                                st.session_state.pop("r_am_searchbox", None)
                                                 st.session_state[f"_addr_open_ver_{_cid}"] = _addr_exp_ver + 1
                                                 st.rerun()
                             _parse_key = f"_show_paste_{_cid}"
@@ -397,6 +398,7 @@ def render(tab1, products, customers, customer_map):
                                     st.session_state["_fr_pv"]     = _parsed.get("province", "")
                                     st.session_state["_staged_pc"] = _parsed.get("zipcode", "")
                                     st.session_state.pop("r_dt_searchbox", None)
+                                    st.session_state.pop("r_am_searchbox", None)
                                     st.session_state[_parse_key] = False
                                     st.rerun()
                                 if _pc2.button("ยกเลิก", key=f"parse_cancel_{_cid}"):
@@ -442,7 +444,8 @@ def render(tab1, products, customers, customer_map):
                             r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                             col_c, col_d, col_e = st.columns(3)
                             with col_c:
-                                r_district = _tambon_selectbox("r_dt", "r_am", "r_pv", "m_postcode", "r_dt_searchbox")
+                                r_district = _tambon_selectbox("r_dt", "r_am", "r_pv", "m_postcode", "r_dt_searchbox",
+                                                                am_searchbox_key="r_am_searchbox")
                             with col_d:
                                 r_amphure = _amphure_selectbox("r_am", "r_pv", "r_am_searchbox")
                             r_province  = col_e.selectbox("จังหวัด", [""] + _PROVINCES, key="r_pv")
@@ -1205,6 +1208,7 @@ def render(tab1, products, customers, customer_map):
                                     st.session_state["_sp_last_dt"] = _sa_dt
                                     st.session_state["_sp_last_pc"] = _sa_pc
                                     st.session_state.pop(f"sp_dt_searchbox_v{_sp_av}", None)
+                                    st.session_state.pop(f"sp_am_searchbox_v{_sp_av}", None)
                                     st.rerun()
 
                 # ── ที่อยู่ผู้รับ ─────────────────────────────────────────────────
@@ -1230,6 +1234,7 @@ def render(tab1, products, customers, customer_map):
                             if _sp_parsed.get("district"):  st.session_state["_sp_last_dt"] = _sp_parsed["district"]
                             if _sp_parsed.get("zipcode"):   st.session_state["_sp_last_pc"] = _sp_parsed["zipcode"]
                             st.session_state.pop(f"sp_dt_searchbox_v{_sp_av}", None)
+                            st.session_state.pop(f"sp_am_searchbox_v{_sp_av}", None)
                             st.session_state[_sp_parse_key] = False
                             st.rerun()
                         if _spc2.button("ยกเลิก", key="sp_parse_cancel"):
@@ -1281,7 +1286,8 @@ def render(tab1, products, customers, customer_map):
                     _sb1, _sb2, _sb3 = st.columns(3)
                     with _sb1:
                         _sp_dt = _tambon_selectbox(f"sp_dt_v{_sp_av}", f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}",
-                                                    f"sp_pc_v{_sp_av}", f"sp_dt_searchbox_v{_sp_av}")
+                                                    f"sp_pc_v{_sp_av}", f"sp_dt_searchbox_v{_sp_av}",
+                                                    am_searchbox_key=f"sp_am_searchbox_v{_sp_av}")
                     with _sb2:
                         _sp_am = _amphure_selectbox(f"sp_am_v{_sp_av}", f"sp_pv_v{_sp_av}", f"sp_am_searchbox_v{_sp_av}")
                     _sp_pv = _sb3.selectbox("จังหวัด", [""] + _PROVINCES, key=f"sp_pv_v{_sp_av}")
@@ -1883,7 +1889,7 @@ def render(tab1, products, customers, customer_map):
                                 with _la1:
                                     _lbl_district = _tambon_selectbox(
                                         "_lbl_district", "_lbl_amphure", "_lbl_province", "_lbl_zip",
-                                        "_lbl_dt_searchbox",
+                                        "_lbl_dt_searchbox", am_searchbox_key="_lbl_amphure_searchbox",
                                     )
                                 with _la2:
                                     _lbl_amphure = _amphure_selectbox("_lbl_amphure", "_lbl_province", "_lbl_amphure_searchbox")
