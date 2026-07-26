@@ -49,6 +49,7 @@ def render(tab1, products, customers, customer_map):
         if _sub_active == "📝 บันทึกขาย":
             _sale_keys = ["_cust_picked","m_cust_search","_adding_cust",
                           "m_bill","m_bill_no","m_pay","m_delivery","m_cod","m_partial_amount",
+                          "m_cod_custom","_m_cod_edit_open",
                           "_cart_base","m_postcode","m_carrier","m_zone","m_iship_note",
                           "r_name","r_phone","r_al","r_dt","r_am","r_pv",
                           "_carrier_sig","_prev_pc","_prev_pay","_prev_shipping_cid","_last_rph_fill",
@@ -574,13 +575,31 @@ def render(tab1, products, customers, customer_map):
                                 _sum_row("💰 ยอดเก็บ (อัตโนมัติ)", f"฿{collect:,.0f}")
                                 _sum_row("💸 ค่า COD", f"฿{cod_fee:,.2f}")
                             _cod_auto = int(ceil(collect))
-                            _cod_custom = st.number_input(
-                                "💰 ยอด COD ที่ต้องเก็บ (แก้ได้)",
-                                min_value=0, value=_cod_auto, step=1,
-                                key="m_cod_custom",
-                                help="ค่า default = คำนวณอัตโนมัติ ปรับได้ถ้าต้องการเก็บยอดอื่น",
-                            )
-                            collect = float(_cod_custom)
+                            # ปุ่ม "แก้ไข" แบบเปิดค่อยแสดงช่องกรอก — เดิมเป็น number_input
+                            # โชว์ตลอด ค่าที่กรอกค้างอยู่ใน session_state คีย์เดิมได้ (เผลอ
+                            # scroll/คลิกโดนโดยไม่ตั้งใจ) แล้วยังหลุดไปใช้ผิดออเดอร์ในรอบ
+                            # ถัดไปได้ด้วย เพราะตอนบันทึกอ่านจาก session_state ตรงๆ — ตอนนี้
+                            # ต้องกด "แก้ไข" เปิดโหมดก่อนเท่านั้นถึงจะกรอกได้ และ default
+                            # ทุกครั้งที่เปิดจะ seed เป็นค่าอัตโนมัติล่าสุดเสมอ (ดู
+                            # m_cod_edit_btn ด้านล่าง กับจุดบันทึกที่เช็ค _m_cod_edit_open
+                            # คู่กัน — ไม่ใช่แค่เช็คว่า key มีค่าเฉยๆ)
+                            if not st.session_state.get("_m_cod_edit_open"):
+                                with _summary_box:
+                                    _sum_row("💰 ยอด COD ที่ต้องเก็บ", f"฿{_cod_auto:,.0f}")
+                                    if st.button("✏️ แก้ไขยอด COD", key="m_cod_edit_btn", width="stretch"):
+                                        st.session_state["m_cod_custom"] = _cod_auto
+                                        st.session_state["_m_cod_edit_open"] = True
+                                        st.rerun()
+                                collect = float(_cod_auto)
+                            else:
+                                with _summary_box:
+                                    _cod_custom = st.number_input(
+                                        "💰 ยอด COD ที่ต้องเก็บ (กำลังแก้ไข)",
+                                        min_value=0, value=_cod_auto, step=1,
+                                        key="m_cod_custom",
+                                        help="แก้ไขยอดที่ต้องการเก็บจริง ถ้าไม่ต่างจากอัตโนมัติ ไม่ต้องกดแก้ไขก็ได้",
+                                    )
+                                collect = float(_cod_custom)
                             with _summary_box:
                                 st.divider()
                                 _sum_row("✅ ได้รับจริง", f"฿{net_recv:,.2f}", big=True, accent=True)
@@ -659,9 +678,12 @@ def render(tab1, products, customers, customer_map):
                             _base_cod  = sum(float(p["price"]) * q for p, q, _ in valid_items) + ship_fee
                             cod_amount = calc_logic.cod_fee(_base_cod)
                             collect    = _base_cod + cod_amount
-                            _cod_custom_val = st.session_state.get("m_cod_custom", 0)
-                            if _cod_custom_val and int(_cod_custom_val) != int(ceil(collect)):
-                                collect = float(_cod_custom_val)
+                            # ใช้ยอดที่แก้เองเฉพาะตอนเปิดโหมด "แก้ไข" จริงเท่านั้น (ไม่ใช่แค่
+                            # เช็คว่า session_state คีย์นี้มีเลขค้างอยู่ — เลขเก่าจากออเดอร์ก่อน
+                            # หน้าอาจยังไม่ถูกเคลียร์ แต่ _m_cod_edit_open reset ทุกครั้งที่
+                            # ล้างฟอร์ม/เริ่มออเดอร์ใหม่แล้ว ดู _sale_keys ด้านบน)
+                            if st.session_state.get("_m_cod_edit_open"):
+                                collect = float(st.session_state.get("m_cod_custom", collect))
                             cod_tag    = f"[COD|ยอดเก็บ={collect:.0f}฿|ค่าธรรมเนียม={cod_amount:.2f}฿|ยอดรับจริง={_base_cod:.2f}฿]"
                         else:
                             cod_amount = 0
