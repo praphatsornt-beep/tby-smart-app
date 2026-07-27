@@ -47,18 +47,19 @@ _FLASH_PRO_DD = {
     48:(649,647),49:(665,658),50:(679,669),
 }
 
-_FLASH_PRO_DD_BULKY = {  # flat rate everywhere
-    1:55,2:55,3:55,4:55,5:55,6:66,7:77,8:88,9:99,10:110,11:121,12:132,
-    13:143,14:154,15:165,16:176,17:187,18:198,19:209,20:220,21:231,
-    22:242,23:253,24:264,25:275,26:286,27:297,28:308,29:319,30:330,
-    31:341,32:352,33:363,34:374,35:385,36:396,37:407,38:418,39:429,
-    40:440,41:451,42:462,43:473,44:484,45:495,46:506,47:517,48:528,
-    49:539,50:550,51:561,52:572,53:583,54:594,55:605,56:616,57:627,
-    58:638,59:649,60:660,61:671,62:682,63:693,64:704,65:715,66:726,
-    67:737,68:748,69:759,70:770,71:781,72:792,73:803,74:814,75:825,
-    76:836,77:847,78:858,79:869,80:880,81:891,82:902,83:913,84:924,
-    85:935,86:946,87:957,88:968,89:979,90:990,91:1001,92:1012,93:1023,
-    94:1034,95:1045,96:1056,97:1067,98:1078,99:1089,100:1100,
+_FLASH_PRO_DD_BULKY = {  # flat rate everywhere — ยืนยันจากตารางราคาจริงบน iShip
+    # (2026-07-26): 50 บาทคงที่ถึง 6 กก. จากนั้น +8 บาท/กก. (สูตรเดิม 55+11/kg ผิด
+    # คิดแพงเกินจริงมาก เช่น 60 กก. เคยคิด 660 จริงแค่ 482) ยืนยันตรงทุกจุดตั้งแต่
+    # 7-60 กก. จากตารางที่ได้มา — ส่วน 61-100 กก. คำนวณต่อด้วยสูตรเดียวกัน (+8/kg)
+    # ยังไม่มีข้อมูลจริงมายืนยันช่วงนี้โดยตรง แต่ pattern คงที่ตลอดไม่มีจุดเปลี่ยนสูตร
+    1:50,2:50,3:50,4:50,5:50,6:50,7:58,8:66,9:74,10:82,11:90,12:98,13:106,
+    14:114,15:122,16:130,17:138,18:146,19:154,20:162,21:170,22:178,23:186,24:194,25:202,26:210,
+    27:218,28:226,29:234,30:242,31:250,32:258,33:266,34:274,35:282,36:290,37:298,38:306,39:314,
+    40:322,41:330,42:338,43:346,44:354,45:362,46:370,47:378,48:386,49:394,50:402,51:410,52:418,
+    53:426,54:434,55:442,56:450,57:458,58:466,59:474,60:482,61:490,62:498,63:506,64:514,65:522,
+    66:530,67:538,68:546,69:554,70:562,71:570,72:578,73:586,74:594,75:602,76:610,77:618,78:626,
+    79:634,80:642,81:650,82:658,83:666,84:674,85:682,86:690,87:698,88:706,89:714,90:722,91:730,
+    92:738,93:746,94:754,95:762,96:770,97:778,98:786,99:794,100:802,
 }
 
 _KEX = {
@@ -240,19 +241,24 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 # max_cm: กว้าง+ยาว+สูง รวมต้องไม่เกินค่านี้ (0 = ไม่จำกัด) | max_cod_amt: วงเงิน COD สูงสุด (0 = ไม่จำกัด)
 # manual_pickup: True = ต้องกดเรียกรถเข้ารับเองในระบบ iShip ทุกครั้ง (ถ้าไม่กด = ไม่มีพนักงานเข้ารับ)
 #                False = รถเข้ารับอัตโนมัติ แค่สร้างรายการก่อนเวลา cut off — ตามอินโฟกราฟิก iShip
+# max_cm/max_cod_amt ยืนยันจากเงื่อนไขจริงบน iShip (2026-07-26) — เดิมเกือบทุกตัวผิด/
+# ไม่จำกัด (max_cod_amt ที่ 0 = ไม่กรองออกตอนเทียบขนส่ง แม้ COD เกินวงเงินจริงของขนส่งนั้น
+# ก็ตาม — ตัวนี้กระทบจริงเพราะใช้กรองใน _price_one_box, max_cm ใช้แค่โชว์คำเตือนใน app.py)
+# Flash Thunder ไม่มีข้อความยืนยันวงเงิน COD ตรงๆ — ใส่ 50,000 ตามขนส่งตระกูล Flash อื่น
+# ทั้งหมดที่ยืนยันแล้ว (Pro DD/OK/100CM/DD Bulky ล้วน 50,000) ยังไม่ได้ยืนยันแยกต่างหาก
 _CARRIER_DEFS = [
-    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,    60, True,  0,     True),
-    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,    60, True,  0,     True),
-    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,    60, True,  0,     True),
-    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   100, True,  0,     True),
-    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01,  0, True,  0,     True),
-    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,     0, True,  0,     False),
-    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,     0, True,  0,     False),
-    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,     0, True,  0,     False),
-    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,     0, True,  50000, False),
+    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,   280, True,  50000, True),
+    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,   280, True,  50000, True),
+    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,   280, True,  50000, True),
+    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   280, True,  50000, True),
+    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01, 400, True,  50000, True),
+    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,   180, True,  36000, False),
+    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,   180, True,  50000, False),
+    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,   400, True,  50000, False),
+    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,   250, True,  50000, False),
     ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   250, True,  50000, False),
-    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0,     True),
-    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,     0, True,  0,     True),
+    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True),
+    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True),
     ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0,     False),
     ("jt_express",        "J&T Express",        _JT_EXPRESS,         100,  _jt_sur,                 0, 2.675,False, 0,   600, True,  10000, False),
 ]
