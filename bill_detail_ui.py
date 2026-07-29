@@ -395,6 +395,24 @@ def render(products, customers):
                         _grp_disp["เลขที่บิล"] = _grp_origin.where(_grp_origin != "", _grp_bno)
                         if _has_family.any():
                             _grp_disp.insert(1, "เลขบิลจริง", _grp_bno.where(_has_family, ""))
+
+                        # ── เลือกทั้งบิลในคลิกเดียว แทนจิ้มทีละแถว ─────────────
+                        _qsel_bill_col = _grp_disp["เลขที่บิล"].fillna("").replace("", "—")
+                        _qsel_bills    = sorted(_qsel_bill_col.unique().tolist())
+                        if len(_qsel_bills) > 1:
+                            _qsel_pick = st.selectbox(
+                                "📄 เลือกทั้งบิล (แทนคลิกทีละแถว)",
+                                ["— เลือกบิล —"] + _qsel_bills,
+                                key=f"qsel_pick_{customer_name}",
+                            )
+                            if _qsel_pick != "— เลือกบิล —":
+                                _qsel_idx = _qsel_bill_col[_qsel_bill_col == _qsel_pick].index.tolist()
+                                _cur_sel_state = st.session_state.get(f"sel_tbl_{customer_name}") or {}
+                                _cur_sel_rows  = _cur_sel_state.get("selection", {}).get("rows", [])
+                                if sorted(_cur_sel_rows) != sorted(_qsel_idx):
+                                    st.session_state[f"sel_tbl_{customer_name}"] = {"selection": {"rows": _qsel_idx}}
+                                    st.rerun()
+
                         st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
                         _evt = st.dataframe(
                             _grp_disp.style
@@ -892,29 +910,11 @@ def render(products, customers):
                                     else:
                                         st.warning("ไม่มีรายการที่ต้องบันทึก (ทุกช่องเป็น 0)")
 
-                            # ── ลบบิล (multi) ────────────────────────────────
-                            _del_bnos = sorted({
-                                str(b) for b in sel_rows["เลขที่บิล"].dropna()
-                                if b and str(b) not in ("—", "")
-                            })
-                            if _del_bnos:
-                                st.divider()
-                                _del_bills_rows = grp.loc[grp["เลขที่บิล"].isin(_del_bnos)]
-                                st.dataframe(_del_bills_rows[["เลขที่บิล", "สินค้า", "สั่ง", "ยอดรวม"]], width="stretch", hide_index=True)
-                                st.warning(f"⚠️ จะลบบิล **{', '.join(_del_bnos)}** ({_del_bills_rows['ยอดรวม'].sum():,.0f} ฿) และทุกรายการข้างต้น — กู้คืนไม่ได้")
-                                _del_chk_m = st.checkbox(
-                                    f"ยืนยันลบ {len(_del_bnos)} บิล",
-                                    key=f"del_bill_chk_multi_{customer_name}",
-                                )
-                                if _del_chk_m:
-                                    if st.button(
-                                        f"🗑️ ลบ {len(_del_bnos)} บิล", type="primary",
-                                        key=f"del_bill_now_multi_{customer_name}",
-                                    ):
-                                        _del_cid = _cust_map_all[customer_name]["id"]
-                                        _total_del = sum(db.delete_bill(b, customer_id=_del_cid) for b in _del_bnos)
-                                        st.success(f"✅ ลบแล้ว {len(_del_bnos)} บิล ({_total_del} รายการ)")
-                                        st.rerun()
+                            # หมายเหตุ: ตัดกล่อง "ลบบิล (multi)" ที่เคยอยู่ตรงนี้ออก (2026-07-29)
+                            # เพราะไม่มี caption อธิบาย โผล่มาแบบงงๆ ทุกครั้งที่เลือกแถวที่มีเลขบิล
+                            # แถมลบ "ทุกสินค้าในบิลนั้น" ไม่ใช่แค่ที่ติ๊กไว้ — เสี่ยงเข้าใจผิดขอบเขต
+                            # ลบทั้งบิลทำได้อยู่แล้วที่อื่น: พิมพ์/จัดการบิล > แก้ไขเพิ่มเติม (ทีละบิล)
+                            # หรือบัตรลูกค้า > แต่ละบิล > ลบบิลนี้
 
                             # ── ลบเฉพาะรายการที่เลือก (multi, ไม่ลบทั้งบิล) ────
                             st.divider()
