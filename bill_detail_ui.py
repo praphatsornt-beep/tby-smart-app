@@ -940,6 +940,16 @@ def render(products, customers):
                     # ── summary metrics (เดียวกับตรรกะแท็บยอดค้าง — ไม่รวม COD ในค้างเงิน) ──
                     _l_all_df = _ledger_to_txn_df(_l_data)
                     if not _l_all_df.empty:
+                        # join คอลัมน์ "ยังไม่เปิด" (ชิ้นที่ยังไม่ได้เปิดบิล) จาก get_all_transactions_df
+                        # แทนคำนวณซ้ำ — ใช้ logic เดียวกับที่แท็บยอดค้างใช้อยู่แล้ว (รวม fallback
+                        # สำหรับแถวเก่าที่ไม่มี bill_open_events ด้วย) กันไม่ให้ต่างกันสองที่
+                        _l_open_df = db.get_all_transactions_df(customer_id=_l_cust["id"])
+                        if not _l_open_df.empty:
+                            _l_all_df = _l_all_df.merge(
+                                _l_open_df[["id", "ยังไม่เปิด"]], on="id", how="left")
+                            _l_all_df["ยังไม่เปิด"] = _l_all_df["ยังไม่เปิด"].fillna(0).astype(int)
+                        else:
+                            _l_all_df["ยังไม่เปิด"] = 0
                         _l_is_cod = _l_all_df["สถานะจ่าย"] == "COD"
                         _l_owed = _l_all_df.loc[~_l_is_cod, "ค้างจ่าย"].sum()
                         _l_pending = int(_l_all_df["ค้างรับ"].sum())
@@ -1260,10 +1270,11 @@ def render(products, customers):
                             st.caption(f"🚚 {_r['date']} {_tagstr}ส่งพัสดุ {_r['detail']}  Tracking: {_r['tracking']}")
 
                     _l_table_cols = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
-                                     "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "สถานะจ่าย", "หมายเหตุ"]
+                                     "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "ยังไม่เปิด",
+                                     "สถานะจ่าย", "หมายเหตุ"]
                     _l_table_cols_disp = ["วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม",
-                                           "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "สถานะจ่าย",
-                                           "สถานะรับของ", "หมายเหตุ"]
+                                           "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ", "สถานะบิล", "ยังไม่เปิด",
+                                           "สถานะจ่าย", "สถานะรับของ", "หมายเหตุ"]
                     _l_bills_owed = _bills_from_df(_l_all_df)
                     _owed_map = dict(zip(
                         _l_bills_owed["เลขที่บิล"].replace("", "—"),
