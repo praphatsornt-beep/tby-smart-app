@@ -26,9 +26,11 @@ _PILL_BAD  = "background-color:oklch(0.94 0.03 25);color:oklch(0.5 0.15 25);"
 _BILL_OVERDUE_DAYS = 30  # ยังไม่มี due-date จริง ใช้อายุบิลค้างจ่ายแทน
 
 
-def _render_ledger_panel(cust: dict, products: list, key_prefix: str):
+def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards: bool = True):
     """การ์ดสรุป + สรุปรายสินค้า + ประวัติรายบิล (timeline) ของลูกค้าคนเดียว —
-    ใช้ร่วมกันระหว่าง บัตรลูกค้า และ ยอดค้าง/จัดการบิล (โชว์ตอนเลือกลูกค้าคนใดคนหนึ่ง)"""
+    ใช้ร่วมกันระหว่าง บัตรลูกค้า และ ยอดค้าง/จัดการบิล (โชว์ตอนเลือกลูกค้าคนใดคนหนึ่ง)
+    show_cards=False: ยอดค้างเรียกแบบนี้เพราะ render การ์ด 3 ใบเองแล้วจากตัวแปรที่มีอยู่
+    แล้วในลูป (เลี่ยง query get_customer_ledger ซ้ำแค่เพื่อโชว์การ์ด)"""
     _l_data = db.get_customer_ledger(cust["id"])
     if not _l_data:
         st.caption("ไม่มีประวัติ")
@@ -62,10 +64,11 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str):
         _l_owed = 0.0
         _l_pending = 0
         _l_unbilled_pv = 0.0
-    _sm1, _sm2, _sm3 = st.columns(3)
-    _sm1.metric("⭐ คะแนนที่ยังไม่เปิด", f"{_l_unbilled_pv:,.0f}")
-    _sm2.metric("💰 ค้างเงิน",           f"{_l_owed:,.0f} ฿")
-    _sm3.metric("📦 ค้างของ",            f"{_l_pending:,} ชิ้น")
+    if show_cards:
+        _sm1, _sm2, _sm3 = st.columns(3)
+        _sm1.metric("⭐ คะแนนที่ยังไม่เปิด", f"{_l_unbilled_pv:,.0f}")
+        _sm2.metric("💰 ค้างเงิน",           f"{_l_owed:,.0f} ฿")
+        _sm3.metric("📦 ค้างของ",            f"{_l_pending:,} ชิ้น")
 
     # ── สรุปรายสินค้า ────────────────────────────────────────
     with st.expander("📊 สรุปรายสินค้า", expanded=False):
@@ -773,181 +776,20 @@ def render(products, customers):
                             st.caption("  ·  ".join(_extra_bits))
 
                     if _is_active_cust:
-                        # ── การ์ดสรุป + สรุปรายสินค้า + ประวัติรายบิล ───────────
-                        # ใช้ฟังก์ชันเดียวกับแท็บบัตรลูกค้า (2026-07-29 — Stage 1 ของ
-                        # การรวมยอดค้าง+บัตรลูกค้าเข้าด้วยกัน)
-                        _cust_obj_led = _cust_map_all.get(customer_name)
-                        if _cust_obj_led:
-                            _render_ledger_panel(
-                                _cust_obj_led, products, key_prefix=f"out_{_cust_obj_led['id']}",
-                            )
-                            st.divider()
-
-                        # ── 🖨️ พิมพ์ / จัดการบิล ───────────────────────────────
-                        with st.expander("🖨️ พิมพ์ / จัดการบิล"):
-                            _cust_obj_bp = _cust_map_all.get(customer_name)
-                            _bp_id = _cust_obj_bp["id"] if _cust_obj_bp else customer_name
-                            _render_bill_panel(
-                                customer_name, _cust_map_all, _all_txn_cache, customers,
-                                key_prefix=f"bp_{_bp_id}",
-                            )
+                        # ── การ์ดสรุป (owed/pending/_unbilled_pv คำนวณไว้แล้วในลูป บรรทัด ~700 —
+                        # ไม่ต้อง query ledger ซ้ำแค่เพื่อโชว์การ์ด) ───────────────────────
+                        _sm1, _sm2, _sm3 = st.columns(3)
+                        _sm1.metric("⭐ คะแนนที่ยังไม่เปิด", f"{_unbilled_pv:,.0f}")
+                        _sm2.metric("💰 ค้างเงิน",           f"{owed:,.0f} ฿")
+                        _sm3.metric("📦 ค้างของ",            f"{pending:,} ชิ้น")
                         st.divider()
 
-                        # ── ใบรับของ popup ───────────────────────────────────
-                        _rp = st.session_state.get("_recv_popup")
-                        if _rp and _rp.get("customer_name") == customer_name:
-                            def _prod_label(it):
-                                code = it.get("product_code", "")
-                                return f"[{code}] {it['product']}" if code else it["product"]
-                            _recv_rows_html = "".join(
-                                f"<tr><td>{_prod_label(it)}</td><td style='text-align:center'>{it['qty']}</td></tr>"
-                                for it in _rp["received"]
-                            )
-                            _pend_rows_html = "".join(
-                                f"<tr><td>{_prod_label(it)}</td><td style='text-align:center'>{it['qty']}</td></tr>"
-                                for it in _rp["pending"]
-                            ) or "<tr><td colspan='2' style='color:#888'>ไม่มีค้างรับ</td></tr>"
-                            _recv_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
-    <style>
-    *{{box-sizing:border-box;margin:0;padding:0}}
-    html,body{{background:#fff!important;color:#000!important}}
-    body{{font-family:'Prompt',sans-serif;padding:16px;font-size:13px}}
-    .header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
-    .header h1{{font-size:16px;font-weight:700}}
-    .header h2{{font-size:14px;font-weight:600;margin-top:2px}}
-    .header-right{{text-align:right;font-size:13px;font-weight:600}}
-    .section{{margin:10px 0}}
-    .section b{{font-size:13px}}
-    table{{width:100%;border-collapse:collapse;margin:6px 0;border:1px solid #000}}
-    th{{background:#000;color:#fff;padding:5px 6px;font-size:12px;text-align:left;border:1px solid #000}}
-    td{{padding:4px 6px;border:1px solid #aaa;font-size:12px;color:#000}}
-    tr:nth-child(even) td{{background:#f0f0f0}}
-    .sig{{margin-top:32px;border-top:1px solid #000;padding-top:4px;min-width:200px;display:inline-block;text-align:center;font-size:12px}}
-    .btn{{display:block;margin:0 0 12px;padding:6px 22px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:13px}}
-    @media print{{.btn{{display:none}}@page{{size:A5 portrait;margin:10mm}}*{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}th{{background:#000!important;color:#fff!important}}tr:nth-child(even) td{{background:#eee!important}}}}
-    </style></head><body>
-    <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบรับของ</button>
-    <div class='header'>
-      <div><h1>ใบรับของ ZHULIAN TBY</h1><h2>ลูกค้า: {_rp['customer_name']}</h2></div>
-      <div class='header-right'>วันที่: {_rp['date']}</div>
-    </div>
-    <div class='section'><b>รายการที่รับวันนี้:</b>
-    <table><tr><th>รหัส / สินค้า</th><th style='text-align:center;width:80px'>จำนวนรับ</th></tr>{_recv_rows_html}</table></div>
-    <div class='section' style='margin-top:14px'><b>ยังค้างรับ:</b>
-    <table><tr><th>รหัส / สินค้า</th><th style='text-align:center;width:80px'>ค้างรับ</th></tr>{_pend_rows_html}</table></div>
-    <div style='margin-top:24px'><div class='sig'>ลายเซ็นผู้รับ</div></div>
-    </body></html>"""
-                            st.iframe(_recv_html, height=430)
-                            if st.button("✕ ปิดใบรับของ", key=f"close_recv_{customer_name}"):
-                                del st.session_state["_recv_popup"]
-                                st.rerun()
-                            st.divider()
-
-                        # ── ปุ่มแจ้ง LINE รับของ/จ่ายเงินบางส่วน ──────────────
-                        _pr = st.session_state.get("_partial_recv_line")
-                        if _pr and _pr.get("customer_name") == customer_name:
-                            _pr_c1, _pr_c2 = st.columns([3, 1])
-                            _pr_items = _pr.get("items")
-                            if _pr_items:
-                                _pr_summary = " + ".join(
-                                    (f"[{it['product_code']}] " if it.get("product_code") else "")
-                                    + it.get("product_name", "")
-                                    + (f" ×{it['qty_received']}" if it.get("qty_received", 0) > 0 else "")
-                                    for it in _pr_items
-                                )
-                            else:
-                                _pr_summary = (f"📦 {_pr['product_name']}" if _pr.get("product_name") else "")
-                                if _pr.get("qty_received", 0) > 0:
-                                    _pr_summary += f" ×{int(_pr['qty_received'])}"
-                            _pr_c1.info(
-                                _pr_summary
-                                + (f" · จ่าย {_pr['amount_paid']:,.0f} ฿" if _pr.get("amount_paid", 0) > 0.01 else "")
-                            )
-                            if _pr_c2.button("📨 แจ้ง LINE", key=f"pr_line_{customer_name}", type="primary", width="stretch"):
-                                _pr_res = line_api.push_partial_receipt(
-                                    _pr["line_user_id"], _pr.get("product_name", ""),
-                                    _pr.get("qty_received", 0), _pr["amount_paid"],
-                                    _pr["remaining_qty"], _pr["remaining_amount"],
-                                    product_code=_pr.get("product_code", ""),
-                                    group_id=_pr.get("group_id", ""),
-                                    items=_pr_items,
-                                )
-                                if _pr_res.get("ok"):
-                                    st.success("✅ ส่ง LINE แล้ว")
-                                    del st.session_state["_partial_recv_line"]
-                                else:
-                                    st.error(f"❌ {_pr_res.get('error')}")
-                            st.divider()
-
-                        # ── LINE แจ้งยอดค้าง ─────────────────────────────────
-                        if line_api.is_configured():
-                            _line_items = [
-                                {"bill_no": r["เลขที่บิล"],
-                                 "product": f"[{r['รหัส']}] {r['สินค้า']}" if r.get("รหัส") else r["สินค้า"],
-                                 "amount": 0.0 if r["สถานะจ่าย"] == "COD" else float(r["ค้างจ่าย"]),
-                                 "qty": int(r["ค้างรับ"])}
-                                for _, r in grp.iterrows()
-                                if float(r["ค้างจ่าย"]) > 0 or int(r["ค้างรับ"]) > 0
-                            ]
-                            # COD ที่โอนแล้วรอเปิดบิล
-                            _cust_obj  = next((c for c in customers if c["name"] == customer_name), None)
-                            _cod_done  = []
-                            if _cust_obj:
-                                _sh_list = _ship_by_cust.get(_cust_obj["id"], [])
-                                _cod_done = [
-                                        {"tracking_no": s.get("tracking_no",""), "cod_amount": float(s.get("cod_amount") or 0)}
-                                        for s in _sh_list
-                                        if s.get("cod_transferred_at") and float(s.get("cod_amount") or 0) > 0
-                                    ]
-                            if st.button(
-                                "📨 แจ้ง LINE" if _luid else "📨 ไม่มี LINE ID",
-                                key=f"line_out_{customer_name}",
-                                disabled=not _luid,
-                                help=None if _luid else "ยังไม่มี line_user_id ของลูกค้านี้",
-                            ):
-                                _r = line_api.push_outstanding(
-                                    _luid, customer_name, owed, pending, _line_items, _cod_done,
-                                    group_id=_gid,
-                                )
-                                if _r.get("ok"):
-                                    st.success("✅ ส่ง LINE แล้ว")
-                                else:
-                                    st.error(f"❌ {_r.get('error')}")
-                        # ── บิลหลัก: รวมสินค้าที่แยกบิลบางส่วน (origin ≠ เลขที่บิล
-                        # ปัจจุบัน) เป็นแถวเดียวต่อสินค้า พร้อมคอลัมน์เปิดบิลแล้ว/
-                        # ยังไม่เปิด — ใช้ _all_txn_cache (ไม่ใช่ grp/outstanding_df)
-                        # เพราะส่วนที่เปิดบิล+จ่าย/รับครบแล้วอาจหลุดจากยอดค้างไปแล้ว
-                        # แต่ยังต้องรวมยอดสั่งทั้งหมดให้เห็นถูกต้อง
+                        # เลขอ้างอิงบิลหลัก/มีบิลแยกหรือไม่ — ต้องคำนวณก่อนตารางเลือกแถว
+                        # (คอลัมน์ "เลขที่บิล" ในตารางใช้ค่านี้) แล้วใช้ซ้ำที่กล่อง "บิลหลัก"
+                        # ด้านล่างด้วย (ย้ายเฉพาะ 3 บรรทัดนี้ขึ้นมา ตัวกล่อง render ยังอยู่ที่เดิม)
                         _grp_origin = grp["เลขอ้างอิงบิลหลัก"].reset_index(drop=True)
                         _grp_bno = grp["เลขที่บิล"].reset_index(drop=True).fillna("")
                         _has_family = (_grp_origin != "") & (_grp_origin != _grp_bno)
-                        # หลายบิลเก่าที่เคยแยกไว้พร้อมกันจะทำให้บล็อกนี้เด้งซ้อนกันหลายอัน
-                        # จนงง — เก็บไว้ใน expander ปิดไว้ก่อน (บิลใหม่จากนี้ไปไม่แยกแถว
-                        # แล้ว บล็อกนี้จะโผล่เฉพาะข้อมูลเก่าก่อน 2026-07-17 เท่านั้น)
-                        for _origin in _grp_origin[_has_family].unique().tolist():
-                            _fam_full_df = _all_txn_cache[
-                                (_all_txn_cache["ลูกค้า"] == customer_name)
-                                & (_all_txn_cache["เลขอ้างอิงบิลหลัก"] == _origin)
-                            ]
-                            _fam_prod = merge_bill_family_products(_fam_full_df, _origin)
-                            if _fam_prod.empty:
-                                continue
-                            with st.expander(f"🗂️ บิลหลัก {_origin} (เคยแยกเปิดบิลบางส่วน)"):
-                                _om1, _om2, _om3, _om4 = st.columns(4)
-                                _om1.metric("สั่งทั้งหมด", f"{_fam_prod['สั่ง'].sum():,.0f} ชิ้น")
-                                _om2.metric("รับแล้ว", f"{_fam_prod['รับแล้ว'].sum():,.0f} ชิ้น")
-                                _om3.metric("ค้างจ่ายรวม", f"{_fam_prod['ค้างจ่าย'].sum():,.0f} ฿")
-                                _om4.metric("เหลือเปิดบิล", f"{_fam_prod['ยังไม่เปิด'].sum():,.0f} ชิ้น")
-                                st.dataframe(
-                                    _fam_prod[[
-                                        "วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม", "จ่ายแล้ว",
-                                        "ค้างจ่าย", "ค้างรับ", "เปิดบิลแล้ว", "ยังไม่เปิด",
-                                        "สถานะบิล", "สถานะจ่าย", "สถานะรับของ",
-                                    ]].style.format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"}),
-                                    width="stretch", hide_index=True,
-                                )
-                        if _has_family.any():
-                            st.divider()
 
                         # ── Styled table + row selection ──────────────────────
                         _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
@@ -1498,6 +1340,179 @@ def render(products, customers):
                                     db.delete_transactions_batch(selected_ids)
                                     st.success(f"✅ ลบแล้ว {len(selected_ids)} รายการ")
                                     st.rerun()
+                        st.divider()
+
+                        # ── 🖨️ พิมพ์ / จัดการบิล ───────────────────────────────
+                        with st.expander("🖨️ พิมพ์ / จัดการบิล"):
+                            _cust_obj_bp = _cust_map_all.get(customer_name)
+                            _bp_id = _cust_obj_bp["id"] if _cust_obj_bp else customer_name
+                            _render_bill_panel(
+                                customer_name, _cust_map_all, _all_txn_cache, customers,
+                                key_prefix=f"bp_{_bp_id}",
+                            )
+                        st.divider()
+
+                        # ── ใบรับของ popup ───────────────────────────────────
+                        _rp = st.session_state.get("_recv_popup")
+                        if _rp and _rp.get("customer_name") == customer_name:
+                            def _prod_label(it):
+                                code = it.get("product_code", "")
+                                return f"[{code}] {it['product']}" if code else it["product"]
+                            _recv_rows_html = "".join(
+                                f"<tr><td>{_prod_label(it)}</td><td style='text-align:center'>{it['qty']}</td></tr>"
+                                for it in _rp["received"]
+                            )
+                            _pend_rows_html = "".join(
+                                f"<tr><td>{_prod_label(it)}</td><td style='text-align:center'>{it['qty']}</td></tr>"
+                                for it in _rp["pending"]
+                            ) or "<tr><td colspan='2' style='color:#888'>ไม่มีค้างรับ</td></tr>"
+                            _recv_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+    <style>
+    *{{box-sizing:border-box;margin:0;padding:0}}
+    html,body{{background:#fff!important;color:#000!important}}
+    body{{font-family:'Prompt',sans-serif;padding:16px;font-size:13px}}
+    .header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
+    .header h1{{font-size:16px;font-weight:700}}
+    .header h2{{font-size:14px;font-weight:600;margin-top:2px}}
+    .header-right{{text-align:right;font-size:13px;font-weight:600}}
+    .section{{margin:10px 0}}
+    .section b{{font-size:13px}}
+    table{{width:100%;border-collapse:collapse;margin:6px 0;border:1px solid #000}}
+    th{{background:#000;color:#fff;padding:5px 6px;font-size:12px;text-align:left;border:1px solid #000}}
+    td{{padding:4px 6px;border:1px solid #aaa;font-size:12px;color:#000}}
+    tr:nth-child(even) td{{background:#f0f0f0}}
+    .sig{{margin-top:32px;border-top:1px solid #000;padding-top:4px;min-width:200px;display:inline-block;text-align:center;font-size:12px}}
+    .btn{{display:block;margin:0 0 12px;padding:6px 22px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:13px}}
+    @media print{{.btn{{display:none}}@page{{size:A5 portrait;margin:10mm}}*{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}th{{background:#000!important;color:#fff!important}}tr:nth-child(even) td{{background:#eee!important}}}}
+    </style></head><body>
+    <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบรับของ</button>
+    <div class='header'>
+      <div><h1>ใบรับของ ZHULIAN TBY</h1><h2>ลูกค้า: {_rp['customer_name']}</h2></div>
+      <div class='header-right'>วันที่: {_rp['date']}</div>
+    </div>
+    <div class='section'><b>รายการที่รับวันนี้:</b>
+    <table><tr><th>รหัส / สินค้า</th><th style='text-align:center;width:80px'>จำนวนรับ</th></tr>{_recv_rows_html}</table></div>
+    <div class='section' style='margin-top:14px'><b>ยังค้างรับ:</b>
+    <table><tr><th>รหัส / สินค้า</th><th style='text-align:center;width:80px'>ค้างรับ</th></tr>{_pend_rows_html}</table></div>
+    <div style='margin-top:24px'><div class='sig'>ลายเซ็นผู้รับ</div></div>
+    </body></html>"""
+                            st.iframe(_recv_html, height=430)
+                            if st.button("✕ ปิดใบรับของ", key=f"close_recv_{customer_name}"):
+                                del st.session_state["_recv_popup"]
+                                st.rerun()
+                            st.divider()
+
+                        # ── ปุ่มแจ้ง LINE รับของ/จ่ายเงินบางส่วน ──────────────
+                        _pr = st.session_state.get("_partial_recv_line")
+                        if _pr and _pr.get("customer_name") == customer_name:
+                            _pr_c1, _pr_c2 = st.columns([3, 1])
+                            _pr_items = _pr.get("items")
+                            if _pr_items:
+                                _pr_summary = " + ".join(
+                                    (f"[{it['product_code']}] " if it.get("product_code") else "")
+                                    + it.get("product_name", "")
+                                    + (f" ×{it['qty_received']}" if it.get("qty_received", 0) > 0 else "")
+                                    for it in _pr_items
+                                )
+                            else:
+                                _pr_summary = (f"📦 {_pr['product_name']}" if _pr.get("product_name") else "")
+                                if _pr.get("qty_received", 0) > 0:
+                                    _pr_summary += f" ×{int(_pr['qty_received'])}"
+                            _pr_c1.info(
+                                _pr_summary
+                                + (f" · จ่าย {_pr['amount_paid']:,.0f} ฿" if _pr.get("amount_paid", 0) > 0.01 else "")
+                            )
+                            if _pr_c2.button("📨 แจ้ง LINE", key=f"pr_line_{customer_name}", type="primary", width="stretch"):
+                                _pr_res = line_api.push_partial_receipt(
+                                    _pr["line_user_id"], _pr.get("product_name", ""),
+                                    _pr.get("qty_received", 0), _pr["amount_paid"],
+                                    _pr["remaining_qty"], _pr["remaining_amount"],
+                                    product_code=_pr.get("product_code", ""),
+                                    group_id=_pr.get("group_id", ""),
+                                    items=_pr_items,
+                                )
+                                if _pr_res.get("ok"):
+                                    st.success("✅ ส่ง LINE แล้ว")
+                                    del st.session_state["_partial_recv_line"]
+                                else:
+                                    st.error(f"❌ {_pr_res.get('error')}")
+                            st.divider()
+
+                        # ── LINE แจ้งยอดค้าง ─────────────────────────────────
+                        if line_api.is_configured():
+                            _line_items = [
+                                {"bill_no": r["เลขที่บิล"],
+                                 "product": f"[{r['รหัส']}] {r['สินค้า']}" if r.get("รหัส") else r["สินค้า"],
+                                 "amount": 0.0 if r["สถานะจ่าย"] == "COD" else float(r["ค้างจ่าย"]),
+                                 "qty": int(r["ค้างรับ"])}
+                                for _, r in grp.iterrows()
+                                if float(r["ค้างจ่าย"]) > 0 or int(r["ค้างรับ"]) > 0
+                            ]
+                            # COD ที่โอนแล้วรอเปิดบิล
+                            _cust_obj  = next((c for c in customers if c["name"] == customer_name), None)
+                            _cod_done  = []
+                            if _cust_obj:
+                                _sh_list = _ship_by_cust.get(_cust_obj["id"], [])
+                                _cod_done = [
+                                        {"tracking_no": s.get("tracking_no",""), "cod_amount": float(s.get("cod_amount") or 0)}
+                                        for s in _sh_list
+                                        if s.get("cod_transferred_at") and float(s.get("cod_amount") or 0) > 0
+                                    ]
+                            if st.button(
+                                "📨 แจ้ง LINE" if _luid else "📨 ไม่มี LINE ID",
+                                key=f"line_out_{customer_name}",
+                                disabled=not _luid,
+                                help=None if _luid else "ยังไม่มี line_user_id ของลูกค้านี้",
+                            ):
+                                _r = line_api.push_outstanding(
+                                    _luid, customer_name, owed, pending, _line_items, _cod_done,
+                                    group_id=_gid,
+                                )
+                                if _r.get("ok"):
+                                    st.success("✅ ส่ง LINE แล้ว")
+                                else:
+                                    st.error(f"❌ {_r.get('error')}")
+                        # ── บิลหลัก: รวมสินค้าที่แยกบิลบางส่วน (origin ≠ เลขที่บิล
+                        # ปัจจุบัน) เป็นแถวเดียวต่อสินค้า พร้อมคอลัมน์เปิดบิลแล้ว/
+                        # ยังไม่เปิด — ใช้ _all_txn_cache (ไม่ใช่ grp/outstanding_df)
+                        # เพราะส่วนที่เปิดบิล+จ่าย/รับครบแล้วอาจหลุดจากยอดค้างไปแล้ว
+                        # แต่ยังต้องรวมยอดสั่งทั้งหมดให้เห็นถูกต้อง (_grp_origin/_grp_bno/
+                        # _has_family คำนวณไว้แล้วก่อนหน้านี้ — ใช้ร่วมกับตารางเลือกแถวด้วย)
+                        # หลายบิลเก่าที่เคยแยกไว้พร้อมกันจะทำให้บล็อกนี้เด้งซ้อนกันหลายอัน
+                        # จนงง — เก็บไว้ใน expander ปิดไว้ก่อน (บิลใหม่จากนี้ไปไม่แยกแถว
+                        # แล้ว บล็อกนี้จะโผล่เฉพาะข้อมูลเก่าก่อน 2026-07-17 เท่านั้น)
+                        for _origin in _grp_origin[_has_family].unique().tolist():
+                            _fam_full_df = _all_txn_cache[
+                                (_all_txn_cache["ลูกค้า"] == customer_name)
+                                & (_all_txn_cache["เลขอ้างอิงบิลหลัก"] == _origin)
+                            ]
+                            _fam_prod = merge_bill_family_products(_fam_full_df, _origin)
+                            if _fam_prod.empty:
+                                continue
+                            with st.expander(f"🗂️ บิลหลัก {_origin} (เคยแยกเปิดบิลบางส่วน)"):
+                                _om1, _om2, _om3, _om4 = st.columns(4)
+                                _om1.metric("สั่งทั้งหมด", f"{_fam_prod['สั่ง'].sum():,.0f} ชิ้น")
+                                _om2.metric("รับแล้ว", f"{_fam_prod['รับแล้ว'].sum():,.0f} ชิ้น")
+                                _om3.metric("ค้างจ่ายรวม", f"{_fam_prod['ค้างจ่าย'].sum():,.0f} ฿")
+                                _om4.metric("เหลือเปิดบิล", f"{_fam_prod['ยังไม่เปิด'].sum():,.0f} ชิ้น")
+                                st.dataframe(
+                                    _fam_prod[[
+                                        "วันที่", "รหัส", "สินค้า", "สั่ง", "รับแล้ว", "ยอดรวม", "จ่ายแล้ว",
+                                        "ค้างจ่าย", "ค้างรับ", "เปิดบิลแล้ว", "ยังไม่เปิด",
+                                        "สถานะบิล", "สถานะจ่าย", "สถานะรับของ",
+                                    ]].style.format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"}),
+                                    width="stretch", hide_index=True,
+                                )
+                        if _has_family.any():
+                            st.divider()
+
+                        # ── สรุปรายสินค้า + ประวัติรายบิล (การ์ดสรุปโชว์ไปแล้วด้านบน —
+                        # ไม่ render ซ้ำ) — ใช้ฟังก์ชันเดียวกับแท็บบัตรลูกค้า ─────────────
+                        _cust_obj_led = _cust_map_all.get(customer_name)
+                        if _cust_obj_led:
+                            _render_ledger_panel(
+                                _cust_obj_led, products, key_prefix=f"out_{_cust_obj_led['id']}", show_cards=False,
+                            )
 
 
     elif _t5_active == _T5_TABS[1]:
