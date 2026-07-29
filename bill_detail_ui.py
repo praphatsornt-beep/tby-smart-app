@@ -719,7 +719,10 @@ def render(products, customers):
                                     "จ่ายจริง":  st.column_config.NumberColumn("จ่ายจริง ✏️", min_value=0, format="%.0f", disabled=_pay_disabled),
                                     "สถานะบิล":  st.column_config.TextColumn(disabled=True),
                                 }
-                                if _any_unbilled:
+                                # เปิดบิลพร้อมกับรับของ/จ่ายเงินได้เฉพาะโหมด "กำหนดเอง" เท่านั้น
+                                # (โหมด "...อย่างเดียว" ต้องทำเฉพาะอย่างนั้นจริงๆ ไม่ผสมเปิดบิล)
+                                _allow_open_here = _any_unbilled and _mc_mode == "🛠️ กำหนดเอง"
+                                if _allow_open_here:
                                     _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
                                     st.caption(f"📄 {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str} — "
                                                "ใส่จำนวนที่จะเปิดบิลในคอลัมน์ \"เปิดบิลกี่ชิ้น\" ด้านล่าง "
@@ -731,6 +734,9 @@ def render(products, customers):
                                         help="จำนวนที่จะเปิดบิลจากส่วนที่ยังไม่เปิด — ใส่น้อยกว่าเพื่อเปิดบิลบางส่วน "
                                                  "(ส่วนที่เหลือยังค้างไม่เปิดบิลต่อไปในแถวเดิม) ไม่มีผลกับรายการที่เปิดบิลแล้ว",
                                     )
+                                elif _any_unbilled:
+                                    st.caption(f"ℹ️ มี {_unbilled_cnt} รายการที่ยังไม่เปิดบิลในรายการที่เลือก "
+                                               "(โหมดนี้จะไม่เปิดบิลให้ — สลับไปโหมด \"กำหนดเอง\" ถ้าต้องการเปิดบิลด้วย)")
 
                                 _combo_edit = st.data_editor(
                                     _combo_df[_combo_cols],
@@ -746,7 +752,7 @@ def render(products, customers):
                                     st.text_input(
                                         "เลขที่บิลจริง (ถ้ามี — ไม่บังคับ, ใช้วันที่ด้านบนเป็นวันที่เปิดบิลด้วย)",
                                         key=f"mc_billno_{customer_name}")
-                                    if _any_unbilled else ""
+                                    if _allow_open_here else ""
                                 )
 
                                 _mc_recv = int(_combo_edit["รับจริง"].sum())
@@ -930,26 +936,23 @@ def render(products, customers):
                     _l_ships    = [r for r in _l_data if "ส่งของ" in r["type"]]
                     _l_bill_opens = [r for r in _l_data if r["type"] == "เปิดบิล"]
 
-                    # ── summary metrics ──────────────────────────────────────
-                    _l_ord_qty  = sum(r["qty_in"]  for r in _l_orders)
-                    _l_recv_qty = sum(r["qty_out"] for r in _l_receipts) + sum(r.get("initial_received", 0) for r in _l_orders)
-                    _l_paid_tot = (
-                        sum(r.get("total_amount", 0) for r in _l_orders if r.get("pay_status") == "จ่ายแล้ว")
-                        + sum(r["amount"] for r in _l_payments)
-                    )
-                    _l_unbilled_pv = sum(
-                        r.get("pv", 0.0) for r in _l_orders
-                        if (r.get("bill_status") or "ยังไม่เปิดบิล") != "เปิดบิลแล้ว"
-                    )
-                    _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
-                    _sm1.metric("สั่งซื้อ",  f"{_l_ord_qty:,} ชิ้น")
-                    _sm2.metric("รับแล้ว",   f"{_l_recv_qty:,} ชิ้น")
-                    _sm3.metric("ค้างรับ",   f"{max(0, _l_ord_qty - _l_recv_qty):,} ชิ้น")
-                    _sm4.metric("จ่ายแล้ว",  f"{_l_paid_tot:,.0f} ฿")
-                    _sm5.metric("⭐ PV รอเปิดบิล", f"{_l_unbilled_pv:,.0f}")
+                    # ── summary metrics (เดียวกับตรรกะแท็บยอดค้าง — ไม่รวม COD ในค้างเงิน) ──
+                    _l_all_df = _ledger_to_txn_df(_l_data)
+                    if not _l_all_df.empty:
+                        _l_is_cod = _l_all_df["สถานะจ่าย"] == "COD"
+                        _l_owed = _l_all_df.loc[~_l_is_cod, "ค้างจ่าย"].sum()
+                        _l_pending = int(_l_all_df["ค้างรับ"].sum())
+                        _l_unbilled_pv = _l_all_df.loc[_l_all_df["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum()
+                    else:
+                        _l_owed = 0.0
+                        _l_pending = 0
+                        _l_unbilled_pv = 0.0
+                    _sm1, _sm2, _sm3 = st.columns(3)
+                    _sm1.metric("⭐ คะแนนที่ยังไม่เปิด", f"{_l_unbilled_pv:,.0f}")
+                    _sm2.metric("💰 ค้างเงิน",           f"{_l_owed:,.0f} ฿")
+                    _sm3.metric("📦 ค้างของ",            f"{_l_pending:,} ชิ้น")
 
                     # ── สรุปรายสินค้า ────────────────────────────────────────
-                    _l_all_df = _ledger_to_txn_df(_l_data)
                     with st.expander("📊 สรุปรายสินค้า", expanded=False):
                         _l_txn_df = _l_all_df
                         if not _l_txn_df.empty:
@@ -1412,29 +1415,46 @@ def render(products, customers):
                         (i, str(r.get("event_id") or ""))
                         for i, r in enumerate(_l_data) if r.get("event_id")
                     ]
+                    _ldel_rows.sort(key=lambda x: _l_data[x[0]]["date"], reverse=True)
                     # ── ยกเลิกเปิดบิล (undo) — คืน bill_status/bill_no กลับเป็นก่อน
                     # เปิดบิล เหมือน "ลบ" เหตุการณ์เปิดบิลออกจากประวัติ
                     _lopened_rows = [
                         (i, r["txn_id"]) for i, r in enumerate(_l_data)
                         if r.get("type") == "สั่งซื้อ" and r.get("bill_status") == "เปิดบิลแล้ว"
                     ]
+                    _lopened_rows.sort(key=lambda x: _l_data[x[0]]["date"], reverse=True)
                     if _ldel_rows or _lopened_rows:
                         with st.expander("🗑️ ลบรายการ"):
+                            st.caption("ติ๊กเลือกได้หลายรายการ แล้วกดลบพร้อมกันด้านล่าง")
+                            _ldel_selected = []
                             for _ldi, _leid in _ldel_rows:
                                 _llr = _l_data[_ldi]
                                 _leid_real = _leid.removesuffix("-r").removesuffix("-p")
                                 _lamt_str = f"฿{_llr['amount']:,.0f}" if _llr['amount'] else ""
                                 _llabel = (f"{_llr['date'][:10]}  {_llr['type']}  "
                                            f"{_llr.get('product','') or ''}  {_lamt_str}")
-                                if st.button(f"🗑️ {_llabel}", key=f"ldel_{_ldi}_{_l_sel}"):
-                                    db.delete_partial_event(_leid_real)
-                                    st.rerun()
+                                if st.checkbox(_llabel, key=f"ldel_chk_{_ldi}_{_l_sel}"):
+                                    _ldel_selected.append(_leid_real)
+                            _lopen_selected = []
                             for _loi, _ltid in _lopened_rows:
                                 _llr = _l_data[_loi]
                                 _lbno = _llr.get("bill_no") or ""
                                 _llabel = f"{_llr['date'][:10]}  เปิดบิล {_lbno}  {_llr.get('product','') or ''}"
-                                if st.button(f"🗑️ {_llabel}", key=f"lundo_open_{_loi}_{_l_sel}"):
-                                    db.undo_last_bill_open_event(_ltid)
+                                if st.checkbox(_llabel, key=f"lundo_chk_{_loi}_{_l_sel}"):
+                                    _lopen_selected.append(_ltid)
+                            _l_total_sel = len(_ldel_selected) + len(_lopen_selected)
+                            if _l_total_sel:
+                                st.divider()
+                                _l_confirm_del = st.checkbox(
+                                    f"ยืนยันลบ {_l_total_sel} รายการที่เลือก", key=f"ldel_bulk_confirm_{_l_sel}"
+                                )
+                                if st.button(f"🗑️ ลบ {_l_total_sel} รายการที่เลือก", type="primary",
+                                             disabled=not _l_confirm_del, key=f"ldel_bulk_{_l_sel}"):
+                                    for _eid in _ldel_selected:
+                                        db.delete_partial_event(_eid)
+                                    for _tid in _lopen_selected:
+                                        db.undo_last_bill_open_event(_tid)
+                                    st.success(f"✅ ลบแล้ว {_l_total_sel} รายการ")
                                     st.rerun()
                 else:
                     st.caption("ไม่มีประวัติ")
