@@ -661,10 +661,14 @@ def render(products, customers):
                             _any_unbilled  = _unbilled_mask.any()
                             _unbilled_cnt  = int(_unbilled_mask.sum())
                             _unbilled_pv   = sel_rows.loc[_unbilled_mask, "PV รวม"].sum() if "PV รวม" in sel_rows.columns else 0
+                            _billed_mask   = sel_rows["สถานะบิล"] == "เปิดบิลแล้ว"
+                            _any_billed    = _billed_mask.any()
 
                             _mc_mode_opts = ["🛠️ กำหนดเอง", "💵 จ่ายเงินอย่างเดียว", "📦 รับของอย่างเดียว"]
                             if _any_unbilled:
                                 _mc_mode_opts.append("📄 เปิดบิลอย่างเดียว")
+                            if _any_billed:
+                                _mc_mode_opts.append("↩️ ยกเลิกเปิดบิล")
                             _mc_mode = st.radio("โหมด", _mc_mode_opts, horizontal=True,
                                                  key=f"multi_mode_{customer_name}", label_visibility="collapsed")
 
@@ -689,6 +693,25 @@ def render(products, customers):
                                     for tid in txn_ids:
                                         st.session_state[f"chk_{tid}"] = False
                                     st.rerun()
+                            elif _mc_mode == "↩️ ยกเลิกเปิดบิล":
+                                _rv_rows = sel_rows.loc[_billed_mask]
+                                st.info(f"จะยกเลิกการเปิดบิลของ {len(_rv_rows)} รายการที่เปิดบิลแล้ว (ย้อนกลับเป็นยังไม่เปิดบิล)")
+                                st.dataframe(
+                                    _rv_rows[["สินค้า", "เลขที่บิล", "สั่ง", "ยอดรวม"]],
+                                    hide_index=True, width="stretch",
+                                )
+                                _rv_confirm = st.checkbox(
+                                    "ยืนยันการยกเลิกเปิดบิล", key=f"multi_revert_confirm_{customer_name}")
+                                if _rv_confirm:
+                                    if st.button(f"↩️ ยกเลิกเปิดบิล {len(_rv_rows)} รายการ", type="primary",
+                                                 width="stretch", key=f"multi_revert_{customer_name}") \
+                                            and _guard_double_submit(f"multi_revert_{customer_name}"):
+                                        for _rvid in _rv_rows["id"]:
+                                            db.undo_last_bill_open_event(_rvid)
+                                        st.success(f"✅ ยกเลิกเปิดบิลแล้ว {len(_rv_rows)} รายการ")
+                                        for tid in txn_ids:
+                                            st.session_state[f"chk_{tid}"] = False
+                                        st.rerun()
                             else:
                                 _recv_disabled = _mc_mode == "💵 จ่ายเงินอย่างเดียว"
                                 _pay_disabled  = _mc_mode == "📦 รับของอย่างเดียว"

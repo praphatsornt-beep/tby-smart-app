@@ -851,19 +851,21 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             st.session_state.pop(_pk, None)
             st.session_state[_ck] = sel_p
 
+        if all_df_p.empty:
+            st.info("ไม่มีรายการ")
+            return
+
         _bill_picked = st.session_state.get(_pk, "")
+        _bills = _bills_from_df(all_df_p)
 
-        if not _bill_picked:
-            if all_df_p.empty:
-                st.info("ไม่มีรายการ")
-                return
+        if len(_bills) == 1 and not _bill_picked:
+            st.session_state[_pk] = _bills.iloc[0]["เลขที่บิล"] or "—"
+            st.rerun()
 
-            _bills = _bills_from_df(all_df_p)
-
-            if len(_bills) == 1:
-                st.session_state[_pk] = _bills.iloc[0]["เลขที่บิล"] or "—"
-                st.rerun()
-            st.caption("เลือกบิลที่ต้องการพิมพ์")
+        # ── ลิสต์สรุปทุกบิลไว้เสมอ (ไม่หายไปตอนเลือกบิลใดบิลหนึ่งแล้ว) — สลับดูบิล
+        # อื่นได้ทันทีโดยไม่ต้องกด "เปลี่ยน" ก่อน ปุ่มของบิลที่กำลังดูอยู่ไฮไลต์ไว้
+        if len(_bills) > 1:
+            st.caption("เลือกบิลที่ต้องการพิมพ์/จัดการ")
             _total_owed    = _bills["ค้างจ่าย"].sum()
             _total_pending = int(_bills["ค้างรับ"].sum())
             _total_pv_unbilled = _bills["pv_unbilled"].sum()
@@ -872,10 +874,10 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             _all_recv_str = f" &nbsp; 📦 ยังไม่รับของ {_total_pending} ชิ้น" if _total_pending > 0 else ""
             if st.button(
                 f"📋 **รวมทุกบิล** &nbsp; {_all_color} ค้างจ่ายรวม {_total_owed:,.0f} บาท{_all_recv_str}{_all_pv_str}",
-                key=f"{key_prefix}_pbill_ALL", width="stretch"):
+                key=f"{key_prefix}_pbill_ALL", width="stretch",
+                type=("primary" if _bill_picked == "__ALL__" else "secondary")):
                 st.session_state[_pk] = "__ALL__"
                 st.rerun()
-            st.divider()
             for _, _br in _bills.iterrows():
                 _bno      = _br["เลขที่บิล"] or "—"
                 _owing    = _br["ค้างจ่าย"]
@@ -886,22 +888,20 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                 _recv_str = f" &nbsp; 📦 ยังไม่รับของ {_pending} ชิ้น" if _pending > 0 else ""
                 _lbl = (f"📄 **{_bno}** &nbsp; {_br['วันที่']} &nbsp; "
                         f"{_color} ค้างจ่าย {_owing:,.0f} บาท{_recv_str}{_pv_str}")
-                if st.button(_lbl, key=f"{key_prefix}_pbill_{_bno}", width="stretch"):
+                if st.button(_lbl, key=f"{key_prefix}_pbill_{_bno}", width="stretch",
+                             type=("primary" if _bill_picked == _bno else "secondary")):
                     st.session_state[_pk] = _bno
                     st.rerun()
+            st.divider()
+
+        if not _bill_picked:
             return
-        else:
-            _bx1, _bx2 = st.columns([6, 1])
-            _lbl_picked = "รวมทุกบิล" if _bill_picked == "__ALL__" else f"บิล {_bill_picked}"
-            _bx1.markdown(f"📄 **{_lbl_picked}**")
-            if _bx2.button("✕ เปลี่ยน", key=f"{key_prefix}_bill_clear"):
-                st.session_state.pop(_pk, None)
-                st.rerun()
-            if _bill_picked != "__ALL__":
-                if _bill_picked == "—":
-                    all_df_p = all_df_p[all_df_p["เลขที่บิล"].replace("", "—") == "—"]
-                else:
-                    all_df_p = all_df_p[all_df_p["เลขที่บิล"] == _bill_picked]
+
+        if _bill_picked != "__ALL__":
+            if _bill_picked == "—":
+                all_df_p = all_df_p[all_df_p["เลขที่บิล"].replace("", "—") == "—"]
+            else:
+                all_df_p = all_df_p[all_df_p["เลขที่บิล"] == _bill_picked]
 
     if all_df_p.empty:
         return
@@ -1074,124 +1074,12 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             st.error(f"LINE error: {_r7['error']}")
 
     # ── จัดการบิล ────────────────────────────────────────────
+    # หมายเหตุ: ตัดกล่อง "บันทึกรับเงิน"/"บันทึกรับของ"/"ลบรายการ" ที่เคยอยู่ตรงนี้ออก
+    # (2026-07-29) เพราะซ้ำกับตารางเลือกแถว+แผงบันทึกจ่าย/รับของ/เปิดบิลในหน้ายอดค้าง
+    # ที่อยู่ถัดจากพาเนลนี้ไปเลย (ยืดหยุ่นกว่าด้วย เลือกได้หลายบิล/ใส่จำนวนเองได้) —
+    # เหลือไว้แค่สิ่งที่ทำที่อื่นไม่ได้: พิมพ์/LINE, เปลี่ยนลูกค้า/ลบทั้งบิล, เคลียร์หลายบิล
     _t7_tids = show_p["id"].tolist()
     _t7_single = len(bill_nos) == 1 and bill_nos[0]
-
-    # ── ปุ่มแจ้ง LINE หลังบันทึกรับเงิน ─────────────────────────
-    _pay_line = st.session_state.get(f"{key_prefix}_pay_line")
-    if _pay_line and _t7_line_uid:
-        _pl1, _pl2, _pl3 = st.columns([3, 1, 1])
-        _pl1.info(f"💰 บันทึกรับเงิน {_pay_line['amount_paid']:,.0f} ฿ แล้ว")
-        if _pl2.button("📨 แจ้ง LINE", key=f"{key_prefix}_pay_line_btn", type="primary", width="stretch"):
-            _lr = line_api.push_partial_receipt(
-                _t7_line_uid, "", 0, _pay_line["amount_paid"],
-                0, _pay_line.get("remaining_amount", 0),
-                group_id=_t7_gid,
-                items=_pay_line.get("items"),
-            )
-            if _lr.get("ok"):
-                del st.session_state[f"{key_prefix}_pay_line"]
-                st.success("✅ ส่ง LINE แล้ว")
-            else:
-                st.error(_lr.get("error"))
-        if _pl3.button("✕", key=f"{key_prefix}_pay_line_cls", width="stretch"):
-            del st.session_state[f"{key_prefix}_pay_line"]
-            st.rerun()
-
-    with st.expander("💰 บันทึกรับเงิน"):
-        _t7_owed = float(show_p["ค้างจ่าย"].sum())
-        _t7_paid_so_far = float(show_p["จ่ายแล้ว"].sum())
-        _t7_total_amt   = float(show_p["ยอดรวม"].sum())
-        pm1, pm2, pm3 = st.columns(3)
-        pm1.metric("ยอดรวมบิล",  f"{_t7_total_amt:,.0f} ฿")
-        pm2.metric("จ่ายแล้ว",    f"{_t7_paid_so_far:,.0f} ฿")
-        pm3.metric("ค้างจ่าย",    f"{_t7_owed:,.0f} ฿")
-        if _t7_owed <= 0.01:
-            st.success("✅ ชำระครบแล้ว")
-        else:
-            _t7_pay_date = st.date_input("วันที่รับเงิน", value=date.today(), key=f"{key_prefix}_pay_date")
-            _t7_pay_amt  = st.number_input(
-                "จำนวนเงินที่รับ (บาท)",
-                min_value=0.0, max_value=float(_t7_owed),
-                value=float(_t7_owed), step=1.0, key=f"{key_prefix}_pay_amount",
-            )
-            if st.button("💾 บันทึกรับเงิน", key=f"{key_prefix}_save_pay", type="primary",
-                         width="stretch"):
-                _owed_rows = show_p[show_p["ค้างจ่าย"] > 0.01].reset_index(drop=True)
-                _owed_ids  = _owed_rows["id"].tolist()
-                _row_owed  = _owed_rows["ค้างจ่าย"].tolist()
-                _total_row_owed = sum(_row_owed)
-                _remaining = float(_t7_pay_amt)
-                _pe_rows = []
-                for _pi, (_tid_p, _row_o) in enumerate(zip(_owed_ids, _row_owed)):
-                    if _remaining <= 0:
-                        break
-                    if _pi == len(_owed_ids) - 1:
-                        _share = _remaining
-                    else:
-                        _share = round(_row_o / _total_row_owed * float(_t7_pay_amt), 2)
-                        _share = min(_share, _remaining)
-                    _pe_rows.append({
-                        "id":             str(uuid.uuid4()),
-                        "date":           str(_t7_pay_date),
-                        "transaction_id": _tid_p,
-                        "qty_received":   0,
-                        "amount_paid":    _share,
-                        "event_type":     "จ่ายเงิน",
-                    })
-                    _remaining -= _share
-                db.insert_partial_events_batch(_pe_rows)
-                if float(_t7_pay_amt) >= _t7_owed - 0.01:
-                    db.update_transaction_statuses_batch(_t7_tids, pay_status="จ่ายแล้ว")
-                if _t7_line_uid and line_api.is_configured():
-                    _rem_after = max(0.0, _t7_owed - float(_t7_pay_amt))
-                    st.session_state[f"{key_prefix}_pay_line"] = {
-                        "amount_paid": float(_t7_pay_amt),
-                        "remaining_amount": _rem_after,
-                        "items": [{"product_name": r["สินค้า"], "product_code": r.get("รหัส", ""), "qty_received": 0}
-                                  for _, r in show_p.iterrows()],
-                    }
-                st.success(f"✅ บันทึกรับเงิน {_t7_pay_amt:,.0f} ฿ แล้ว")
-                st.rerun()
-
-    if _t7_single:
-        with st.expander("📦 บันทึกรับของ"):
-            _recv_base = show_p[["สินค้า","สั่ง","รับแล้ว","ค้างรับ"]].copy().reset_index(drop=True)
-            _recv_ids  = show_p["id"].reset_index(drop=True)
-            _recv_base["รับเพิ่ม"] = pd.Series([0]*len(_recv_base), dtype="int64")
-            _recv_edit = st.data_editor(
-                _recv_base,
-                hide_index=True, width="stretch",
-                column_config={
-                    "รับเพิ่ม": st.column_config.NumberColumn("รับเพิ่ม", min_value=0, step=1, width="small"),
-                },
-                disabled=["สินค้า","สั่ง","รับแล้ว","ค้างรับ"],
-                key=f"{key_prefix}_recv_edit"
-            )
-            if st.button("💾 บันทึกรับของ", key=f"{key_prefix}_save_recv"):
-                _saved_r = 0
-                _pe_rows = []
-                for _ri, _rrow in _recv_edit.iterrows():
-                    _delta = int(_rrow["รับเพิ่ม"] or 0)
-                    if _delta <= 0:
-                        continue
-                    _cap = int(_recv_base.iloc[_ri]["ค้างรับ"])
-                    _delta = min(_delta, _cap)
-                    _pe_rows.append({
-                        "id":             str(uuid.uuid4()),
-                        "date":           str(date.today()),
-                        "transaction_id": _recv_ids.iloc[_ri],
-                        "qty_received":   _delta,
-                        "amount_paid":    0.0,
-                        "event_type":     "รับของ",
-                    })
-                    _saved_r += 1
-                db.insert_partial_events_batch(_pe_rows)
-                if _saved_r:
-                    st.success(f"✅ บันทึกรับของ {_saved_r} รายการ")
-                    st.rerun()
-                else:
-                    st.warning("ไม่มีรายการที่เปลี่ยนแปลง")
 
     # ── แก้ไขเพิ่มเติม (เปลี่ยนลูกค้า / ลบบิล) ─────────────────
     with st.expander("⚙️ แก้ไขเพิ่มเติม"):
@@ -1216,7 +1104,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             st.divider()
             st.markdown("**🗑️ ลบบิล**")
             st.dataframe(show_p[["สินค้า", "สั่ง", "ยอดรวม"]], width="stretch", hide_index=True)
-            st.warning(f"⚠️ จะลบบิล **{bill_nos[0]}** ({_t7_total_amt:,.0f} ฿) และรายการทั้งหมดข้างต้น ({len(show_p)} รายการ) — กู้คืนไม่ได้")
+            st.warning(f"⚠️ จะลบบิล **{bill_nos[0]}** ({float(show_p['ยอดรวม'].sum()):,.0f} ฿) และรายการทั้งหมดข้างต้น ({len(show_p)} รายการ) — กู้คืนไม่ได้")
             _t7_del_chk = st.checkbox("ยืนยันการลบ", key=f"{key_prefix}_del_confirm")
             if st.button("🗑️ ลบบิล", disabled=not _t7_del_chk,
                          type="secondary", key=f"{key_prefix}_del_bill"):
@@ -1225,27 +1113,6 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
                 if not preselected_bill:
                     st.session_state.pop(_pk, None)
                 st.rerun()
-
-    with st.expander("🗑️ ลบรายการ"):
-        st.caption("เลือกรายการสินค้าที่ต้องการลบออก (ไม่ลบทั้งบิล) — เลือกได้หลายรายการ")
-        _t7_item_opts = {
-            f"{r['สินค้า']} — บิล {r['เลขที่บิล'] or '—'} (฿{r['ยอดรวม']:,.0f})": r["id"]
-            for _, r in show_p.iterrows()
-        }
-        _t7_del_item_labels = st.multiselect(
-            "รายการ", list(_t7_item_opts.keys()), key=f"{key_prefix}_del_item_sel"
-        )
-        _t7_del_item_chk = st.checkbox(
-            f"ยืนยันการลบ {len(_t7_del_item_labels)} รายการนี้",
-            key=f"{key_prefix}_del_item_confirm", disabled=not _t7_del_item_labels,
-        )
-        if st.button("🗑️ ลบรายการ", disabled=not (_t7_del_item_chk and _t7_del_item_labels),
-                     type="secondary", key=f"{key_prefix}_del_item_btn"):
-            db.delete_transactions_batch([_t7_item_opts[_lbl] for _lbl in _t7_del_item_labels])
-            st.success(f"✅ ลบ {len(_t7_del_item_labels)} รายการแล้ว")
-            if not preselected_bill:
-                st.session_state.pop(_pk, None)
-            st.rerun()
 
     # ── เคลียร์บิลหลายใบ ──────────────────────────────────────
     _t7_all_cust_df = all_txn_cache[all_txn_cache["ลูกค้า"] == _t7_cust_name]
