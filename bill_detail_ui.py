@@ -937,11 +937,16 @@ def render(products, customers):
                         sum(r.get("total_amount", 0) for r in _l_orders if r.get("pay_status") == "จ่ายแล้ว")
                         + sum(r["amount"] for r in _l_payments)
                     )
-                    _sm1, _sm2, _sm3, _sm4 = st.columns(4)
+                    _l_unbilled_pv = sum(
+                        r.get("pv", 0.0) for r in _l_orders
+                        if (r.get("bill_status") or "ยังไม่เปิดบิล") != "เปิดบิลแล้ว"
+                    )
+                    _sm1, _sm2, _sm3, _sm4, _sm5 = st.columns(5)
                     _sm1.metric("สั่งซื้อ",  f"{_l_ord_qty:,} ชิ้น")
                     _sm2.metric("รับแล้ว",   f"{_l_recv_qty:,} ชิ้น")
                     _sm3.metric("ค้างรับ",   f"{max(0, _l_ord_qty - _l_recv_qty):,} ชิ้น")
                     _sm4.metric("จ่ายแล้ว",  f"{_l_paid_tot:,.0f} ฿")
+                    _sm5.metric("⭐ PV รอเปิดบิล", f"{_l_unbilled_pv:,.0f}")
 
                     # ── สรุปรายสินค้า ────────────────────────────────────────
                     _l_all_df = _ledger_to_txn_df(_l_data)
