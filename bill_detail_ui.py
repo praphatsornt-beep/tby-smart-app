@@ -935,6 +935,7 @@ def render(products, customers):
                     _l_receipts = [r for r in _l_data if r["type"] in ("รับของ", "แก้ไขรับ")]
                     _l_ships    = [r for r in _l_data if "ส่งของ" in r["type"]]
                     _l_bill_opens = [r for r in _l_data if r["type"] == "เปิดบิล"]
+                    _l_bill_cancels = [r for r in _l_data if r["type"] == "ยกเลิกเปิดบิล"]
 
                     # ── summary metrics (เดียวกับตรรกะแท็บยอดค้าง — ไม่รวม COD ในค้างเงิน) ──
                     _l_all_df = _ledger_to_txn_df(_l_data)
@@ -1110,6 +1111,24 @@ def render(products, customers):
                             "note": _note_str,
                         })
 
+                    # Phase 1c-cancel: เหตุการณ์ "ยกเลิกเปิดบิล" (undo) — โชว์เป็นแถวแยก
+                    # ไม่ซ่อน กันดูเหมือนไม่มีอะไรเกิดขึ้นทั้งที่จริงมีการยกเลิกไปแล้ว
+                    _cancel_groups: dict = {}
+                    for _r in _l_bill_cancels:
+                        _bk = _r["bill_no"] or "—"
+                        _g = _cancel_groups.setdefault((_bk, _r["date"]), {"products": [], "total": 0.0, "pv": 0.0})
+                        _g["products"].append(f"{_r['product']} ×{_r['qty_opened']}")
+                        _g["total"] += _r.get("amount_opened", 0.0)
+                        _g["pv"]    += _r.get("pv_opened", 0.0)
+                    for (_bk, _ed), _g in _cancel_groups.items():
+                        if _bk not in _bills_tl:
+                            continue
+                        _bills_tl[_bk]["events"].append({
+                            "date": _ed, "order": 0, "type": "ยกเลิกเปิดบิล",
+                            "detail": ",  ".join(_g["products"]),
+                            "total": _g["total"], "pv": _g["pv"],
+                        })
+
                     # Phase 1d: fallback สำหรับบิลเก่าที่เปิดผ่าน split_and_open_bill (ก่อนมี
                     # bill_open_events) — bill_status="เปิดบิลแล้ว" แต่ไม่มี event จริงผูกอยู่
                     # เลย ต้อง synthesize เหมือนเดิม กันประวัติหายไปจากตาราง
@@ -1211,6 +1230,13 @@ def render(products, customers):
                                 f"(รวม {_r['total']:,.0f}฿"
                                 + (f", {_r['pv']:.0f} PV" if _r['pv'] > 0 else "")
                                 + ")" + _note_str
+                            )
+                        elif _r["type"] == "ยกเลิกเปิดบิล":
+                            st.caption(
+                                f"↩️ {_r['date']} {_tagstr}ยกเลิกเปิดบิล — {_r['detail']}  "
+                                f"(รวม {_r['total']:,.0f}฿"
+                                + (f", {_r['pv']:.0f} PV" if _r['pv'] > 0 else "")
+                                + ")"
                             )
                         elif _r["type"] == "จ่ายเงิน":
                             _pay_details = _r.get("details", [])

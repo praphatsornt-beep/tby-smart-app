@@ -525,24 +525,26 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
             "txn_id":           t["id"],
         })
     # bill-open event rows (เปิดบิลจริงแต่ละครั้ง — qty_opened ติดลบ = event
-    # ยกเลิกเปิดบิล/undo, ไม่โชว์เป็นเหตุการณ์แยก แค่หักออกจากยอดสะสม)
+    # ยกเลิกเปิดบิล/undo ของ event ก่อนหน้า เก็บเป็นแถวประวัติแยกต่างหาก แบบเดียว
+    # กับที่ partial_events ติดลบโชว์เป็น "แก้ไขรับ" — ไม่ซ่อน กันดูเหมือนไม่มีอะไร
+    # เกิดขึ้นทั้งที่จริงมีการยกเลิกไปแล้ว)
     for oe in all_open_events:
         _qo = int(oe.get("qty_opened") or 0)
-        if _qo <= 0:
+        if _qo == 0:
             continue
         txn = txn_map.get(oe["transaction_id"], {})
         rows.append({
             "date":         oe["date"][:10],
-            "type":         "เปิดบิล",
+            "type":         "เปิดบิล" if _qo > 0 else "ยกเลิกเปิดบิล",
             "bill_no":      txn.get("bill_no") or "",
             "product":      txn.get("product_name", ""),
             "qty_in":       0,
             "qty_out":      0,
             "amount":       0.0,
-            "qty_opened":   _qo,
+            "qty_opened":   abs(_qo),
             "note":         oe.get("note") or "",
-            "amount_opened": _qo * float(txn.get("price_per_unit") or 0),
-            "pv_opened":    _qo * float(txn.get("points_per_unit") or 0),
+            "amount_opened": abs(_qo) * float(txn.get("price_per_unit") or 0),
+            "pv_opened":    abs(_qo) * float(txn.get("points_per_unit") or 0),
             "txn_id":       oe["transaction_id"],
             "event_id":     oe["id"] + "-o",
         })
