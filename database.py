@@ -251,11 +251,18 @@ def undo_last_bill_open_event(transaction_id: str) -> None:
     """ยกเลิกการเปิดบิลครั้งล่าสุด (undo) — insert correction event ติดลบหักล้าง
     event ล่าสุด (ไม่ลบ/ไม่แก้ของเดิม เก็บ audit trail ไว้เหมือน partial_events)
     แล้วเช็คยอดเปิดบิลสะสมใหม่ ถ้าต่ำกว่า qty ทั้งหมดของแถว ให้คืน bill_status
-    เป็น "ยังไม่เปิดบิล" และเคลียร์ bill_opened_at"""
+    เป็น "ยังไม่เปิดบิล" และเคลียร์ bill_opened_at
+    แถวเก่าที่เปิดบิลไปตั้งแต่ก่อนมี bill_open_events (bill_status ถูกตั้งตรงๆ
+    ไม่มี event ผูกอยู่เลย — ดู comment ที่ get_all_transactions_df) จะไม่มี event
+    ให้ undo เลย ต้องสลับ bill_status กลับตรงๆ แทน ไม่งั้นฟังก์ชันนี้จะ no-op เงียบๆ"""
     db = get_supabase()
     _last = _retry(lambda: db.table("bill_open_events").select("*").eq(
         "transaction_id", transaction_id).order("created_at", desc=True).limit(1).execute()).data
     if not _last:
+        _retry(lambda: db.table("transactions").update({
+            "bill_status": "ยังไม่เปิดบิล", "bill_opened_at": None,
+        }).eq("id", transaction_id).execute())
+        _clear_transaction_caches()
         return
     _last = _last[0]
     _retry(lambda: db.table("bill_open_events").insert({
