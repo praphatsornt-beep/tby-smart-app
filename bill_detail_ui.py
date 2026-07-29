@@ -147,6 +147,14 @@ def render(products, customers):
 
                 single_cust = (_t2_search.strip() != "" or _t2_bill_search.strip() != "") and outstanding_df["ลูกค้า"].nunique() == 1
                 _active_cust = st.session_state.get("_t5_out_active_cust", "")
+                # เลือกลูกค้าแล้ว (ไม่ใช่แค่ค้นหาเจอคนเดียว) — ซ่อนรายชื่อคนอื่นทั้งหมด
+                # กันกดเลือก/ติ๊กผิดคนตอนไล่สายตาผ่านลิสต์ยาวๆ (ผู้ใช้ขอ 2026-07-29)
+                if _active_cust and not single_cust:
+                    _back_c1, _back_c2 = st.columns([4, 1])
+                    _back_c1.info(f"👁️ กำลังดู: **{_active_cust}**")
+                    if _back_c2.button("🔙 ดูทั้งหมด", key="t5_out_back_all", width="stretch"):
+                        st.session_state["_t5_out_active_cust"] = ""
+                        st.rerun()
                 # pre-fetch shipments ครั้งเดียวแทนการเรียงใน loop (N+1 fix)
                 try:
                     _all_ships = db.get_shipments()
@@ -158,6 +166,8 @@ def render(products, customers):
                     _ship_by_cust.setdefault(_s.get("customer_id", ""), []).append(_s)
 
                 for customer_name, grp in outstanding_df.groupby("ลูกค้า"):
+                    if _active_cust and not single_cust and customer_name != _active_cust:
+                        continue
                     _is_cod = grp["สถานะจ่าย"] == "COD"
                     owed     = grp.loc[~_is_cod, "ค้างจ่าย"].sum()
                     pending = int(grp["ค้างรับ"].sum())
@@ -213,6 +223,22 @@ def render(products, customers):
                             f'font-size:0.8rem;display:inline-block;">{_agg_txt}</span>',
                             unsafe_allow_html=True,
                         )
+                        # ── บรรทัดรายละเอียดค้างเพิ่มเติม (โชว์เฉพาะที่ยังค้างอยู่ ผู้ใช้ขอ
+                        # 2026-07-29) — คะแนนค้างเปิดบิล, จำนวนชิ้นค้างรับ, สรุปจำนวนบิลแยก
+                        # ตามสถานะ (ไม่นับบิลที่ชำระแล้ว เพราะไม่ใช่สิ่งที่ "ค้าง")
+                        _status_counts: dict = {}
+                        for _r in _bill_rows_info:
+                            if _r[3] != "ชำระแล้ว":
+                                _status_counts[_r[3]] = _status_counts.get(_r[3], 0) + 1
+                        _extra_bits = []
+                        if _unbilled_pv > 0:
+                            _extra_bits.append(f"⭐ ค้างเปิดบิล {_unbilled_pv:,.0f} คะแนน")
+                        if pending > 0:
+                            _extra_bits.append(f"📦 ค้างรับ {pending} ชิ้น")
+                        for _st_txt, _st_cnt in _status_counts.items():
+                            _extra_bits.append(f"{_st_txt} {_st_cnt} บิล")
+                        if _extra_bits:
+                            st.caption("  ·  ".join(_extra_bits))
 
                     if _is_active_cust:
                         # ── 🖨️ พิมพ์ / จัดการบิล ───────────────────────────────
