@@ -613,48 +613,6 @@ def render(products, customers):
             db._clear_transaction_caches()
             st.rerun()
 
-        with st.expander("🗑️ ลบบิล", expanded=False):
-            st.caption("เลือกเลขที่บิลที่ต้องการลบ — จะลบทุกรายการในบิลนั้น")
-            _bill_list = db.get_bill_list()
-            if _bill_list:
-                _sel_bill = st.selectbox("เลขที่บิล", _bill_list, key="del_bill_sel")
-                _bill_rows = db.get_bill_details(_sel_bill)
-                _bill_cust_names = {(r.get("customers") or {}).get("name", "—") for r in _bill_rows}
-                _bill_no_collision = len(_bill_cust_names) > 1
-                if _bill_rows:
-                    _bill_date = (_bill_rows[0].get("date") or "")[:10]
-                    _bill_cust = (_bill_rows[0].get("customers") or {}).get("name", "—")
-                    _bill_status = _bill_rows[0].get("bill_status", "")
-                    st.markdown(f"**วันที่:** {_bill_date} &nbsp;|&nbsp; **ลูกค้า:** {_bill_cust} &nbsp;|&nbsp; **สถานะ:** {_bill_status}")
-                    _preview_df = pd.DataFrame([{
-                        "สินค้า":      r.get("product_name", ""),
-                        "จำนวน":      r.get("qty", 0),
-                        "ราคา/หน่วย": r.get("price_per_unit", 0),
-                        "ยอดรวม":     r.get("total_amount", 0),
-                    } for r in _bill_rows])
-                    st.dataframe(_preview_df, width="stretch", hide_index=True)
-                    _grand = sum(r.get("total_amount") or 0 for r in _bill_rows)
-                    st.markdown(f"**ยอดรวมทั้งบิล: {_grand:,.0f} บาท** ({len(_bill_rows)} รายการ)")
-                    if _bill_no_collision:
-                        st.error(
-                            f"🚨 เลขที่บิล {_sel_bill} นี้ถูกใช้ซ้ำกันโดยหลายลูกค้า "
-                            f"({', '.join(_bill_cust_names)}) — ลบตรงนี้จะลบของทุกคนที่ใช้เลขนี้ปนกันหมด "
-                            "กรุณาแก้เลขบิลให้ไม่ซ้ำกันก่อน (ผ่าน 'ประวัติทั้งหมด' > แก้ไขรายการ) แล้วค่อยลบทีละบิล"
-                        )
-                    else:
-                        st.warning(f"⚠️ จะลบบิล **{_sel_bill}** ({_bill_cust}) และทุกรายการข้างต้น — กู้คืนไม่ได้")
-                st.divider()
-                _del_chk_main = st.checkbox(
-                    "ยืนยันการลบ", key="del_bill_confirm", disabled=_bill_no_collision)
-                if st.button("🗑️ ลบบิลนี้", type="primary",
-                             disabled=not _del_chk_main or _bill_no_collision, key="del_bill_btn"):
-                    _n = db.delete_bill(_sel_bill)
-                    st.success(f"✅ ลบบิล {_sel_bill} แล้ว ({_n} รายการ)")
-                    st.rerun()
-            else:
-                st.info("ไม่มีบิลในระบบ")
-        st.divider()
-
         if not customers:
             st.info("ยังไม่มีข้อมูล")
         else:
