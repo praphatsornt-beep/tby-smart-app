@@ -1446,16 +1446,17 @@ def render(products, customers):
                             if _l_total_sel:
                                 st.divider()
                                 _l_confirm_del = st.checkbox(
-                                    f"ยืนยันลบ {_l_total_sel} รายการที่เลือก", key=f"ldel_bulk_confirm_{_l_sel}"
+                                    f"🗑️ ยืนยันลบ {_l_total_sel} รายการที่เลือก", key=f"ldel_bulk_confirm_{_l_sel}"
                                 )
-                                if st.button(f"🗑️ ลบ {_l_total_sel} รายการที่เลือก", type="primary",
-                                             disabled=not _l_confirm_del, key=f"ldel_bulk_{_l_sel}"):
-                                    for _eid in _ldel_selected:
-                                        db.delete_partial_event(_eid)
-                                    for _tid in _lopen_selected:
-                                        db.undo_last_bill_open_event(_tid)
-                                    st.success(f"✅ ลบแล้ว {_l_total_sel} รายการ")
-                                    st.rerun()
+                                if _l_confirm_del:
+                                    if st.button(f"🗑️ ลบ {_l_total_sel} รายการที่เลือก", type="primary",
+                                                 key=f"ldel_bulk_{_l_sel}"):
+                                        for _eid in _ldel_selected:
+                                            db.delete_partial_event(_eid)
+                                        for _tid in _lopen_selected:
+                                            db.undo_last_bill_open_event(_tid)
+                                        st.success(f"✅ ลบแล้ว {_l_total_sel} รายการ")
+                                        st.rerun()
                 else:
                     st.caption("ไม่มีประวัติ")
 
