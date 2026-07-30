@@ -603,6 +603,20 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
                         st.rerun()
 
 
+def _build_bill_opened_message(customer_name: str, items: list) -> str:
+    """สร้างข้อความ LINE แจ้งลูกค้าว่าเปิดบิลแล้ว (ใช้ตอนเปิดบิลอย่างเดียว ไม่มีการจ่าย/
+    รับของร่วมด้วย — ถ้ามีจ่าย/รับของด้วยใช้ line_api.push_partial_receipt แทน)
+    items: [{"code","name","qty","total"}] — ใส่รหัสสินค้าเสมอถ้ามี เพราะลูกค้าบางคน
+    ไม่ใช่คนไทย รหัสสินค้าอ่าน/เทียบง่ายกว่าชื่อภาษาไทย"""
+    lines = ["📄 เปิดบิลแล้วค่ะ", f"คุณ {customer_name}", ""]
+    for it in items:
+        _code = it.get("code", "")
+        _lbl = f"[{_code}] {it['name']}" if _code else it["name"]
+        lines.append(f"• {_lbl} ×{int(it['qty'])} = {it['total']:,.0f}฿")
+    lines += ["", f"💰 รวม: {sum(it['total'] for it in items):,.0f} บาท"]
+    return "\n".join(lines)
+
+
 def render(products, customers):
     try:
         _t5_active = st.pills(" ", _T5_TABS, key="_t5_active_sub", default=_T5_TABS[0], label_visibility="collapsed") or _T5_TABS[0]
@@ -915,6 +929,14 @@ def render(products, customers):
                                     db.open_bill_partial(
                                         txn_id, qty_to_open,
                                         note=new_bill_no.strip() or None, date=str(new_bill_date))
+                                    if (_luid or _gid) and line_api.is_configured():
+                                        _ob_total = float(txn["price_per_unit"]) * qty_to_open
+                                        _ob_msg = _build_bill_opened_message(customer_name, [{
+                                            "code": sel_row.get("รหัส", ""), "name": txn["product_name"],
+                                            "qty": qty_to_open, "total": _ob_total,
+                                        }])
+                                        line_api.push_text(_luid, _ob_msg, _gid)
+                                    st.success(f"✅ เปิดบิลแล้ว {qty_to_open} ชิ้น")
                                     st.rerun()
                             else:
                                 evt_map  = {
@@ -1132,6 +1154,7 @@ def render(products, customers):
                                              width="stretch", key=f"multi_openonly_{customer_name}") \
                                         and _guard_double_submit(f"multi_openonly_{customer_name}"):
                                     _ob_opened_n = 0
+                                    _ob_notify_items = []
                                     for i, _obr in _ob_rows.iterrows():
                                         _remaining = (int(_obr["ยังไม่เปิด"]) if "ยังไม่เปิด" in _obr and pd.notna(_obr.get("ยังไม่เปิด"))
                                                       else int(_obr["สั่ง"]))
@@ -1141,7 +1164,15 @@ def render(products, customers):
                                                 _obr["id"], _obr_qty,
                                                 note=_ob_bill_no.strip() or None, date=str(_ob_bill_date))
                                             _ob_opened_n += 1
+                                            _obr_unit = float(_obr["ยอดรวม"]) / int(_obr["สั่ง"]) if int(_obr["สั่ง"]) > 0 else 0.0
+                                            _ob_notify_items.append({
+                                                "code": _obr.get("รหัส", ""), "name": _obr["สินค้า"],
+                                                "qty": _obr_qty, "total": _obr_unit * _obr_qty,
+                                            })
                                     st.success(f"✅ เปิดบิลแล้ว {_ob_opened_n} รายการ")
+                                    if (_luid or _gid) and line_api.is_configured() and _ob_notify_items:
+                                        _ob_msg = _build_bill_opened_message(customer_name, _ob_notify_items)
+                                        line_api.push_text(_luid, _ob_msg, _gid)
                                     for tid in txn_ids:
                                         st.session_state[f"chk_{tid}"] = False
                                     st.rerun()
@@ -1291,6 +1322,7 @@ def render(products, customers):
                                     # เปิดบิล — เปิดได้ทั้งเต็มจำนวนหรือบางส่วน (เลขบิลจริงเป็นแค่
                                     # โน้ต optional ไม่บังคับ ไม่เช็คซ้ำ) ไม่แยกแถวอีกต่อไป
                                     _opened_cnt = 0
+                                    _opened_items = []
                                     for i, row in _combo_df.iterrows():
                                         if row["สถานะบิล"] != "ยังไม่เปิดบิล":
                                             continue
@@ -1304,6 +1336,11 @@ def render(products, customers):
                                         db.open_bill_partial(
                                             row["_id"], _bill_qty,
                                             note=_combo_bill_no.strip() or None, date=str(mc_date))
+                                        _row_unit = float(row["ยอดรวม"]) / int(row["สั่ง"]) if int(row["สั่ง"]) > 0 else 0.0
+                                        _opened_items.append({
+                                            "code": row.get("รหัส", ""), "name": row["สินค้า"],
+                                            "qty": _bill_qty, "total": _row_unit * _bill_qty,
+                                        })
                                     _do_open_bill = _opened_cnt > 0
                                     # popup รับของ + LINE notification
                                     _mrp_pending = []
@@ -1339,6 +1376,11 @@ def render(products, customers):
                                                 for it in _mrp_received
                                             ],
                                         }
+                                    elif (_luid or _gid) and line_api.is_configured() and _do_open_bill:
+                                        # เปิดบิลอย่างเดียวในโหมดกำหนดเอง (ไม่มีจ่าย/รับของร่วม)
+                                        # — ยังไม่มีใครแจ้งลูกค้าเลยถ้าไม่เข้าเงื่อนไขด้านบน
+                                        line_api.push_text(
+                                            _luid, _build_bill_opened_message(customer_name, _opened_items), _gid)
                                     _parts = []
                                     if _saved_r:
                                         _parts.append(f"รับของ {_saved_r} รายการ")
