@@ -1160,7 +1160,14 @@ def render(products, customers):
                                 } for _, r in sel_rows.iterrows()]
                                 _combo_df = pd.DataFrame(_combo_rows)
 
-                                _combo_cols = ["สินค้า","เลขที่บิล","ค้างรับ","รับจริง","ค้างจ่าย","จ่ายจริง","สถานะบิล"]
+                                # โหมด "...อย่างเดียว" ซ่อนคอลัมน์ของอีกฝั่งไปเลย (ไม่ใช่แค่ disabled)
+                                # กันสับสน/กรอกผิดฝั่งตอนโฟกัสแค่จ่ายเงินหรือรับของอย่างเดียว
+                                _combo_cols = ["สินค้า", "เลขที่บิล"]
+                                if not _recv_disabled:
+                                    _combo_cols += ["ค้างรับ", "รับจริง"]
+                                if not _pay_disabled:
+                                    _combo_cols += ["ค้างจ่าย", "จ่ายจริง"]
+                                _combo_cols.append("สถานะบิล")
                                 _combo_colcfg = {
                                     "สินค้า":    st.column_config.TextColumn(disabled=True),
                                     "เลขที่บิล": st.column_config.TextColumn(disabled=True),
@@ -1179,7 +1186,7 @@ def render(products, customers):
                                                "ใส่จำนวนที่จะเปิดบิลในคอลัมน์ \"เปิดบิลกี่ชิ้น\" ด้านล่าง "
                                                "(ลดจำนวนได้ถ้าจะเปิดบิลแค่บางส่วน ที่เหลือจะยังค้างไม่เปิดบิลต่อไป, "
                                                "0 = ไม่เปิดบิลตอนนี้)")
-                                    _combo_cols = ["สินค้า","เลขที่บิล","ค้างรับ","รับจริง","ค้างจ่าย","จ่ายจริง","สถานะบิล","เปิดบิลกี่ชิ้น"]
+                                    _combo_cols.append("เปิดบิลกี่ชิ้น")
                                     _combo_colcfg["เปิดบิลกี่ชิ้น"] = st.column_config.NumberColumn(
                                         "เปิดบิลกี่ชิ้น ✏️", min_value=0, format="%d",
                                         help="จำนวนที่จะเปิดบิลจากส่วนที่ยังไม่เปิด — ใส่น้อยกว่าเพื่อเปิดบิลบางส่วน "
@@ -1206,8 +1213,11 @@ def render(products, customers):
                                     if _allow_open_here else ""
                                 )
 
-                                _mc_recv = int(_combo_edit["รับจริง"].sum())
-                                _mc_pay  = float(_combo_edit["จ่ายจริง"].sum())
+                                # โหมด "...อย่างเดียว" ไม่มีคอลัมน์ของอีกฝั่งใน _combo_edit เลย
+                                # (ถูกซ่อนออกไปข้างบน) ใช้ _recv_disabled/_pay_disabled เดิม
+                                # บอกว่าฝั่งไหนถือว่าเป็น 0 แทนไปเช็ค column exists
+                                _mc_recv = 0 if _recv_disabled else int(_combo_edit["รับจริง"].sum())
+                                _mc_pay  = 0.0 if _pay_disabled else float(_combo_edit["จ่ายจริง"].sum())
                                 _ms1, _ms2 = st.columns(2)
                                 if _mc_recv > 0:
                                     _ms1.metric("รับของรวม", f"{_mc_recv} ชิ้น")
@@ -1222,8 +1232,8 @@ def render(products, customers):
                                     _total_paid_actual = 0.0
                                     _pe_rows, _paid_full_ids = [], []
                                     for i, row in _combo_df.iterrows():
-                                        _qty   = int(_combo_edit.iloc[i]["รับจริง"])
-                                        _amt   = float(_combo_edit.iloc[i]["จ่ายจริง"])
+                                        _qty   = 0 if _recv_disabled else int(_combo_edit.iloc[i]["รับจริง"])
+                                        _amt   = 0.0 if _pay_disabled else float(_combo_edit.iloc[i]["จ่ายจริง"])
                                         _owed  = float(row["ค้างจ่าย"])
                                         _cap_r = int(row["ค้างรับ"])
                                         _actual_qty = min(_qty, _cap_r) if _qty > 0 else 0
