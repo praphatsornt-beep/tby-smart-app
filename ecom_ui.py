@@ -374,6 +374,13 @@ def _render_tiktok_affiliate():
 
     _tt_df["วันที่"] = pd.to_datetime(_tt_df["order_created_at"]).dt.strftime("%d/%m/%Y")
 
+    # ตัดออเดอร์ "ไม่มีสิทธิ์" ออกทั้งหมด — สินค้าตีกลับ/คำสั่งซื้อไม่สมบูรณ์ ไม่ใช่ยอดขาย
+    # จริง ไม่ควรโผล่ทั้งในตารางและยอดรวมทุกจุดของแท็บนี้
+    _tt_df = _tt_df[_tt_df["order_status"] != "ไม่มีสิทธิ์"]
+    if _tt_df.empty:
+        st.info("ยังไม่มีออเดอร์ที่มีสิทธิ์ได้ค่าคอม")
+        return
+
     # คะแนน (PV) ต่อแถว = จำนวน x units_per_pack x points_per_unit ของสินค้าที่ map ไว้แล้ว
     # จับคู่ผ่าน sku_id (ไม่ใช่ product_code — เช็คข้อมูลจริงแล้วว่า product_code ในตารางนี้
     # คือรหัส SKU ตัวเลขยาวของ TikTok เอง ไม่ตรงกับ products.id เลย ส่วน sku_id ตรงกับคีย์
@@ -386,12 +393,6 @@ def _render_tiktok_affiliate():
         if not _m:
             return 0.0
         return _tt_points_by_id.get(_m["product_id"], 0.0) * float(_m.get("units_per_pack") or 1) * (qty or 0)
-
-    # ── filter ตามชื่อนายหน้า ──────────────────────────────────────────
-    _tt_creators = ["ทั้งหมด"] + sorted(_tt_df["creator_username"].dropna().unique().tolist())
-    _tt_creator_filter = st.selectbox("🔍 กรองตามนายหน้า", _tt_creators, key="ecom_tiktok_creator_filter")
-    if _tt_creator_filter != "ทั้งหมด":
-        _tt_df = _tt_df[_tt_df["creator_username"] == _tt_creator_filter]
 
     # ── สรุปยอดต่อนายหน้า ─────────────────────────────────────────────
     # นับเฉพาะออเดอร์ที่ยังไม่เปิดบิล — ที่เปิดบิลแล้วถือว่าจัดการเสร็จแล้ว ไม่ควรมาบวก
@@ -423,8 +424,15 @@ def _render_tiktok_affiliate():
     # โดยไม่ตั้งใจ — เกิดขึ้นจริงมาแล้ว) เป็นแบบ "เลือกแถว → ดูยอดรวม → กดยืนยัน" เหมือน
     # ตารางเลือกแถวใน ยอดค้าง/จัดการบิล (bill_detail_ui.py) — ไม่มีอะไรถูกบันทึกจนกว่าจะกดปุ่ม
     st.subheader("รายละเอียดออเดอร์")
+    _tt_creators = ["ทั้งหมด"] + sorted(_tt_df["creator_username"].dropna().unique().tolist())
+    _tt_creator_filter = st.selectbox("🔍 กรองตามนายหน้า", _tt_creators, key="ecom_tiktok_creator_filter")
     _tt_only_unbilled = st.checkbox("แสดงเฉพาะที่ยังไม่เปิดบิล", key="ecom_tiktok_only_unbilled")
-    _tt_detail_df = _tt_df[~_tt_df["billed_in_system"]] if _tt_only_unbilled else _tt_df
+
+    _tt_detail_df = _tt_df
+    if _tt_creator_filter != "ทั้งหมด":
+        _tt_detail_df = _tt_detail_df[_tt_detail_df["creator_username"] == _tt_creator_filter]
+    if _tt_only_unbilled:
+        _tt_detail_df = _tt_detail_df[~_tt_detail_df["billed_in_system"]]
     _tt_detail_df = _tt_detail_df.sort_values("order_created_at", ascending=False).reset_index(drop=True)
 
     _tt_points_series = pd.Series(
