@@ -459,6 +459,17 @@ def _render_tiktok_affiliate():
     _tt_s2.metric("ยอดค่านายหน้ารวม", f"{_tt_sel_rows['commission_payable_actual'].sum():,.2f} ฿")
     _tt_s3.metric("คะแนนรวม", f"{_tt_sel_points:,.0f} PV")
 
+    if _tt_sel_n > 0:
+        _tt_sel_by_product = _tt_sel_rows.groupby("item_name").agg(
+            จำนวน=("qty", "sum"),
+            ยอดขาย=("payment_amount", "sum"),
+            ยอดนายหน้า=("commission_payable_actual", "sum"),
+        ).reset_index().rename(columns={"item_name": "สินค้า"}).sort_values("จำนวน", ascending=False)
+        st.dataframe(
+            _tt_sel_by_product.style.format({"จำนวน": "{:,.0f}", "ยอดขาย": "{:,.2f}", "ยอดนายหน้า": "{:,.2f}"}),
+            hide_index=True, width="stretch",
+        )
+
     _tt_confirm_col, _tt_undo_col = st.columns(2)
     if _tt_confirm_col.button(f"✅ ยืนยันเปิดบิล ({_tt_sel_n} รายการ)", type="primary", width="stretch",
                                disabled=_tt_sel_n == 0, key="ecom_tiktok_confirm_bill"):
