@@ -448,7 +448,11 @@ def _render_tiktok_affiliate():
                       "ยอดขาย", "ยอดนายหน้า", "ยอดที่เราได้โดยประมาณ", "สถานะออเดอร์"],
         selection_mode="multi-row", on_select="rerun", key="ecom_tiktok_detail_select",
     )
-    _tt_sel_idx = list(_tt_evt.selection.rows) if hasattr(_tt_evt, "selection") else []
+    # clamp กัน index ค้างจากตารางรอบก่อนที่แถวเยอะกว่า (เช่นเพิ่งกดยืนยัน/ยกเลิกเปิดบิล
+    # แล้วแถวหายไปเพราะเปิด "แสดงเฉพาะที่ยังไม่เปิดบิล" อยู่ — selection state ของ
+    # st.dataframe ไม่ auto-clamp ตาม row count ใหม่ให้ ทำให้ .iloc[] เกินขอบเขตได้จริง)
+    _tt_sel_idx = [i for i in (_tt_evt.selection.rows if hasattr(_tt_evt, "selection") else [])
+                   if i < len(_tt_detail_df)]
     _tt_sel_rows = _tt_detail_df.iloc[_tt_sel_idx] if _tt_sel_idx else _tt_detail_df.iloc[0:0]
     _tt_sel_n = len(_tt_sel_idx)
     _tt_sel_points = _tt_points_series.iloc[_tt_sel_idx].sum() if _tt_sel_idx else 0.0
