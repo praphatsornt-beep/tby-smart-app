@@ -1102,17 +1102,27 @@ def render(products, customers):
 
                             if _mc_mode == "📄 เปิดบิลอย่างเดียว":
                                 # โชว์ตารางรายการที่จะเปิดบิล เหมือนโหมดจ่ายเงิน/รับของ —
-                                # กันเปิดบิลผิดรายการโดยไม่รู้ตัว (ผู้ใช้ขอ 2026-07-30)
-                                _ob_rows = sel_rows.loc[_unbilled_mask].copy()
+                                # กันเปิดบิลผิดรายการโดยไม่รู้ตัว + แก้จำนวนได้ถ้าจะเปิดแค่
+                                # บางส่วน (ผู้ใช้ขอ 2026-07-30) — ค่าเริ่มต้น = เปิดเต็มจำนวน
+                                # ที่ยังไม่เปิดของแต่ละแถว ลดได้ ที่เหลือยังค้างไม่เปิดต่อไป
+                                _ob_rows = sel_rows.loc[_unbilled_mask].reset_index(drop=True).copy()
                                 _ob_rows["จะเปิดบิล"] = _ob_rows.apply(
                                     lambda r: int(r["ยังไม่เปิด"]) if "ยังไม่เปิด" in r and pd.notna(r.get("ยังไม่เปิด"))
                                     else int(r["สั่ง"]), axis=1,
                                 )
                                 _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
-                                st.info(f"จะเปิดบิล {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str}")
-                                st.dataframe(
+                                st.info(f"จะเปิดบิล {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str} — "
+                                        "แก้จำนวนในคอลัมน์ \"จะเปิดบิล\" ได้ถ้าจะเปิดแค่บางส่วน (0 = ไม่เปิดรายการนั้น)")
+                                _ob_edit = st.data_editor(
                                     _ob_rows[["สินค้า", "เลขที่บิล", "จะเปิดบิล", "ยอดรวม"]],
+                                    column_config={
+                                        "สินค้า":    st.column_config.TextColumn(disabled=True),
+                                        "เลขที่บิล": st.column_config.TextColumn(disabled=True),
+                                        "จะเปิดบิล": st.column_config.NumberColumn("จะเปิดบิล ✏️", min_value=0, format="%d"),
+                                        "ยอดรวม":   st.column_config.NumberColumn(disabled=True, format="%.0f"),
+                                    },
                                     hide_index=True, width="stretch",
+                                    key=f"multi_openonly_edit_{customer_name}",
                                 )
                                 _ob_c1, _ob_c2 = st.columns(2)
                                 _ob_bill_no   = _ob_c1.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key=f"multi_openonly_bn_{customer_name}")
@@ -1121,13 +1131,17 @@ def render(products, customers):
                                 if st.button("📄 เปิดบิล", type="primary",
                                              width="stretch", key=f"multi_openonly_{customer_name}") \
                                         and _guard_double_submit(f"multi_openonly_{customer_name}"):
-                                    for _, _obr in _ob_rows.iterrows():
-                                        _obr_qty = int(_obr["จะเปิดบิล"])
+                                    _ob_opened_n = 0
+                                    for i, _obr in _ob_rows.iterrows():
+                                        _remaining = (int(_obr["ยังไม่เปิด"]) if "ยังไม่เปิด" in _obr and pd.notna(_obr.get("ยังไม่เปิด"))
+                                                      else int(_obr["สั่ง"]))
+                                        _obr_qty = max(0, min(int(_ob_edit.iloc[i]["จะเปิดบิล"]), _remaining))
                                         if _obr_qty > 0:
                                             db.open_bill_partial(
                                                 _obr["id"], _obr_qty,
                                                 note=_ob_bill_no.strip() or None, date=str(_ob_bill_date))
-                                    st.success(f"✅ เปิดบิลแล้ว {len(_ob_rows)} รายการ")
+                                            _ob_opened_n += 1
+                                    st.success(f"✅ เปิดบิลแล้ว {_ob_opened_n} รายการ")
                                     for tid in txn_ids:
                                         st.session_state[f"chk_{tid}"] = False
                                     st.rerun()
