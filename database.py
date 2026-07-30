@@ -1827,10 +1827,13 @@ def get_tiktok_affiliate_orders_df(shop_name: str = None) -> pd.DataFrame:
 
 
 def set_tiktok_affiliate_billed(order_id: str, sku_id: str, billed: bool) -> None:
-    """แก้เฉพาะ billed_in_system ทีละแถว — ใช้ upsert คีย์เดียวกับข้อมูลหลักแต่ส่งแค่
-    คอลัมน์นี้ไป ไม่กระทบคอลัมน์อื่น (ต้องมีแถว order_id+sku_id นี้อยู่แล้วจากการนำเข้าไฟล์)"""
+    """แก้เฉพาะ billed_in_system (+ billed_at) ทีละแถว — ใช้ upsert คีย์เดียวกับข้อมูลหลักแต่
+    ส่งแค่ 2 คอลัมน์นี้ไป ไม่กระทบคอลัมน์อื่น (ต้องมีแถว order_id+sku_id นี้อยู่แล้วจากการนำเข้าไฟล์)
+    billed_at stamp เวลาปัจจุบันตอนเปิดบิล เคลียร์เป็น null ตอนยกเลิก — ใช้ทำสรุป "เปิดบิลวันนี้"
+    ที่ยืนอยู่ได้แม้รีเฟรช/ปิดหน้าไป ต่างจาก session_state ล้วนๆ ที่หายตอนปิดหน้า"""
+    from datetime import datetime, timezone
     _retry(lambda: get_supabase().table("tiktok_affiliate_orders").update(
-        {"billed_in_system": billed}
+        {"billed_in_system": billed, "billed_at": datetime.now(timezone.utc).isoformat() if billed else None}
     ).eq("order_id", order_id).eq("sku_id", sku_id).execute())
     get_tiktok_affiliate_orders_df.clear()
 
