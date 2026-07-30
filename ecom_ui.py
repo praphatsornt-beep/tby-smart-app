@@ -409,7 +409,7 @@ def _render_tiktok_affiliate():
     )
     _tt_m1, _tt_m2, _tt_m3 = st.columns(3)
     _tt_m1.metric("ยอดขายรวม", f"{_tt_df['payment_amount'].sum():,.0f} ฿")
-    _tt_m2.metric("ยอดนายหน้ารวม", f"{_tt_df['commission_payable_actual'].sum():,.0f} ฿")
+    _tt_m2.metric("ยอดนายหน้ารวม", f"{_tt_df['commission_payable_actual'].sum():,.2f} ฿")
     _tt_m3.metric("ยอดที่เราได้โดยประมาณ", f"{_tt_df['net_amount'].sum():,.0f} ฿")
 
     st.divider()
@@ -456,7 +456,7 @@ def _render_tiktok_affiliate():
     st.markdown(f"**เลือกอยู่: {_tt_sel_n} รายการ**")
     _tt_s1, _tt_s2, _tt_s3 = st.columns(3)
     _tt_s1.metric("ยอดขายรวม", f"{_tt_sel_rows['payment_amount'].sum():,.0f} ฿")
-    _tt_s2.metric("ยอดค่านายหน้ารวม", f"{_tt_sel_rows['commission_payable_actual'].sum():,.0f} ฿")
+    _tt_s2.metric("ยอดค่านายหน้ารวม", f"{_tt_sel_rows['commission_payable_actual'].sum():,.2f} ฿")
     _tt_s3.metric("คะแนนรวม", f"{_tt_sel_points:,.0f} PV")
 
     _tt_confirm_col, _tt_undo_col = st.columns(2)
@@ -487,7 +487,7 @@ def _render_tiktok_affiliate():
             st.markdown(f"**📅 เปิดบิลไปแล้ววันนี้: {len(_tt_billed_today)} รายการ**")
             _tt_bt1, _tt_bt2, _tt_bt3 = st.columns(3)
             _tt_bt1.metric("ยอดขายรวม", f"{_tt_billed_today['payment_amount'].sum():,.0f} ฿")
-            _tt_bt2.metric("ยอดค่านายหน้ารวม", f"{_tt_billed_today['commission_payable_actual'].sum():,.0f} ฿")
+            _tt_bt2.metric("ยอดค่านายหน้ารวม", f"{_tt_billed_today['commission_payable_actual'].sum():,.2f} ฿")
             _tt_bt3.metric("คะแนนรวม", f"{_tt_bt_points:,.0f} PV")
 
 
