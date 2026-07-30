@@ -444,7 +444,7 @@ def _render_tiktok_affiliate():
             "ยอดขาย": "{:,.2f}", "ยอดนายหน้า": "{:,.2f}", "ยอดที่เราได้โดยประมาณ": "{:,.2f}",
         }),
         hide_index=True, width="stretch",
-        column_order=["เปิดบิลแล้ว", "เลขที่ออเดอร์", "วันที่", "สินค้า", "นายหน้า",
+        column_order=["เลขที่ออเดอร์", "วันที่", "สินค้า", "นายหน้า",
                       "ยอดขาย", "ยอดนายหน้า", "ยอดที่เราได้โดยประมาณ", "สถานะออเดอร์"],
         selection_mode="multi-row", on_select="rerun", key="ecom_tiktok_detail_select",
     )
