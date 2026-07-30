@@ -374,6 +374,12 @@ def _render_tiktok_affiliate():
 
     _tt_df["วันที่"] = pd.to_datetime(_tt_df["order_created_at"]).dt.strftime("%d/%m/%Y")
 
+    # ── filter ตามชื่อนายหน้า ──────────────────────────────────────────
+    _tt_creators = ["ทั้งหมด"] + sorted(_tt_df["creator_username"].dropna().unique().tolist())
+    _tt_creator_filter = st.selectbox("🔍 กรองตามนายหน้า", _tt_creators, key="ecom_tiktok_creator_filter")
+    if _tt_creator_filter != "ทั้งหมด":
+        _tt_df = _tt_df[_tt_df["creator_username"] == _tt_creator_filter]
+
     # ── สรุปยอดต่อนายหน้า ─────────────────────────────────────────────
     st.subheader("สรุปยอดต่อนายหน้า")
     _tt_summary = _tt_df.groupby("creator_username").agg(
@@ -399,7 +405,25 @@ def _render_tiktok_affiliate():
     st.subheader("รายละเอียดออเดอร์")
     _tt_only_unbilled = st.checkbox("แสดงเฉพาะที่ยังไม่เปิดบิล", key="ecom_tiktok_only_unbilled")
     _tt_detail_df = _tt_df[~_tt_df["billed_in_system"]] if _tt_only_unbilled else _tt_df
-    _tt_detail_df = _tt_detail_df.sort_values("order_created_at", ascending=False)
+    _tt_detail_df = _tt_detail_df.sort_values("order_created_at", ascending=False).reset_index(drop=True)
+
+    # คะแนน (PV) ต่อแถว = จำนวน x units_per_pack x points_per_unit ของสินค้าที่ map ไว้แล้ว
+    # จับคู่ผ่าน sku_id (ไม่ใช่ product_code — เช็คข้อมูลจริงแล้วว่า product_code ในตารางนี้
+    # คือรหัส SKU ตัวเลขยาวของ TikTok เอง ไม่ตรงกับ products.id เลย ส่วน sku_id ตรงกับคีย์
+    # platform_item_id ที่ตั้งไว้แล้วใน "Map สินค้า → ระบบ" ของแท็บ ⚙️ ตั้งค่า/นำเข้าข้อมูล)
+    _tt_prod_map = db.get_ecommerce_product_map()
+    _tt_points_by_id = {p["id"]: float(p.get("points_per_unit") or 0) for p in db.get_products()}
+
+    def _tt_row_points(sku_id, qty):
+        _m = _tt_prod_map.get(("tiktok", sku_id))
+        if not _m:
+            return 0.0
+        return _tt_points_by_id.get(_m["product_id"], 0.0) * float(_m.get("units_per_pack") or 1) * (qty or 0)
+
+    _tt_points_series = pd.Series(
+        [_tt_row_points(sid, q) for sid, q in zip(_tt_detail_df["sku_id"], _tt_detail_df["qty"])],
+        index=_tt_detail_df.index,
+    )
 
     _tt_edit_cols = ["order_id", "sku_id", "วันที่", "item_name", "creator_username",
                       "payment_amount", "commission_payable_actual", "net_amount",
@@ -425,12 +449,23 @@ def _render_tiktok_affiliate():
         },
     )
 
+    # บันทึกทันทีที่ติ๊กเปลี่ยน แต่ "ไม่" เรียก st.rerun() ซ้อนทับ rerun อัตโนมัติของ
+    # data_editor เอง — เดิมเรียกซ้ำทำให้หน้าเด้งกลับบนสุด/แถวสลับตำแหน่งทุกครั้งที่ติ๊ก
+    # (โดยเฉพาะตอนเปิด "แสดงเฉพาะที่ยังไม่เปิดบิล" ที่แถวจะหายไปจากลิสต์ทันที)
     _tt_changed = _tt_edited[_tt_edited["เปิดบิลแล้ว"] != _tt_edit_df["เปิดบิลแล้ว"]]
     if not _tt_changed.empty:
         for _, _tt_row in _tt_changed.iterrows():
             db.set_tiktok_affiliate_billed(_tt_row["เลขที่ออเดอร์"], _tt_row["SKU"], bool(_tt_row["เปิดบิลแล้ว"]))
-        st.success(f"✅ อัปเดตสถานะเปิดบิล {len(_tt_changed)} รายการ")
-        st.rerun()
+        st.toast(f"✅ อัปเดตสถานะเปิดบิล {len(_tt_changed)} รายการ")
+
+    # ── สรุปรายการที่ติ๊ก "เปิดบิลแล้ว" อยู่ตอนนี้ ────────────────────────
+    _tt_sel_mask = _tt_edited["เปิดบิลแล้ว"] == True  # noqa: E712 (pandas bool mask ต้องใช้ ==)
+    _tt_sel_n = int(_tt_sel_mask.sum())
+    st.markdown(f"**✅ ที่ติ๊กอยู่ตอนนี้: {_tt_sel_n} รายการ**")
+    _tt_s1, _tt_s2, _tt_s3 = st.columns(3)
+    _tt_s1.metric("ยอดขายรวม", f"{_tt_edited.loc[_tt_sel_mask, 'ยอดขาย'].sum():,.0f} ฿")
+    _tt_s2.metric("ยอดค่านายหน้ารวม", f"{_tt_edited.loc[_tt_sel_mask, 'ยอดนายหน้า'].sum():,.0f} ฿")
+    _tt_s3.metric("คะแนนรวม", f"{_tt_points_series[_tt_sel_mask].sum():,.0f} PV")
 
 
 _PROFIT_GREEN = "#14874e"   # ตรงกับ --tby-green ใน app.py
