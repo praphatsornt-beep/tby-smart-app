@@ -426,11 +426,24 @@ def _render_tiktok_affiliate():
     st.subheader("รายละเอียดออเดอร์")
     _tt_creators = ["ทั้งหมด"] + sorted(_tt_df["creator_username"].dropna().unique().tolist())
     _tt_creator_filter = st.selectbox("🔍 กรองตามนายหน้า", _tt_creators, key="ecom_tiktok_creator_filter")
+
+    _tt_order_dates = pd.to_datetime(_tt_df["order_created_at"]).dt.date
+    _tt_min_date, _tt_max_date = _tt_order_dates.min(), _tt_order_dates.max()
+    _tt_dc1, _tt_dc2 = st.columns(2)
+    _tt_date_from = _tt_dc1.date_input("📅 จาก (วันที่ออเดอร์)", value=_tt_min_date,
+                                        min_value=_tt_min_date, max_value=_tt_max_date, key="ecom_tiktok_date_from")
+    _tt_date_to = _tt_dc2.date_input("ถึง", value=_tt_max_date,
+                                      min_value=_tt_min_date, max_value=_tt_max_date, key="ecom_tiktok_date_to")
+
     _tt_only_unbilled = st.checkbox("แสดงเฉพาะที่ยังไม่เปิดบิล", key="ecom_tiktok_only_unbilled")
 
     _tt_detail_df = _tt_df
     if _tt_creator_filter != "ทั้งหมด":
         _tt_detail_df = _tt_detail_df[_tt_detail_df["creator_username"] == _tt_creator_filter]
+    _tt_detail_df = _tt_detail_df[
+        (pd.to_datetime(_tt_detail_df["order_created_at"]).dt.date >= _tt_date_from)
+        & (pd.to_datetime(_tt_detail_df["order_created_at"]).dt.date <= _tt_date_to)
+    ]
     if _tt_only_unbilled:
         _tt_detail_df = _tt_detail_df[~_tt_detail_df["billed_in_system"]]
     _tt_detail_df = _tt_detail_df.sort_values("order_created_at", ascending=False).reset_index(drop=True)
