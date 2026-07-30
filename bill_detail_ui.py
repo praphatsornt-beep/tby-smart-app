@@ -1101,8 +1101,19 @@ def render(products, customers):
                                                  key=f"multi_mode_{customer_name}", label_visibility="collapsed")
 
                             if _mc_mode == "📄 เปิดบิลอย่างเดียว":
+                                # โชว์ตารางรายการที่จะเปิดบิล เหมือนโหมดจ่ายเงิน/รับของ —
+                                # กันเปิดบิลผิดรายการโดยไม่รู้ตัว (ผู้ใช้ขอ 2026-07-30)
+                                _ob_rows = sel_rows.loc[_unbilled_mask].copy()
+                                _ob_rows["จะเปิดบิล"] = _ob_rows.apply(
+                                    lambda r: int(r["ยังไม่เปิด"]) if "ยังไม่เปิด" in r and pd.notna(r.get("ยังไม่เปิด"))
+                                    else int(r["สั่ง"]), axis=1,
+                                )
                                 _ob_pv_str = f", ⭐ {_unbilled_pv:,.0f} PV" if _unbilled_pv > 0 else ""
                                 st.info(f"จะเปิดบิล {_unbilled_cnt} รายการที่ยังไม่เปิดบิล{_ob_pv_str}")
+                                st.dataframe(
+                                    _ob_rows[["สินค้า", "เลขที่บิล", "จะเปิดบิล", "ยอดรวม"]],
+                                    hide_index=True, width="stretch",
+                                )
                                 _ob_c1, _ob_c2 = st.columns(2)
                                 _ob_bill_no   = _ob_c1.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key=f"multi_openonly_bn_{customer_name}")
                                 _ob_bill_date = _ob_c2.date_input(
@@ -1110,9 +1121,8 @@ def render(products, customers):
                                 if st.button("📄 เปิดบิล", type="primary",
                                              width="stretch", key=f"multi_openonly_{customer_name}") \
                                         and _guard_double_submit(f"multi_openonly_{customer_name}"):
-                                    _ob_rows = sel_rows.loc[_unbilled_mask]
                                     for _, _obr in _ob_rows.iterrows():
-                                        _obr_qty = int(_obr["ยังไม่เปิด"]) if "ยังไม่เปิด" in _obr else int(_obr["สั่ง"])
+                                        _obr_qty = int(_obr["จะเปิดบิล"])
                                         if _obr_qty > 0:
                                             db.open_bill_partial(
                                                 _obr["id"], _obr_qty,
