@@ -394,8 +394,12 @@ def _render_tiktok_affiliate():
         _tt_df = _tt_df[_tt_df["creator_username"] == _tt_creator_filter]
 
     # ── สรุปยอดต่อนายหน้า ─────────────────────────────────────────────
+    # นับเฉพาะออเดอร์ที่ยังไม่เปิดบิล — ที่เปิดบิลแล้วถือว่าจัดการเสร็จแล้ว ไม่ควรมาบวก
+    # ค้างอยู่ในสรุปยอดที่ต้องตามนี้อีก
     st.subheader("สรุปยอดต่อนายหน้า")
-    _tt_summary = _tt_df.groupby("creator_username").agg(
+    st.caption("นับเฉพาะออเดอร์ที่ยังไม่เปิดบิล — ที่เปิดบิลแล้วไม่รวมในสรุปนี้")
+    _tt_unbilled_df = _tt_df[~_tt_df["billed_in_system"]]
+    _tt_summary = _tt_unbilled_df.groupby("creator_username").agg(
         จำนวนออเดอร์=("order_id", "nunique"),
         ยอดขายรวม=("payment_amount", "sum"),
         ยอดนายหน้า=("commission_payable_actual", "sum"),
@@ -408,9 +412,9 @@ def _render_tiktok_affiliate():
         hide_index=True, width="stretch",
     )
     _tt_m1, _tt_m2, _tt_m3 = st.columns(3)
-    _tt_m1.metric("ยอดขายรวม", f"{_tt_df['payment_amount'].sum():,.0f} ฿")
-    _tt_m2.metric("ยอดนายหน้ารวม", f"{_tt_df['commission_payable_actual'].sum():,.2f} ฿")
-    _tt_m3.metric("ยอดที่เราได้โดยประมาณ", f"{_tt_df['net_amount'].sum():,.0f} ฿")
+    _tt_m1.metric("ยอดขายรวม", f"{_tt_unbilled_df['payment_amount'].sum():,.0f} ฿")
+    _tt_m2.metric("ยอดนายหน้ารวม", f"{_tt_unbilled_df['commission_payable_actual'].sum():,.2f} ฿")
+    _tt_m3.metric("ยอดที่เราได้โดยประมาณ", f"{_tt_unbilled_df['net_amount'].sum():,.0f} ฿")
 
     st.divider()
 
@@ -438,11 +442,19 @@ def _render_tiktok_affiliate():
         "order_status": "สถานะออเดอร์", "billed_in_system": "เปิดบิลแล้ว",
     }).reset_index(drop=True)
 
-    st.caption('คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว) แล้วกด "ยืนยันเปิดบิล" ด้านล่าง — ยังไม่บันทึกจนกว่าจะกดยืนยัน')
+    # Streamlit ไม่รองรับปิดการเลือกเฉพาะบางแถวในตารางเดียวกัน (เลือกได้ทั้งตารางหรือไม่มีเลย)
+    # เลยทำได้แค่ทำให้แถวที่เปิดบิลแล้วดูจางลง (เตือนสายตาว่าไม่ควรแตะอีก) ส่วนล็อกจริงๆ ทำ
+    # ที่ปุ่ม "ยืนยันเปิดบิล" ด้านล่าง — ข้ามแถวที่เปิดบิลแล้วในสิ่งที่เลือกเสมอ ต่อให้ติ๊กไว้
+    def _tt_dim_billed(row):
+        _dim = "background-color:#f0f0ee;color:#b3b0a8"
+        return [_dim] * len(row) if row["เปิดบิลแล้ว"] else [""] * len(row)
+
+    st.caption('คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว) แล้วกด "ยืนยันเปิดบิล" ด้านล่าง — '
+               'ยังไม่บันทึกจนกว่าจะกดยืนยัน (แถวจางๆ = เปิดบิลไปแล้ว แก้ไขอีกไม่ได้ผ่านปุ่มยืนยัน)')
     _tt_evt = st.dataframe(
         _tt_disp_df.style.format({
             "ยอดขาย": "{:,.2f}", "ยอดนายหน้า": "{:,.2f}", "ยอดที่เราได้โดยประมาณ": "{:,.2f}",
-        }),
+        }).apply(_tt_dim_billed, axis=1),
         hide_index=True, width="stretch",
         column_order=["เลขที่ออเดอร์", "วันที่", "สินค้า", "นายหน้า",
                       "ยอดขาย", "ยอดนายหน้า", "ยอดที่เราได้โดยประมาณ", "สถานะออเดอร์"],
@@ -482,18 +494,23 @@ def _render_tiktok_affiliate():
             hide_index=True, width="stretch",
         )
 
+    # แยกตามสถานะปัจจุบัน — ยืนยันเปิดบิล ทำงานเฉพาะแถวที่ยังไม่เปิดบิล (ข้ามที่เปิดแล้วเสมอ
+    # แม้จะติ๊กไว้ในสิ่งที่เลือก), ยกเลิกเปิดบิล ทำงานเฉพาะแถวที่เปิดบิลแล้วเท่านั้น
+    _tt_confirm_rows = _tt_sel_rows[~_tt_sel_rows["billed_in_system"]]
+    _tt_undo_rows = _tt_sel_rows[_tt_sel_rows["billed_in_system"]]
+
     _tt_confirm_col, _tt_undo_col = st.columns(2)
-    if _tt_confirm_col.button(f"✅ ยืนยันเปิดบิล ({_tt_sel_n} รายการ)", type="primary", width="stretch",
-                               disabled=_tt_sel_n == 0, key="ecom_tiktok_confirm_bill"):
-        for _, _tt_r in _tt_sel_rows.iterrows():
+    if _tt_confirm_col.button(f"✅ ยืนยันเปิดบิล ({len(_tt_confirm_rows)} รายการ)", type="primary", width="stretch",
+                               disabled=len(_tt_confirm_rows) == 0, key="ecom_tiktok_confirm_bill"):
+        for _, _tt_r in _tt_confirm_rows.iterrows():
             db.set_tiktok_affiliate_billed(_tt_r["order_id"], _tt_r["sku_id"], True)
-        st.success(f"✅ เปิดบิลแล้ว {_tt_sel_n} รายการ")
+        st.success(f"✅ เปิดบิลแล้ว {len(_tt_confirm_rows)} รายการ")
         st.rerun()
-    if _tt_undo_col.button(f"↩️ ยกเลิกเปิดบิลที่เลือก ({_tt_sel_n} รายการ)", width="stretch",
-                            disabled=_tt_sel_n == 0, key="ecom_tiktok_undo_bill"):
-        for _, _tt_r in _tt_sel_rows.iterrows():
+    if _tt_undo_col.button(f"↩️ ยกเลิกเปิดบิลที่เลือก ({len(_tt_undo_rows)} รายการ)", width="stretch",
+                            disabled=len(_tt_undo_rows) == 0, key="ecom_tiktok_undo_bill"):
+        for _, _tt_r in _tt_undo_rows.iterrows():
             db.set_tiktok_affiliate_billed(_tt_r["order_id"], _tt_r["sku_id"], False)
-        st.success(f"↩️ ยกเลิกเปิดบิลแล้ว {_tt_sel_n} รายการ")
+        st.success(f"↩️ ยกเลิกเปิดบิลแล้ว {len(_tt_undo_rows)} รายการ")
         st.rerun()
 
     st.divider()
