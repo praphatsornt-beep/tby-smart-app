@@ -396,6 +396,7 @@ tr:nth-child(even) td{{background:#f0f0f0}}
                     "items":         _rs_row.get("items") or [],
                     "shipment_id":   _rs_row["id"],
                     "remark":        _rs_row.get("notes", ""),
+                    "default_carrier": _rs_row.get("carrier", ""),
                 }
                 if _old_tn:
                     st.session_state["_change_carrier_old_track"] = _old_tn

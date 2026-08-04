@@ -1960,9 +1960,12 @@ def get_shipments(customer_id: str = None) -> list[dict]:
     return q.order("created_at", desc=True).execute().data
 
 
-def update_shipment_tracking(shipment_id: str, tracking_no: str) -> None:
+def update_shipment_tracking(shipment_id: str, tracking_no: str, carrier: str = None) -> None:
+    _upd = {"tracking_no": tracking_no}
+    if carrier:
+        _upd["carrier"] = carrier
     _retry(lambda: get_supabase().table("shipments").update(
-        {"tracking_no": tracking_no}
+        _upd
     ).eq("id", shipment_id).execute())
     get_shipments.clear()
     get_customer_ledger.clear()

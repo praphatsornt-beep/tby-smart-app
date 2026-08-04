@@ -1000,8 +1000,13 @@ def _show_carrier_select():
         st.dataframe(pd.DataFrame(_cmp), hide_index=True, width="stretch",
                      column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
 
-        _cs_carrier = st.selectbox("เลือกขนส่ง", [o["name"] for o in opts_ok],
-                                   index=0, key="_cs_carrier_sel")
+        _cs_names = [o["name"] for o in opts_ok]
+        _cs_default_idx = (
+            _cs_names.index(info["default_carrier"])
+            if info.get("default_carrier") in _cs_names else 0
+        )
+        _cs_carrier = st.selectbox("เลือกขนส่ง", _cs_names,
+                                   index=_cs_default_idx, key="_cs_carrier_sel")
         _cs_code    = iship_api.COURIER_MAP.get(_cs_carrier, "")
         _cs_sel_opt = next((o for o in opts_ok if o["name"] == _cs_carrier), {})
         _cs_total   = _cs_sel_opt.get("total", 0)
@@ -1077,7 +1082,7 @@ def _show_carrier_select():
                 _cs_order_id = _extract_iship_order_id(_cs_resp)
                 st.session_state["_iship_debug_resp"] = _cs_resp
                 if tab == "ship" and info.get("shipment_id") and _cs_track:
-                    db.update_shipment_tracking(info["shipment_id"], _cs_track)
+                    db.update_shipment_tracking(info["shipment_id"], _cs_track, carrier=_cs_carrier)
                 if tab in ("sale", "pending"):
                     try:
                         db.create_shipment({

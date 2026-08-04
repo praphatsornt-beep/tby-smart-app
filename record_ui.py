@@ -786,6 +786,7 @@ def render(tab1, products, customers, customer_map):
                                 "customer_name":customer["name"],
                                 "shipment_id":  "",
                                 "remark":       "",
+                                "default_carrier": m_carrier,
                             }
                             pass  # _iship_carrier_select set above — dialog triggers automatically
                     elif not is_shipping and _rx_df is not None and _rx_edit is not None:
@@ -865,6 +866,7 @@ def render(tab1, products, customers, customer_map):
                                 "customer_name":_rxo_customer["name"],
                                 "shipment_id":  "",
                                 "remark":       f"[ส่งพัสดุ|{m_carrier}|{m_postcode}|น้ำหนัก={_rxo_weight_g/1000:.2f}kg|ค่าส่ง={_rxo_ship_fee:.0f}{_rxo_zone_tag}]",
+                                "default_carrier": m_carrier,
                             }
                         st.rerun()
 
@@ -1432,6 +1434,7 @@ def render(tab1, products, customers, customer_map):
                             "customer_name":_sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
                             "shipment_id":  _sp_new_id,
                             "remark":       _sp_remark,
+                            "default_carrier": _sp_carrier,
                         }
                         st.session_state["_open_carrier_select"] = True
                     for _k in _sp_keys:
