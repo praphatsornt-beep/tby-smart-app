@@ -179,6 +179,7 @@ def render(customers):
             if s == "sale": return "💰"
             if s == "ship": return "📦"
             if s == "manual": return "🖨️"
+            if s == "recovered": return "♻️"
             return "—"
 
         def _billing_check(r):
@@ -235,7 +236,8 @@ def render(customers):
                 "📤":       st.column_config.CheckboxColumn("📤", default=False, width=45,
                                 help="เลือกเพื่อส่ง iShip ใหม่"),
                 "แหล่ง":    st.column_config.TextColumn("แหล่ง", width=50,
-                                help="🛒 = บันทึกขาย  📦 = ส่งของ"),
+                                help="💰 = บันทึกขาย  📦 = ส่งของ  🖨️ = พิมพ์ป้ายเอง (ไม่ผ่าน iShip)  "
+                                     "♻️ = กู้คืนหลังข้อมูลหาย 2026-07-21"),
                 "COD":      st.column_config.NumberColumn("COD", format="%,.0f", width=75),
                 "💸":       st.column_config.TextColumn("💸", width=45),
                 "💰 เทียบยอด": st.column_config.TextColumn("💰 เทียบยอด", width=90,
