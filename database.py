@@ -499,7 +499,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
 
     # shipments
     ships = _retry(lambda: db.table("shipments").select(
-        "id, created_at, carrier, tracking_no, items, source"
+        "id, created_at, carrier, tracking_no, items, source, recipient_name"
     ).eq("customer_id", customer_id).order("created_at").execute().data)
 
     rows = []
@@ -596,6 +596,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
             "qty_out": 0,
             "amount":  0.0,
             "txn_id":  "",
+            "recipient_name": s.get("recipient_name") or "",
         })
     rows.sort(key=lambda r: r["date"])
     return rows

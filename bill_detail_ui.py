@@ -271,6 +271,7 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
 
     # delivery type heuristic per bill
     _ship_dates_set = {_r["date"] for _r in _l_ships}
+    _ship_recipient_by_date = {_r["date"]: _r["recipient_name"] for _r in _l_ships if _r.get("recipient_name")}
     _recv_bill_set  = {_r["bill_no"] for _r in _l_receipts if _r["bill_no"]}
     _initial_recv_by_bill: dict = {}
     for _r in _l_orders:
@@ -369,8 +370,15 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
                     f"(คงค้าง {_r['remaining']:,.0f}฿)"
                 )
         elif _r["type"] == "รับของ":
+            _rv_recipient = _ship_recipient_by_date.get(_r["date"], "")
+            if _r["date"] in _ship_dates_set:
+                _rv_icon = "🚚"
+                _rv_tag  = f" (ส่งถึง {_rv_recipient})" if _rv_recipient else " (ส่งพัสดุ)"
+            else:
+                _rv_icon = "🏪"
+                _rv_tag  = ""
             st.caption(
-                f"📦 {_r['date']} {_tagstr}รับของ {_r['detail']} "
+                f"{_rv_icon} {_r['date']} {_tagstr}รับของ {_r['detail']}{_rv_tag} "
                 f"(ค้างรับเหลือ {_r['remaining_qty']} ชิ้น)"
             )
         elif _r["type"] == "ส่งพัสดุ":
