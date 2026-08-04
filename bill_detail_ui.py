@@ -14,7 +14,7 @@ from ui_helpers import (
     _to_bkk, _to_excel_bytes,
     _style_status, _fmt_note, _guard_double_submit,
     _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
-    merge_bill_family_products,
+    merge_bill_family_products, _unbilled_pv_of,
 )
 
 
@@ -59,7 +59,7 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
         _l_is_cod = _l_all_df["สถานะจ่าย"] == "COD"
         _l_owed = _l_all_df.loc[~_l_is_cod, "ค้างจ่าย"].sum()
         _l_pending = int(_l_all_df["ค้างรับ"].sum())
-        _l_unbilled_pv = _l_all_df.loc[_l_all_df["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum()
+        _l_unbilled_pv = _unbilled_pv_of(_l_all_df)
     else:
         _l_owed = 0.0
         _l_pending = 0
@@ -723,7 +723,7 @@ def render(products, customers):
                     txn_ids = grp["id"].tolist()
                     _luid   = _cust_line_map.get(customer_name, "")
                     _gid    = _cust_gid_map.get(customer_name, "")
-                    _unbilled_pv = grp.loc[grp["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in grp.columns else 0
+                    _unbilled_pv = _unbilled_pv_of(grp)
                     # ── แถวเดียวต่อลูกค้า (ยอดรวมทุกบิล) — คลิกชื่อเพื่อดูรายละเอียดทีละบิล ──
                     _cust_bills = _bills_from_df(grp)
                     _bill_rows_info = []
@@ -859,8 +859,8 @@ def render(products, customers):
                             st.session_state["_t5_out_active_cust"] = customer_name
                             sel_rows       = grp[grp["id"].isin(selected_ids)]
                             total_selected = sel_rows["ค้างจ่าย"].sum()
-                            _sel_pv = sel_rows["PV รวม"].sum() if "PV รวม" in sel_rows.columns else 0
-                            _pv_str = f"  |  ⭐ PV รวม **{_sel_pv:,.0f}**" if _sel_pv > 0 else ""
+                            _sel_pv = _unbilled_pv_of(sel_rows)
+                            _pv_str = f"  |  ⭐ PV ที่ยังไม่เปิดบิล **{_sel_pv:,.0f}**" if _sel_pv > 0 else ""
                             st.info(f"เลือก {len(selected_ids)} รายการ — ค้างจ่ายรวม **{total_selected:,.0f} บาท**{_pv_str}")
 
                         st.divider()
@@ -1110,7 +1110,7 @@ def render(products, customers):
                             _unbilled_mask = sel_rows["สถานะบิล"] == "ยังไม่เปิดบิล"
                             _any_unbilled  = _unbilled_mask.any()
                             _unbilled_cnt  = int(_unbilled_mask.sum())
-                            _unbilled_pv   = sel_rows.loc[_unbilled_mask, "PV รวม"].sum() if "PV รวม" in sel_rows.columns else 0
+                            _unbilled_pv   = _unbilled_pv_of(sel_rows.loc[_unbilled_mask])
                             _billed_mask   = sel_rows["สถานะบิล"] == "เปิดบิลแล้ว"
                             _any_billed    = _billed_mask.any()
 

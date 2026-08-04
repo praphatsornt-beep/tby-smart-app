@@ -749,6 +749,20 @@ def _ledger_to_txn_df(ledger_data: list) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
+def _unbilled_pv_of(df: pd.DataFrame) -> float:
+    """PV ของส่วนที่ยังไม่เปิดบิลจริง คิดตามสัดส่วน ยังไม่เปิด/สั่ง ต่อแถว — แถวที่เปิดบิล
+    บางส่วนไปแล้ว (สถานะบิลรวมยังเป็น "ยังไม่เปิดบิล" จนกว่าจะเปิดครบ) ต้องหักส่วนที่เปิด
+    ไปแล้วออกก่อน ไม่งั้นจะนับ PV ส่วนที่เปิดบิลไปแล้วซ้ำเข้ามาด้วย (นับทั้งแถวทั้งที่เปิด
+    ไปแล้วบางส่วน) ไม่ต้อง filter สถานะบิลก่อนเรียก เพราะแถวที่เปิดบิลครบแล้ว ยังไม่เปิด=0
+    อยู่แล้ว สูตรนี้หักออกให้เองอัตโนมัติ"""
+    if df.empty or "PV รวม" not in df.columns:
+        return 0.0
+    if "ยังไม่เปิด" not in df.columns or "สั่ง" not in df.columns:
+        return float(df["PV รวม"].sum())
+    _denom = df["สั่ง"].replace(0, 1)
+    return float((df["PV รวม"] * df["ยังไม่เปิด"] / _denom).sum())
+
+
 def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
     """รวมรายการในแต่ละบิล (groupby เลขที่บิล) คืน DataFrame หนึ่งแถวต่อบิล:
     เลขที่บิล, วันที่, ยอดรวม, ค้างจ่าย, ค้างรับ, is_paid, is_billed, pv_unbilled
@@ -767,10 +781,10 @@ def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
               .sort_values("วันที่", ascending=False))
     _bills["is_paid"] = _bills["ค้างจ่าย"] <= 0.01
 
-    _pv_col = "PV รวม" if "PV รวม" in df.columns else None
-    if _pv_col:
-        _pv_map = (df[df.get("สถานะบิล", pd.Series(dtype=str)) == "ยังไม่เปิดบิล"]
-                   .groupby("เลขที่บิล")[_pv_col].sum())
+    if "PV รวม" in df.columns and "ยังไม่เปิด" in df.columns and "สั่ง" in df.columns:
+        _pv_df = df.copy()
+        _pv_df["_pv_unbilled_row"] = _pv_df["PV รวม"] * _pv_df["ยังไม่เปิด"] / _pv_df["สั่ง"].replace(0, 1)
+        _pv_map = _pv_df.groupby("เลขที่บิล")["_pv_unbilled_row"].sum()
         _bills["pv_unbilled"] = _bills["เลขที่บิล"].map(_pv_map).fillna(0)
     else:
         _bills["pv_unbilled"] = 0
@@ -933,7 +947,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     total_amount      = show_p["ยอดรวม"].sum()
     total_paid        = show_p["จ่ายแล้ว"].sum()
     total_outstanding = show_p["ค้างจ่าย"].sum()
-    unbilled_pv       = show_p.loc[show_p["สถานะบิล"] == "ยังไม่เปิดบิล", "PV รวม"].sum() if "PV รวม" in show_p.columns else 0
+    unbilled_pv       = _unbilled_pv_of(show_p)
     today_str         = date.today().strftime("%d/%m/%Y")
     filter_label      = "รายการทั้งหมด"
     bill_nos          = show_p["เลขที่บิล"].dropna().unique().tolist() if "เลขที่บิล" in show_p.columns else []
