@@ -1175,6 +1175,25 @@ def _show_iship_success_dialog():
             f"{it.get('name','')} ×{it.get('qty',0)}" for it in info["items"]
         ))
     st.divider()
+    _dluid = info.get("line_user_id", "")
+    _dlgid = info.get("group_id", "")
+    if (_dluid or _dlgid) and line_api.is_configured():
+        if st.button("📨 ส่งแจ้งลูกค้าทาง LINE", width="stretch"):
+            _dlr = line_api.push_tracking(
+                _dluid,
+                info.get("dst_name", ""),
+                info.get("tracking", ""),
+                info.get("carrier", ""),
+                float(info.get("cod_amount", 0)),
+                group_id=_dlgid,
+            )
+            if _dlr.get("ok"):
+                st.success("✅ ส่ง LINE แล้ว")
+                if info.get("shipment_id"):
+                    db.mark_line_notified(info["shipment_id"])
+            else:
+                st.error(f"❌ {_dlr.get('error','')}")
+
     _track = info.get("tracking", "")
     _iship_oid = info.get("iship_order_id", "")
     if _track:
@@ -1194,24 +1213,6 @@ def _show_iship_success_dialog():
             with st.expander("🔍 iShip response (หา order_id)"):
                 st.json(_dbg_resp)
 
-    _dluid = info.get("line_user_id", "")
-    _dlgid = info.get("group_id", "")
-    if (_dluid or _dlgid) and line_api.is_configured():
-        if st.button("📨 ส่งแจ้งลูกค้าทาง LINE", width="stretch"):
-            _dlr = line_api.push_tracking(
-                _dluid,
-                info.get("dst_name", ""),
-                info.get("tracking", ""),
-                info.get("carrier", ""),
-                float(info.get("cod_amount", 0)),
-                group_id=_dlgid,
-            )
-            if _dlr.get("ok"):
-                st.success("✅ ส่ง LINE แล้ว")
-                if info.get("shipment_id"):
-                    db.mark_line_notified(info["shipment_id"])
-            else:
-                st.error(f"❌ {_dlr.get('error','')}")
     if st.button("✅ ตกลง / เริ่มออเดอร์ใหม่", type="primary", width="stretch"):
         _tab = info.get("tab", "sale")
         st.session_state.pop("_iship_success_info", None)
