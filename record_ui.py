@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
 from math import ceil
 import uuid
 
@@ -1394,7 +1394,7 @@ def render(tab1, products, customers, customer_map):
                     try:
                         db.create_shipment({
                             "id":             _sp_new_id,
-                            "created_at":     str(_sp_date),
+                            "created_at":     datetime.combine(_sp_date, datetime.now().time()).isoformat(),
                             "customer_id":    _sp_cid or None,
                             "recipient_name": _sp_rname.strip(),
                             "phone":          _sp_rphone.strip(),
