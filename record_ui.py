@@ -770,6 +770,8 @@ def render(tab1, products, customers, customer_map):
                         _all_items = _new_items + _old_ship_items
                         if iship_api.is_configured():
                             st.session_state.pop("_cs_carrier_sel", None)
+                            st.session_state.pop("_cs_carrier_table", None)
+                            st.session_state.pop("_cs_table_sel_prev", None)
                             st.session_state["_iship_carrier_select"] = {
                                 "tab":          "sale",
                                 "postcode":     m_postcode,
@@ -850,6 +852,8 @@ def render(tab1, products, customers, customer_map):
                         )
                         if iship_api.is_configured() and _rxo_items:
                             st.session_state.pop("_cs_carrier_sel", None)
+                            st.session_state.pop("_cs_carrier_table", None)
+                            st.session_state.pop("_cs_table_sel_prev", None)
                             st.session_state["_iship_carrier_select"] = {
                                 "tab":          "sale",
                                 "postcode":     m_postcode,
@@ -1418,6 +1422,8 @@ def render(tab1, products, customers, customer_map):
                     ]))
                     if iship_api.is_configured():
                         st.session_state.pop("_cs_carrier_sel", None)
+                        st.session_state.pop("_cs_carrier_table", None)
+                        st.session_state.pop("_cs_table_sel_prev", None)
                         st.session_state["_iship_carrier_select"] = {
                             "tab":          "ship",
                             "postcode":     _sp_pc.strip(),

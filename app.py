@@ -997,10 +997,20 @@ def _show_carrier_select():
             _cmp.append({"ขนส่ง": ("🥇 " if _ci == 0 else "") + o["name"] + _pickup_txt,
                          "ค่าส่ง": o["base"], "พื้นที่พิเศษ": _sur_txt,
                          "น้ำมัน": _fuel_txt, "รวม (฿)": o["total"], "📐": _size_txt, "COD": _cod_txt})
-        st.dataframe(pd.DataFrame(_cmp), hide_index=True, width="stretch",
-                     column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")})
+        _cs_table_evt = st.dataframe(
+            pd.DataFrame(_cmp), hide_index=True, width="stretch",
+            column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")},
+            selection_mode="single-row", on_select="rerun", key="_cs_carrier_table",
+        )
+        st.caption("👆 คลิกแถวเพื่อเลือกขนส่งด้านล่างให้อัตโนมัติ")
 
         _cs_names = [o["name"] for o in opts_ok]
+        _cs_table_rows = _cs_table_evt.selection.rows if hasattr(_cs_table_evt, "selection") else []
+        _cs_table_sel  = _cs_table_rows[0] if _cs_table_rows and _cs_table_rows[0] < len(_cs_names) else None
+        if _cs_table_sel is not None and _cs_table_sel != st.session_state.get("_cs_table_sel_prev"):
+            st.session_state["_cs_table_sel_prev"] = _cs_table_sel
+            st.session_state["_cs_carrier_sel"] = _cs_names[_cs_table_sel]
+
         _cs_default_idx = (
             _cs_names.index(info["default_carrier"])
             if info.get("default_carrier") in _cs_names else 0

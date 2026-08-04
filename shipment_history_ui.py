@@ -380,6 +380,8 @@ tr:nth-child(even) td{{background:#f0f0f0}}
             if st.button("📤 ส่ง iShip ใหม่", type="primary", key="sh_resend_btn"):
                 _old_tn = (_rs_row.get("tracking_no") or "").strip()
                 st.session_state.pop("_cs_carrier_sel", None)
+                st.session_state.pop("_cs_carrier_table", None)
+                st.session_state.pop("_cs_table_sel_prev", None)
                 st.session_state["_iship_carrier_select"] = {
                     "tab":           "ship",
                     "postcode":      _rs_row.get("postal_code", ""),
