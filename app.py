@@ -980,9 +980,35 @@ def _show_carrier_select():
         ))
     st.caption(f"⚖️ {weight_kg:.2f} kg (ส่งจริงให้ iShip {weight_kg_iship:.2f} kg)"
                + (f"  |  COD: {int(cod_amt):,} ฿" if cod_amt else ""))
+
+    # ── ขนาดกล่อง (ไม่บังคับ) — ใช้เทียบน้ำหนักตามปริมาตรกับน้ำหนักจริง เอาตัวที่
+    # หนักกว่าคิดราคา (ขนส่งทุกเจ้าคิดแบบนี้จริง ยืนยันจากราคาจริงบน iShip 2026-08-04)
+    # กันเลือกขนส่งผิดเวลากล่องใหญ่แต่เบา (เช่น ของฟู กล่องใหญ่ น้ำหนักน้อย) ราคาประเมิน
+    # ต่ำกว่าที่ขนส่งจะเรียกเก็บจริงมาก — ใส่ได้กับขนส่งทุกประเภทไม่ใช่แค่ Bulky อีกต่อไป
+    _bulky_presets = get_bulky_presets()
+    _preset_opts = ["-- ไม่ระบุขนาด --"] + [p["name"] for p in _bulky_presets] + ["กรอกเอง"]
+    _preset_sel  = st.selectbox(
+        "📐 ขนาดกล่อง (ไม่บังคับ — ช่วยประเมินราคาแม่นขึ้นถ้ากล่องใหญ่แต่เบา)",
+        _preset_opts, key="_cs_box_preset",
+        help="ระบบจะเทียบน้ำหนักตามปริมาตร (กว้าง×ยาว×สูง/4000) กับน้ำหนักจริง แล้วใช้ตัวที่หนักกว่าคิดราคา",
+    )
+    _pm = next((p for p in _bulky_presets if p["name"] == _preset_sel), None)
+    _cs_len = _cs_wid = _cs_hgt = 0
+    if _preset_sel == "กรอกเอง" or _pm:
+        _def_l, _def_w, _def_h = (_pm["l"], _pm["w"], _pm["h"]) if _pm else (30, 30, 20)
+        _b1, _b2, _b3 = st.columns(3)
+        _cs_len = _b1.number_input("ยาว (cm)", 1, 300, _def_l, key=f"_cs_len_{_preset_sel}")
+        _cs_wid = _b2.number_input("กว้าง (cm)", 1, 300, _def_w, key=f"_cs_wid_{_preset_sel}")
+        _cs_hgt = _b3.number_input("สูง (cm)", 1, 300, _def_h, key=f"_cs_hgt_{_preset_sel}")
+
+    _cs_vol_kg = carr.volumetric_weight_kg(_cs_len, _cs_wid, _cs_hgt)
+    if _cs_vol_kg > weight_kg:
+        st.info(f"📦 น้ำหนักตามปริมาตร **{_cs_vol_kg:.0f} kg** หนักกว่าน้ำหนักจริง ({weight_kg:.2f} kg) — ใช้ {_cs_vol_kg:.0f} kg คิดราคาแทน")
+
     st.divider()
 
-    opts     = carr.get_shipping_options(weight_kg, postcode, cod_amt > 0, cod_amt)
+    opts     = carr.get_shipping_options(weight_kg, postcode, cod_amt > 0, cod_amt,
+                                          length_cm=_cs_len, width_cm=_cs_wid, height_cm=_cs_hgt)
     opts_ok  = [o for o in opts if not o["exceeds_max"]]
     opts_exc = [o for o in opts if o["exceeds_max"]]
 
@@ -1029,26 +1055,10 @@ def _show_carrier_select():
         if not _cs_code:
             st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_cs_carrier}'")
 
-        _cs_is_bulky = "Bulky" in _cs_carrier
-        _cs_len = _cs_wid = _cs_hgt = 0
-        if _cs_is_bulky:
-            st.markdown("**📐 ขนาดกล่อง (จำเป็นสำหรับ Bulky)**")
-
-            # ── preset กล่อง (จัดการที่แท็บ ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง) ──────
-            _bulky_presets = get_bulky_presets()
-            if not _bulky_presets:
-                st.caption("ℹ️ ยังไม่มี preset ขนาดกล่อง — ไปเพิ่มได้ที่แท็บ ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง")
-
-            # dropdown เลือกขนาด
-            _preset_opts = ["-- เลือกขนาดกล่อง --"] + [p["name"] for p in _bulky_presets] + ["กรอกเอง"]
-            _preset_sel  = st.selectbox("ขนาดกล่อง", _preset_opts, key="_cs_bulky_preset")
-            _pm = next((p for p in _bulky_presets if p["name"] == _preset_sel), None)
-            _def_l, _def_w, _def_h = (_pm["l"], _pm["w"], _pm["h"]) if _pm else (30, 30, 20)
-
-            _b1, _b2, _b3 = st.columns(3)
-            _cs_len = _b1.number_input("ยาว (cm)", 1, 300, _def_l, key=f"_cs_len_{_preset_sel}")
-            _cs_wid = _b2.number_input("กว้าง (cm)", 1, 300, _def_w, key=f"_cs_wid_{_preset_sel}")
-            _cs_hgt = _b3.number_input("สูง (cm)", 1, 300, _def_h, key=f"_cs_hgt_{_preset_sel}")
+        _cs_is_bulky   = "Bulky" in _cs_carrier
+        _cs_missing_dims = _cs_is_bulky and not (_cs_len and _cs_wid and _cs_hgt)
+        if _cs_missing_dims:
+            st.warning("⚠️ ขนส่งประเภท Bulky ต้องระบุขนาดกล่องด้านบนก่อนถึงจะส่งได้")
 
         st.divider()
         _btn1, _btn2, _btn3 = st.columns(3)
@@ -1058,7 +1068,7 @@ def _show_carrier_select():
         if _cs_already_sent:
             st.warning("⚠️ รายการนี้ส่ง iShip สำเร็จไปแล้ว — ถ้าหน้าต่างนี้ค้าง กด \"ข้าม\"/ปิดหน้าต่างแล้วเข้าไปดูใน 🚚 ประวัติการส่งแทน (ป้องกันไม่ให้ส่งซ้ำโดยไม่ตั้งใจ)")
         if _btn1.button("📦 ส่ง iShip", type="primary", width="stretch", key="_cs_send",
-                        disabled=_cs_already_sent):
+                        disabled=_cs_already_sent or _cs_missing_dims):
             _cs_items       = info.get("items", [])
             _cs_item_codes  = " ".join(
                 f"{(it.get('product_id') or it.get('name','')).upper()}-{it.get('qty',0)}"

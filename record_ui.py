@@ -779,6 +779,7 @@ def render(tab1, products, customers, customer_map):
                             st.session_state.pop("_cs_carrier_sel", None)
                             st.session_state.pop("_cs_carrier_table", None)
                             st.session_state.pop("_cs_table_sel_prev", None)
+                            st.session_state.pop("_cs_box_preset", None)
                             st.session_state["_iship_carrier_select"] = {
                                 "tab":          "sale",
                                 "postcode":     m_postcode,
@@ -862,6 +863,7 @@ def render(tab1, products, customers, customer_map):
                             st.session_state.pop("_cs_carrier_sel", None)
                             st.session_state.pop("_cs_carrier_table", None)
                             st.session_state.pop("_cs_table_sel_prev", None)
+                            st.session_state.pop("_cs_box_preset", None)
                             st.session_state["_iship_carrier_select"] = {
                                 "tab":          "sale",
                                 "postcode":     m_postcode,
@@ -1437,6 +1439,7 @@ def render(tab1, products, customers, customer_map):
                         st.session_state.pop("_cs_carrier_sel", None)
                         st.session_state.pop("_cs_carrier_table", None)
                         st.session_state.pop("_cs_table_sel_prev", None)
+                        st.session_state.pop("_cs_box_preset", None)
                         st.session_state["_iship_carrier_select"] = {
                             "tab":          "ship",
                             "postcode":     _sp_pc.strip(),

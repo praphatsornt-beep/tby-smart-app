@@ -42,6 +42,30 @@ class TestGetShippingOptions(unittest.TestCase):
         ft = next(o for o in carriers.get_shipping_options(1, "96000") if o["id"] == "flash_thunder")
         self.assertEqual(ft["surcharge"], 50)
 
+    def test_volumetric_weight_used_when_bigger_than_actual(self):
+        # ยืนยันจากราคาจริงบน iShip (2026-08-04): กล่อง 40x45x23cm น้ำหนักจริง 3kg
+        # ส่ง กทม -> ปริมาตร 41400/4000 = 10.35 -> ปัดขึ้น 11kg -> ใช้เรท 11kg แทน 3kg
+        opts = carriers.get_shipping_options(3, "10110", length_cm=40, width_cm=45, height_cm=23)
+        by_id = {o["id"]: o for o in opts}
+        self.assertEqual(by_id["flash_thunder"]["billed_kg"], 11.0)
+        self.assertEqual(by_id["flash_thunder"]["total"], 140)
+        self.assertEqual(by_id["flash_pro_dd"]["total"], 140)
+        self.assertEqual(by_id["flash_pro_ok"]["total"], 140)
+        self.assertEqual(by_id["flash_100cm"]["total"], 145)
+
+    def test_volumetric_weight_ignored_when_no_dimensions(self):
+        # ไม่ระบุขนาด -> ใช้น้ำหนักจริงเหมือนเดิม ไม่กระทบพฤติกรรมเดิม
+        opts = carriers.get_shipping_options(3, "10110")
+        ft = next(o for o in opts if o["id"] == "flash_thunder")
+        self.assertEqual(ft["billed_kg"], 3.0)
+        self.assertEqual(ft["volumetric_kg"], 0.0)
+
+    def test_actual_weight_used_when_bigger_than_volumetric(self):
+        # กล่องเล็กแต่หนัก -> ใช้น้ำหนักจริง ไม่ใช่ปริมาตร (ปริมาตรน้อยกว่า)
+        opts = carriers.get_shipping_options(10, "10110", length_cm=20, width_cm=20, height_cm=20)
+        ft = next(o for o in opts if o["id"] == "flash_thunder")
+        self.assertEqual(ft["billed_kg"], 10.0)  # 20*20*20/4000=2kg < 10kg จริง
+
 
 class TestBracketBreakpoints(unittest.TestCase):
     def test_inter_express_flat_brackets(self):

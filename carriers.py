@@ -266,11 +266,26 @@ _CARRIER_DEFS = [
 
 # ── Main comparison function ──────────────────────────────────────────────────
 
+def volumetric_weight_kg(length_cm: float, width_cm: float, height_cm: float) -> float:
+    """น้ำหนักตามปริมาตร (dimensional weight) — สูตร (กว้าง×ยาว×สูง)/4000 ปัดขึ้น
+    ยืนยันจากตารางราคาจริงของ Flash บน iShip (2026-08-04): กล่อง 40×45×23 ซม. =
+    41,400 ลบ.ซม. ÷ 4000 = 10.35 → ปัดขึ้น 11 กก. ตรงกับ "ค่าขนส่ง(ปริมาตร)" ที่ iShip
+    แสดงจริงทุกเรท (Thunder/Pro DD/Pro OK/100CM) เป๊ะ — ไม่มีให้ 0 ถ้าขนาดไม่ครบ 3 ด้าน"""
+    if length_cm <= 0 or width_cm <= 0 or height_cm <= 0:
+        return 0.0
+    from math import ceil as _ceil
+    return float(_ceil((length_cm * width_cm * height_cm) / 4000))
+
+
 def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
-                    is_cod: bool = False, cod_amount: float = 0) -> dict | None:
+                    is_cod: bool = False, cod_amount: float = 0,
+                    length_cm: float = 0, width_cm: float = 0, height_cm: float = 0) -> dict | None:
     """คิดราคา 1 ขนส่ง (tuple จาก _CARRIER_DEFS) สำหรับน้ำหนัก/รหัสไปรษณีย์ที่กำหนด
     คืน None ถ้าขนส่งนี้ใช้ไม่ได้เลย (ต่ำกว่าขั้นต่ำ, ไม่รับ COD, เกินวงเงิน COD, หรือหาราคาไม่เจอ)
-    """
+
+    ถ้ามีขนาดกล่องครบ (length/width/height > 0) เทียบน้ำหนักจริงกับน้ำหนักตามปริมาตร
+    ใช้ตัวที่หนักกว่าคิดราคา (มาตรฐานขนส่งทั่วไป — ยืนยันจากตารางราคาจริงของ Flash แล้ว)
+    น้ำหนักขั้นต่ำ (min_kg) ยังเช็คกับน้ำหนักจริงเท่านั้น ไม่เกี่ยวกับปริมาตร"""
     cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup = carrier_def
     if weight_kg < min_kg:
         return None  # ไม่แสดงถ้าน้ำหนักต่ำกว่าขั้นต่ำ (เช่น Flash Pro DD Bulky ต้อง >5kg)
@@ -281,12 +296,14 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
 
     pc  = str(postcode).strip()
     bkk = _is_bkk(pc)
-    exceeds = weight_kg > max_kg
-    lookup_kg = min(weight_kg, max_kg) if exceeds else weight_kg
+    vol_kg = volumetric_weight_kg(length_cm, width_cm, height_cm)
+    billed_kg = max(weight_kg, vol_kg)
+    exceeds = billed_kg > max_kg
+    lookup_kg = min(billed_kg, max_kg) if exceeds else billed_kg
     base = _lookup(table, lookup_kg, bkk)
     if base is None:
         return None
-    sur, sur_label = sur_fn(pc, weight_kg)
+    sur, sur_label = sur_fn(pc, billed_kg)
     subtotal = base + sur + fuel
     cod_fee = ceil(max(subtotal, cod_amount) * cod_pct / 100) if is_cod else 0
     return {
@@ -306,18 +323,23 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
         "max_cm":        max_cm,
         "max_cod_amt":   max_cod_amt,
         "manual_pickup": manual_pickup,
+        "billed_kg":     billed_kg,
+        "volumetric_kg": vol_kg,
     }
 
 
 def get_shipping_options(weight_kg: float, postcode: str,
-                         is_cod: bool = False, cod_amount: float = 0) -> list[dict]:
+                         is_cod: bool = False, cod_amount: float = 0,
+                         length_cm: float = 0, width_cm: float = 0, height_cm: float = 0) -> list[dict]:
     """
     คำนวณค่าส่งทุกขนส่งสำหรับน้ำหนักและรหัสไปรษณีย์ที่กำหนด
     คืน list ของ dict เรียงจากถูกไปแพง (เกินน้ำหนักสูงสุดอยู่ท้าย)
+    ระบุขนาดกล่อง (length/width/height) เพื่อเทียบน้ำหนักตามปริมาตรด้วย — ไม่บังคับ
     """
     results = []
     for carrier_def in _CARRIER_DEFS:
-        r = _price_one_box(carrier_def, weight_kg, postcode, is_cod, cod_amount)
+        r = _price_one_box(carrier_def, weight_kg, postcode, is_cod, cod_amount,
+                            length_cm, width_cm, height_cm)
         if r is not None:
             results.append(r)
     results.sort(key=lambda x: (x["exceeds_max"], x["total"]))
