@@ -314,21 +314,23 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
     for _r in _l_receipts:
         _bk = _r["bill_no"] or "—"
         _recv_groups.setdefault((_bk, _r["date"]), []).append(
-            (_r["product"], int(_r["qty_out"]))
+            (_r["product"], int(_r["qty_out"]), _r.get("source", ""), _r.get("recipient_name", ""))
         )
     _recv_cumul: dict = {}
     for _r in _l_orders:
         _bk = _r["bill_no"] or "—"
         _recv_cumul[_bk] = _recv_cumul.get(_bk, 0) + _r.get("initial_received", 0)
     for (_bk, _rd), _items in sorted(_recv_groups.items(), key=lambda x: x[0][1]):
-        _batch_qty = sum(q for _, q in _items)
+        _batch_qty = sum(q for _, q, _, _ in _items)
         _recv_cumul[_bk] = _recv_cumul.get(_bk, 0) + _batch_qty
         _rem_recv = max(0, _bills_tl.get(_bk, {}).get("qty", 0) - _recv_cumul[_bk])
+        _recv_ship_recipient = next((r for _, _, s, r in _items if s == "ship" and r), "")
         if _bk in _bills_tl:
             _bills_tl[_bk]["events"].append({
                 "date": _rd, "order": 1, "type": "รับของ",
-                "detail": ",  ".join(f"{p} ×{q}" for p, q in _items),
+                "detail": ",  ".join(f"{p} ×{q}" for p, q, _, _ in _items),
                 "remaining_qty": _rem_recv,
+                "ship_recipient": _recv_ship_recipient,
             })
 
     # sort events within each bill
@@ -370,8 +372,13 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
                     f"(คงค้าง {_r['remaining']:,.0f}฿)"
                 )
         elif _r["type"] == "รับของ":
-            _rv_recipient = _ship_recipient_by_date.get(_r["date"], "")
-            if _r["date"] in _ship_dates_set:
+            # source="ship" ติดมาจาก partial_events ตรงๆ (บันทึกไว้ตั้งแต่ตอนบันทึกขาย
+            # เลือกส่งพัสดุ) แม่นกว่าการเดาจากวันที่ชนกับ shipment — เผื่อลูกค้ามีของเก่า
+            # ที่ไม่เกี่ยวข้องถูกบันทึกวันเดียวกันพอดี ถ้าไม่มี source (ประวัติเก่าก่อนมี
+            # คอลัมน์นี้) fallback ไปเดาจากวันที่เหมือนเดิม
+            _rv_recipient = _r.get("ship_recipient") or _ship_recipient_by_date.get(_r["date"], "")
+            _rv_is_ship = bool(_r.get("ship_recipient")) or _r["date"] in _ship_dates_set
+            if _rv_is_ship:
                 _rv_icon = "🚚"
                 _rv_tag  = f" (ส่งถึง {_rv_recipient})" if _rv_recipient else " (ส่งพัสดุ)"
             else:

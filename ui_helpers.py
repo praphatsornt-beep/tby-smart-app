@@ -363,12 +363,20 @@ def _build_success_info(tracking, tab, customer, dst_name, dst_phone, address,
 
 def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,
                                event_date: str,
-                               collect_ship_items: bool = False) -> tuple:
+                               collect_ship_items: bool = False,
+                               recipient_name: str = "") -> tuple:
     """Process receive-old-items loop.
 
     Returns (saved_count, total_pay, ship_items).
     ship_items is populated only when *collect_ship_items* is True.
-    """
+
+    เมื่อ collect_ship_items=True และมี recipient_name (มาจากฟอร์มบันทึกขายตอนเลือก
+    ส่งพัสดุ) แปลว่าของเก่าชุดนี้ถูกส่งพัสดุไปพร้อมออเดอร์ใหม่จริง — tag source="ship"
+    + recipient_name ติดไปกับ partial_events ที่สร้าง เพื่อให้บัตรลูกค้าโชว์ได้ตรงว่า
+    "ส่งของ" ไปหาใคร แทนการเดาจากวันที่ชนกับ shipment (ไม่แม่นถ้ามีของเก่าอื่นที่ไม่
+    เกี่ยวข้องพอดีถูกบันทึกวันเดียวกัน) ถ้าไม่ส่งพัสดุ (ฝากของ/รับแล้วหน้าร้าน) หรือไม่มี
+    recipient_name ให้ปล่อย source ว่างไว้เหมือนบันทึกจากยอดค้างปกติ — ไม่ใช่ทุกครั้งที่
+    เรียกจากบันทึกขายจะมีการส่งพัสดุจริง"""
     saved_count = 0
     total_pay   = 0.0
     ship_items  = []
@@ -386,14 +394,18 @@ def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,
         else:
             _apply_pay = round(_owed_this * _actual_qty / _cap, 2) if _owed_this > 0.01 and _cap > 0 else 0.0
         _etype = "ทั้งคู่" if _apply_pay > 0.01 else "รับของ"
-        _pe_rows.append({
+        _pe_row = {
             "id":             str(uuid.uuid4()),
             "date":           event_date,
             "transaction_id": rx_df.iloc[_ri]["_tid"],
             "qty_received":   _actual_qty,
             "amount_paid":    _apply_pay,
             "event_type":     _etype,
-        })
+        }
+        if collect_ship_items and recipient_name:
+            _pe_row["source"] = "ship"
+            _pe_row["recipient_name"] = recipient_name
+        _pe_rows.append(_pe_row)
         saved_count += 1
         total_pay   += _apply_pay
         if _apply_pay > 0.01 and _apply_pay >= _owed_this - 0.01:

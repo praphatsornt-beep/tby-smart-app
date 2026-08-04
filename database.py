@@ -493,7 +493,7 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
     for _i in range(0, len(txn_ids), _batch):
         _chunk = txn_ids[_i:_i + _batch]
         _evts = _retry(lambda: db.table("partial_events").select(
-            "id, date, transaction_id, qty_received, amount_paid, event_type"
+            "id, date, transaction_id, qty_received, amount_paid, event_type, source, recipient_name"
         ).in_("transaction_id", _chunk).order("date").execute().data)
         all_events.extend(_evts)
 
@@ -563,6 +563,8 @@ def get_customer_ledger(customer_id: str) -> list[dict]:
                 "amount":   0.0,
                 "txn_id":   e["transaction_id"],
                 "event_id": e["id"] + "-r",
+                "source":         e.get("source") or "",
+                "recipient_name": e.get("recipient_name") or "",
             })
         if float(e.get("amount_paid") or 0) > 0:
             rows.append({

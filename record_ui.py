@@ -764,6 +764,7 @@ def render(tab1, products, customers, customer_map):
                             _, _, _old_ship_items = _process_old_items_receipt(
                                 _rx_edit, _rx_df, _rx_pay_map, _pending_rx,
                                 event_date=str(m_date), collect_ship_items=True,
+                                recipient_name=r_name or customer["name"],
                             )
                         _new_items = [{"product_id": p["id"], "name": p["name"], "qty": qty}
                                       for p, qty, _ in valid_items]
@@ -849,6 +850,7 @@ def render(tab1, products, customers, customer_map):
                         _, _, _rxo_items = _process_old_items_receipt(
                             _rx_edit, _rx_df, _rx_pay_map, _pending_rx,
                             event_date=str(m_date), collect_ship_items=True,
+                            recipient_name=r_name or _rxo_customer["name"],
                         )
                         if iship_api.is_configured() and _rxo_items:
                             st.session_state.pop("_cs_carrier_sel", None)
