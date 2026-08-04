@@ -231,6 +231,7 @@ def render(tab1, products, customers, customer_map):
                 # ── น้ำหนักจากของค้างที่กำลังรับ ─────────────────────────────────
                 _prod_weight_map   = {p["id"]: float(p.get("weight_grams") or 0) for p in products}
                 _rx_extra_weight_g = 0.0
+                m_extra_weight_g   = 0.0  # น้ำหนักของอื่นที่ไม่ใช่สินค้าในระบบ (กรอกได้ตอนส่งพัสดุ)
                 _has_rx_action     = False
                 if _rx_df is not None and _rx_edit is not None:
                     for _ri, _rrow in _rx_edit.iterrows():
@@ -456,6 +457,11 @@ def render(tab1, products, customers, customer_map):
                                               "r_dt_searchbox", "r_pc_suggest",
                                               stage_dt="_fr_dt", stage_am="_fr_am", stage_pv="_fr_pv",
                                               am_searchbox_key="r_am_searchbox")
+                            m_extra_weight_g = st.number_input(
+                                "⚖️ น้ำหนักเพิ่มเติม (กก.) — ของอื่นที่ไม่ใช่สินค้าในระบบ",
+                                min_value=0.0, step=0.1, key="m_extra_weight",
+                                help="เช่น ฝากสินค้าเพิ่มที่ไม่ได้อยู่ในรายการสินค้า — บวกเข้าน้ำหนักรวมเพื่อประเมินค่าส่งให้ตรงขึ้น",
+                            ) * 1000
                             if m_customer != "— เลือกลูกค้า —":
                                 if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                     try:
@@ -489,7 +495,7 @@ def render(tab1, products, customers, customer_map):
                     _sum_qty = sum(q for _, q, _ in valid_items)
                     _sum_row("📦 จำนวนสินค้า", f"{_sum_qty} ชิ้น")
                     if m_delivery == "ส่งพัสดุ":
-                        _early_weight = (raw_weight_g(valid_items, _rx_extra_weight_g) + BOX_WEIGHT_G) / 1000
+                        _early_weight = (raw_weight_g(valid_items, _rx_extra_weight_g + m_extra_weight_g) + BOX_WEIGHT_G) / 1000
                         _sum_row("⚖️ น้ำหนัก", f"{_early_weight:.2f} kg")
                     if m_delivery != "ส่งพัสดุ":
                         st.divider()
@@ -534,7 +540,7 @@ def render(tab1, products, customers, customer_map):
 
                 # auto-select carrier จาก weight + location (รันทุกครั้งที่ items หรือ postcode เปลี่ยน)
                 if m_delivery == "ส่งพัสดุ" and len(m_postcode.strip()) == 5:
-                    _w_kg = (raw_weight_g(valid_items, _rx_extra_weight_g) + BOX_WEIGHT_G) / 1000
+                    _w_kg = (raw_weight_g(valid_items, _rx_extra_weight_g + m_extra_weight_g) + BOX_WEIGHT_G) / 1000
                     _optimal = _pick_carrier(m_postcode.strip(), _w_kg)
                     _sig = (m_postcode.strip(), round(_w_kg, 2))
                     if _sig != st.session_state.get("_carrier_sig"):
@@ -550,7 +556,7 @@ def render(tab1, products, customers, customer_map):
                 if valid_items or (_has_rx_action and m_delivery == "ส่งพัสดุ"):
                     total_amt    = sum(float(p["price"]) * q for p, q, _ in valid_items)
                     total_pv     = sum(float(p["points_per_unit"]) * q for p, q, _ in valid_items)
-                    _raw_weight  = raw_weight_g(valid_items, _rx_extra_weight_g)
+                    _raw_weight  = raw_weight_g(valid_items, _rx_extra_weight_g + m_extra_weight_g)
                     if _rx_old_items and valid_items:
                         _old_label = "  +  ".join(f"{it['name']} ×{it['qty']}" for it in _rx_old_items)
                         st.info(f"📦 ของเก่า: {_old_label}  ·  ยอดค้างที่จะจ่าย **{_rx_total_pay:,.0f}฿**  ·  รวมยอดทั้งหมด **{total_amt + _rx_total_pay:,.0f}฿**")
@@ -659,7 +665,7 @@ def render(tab1, products, customers, customer_map):
                 if _submit_clicked and _guard_double_submit("m_submit"):
                     customer     = customer_map[m_customer]
                     is_shipping  = m_delivery == "ส่งพัสดุ"
-                    _raw_w_save  = raw_weight_g(valid_items, _rx_extra_weight_g)
+                    _raw_w_save  = raw_weight_g(valid_items, _rx_extra_weight_g + m_extra_weight_g)
                     total_w_g    = _raw_w_save + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
                     if is_shipping:
                         fees_save = carrier_fees(_raw_w_save, m_postcode)
@@ -1210,7 +1216,12 @@ def render(tab1, products, customers, customer_map):
                     {"product_id": p["id"], "name": p["name"], "qty": qty}
                     for p, qty, _ in _sp_valid_items
                 ]
-                _sp_raw_weight   = raw_weight_g(_sp_valid_items)
+                _sp_extra_weight_g = st.number_input(
+                    "⚖️ น้ำหนักเพิ่มเติม (กก.) — ของอื่นที่ไม่ใช่สินค้าในระบบ",
+                    min_value=0.0, step=0.1, key=f"sp_extra_wt_v{_sp_av}",
+                    help="เช่น ฝากสินค้าเพิ่มที่ไม่ได้อยู่ในรายการสินค้า — บวกเข้าน้ำหนักรวมเพื่อประเมินค่าส่งให้ตรงขึ้น",
+                ) * 1000
+                _sp_raw_weight   = raw_weight_g(_sp_valid_items) + _sp_extra_weight_g
                 _sp_total_weight = _sp_raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
                 _sp_total_amt = sum(float(p.get("price") or 0) * qty for p, qty, _ in _sp_valid_items)
 
