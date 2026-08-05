@@ -123,6 +123,16 @@ class TestGetShippingOptions(unittest.TestCase):
                 o = next(x for x in opts if x["id"] == "kex")
                 self.assertEqual(o["max_cm"], expected_cm)
 
+    def test_dhl_max_cm_uneven_steps_then_capped_at_max_weight(self):
+        # ยืนยันจากตารางจริงของ DHL eCommerce (2026-08-05) — ไล่ขึ้นแบบขั้นบันไดไม่เท่ากัน
+        # ช่วง 1-13kg แล้วค่อย +5cm/kg สม่ำเสมอ 14-34kg ก่อนกระโดดไปแตะเพดาน 250cm ที่ 35kg
+        cases = {1: 70, 2: 80, 5: 90, 9: 110, 14: 125, 30: 205, 34: 225, 35: 250}
+        for kg, expected_cm in cases.items():
+            with self.subTest(kg=kg):
+                opts = carriers.get_shipping_options(kg, "10110")
+                o = next(x for x in opts if x["id"] == "dhl")
+                self.assertEqual(o["max_cm"], expected_cm)
+
 
 class TestBracketBreakpoints(unittest.TestCase):
     def test_inter_express_flat_brackets(self):
