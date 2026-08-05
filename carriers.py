@@ -27,6 +27,16 @@ _FLASH_THUNDER = {
     49:(665,648),50:(679,659),
 }
 
+_FLASH_THUNDER_SIZE_CM = {  # กว้าง+ยาว+สูง รวมสูงสุดต่อน้ำหนัก (ซม.) — เพิ่มทีละ 5ซม./กก. ตั้งแต่
+    # 6กก. ขึ้นไป (คงที่ 80 ที่ 1-5กก.) จนแตะเพดาน 280ซม. ที่ 45กก. แล้วคงที่ยาวถึง 50กก.
+    # ยืนยันจากตารางราคา+เงื่อนไขจริงของ Flash Thunder บน iShip เต็มตาราง 1-50กก. (2026-08-05)
+    1:80,2:80,3:80,4:80,5:80,6:85,7:90,8:95,9:100,10:105,
+    11:110,12:115,13:120,14:125,15:130,16:135,17:140,18:145,19:150,20:155,
+    21:160,22:165,23:170,24:175,25:180,26:185,27:190,28:195,29:200,30:205,
+    31:210,32:215,33:220,34:225,35:230,36:235,37:240,38:245,39:250,40:255,
+    41:260,42:265,43:270,44:275,45:280,46:280,47:280,48:280,49:280,50:280,
+}
+
 _SPX = {
     1:(17,28),2:(21,33),3:(24,35),4:(36,36),5:(44,39),6:(50,44),7:(55,50),
     8:(66,61),9:(77,72),10:(88,83),11:(99,94),12:(110,105),13:(121,110),
@@ -247,7 +257,7 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 # Flash Thunder ไม่มีข้อความยืนยันวงเงิน COD ตรงๆ — ใส่ 50,000 ตามขนส่งตระกูล Flash อื่น
 # ทั้งหมดที่ยืนยันแล้ว (Pro DD/OK/100CM/DD Bulky ล้วน 50,000) ยังไม่ได้ยืนยันแยกต่างหาก
 _CARRIER_DEFS = [
-    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,   280, True,  50000, True),
+    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True),
     ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,   280, True,  50000, True),
     ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,   280, True,  50000, True),
     ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   280, True,  50000, True),
@@ -275,6 +285,16 @@ def volumetric_weight_kg(length_cm: float, width_cm: float, height_cm: float) ->
         return 0.0
     from math import ceil as _ceil
     return float(_ceil((length_cm * width_cm * height_cm) / 4000))
+
+
+def _max_cm_for(max_cm, lookup_kg: float) -> int:
+    """max_cm ต่อขนส่งอาจเป็นเลขคงที่ (ทุกน้ำหนักเท่ากัน) หรือ dict {weight_kg: max_cm}
+    ถ้าจำกัดต่างกันไปตาม tier น้ำหนัก (เช่น Flash Thunder) — ใช้ weight bracket เดียวกับ
+    ที่ใช้ lookup ราคา (lookup_kg) เพื่อให้ตรงแถวเดียวกันในตารางเสมอ"""
+    if not isinstance(max_cm, dict):
+        return max_cm
+    w = max(1, ceil(lookup_kg))
+    return max_cm.get(w, max_cm[max(max_cm)])
 
 
 def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
@@ -320,7 +340,7 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
         "max_kg":        max_kg,
         "min_kg":        min_kg,
         "return_free":   return_free,
-        "max_cm":        max_cm,
+        "max_cm":        _max_cm_for(max_cm, lookup_kg),
         "max_cod_amt":   max_cod_amt,
         "manual_pickup": manual_pickup,
         "billed_kg":     billed_kg,

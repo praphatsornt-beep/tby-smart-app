@@ -66,6 +66,24 @@ class TestGetShippingOptions(unittest.TestCase):
         ft = next(o for o in opts if o["id"] == "flash_thunder")
         self.assertEqual(ft["billed_kg"], 10.0)  # 20*20*20/4000=2kg < 10kg จริง
 
+    def test_flash_thunder_max_cm_varies_by_weight_tier(self):
+        # ยืนยันจากตารางจริงของ Flash Thunder (2026-08-05): ขนาดจำกัดเพิ่มทีละ 5cm/kg
+        # ตั้งแต่ 6kg ขึ้นไป ไม่ใช่ 280cm คงที่ทุกน้ำหนักเหมือนเดิม
+        cases = {3: 80, 6: 85, 13: 120, 44: 275, 45: 280, 50: 280}
+        for kg, expected_cm in cases.items():
+            with self.subTest(kg=kg):
+                opts = carriers.get_shipping_options(kg, "10110")
+                ft = next(o for o in opts if o["id"] == "flash_thunder")
+                self.assertEqual(ft["max_cm"], expected_cm)
+
+    def test_flash_thunder_max_cm_follows_volumetric_bracket(self):
+        # กล่องเบาแต่ใหญ่ ถูกดันไปเรตน้ำหนักปริมาตรที่สูงกว่า -> ขนาดจำกัดต้องอ้างอิง
+        # bracket ปริมาตร (11kg) ไม่ใช่ bracket น้ำหนักจริง (3kg)
+        opts = carriers.get_shipping_options(3, "10110", length_cm=40, width_cm=45, height_cm=23)
+        ft = next(o for o in opts if o["id"] == "flash_thunder")
+        self.assertEqual(ft["billed_kg"], 11.0)
+        self.assertEqual(ft["max_cm"], 110)
+
 
 class TestBracketBreakpoints(unittest.TestCase):
     def test_inter_express_flat_brackets(self):
