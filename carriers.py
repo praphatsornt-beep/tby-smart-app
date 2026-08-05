@@ -308,7 +308,7 @@ _CARRIER_DEFS = [
     ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,   _KEX_SIZE_CM, True,  50000, False),
     ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,   400, True,  50000, False),
     ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False),
-    ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   250, True,  50000, False),
+    ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False),
     ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True),
     ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True),
     ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0,     False),

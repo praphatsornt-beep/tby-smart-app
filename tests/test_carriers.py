@@ -133,6 +133,15 @@ class TestGetShippingOptions(unittest.TestCase):
                 o = next(x for x in opts if x["id"] == "dhl")
                 self.assertEqual(o["max_cm"], expected_cm)
 
+    def test_dhl_next_day_max_cm_matches_dhl_ecommerce_table(self):
+        # ยืนยันจากตารางจริงของ DHL Next Day (2026-08-05) — ตรงกับ DHL eCommerce เป๊ะ
+        cases = {1: 70, 14: 125, 30: 205, 35: 250}
+        for kg, expected_cm in cases.items():
+            with self.subTest(kg=kg):
+                opts = carriers.get_shipping_options(kg, "10110")
+                o = next(x for x in opts if x["id"] == "dhl_next_day")
+                self.assertEqual(o["max_cm"], expected_cm)
+
 
 class TestBracketBreakpoints(unittest.TestCase):
     def test_inter_express_flat_brackets(self):
