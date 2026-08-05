@@ -113,6 +113,16 @@ class TestGetShippingOptions(unittest.TestCase):
                 o = next(x for x in opts if x["id"] == "flash_100cm")
                 self.assertEqual(o["max_cm"], expected_cm)
 
+    def test_kex_max_cm_uses_pickup_acceptance_tiers(self):
+        # ยืนยันจากเงื่อนไข "เข้ารับ" จริงของ KEX Express (2026-08-05) — แคบกว่าเพดาน
+        # 180cm ทั่วไปที่ตารางราคาเขียนไว้ (คนขับปฏิเสธรับหน้างานได้ถ้าเกินเกณฑ์นี้)
+        cases = {1: 75, 7: 75, 8: 90, 10: 90, 11: 120, 15: 120, 16: 180, 30: 180}
+        for kg, expected_cm in cases.items():
+            with self.subTest(kg=kg):
+                opts = carriers.get_shipping_options(kg, "10110")
+                o = next(x for x in opts if x["id"] == "kex")
+                self.assertEqual(o["max_cm"], expected_cm)
+
 
 class TestBracketBreakpoints(unittest.TestCase):
     def test_inter_express_flat_brackets(self):
