@@ -128,12 +128,16 @@ def render(customers):
     def _is_billing_anomaly(r):
         # นับเป็น "ผิดปกติ" เฉพาะฝั่งขาดทุน (ขนส่งคิดจริงแพงกว่าที่ประเมิน) — ฝั่งกำไร
         # (คิดจริงถูกกว่า) ไม่ต้องเตือน ไม่ใช่ปัญหาที่ต้องรีบเช็ค
+        # แถว source="recovered" (กู้คืนจากเหตุข้อมูลหาย 2026-07-21) ข้ามเสมอ — shipping_cost
+        # ของแถวพวกนี้เป็นค่าประมาณตอนกู้คืน ไม่ใช่ค่าที่คิดลูกค้าจริงตอนนั้น เทียบแล้วเพี้ยน
+        if r.get("source") == "recovered":
+            return False
         tn = r.get("tracking_no", "") or ""
         if not tn or tn not in _sh_billing_map:
             return False
         actual = float(_sh_billing_map[tn].get("discount_price") or 0)
         est    = float(r.get("shipping_cost") or 0)
-        return actual > 0 and est > 0 and (actual - est) > 2
+        return actual > 0 and est > 0 and (actual - est) > 0
 
     _f1, _f2, _f3 = st.columns(3)
     _filter_delayed = _f1.checkbox("🚚 ล่าช้า (>3 วัน)", key="sh_filter_delayed")
@@ -183,6 +187,8 @@ def render(customers):
             return "—"
 
         def _billing_check(r):
+            if r.get("source") == "recovered":
+                return "-"  # shipping_cost เป็นค่าประมาณตอนกู้คืนข้อมูล เทียบไม่ได้แม่นยำ
             tn = r.get("tracking_no", "") or ""
             if not tn or tn not in _sh_billing_map:
                 return "-"
@@ -193,7 +199,7 @@ def render(customers):
             if est <= 0:
                 return "?"
             diff = actual - est  # + = จริงแพงกว่าประเมิน (คิดลูกค้าขาด/ขาดทุน), - = จริงถูกกว่า (คิดลูกค้าเกิน/กำไร)
-            if abs(diff) <= 2:
+            if diff == 0:
                 return f"✅ {actual:,.0f}฿"
             if diff < 0:
                 return f"+{abs(diff):,.0f}฿"
