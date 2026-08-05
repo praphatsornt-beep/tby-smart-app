@@ -231,7 +231,6 @@ def render(tab1, products, customers, customer_map):
                 # ── น้ำหนักจากของค้างที่กำลังรับ ─────────────────────────────────
                 _prod_weight_map   = {p["id"]: float(p.get("weight_grams") or 0) for p in products}
                 _rx_extra_weight_g = 0.0
-                m_extra_weight_g   = 0.0  # น้ำหนักของอื่นที่ไม่ใช่สินค้าในระบบ (กรอกได้ตอนส่งพัสดุ)
                 _has_rx_action     = False
                 if _rx_df is not None and _rx_edit is not None:
                     for _ri, _rrow in _rx_edit.iterrows():
@@ -339,6 +338,12 @@ def render(tab1, products, customers, customer_map):
                                 """,
                                 height=1,
                             )
+
+                    m_extra_weight_g = st.number_input(
+                        "⚖️ น้ำหนักเพิ่มเติม (กก.) — ของอื่นที่ไม่ใช่สินค้าในระบบ",
+                        min_value=0.0, step=0.1, key="m_extra_weight",
+                        help="เช่น ฝากสินค้าเพิ่มที่ไม่ได้อยู่ในรายการสินค้า — บวกเข้าน้ำหนักรวมเพื่อประเมินค่าส่งให้ตรงขึ้น",
+                    ) * 1000
 
                     valid_items = _render_cart_card(_cart_key, products, title="บันทึกรายการขาย")
 
@@ -457,11 +462,6 @@ def render(tab1, products, customers, customer_map):
                                               "r_dt_searchbox", "r_pc_suggest",
                                               stage_dt="_fr_dt", stage_am="_fr_am", stage_pv="_fr_pv",
                                               am_searchbox_key="r_am_searchbox")
-                            m_extra_weight_g = st.number_input(
-                                "⚖️ น้ำหนักเพิ่มเติม (กก.) — ของอื่นที่ไม่ใช่สินค้าในระบบ",
-                                min_value=0.0, step=0.1, key="m_extra_weight",
-                                help="เช่น ฝากสินค้าเพิ่มที่ไม่ได้อยู่ในรายการสินค้า — บวกเข้าน้ำหนักรวมเพื่อประเมินค่าส่งให้ตรงขึ้น",
-                            ) * 1000
                             if m_customer != "— เลือกลูกค้า —":
                                 if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                     try:
@@ -1212,17 +1212,18 @@ def render(tab1, products, customers, customer_map):
                         height=1,
                     )
 
+                _sp_extra_weight_g = st.number_input(
+                    "⚖️ น้ำหนักเพิ่มเติม (กก.) — ของอื่นที่ไม่ใช่สินค้าในระบบ",
+                    min_value=0.0, step=0.1, key=f"sp_extra_wt_v{_sp_av}",
+                    help="เช่น ฝากสินค้าเพิ่มที่ไม่ได้อยู่ในรายการสินค้า — บวกเข้าน้ำหนักรวมเพื่อประเมินค่าส่งให้ตรงขึ้น",
+                ) * 1000
+
                 # ── รายการสินค้าที่ส่ง (ไม่ตัด stock) ───────────────────────────
                 _sp_valid_items = _render_cart_card(_sp_cart_key, _sp, title="รายการที่ส่ง")
                 _sp_items = [
                     {"product_id": p["id"], "name": p["name"], "qty": qty}
                     for p, qty, _ in _sp_valid_items
                 ]
-                _sp_extra_weight_g = st.number_input(
-                    "⚖️ น้ำหนักเพิ่มเติม (กก.) — ของอื่นที่ไม่ใช่สินค้าในระบบ",
-                    min_value=0.0, step=0.1, key=f"sp_extra_wt_v{_sp_av}",
-                    help="เช่น ฝากสินค้าเพิ่มที่ไม่ได้อยู่ในรายการสินค้า — บวกเข้าน้ำหนักรวมเพื่อประเมินค่าส่งให้ตรงขึ้น",
-                ) * 1000
                 _sp_raw_weight   = raw_weight_g(_sp_valid_items) + _sp_extra_weight_g
                 _sp_total_weight = _sp_raw_weight + BOX_WEIGHT_G  # สำหรับแสดงผลเท่านั้น
                 _sp_total_amt = sum(float(p.get("price") or 0) * qty for p, qty, _ in _sp_valid_items)
