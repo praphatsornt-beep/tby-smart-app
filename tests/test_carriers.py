@@ -84,6 +84,35 @@ class TestGetShippingOptions(unittest.TestCase):
         self.assertEqual(ft["billed_kg"], 11.0)
         self.assertEqual(ft["max_cm"], 110)
 
+    def test_flash_pro_ok_max_cm_matches_thunder_table(self):
+        # ยืนยันจากตารางจริงของ Flash Pro OK (2026-08-05) — ตรงกับ Thunder เป๊ะทุก tier
+        cases = {3: 80, 6: 85, 13: 120, 44: 275, 45: 280}
+        for kg, expected_cm in cases.items():
+            with self.subTest(kg=kg):
+                opts = carriers.get_shipping_options(kg, "10110")
+                o = next(x for x in opts if x["id"] == "flash_pro_ok")
+                self.assertEqual(o["max_cm"], expected_cm)
+
+    def test_flash_pro_dd_max_cm_differs_at_low_weight(self):
+        # ยืนยันจากตารางจริงของ Flash Pro DD (2026-08-05) — ต่างจาก Thunder เฉพาะ
+        # 1-4kg (60/60/60/70 แทน 80 คงที่) ตั้งแต่ 5kg ขึ้นไปตรงกับ Thunder เป๊ะ
+        cases = {1: 60, 2: 60, 3: 60, 4: 70, 5: 80, 6: 85, 13: 120, 45: 280}
+        for kg, expected_cm in cases.items():
+            with self.subTest(kg=kg):
+                opts = carriers.get_shipping_options(kg, "10110")
+                o = next(x for x in opts if x["id"] == "flash_pro_dd")
+                self.assertEqual(o["max_cm"], expected_cm)
+
+    def test_flash_100cm_max_cm_flat_until_10kg(self):
+        # ยืนยันจากตารางจริงของ Flash 100CM (2026-08-05) — คงที่ 100 ตลอด 1-9kg
+        # (ไม่ไล่ขึ้นทีละ 5cm/kg เหมือนเจ้าอื่น) แล้วค่อยไล่ขึ้นแบบเดียวกันตั้งแต่ 10kg
+        cases = {1: 100, 5: 100, 9: 100, 10: 105, 13: 120, 45: 280}
+        for kg, expected_cm in cases.items():
+            with self.subTest(kg=kg):
+                opts = carriers.get_shipping_options(kg, "10110")
+                o = next(x for x in opts if x["id"] == "flash_100cm")
+                self.assertEqual(o["max_cm"], expected_cm)
+
 
 class TestBracketBreakpoints(unittest.TestCase):
     def test_inter_express_flat_brackets(self):
