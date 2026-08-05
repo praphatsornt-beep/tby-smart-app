@@ -142,6 +142,27 @@ class TestGetShippingOptions(unittest.TestCase):
                 o = next(x for x in opts if x["id"] == "dhl_next_day")
                 self.assertEqual(o["max_cm"], expected_cm)
 
+    def test_jt_express_prices_corrected(self):
+        # ยืนยันจากตารางจริงของ J&T Express (2026-08-05) — ค่าเดิมผิด 84/100 แถว
+        # (ไม่ใช่ "เรทเดียวกันทั้งกรุงเทพ/ตจว" อย่างที่เข้าใจไว้เดิม แถมตัวเลขก็ผิดสะสม
+        # ตั้งแต่ 21kg ขึ้นไปด้วย)
+        cases = {1: 27, 3: 37, 21: 266, 50: 937, 100: 2094}
+        for kg, expected_base in cases.items():
+            with self.subTest(kg=kg):
+                opts = carriers.get_shipping_options(kg, "10110")
+                o = next(x for x in opts if x["id"] == "jt_express")
+                self.assertEqual(o["base"], expected_base)
+
+    def test_vol_divisor_differs_for_bulky_carriers(self):
+        # ยืนยันจากเงื่อนไขจริงของ Flash Pro DD Bulky/KEX Bulky/J&T Express (2026-08-05)
+        # — ทั้ง 3 ตัวระบุสูตรน้ำหนักปริมาตร "(กว้างxยาวxสูง÷6000)" ตรงๆ ต่างจากขนส่งอื่น
+        # ที่ใช้ 4000 — กล่อง 40x45x23 = 41,400 ลบ.ซม. -> /4000=10.35->11kg, /6000=6.9->7kg
+        opts = carriers.get_shipping_options(3, "10110", length_cm=40, width_cm=45, height_cm=23)
+        by_id = {o["id"]: o for o in opts}
+        self.assertEqual(by_id["flash_thunder"]["billed_kg"], 11.0)
+        self.assertEqual(by_id["jt_express"]["billed_kg"], 7.0)
+        self.assertEqual(by_id["kex_bulky"]["billed_kg"], 7.0)
+
 
 class TestBracketBreakpoints(unittest.TestCase):
     def test_inter_express_flat_brackets(self):

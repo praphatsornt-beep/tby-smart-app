@@ -80,9 +80,10 @@ _FLASH_PRO_DD = {
 
 _FLASH_PRO_DD_BULKY = {  # flat rate everywhere — ยืนยันจากตารางราคาจริงบน iShip
     # (2026-07-26): 50 บาทคงที่ถึง 6 กก. จากนั้น +8 บาท/กก. (สูตรเดิม 55+11/kg ผิด
-    # คิดแพงเกินจริงมาก เช่น 60 กก. เคยคิด 660 จริงแค่ 482) ยืนยันตรงทุกจุดตั้งแต่
-    # 7-60 กก. จากตารางที่ได้มา — ส่วน 61-100 กก. คำนวณต่อด้วยสูตรเดียวกัน (+8/kg)
-    # ยังไม่มีข้อมูลจริงมายืนยันช่วงนี้โดยตรง แต่ pattern คงที่ตลอดไม่มีจุดเปลี่ยนสูตร
+    # คิดแพงเกินจริงมาก เช่น 60 กก. เคยคิด 660 จริงแค่ 482) — ตอนนั้นยืนยันตรงแค่ 7-60 กก.
+    # ส่วน 61-100 กก. เป็นค่าคำนวณต่อด้วยสูตรเดียวกัน (+8/kg) ยังไม่มีข้อมูลจริง —
+    # ตอนนี้ (2026-08-05) user ส่งตารางเต็ม 1-100 กก.มายืนยันซ้ำ ตรงเป๊ะทุกแถวรวม 61-100
+    # ที่เคยเป็นแค่การคำนวณต่อ (ยืนยันแล้วว่าไม่มีจุดเปลี่ยนสูตรจริง)
     1:50,2:50,3:50,4:50,5:50,6:50,7:58,8:66,9:74,10:82,11:90,12:98,13:106,
     14:114,15:122,16:130,17:138,18:146,19:154,20:162,21:170,22:178,23:186,24:194,25:202,26:210,
     27:218,28:226,29:234,30:242,31:250,32:258,33:266,34:274,35:282,36:290,37:298,38:306,39:314,
@@ -176,25 +177,25 @@ _FLASH_PRO_OK = {
     49:(627,587),50:(642,596),
 }
 
-_JT_EXPRESS = {  # (กรุงเทพ, ต่างจังหวัด) — เรทเดียวกันทั้งกรุงเทพ/ตจว/ภายในจังหวัด รองรับถึง 100kg
-    1:(25,25),2:(29,29),3:(32,32),4:(46,51),5:(57,60),6:(71,71),7:(80,80),
-    8:(113,113),9:(125,125),10:(136,136),11:(145,145),12:(156,156),13:(165,165),
-    14:(176,176),15:(186,186),16:(202,202),17:(213,213),18:(223,223),19:(234,234),
-    20:(242,242),21:(261,261),22:(279,279),23:(297,297),24:(315,315),25:(334,334),
-    26:(351,351),27:(370,370),28:(388,388),29:(406,406),30:(424,424),31:(443,443),
-    32:(460,460),33:(479,479),34:(497,497),35:(515,515),36:(533,533),37:(552,552),
-    38:(569,569),39:(588,588),40:(605,605),41:(624,624),42:(642,642),43:(660,660),
-    44:(678,678),45:(697,697),46:(714,714),47:(733,733),48:(751,751),49:(769,769),
-    50:(787,787),51:(806,806),52:(823,823),53:(842,842),54:(860,860),55:(878,878),
-    56:(896,896),57:(915,915),58:(932,932),59:(951,951),60:(968,968),61:(987,987),
-    62:(1005,1005),63:(1023,1023),64:(1041,1041),65:(1060,1060),66:(1077,1077),
-    67:(1096,1096),68:(1114,1114),69:(1132,1132),70:(1150,1150),71:(1169,1169),
-    72:(1186,1186),73:(1205,1205),74:(1223,1223),75:(1241,1241),76:(1259,1259),
-    77:(1278,1278),78:(1295,1295),79:(1314,1314),80:(1331,1331),81:(1350,1350),
-    82:(1368,1368),83:(1386,1386),84:(1404,1404),85:(1423,1423),86:(1440,1440),
-    87:(1459,1459),88:(1477,1477),89:(1495,1495),90:(1513,1513),91:(1532,1532),
-    92:(1549,1549),93:(1568,1568),94:(1586,1586),95:(1604,1604),96:(1622,1622),
-    97:(1641,1641),98:(1658,1658),99:(1677,1677),100:(1694,1694),
+_JT_EXPRESS = {  # (กรุงเทพ, ต่างจังหวัด) — ยืนยันจากตารางราคาจริงบน iShip (2026-08-05):
+    # ค่าเดิม (แบบ "เรทเดียวกันทั้งกรุงเทพ/ตจว") ผิดจริง 84/100 แถว — ไม่ใช่แค่ 1-3กก./13กก.
+    # ที่ bkk/province ต่างกันจริง แต่ตั้งแต่ 21กก. ขึ้นไปราคาผิดสะสมทุกแถว (เช่น 21กก.
+    # เดิม 261 จริง 266, 50กก. เดิม 787 จริง 937) แทนที่ด้วยตัวเลขจริงทั้งตาราง 1-100kg
+    1:(27,36),2:(33,37),3:(37,40),4:(46,51),5:(57,60),6:(71,71),7:(80,80),
+    8:(113,113),9:(125,125),10:(136,136),11:(145,145),12:(156,156),13:(165,167),14:(176,176),
+    15:(186,186),16:(202,202),17:(213,213),18:(223,223),19:(234,234),20:(242,242),21:(266,266),
+    22:(289,289),23:(312,312),24:(335,335),25:(359,359),26:(381,381),27:(405,405),28:(428,428),
+    29:(451,451),30:(474,474),31:(498,498),32:(520,520),33:(544,544),34:(567,567),35:(590,590),
+    36:(613,613),37:(637,637),38:(659,659),39:(683,683),40:(705,705),41:(729,729),42:(752,752),
+    43:(775,775),44:(798,798),45:(822,822),46:(844,844),47:(868,868),48:(891,891),49:(914,914),
+    50:(937,937),51:(961,961),52:(983,983),53:(1007,1007),54:(1030,1030),55:(1053,1053),56:(1076,1076),
+    57:(1100,1100),58:(1122,1122),59:(1146,1146),60:(1168,1168),61:(1192,1192),62:(1215,1215),63:(1238,1238),
+    64:(1261,1261),65:(1285,1285),66:(1307,1307),67:(1331,1331),68:(1354,1354),69:(1377,1377),70:(1400,1400),
+    71:(1424,1424),72:(1446,1446),73:(1470,1470),74:(1493,1493),75:(1516,1516),76:(1539,1539),77:(1563,1563),
+    78:(1585,1585),79:(1609,1609),80:(1631,1631),81:(1655,1655),82:(1678,1678),83:(1701,1701),84:(1724,1724),
+    85:(1748,1748),86:(1770,1770),87:(1794,1794),88:(1817,1817),89:(1840,1840),90:(1863,1863),91:(1887,1887),
+    92:(1909,1909),93:(1933,1933),94:(1956,1956),95:(1979,1979),96:(2002,2002),97:(2026,2026),98:(2048,2048),
+    99:(2072,2072),100:(2094,2094),
 }
 
 _INTER_EXPRESS = {  # เหมาตามขนาดกล่อง (A1/A2/B1/B2) เรทเดียวทั่วประเทศ ไม่รับ COD
@@ -288,45 +289,51 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 
 
 # ── Carrier definitions ───────────────────────────────────────────────────────
-# (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup)
+# (id, display_name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup, vol_divisor)
 # max_cm: กว้าง+ยาว+สูง รวมต้องไม่เกินค่านี้ (0 = ไม่จำกัด, เลขคงที่ หรือ dict {weight_kg: max_cm}
 # ถ้าจำกัดขนาดต่างกันไปตาม tier น้ำหนัก — ดู _max_cm_for()) | max_cod_amt: วงเงิน COD สูงสุด (0 = ไม่จำกัด)
 # manual_pickup: True = ต้องกดเรียกรถเข้ารับเองในระบบ iShip ทุกครั้ง (ถ้าไม่กด = ไม่มีพนักงานเข้ารับ)
 #                False = รถเข้ารับอัตโนมัติ แค่สร้างรายการก่อนเวลา cut off — ตามอินโฟกราฟิก iShip
+# vol_divisor: ตัวหารสูตรน้ำหนักปริมาตร (กว้าง×ยาว×สูง)/vol_divisor — ค่าปกติ 4000 (ยืนยันจาก
+# ราคาจริงของ Flash Thunder/Pro DD/Pro OK/100CM 2026-08-04) แต่ Flash Pro DD Bulky/KEX Bulky
+# (KEX Jumbo)/J&T Express เอกสารเงื่อนไขจริงระบุสูตร "(กว้างxยาวxสูง÷6000)" ตรงๆ ต่างจาก
+# เจ้าอื่น (2026-08-05) — ใช้ 6000 เฉพาะ 3 ตัวนี้
 # max_cm/max_cod_amt ยืนยันจากเงื่อนไขจริงบน iShip (2026-07-26) — เดิมเกือบทุกตัวผิด/
 # ไม่จำกัด (max_cod_amt ที่ 0 = ไม่กรองออกตอนเทียบขนส่ง แม้ COD เกินวงเงินจริงของขนส่งนั้น
 # ก็ตาม — ตัวนี้กระทบจริงเพราะใช้กรองใน _price_one_box, max_cm ใช้แค่โชว์คำเตือนใน app.py)
 # Flash Thunder ไม่มีข้อความยืนยันวงเงิน COD ตรงๆ — ใส่ 50,000 ตามขนส่งตระกูล Flash อื่น
 # ทั้งหมดที่ยืนยันแล้ว (Pro DD/OK/100CM/DD Bulky ล้วน 50,000) ยังไม่ได้ยืนยันแยกต่างหาก
 _CARRIER_DEFS = [
-    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True),
-    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,   _FLASH_PRO_DD_SIZE_CM, True,  50000, True),
-    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True),
-    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_100CM_SIZE_CM, True,  50000, True),
-    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01, 400, True,  50000, True),
-    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,   180, True,  36000, False),
-    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,   _KEX_SIZE_CM, True,  50000, False),
-    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,   400, True,  50000, False),
-    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False),
-    ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False),
-    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True),
-    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True),
-    ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0,     False),
-    ("jt_express",        "J&T Express",        _JT_EXPRESS,         100,  _jt_sur,                 0, 2.675,False, 0,   600, True,  10000, False),
+    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True,  4000),
+    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,   _FLASH_PRO_DD_SIZE_CM, True,  50000, True,  4000),
+    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True,  4000),
+    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_100CM_SIZE_CM, True,  50000, True,  4000),
+    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01, 400, True,  50000, True,  6000),
+    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,   180, True,  36000, False, 4000),
+    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,   _KEX_SIZE_CM, True,  50000, False, 4000),
+    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,   400, True,  50000, False, 6000),
+    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False, 4000),
+    ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False, 4000),
+    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True,  4000),
+    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True,  4000),
+    ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0,     False, 4000),
+    ("jt_express",        "J&T Express",        _JT_EXPRESS,         100,  _jt_sur,                 0, 2.675,False, 0,   600, True,  10000, False, 6000),
 ]
 
 
 # ── Main comparison function ──────────────────────────────────────────────────
 
-def volumetric_weight_kg(length_cm: float, width_cm: float, height_cm: float) -> float:
-    """น้ำหนักตามปริมาตร (dimensional weight) — สูตร (กว้าง×ยาว×สูง)/4000 ปัดขึ้น
+def volumetric_weight_kg(length_cm: float, width_cm: float, height_cm: float, divisor: int = 4000) -> float:
+    """น้ำหนักตามปริมาตร (dimensional weight) — สูตร (กว้าง×ยาว×สูง)/divisor ปัดขึ้น
     ยืนยันจากตารางราคาจริงของ Flash บน iShip (2026-08-04): กล่อง 40×45×23 ซม. =
     41,400 ลบ.ซม. ÷ 4000 = 10.35 → ปัดขึ้น 11 กก. ตรงกับ "ค่าขนส่ง(ปริมาตร)" ที่ iShip
-    แสดงจริงทุกเรท (Thunder/Pro DD/Pro OK/100CM) เป๊ะ — ไม่มีให้ 0 ถ้าขนาดไม่ครบ 3 ด้าน"""
+    แสดงจริงทุกเรท (Thunder/Pro DD/Pro OK/100CM) เป๊ะ — ไม่มีให้ 0 ถ้าขนาดไม่ครบ 3 ด้าน
+    divisor default 4000 ใช้กับขนส่งทั่วไป แต่ Pro DD Bulky/KEX Bulky/J&T Express ยืนยัน
+    จากเงื่อนไขจริงของตัวเองว่าใช้ 6000 (ดู _CARRIER_DEFS.vol_divisor, 2026-08-05)"""
     if length_cm <= 0 or width_cm <= 0 or height_cm <= 0:
         return 0.0
     from math import ceil as _ceil
-    return float(_ceil((length_cm * width_cm * height_cm) / 4000))
+    return float(_ceil((length_cm * width_cm * height_cm) / divisor))
 
 
 def _max_cm_for(max_cm, lookup_kg: float) -> int:
@@ -348,7 +355,7 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
     ถ้ามีขนาดกล่องครบ (length/width/height > 0) เทียบน้ำหนักจริงกับน้ำหนักตามปริมาตร
     ใช้ตัวที่หนักกว่าคิดราคา (มาตรฐานขนส่งทั่วไป — ยืนยันจากตารางราคาจริงของ Flash แล้ว)
     น้ำหนักขั้นต่ำ (min_kg) ยังเช็คกับน้ำหนักจริงเท่านั้น ไม่เกี่ยวกับปริมาตร"""
-    cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup = carrier_def
+    cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup, vol_divisor = carrier_def
     if weight_kg < min_kg:
         return None  # ไม่แสดงถ้าน้ำหนักต่ำกว่าขั้นต่ำ (เช่น Flash Pro DD Bulky ต้อง >5kg)
     if is_cod and not supports_cod:
@@ -358,7 +365,7 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
 
     pc  = str(postcode).strip()
     bkk = _is_bkk(pc)
-    vol_kg = volumetric_weight_kg(length_cm, width_cm, height_cm)
+    vol_kg = volumetric_weight_kg(length_cm, width_cm, height_cm, vol_divisor)
     billed_kg = max(weight_kg, vol_kg)
     exceeds = billed_kg > max_kg
     lookup_kg = min(billed_kg, max_kg) if exceeds else billed_kg
