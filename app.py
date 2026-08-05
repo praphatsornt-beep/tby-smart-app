@@ -616,6 +616,13 @@ button[kind="secondary"]:hover {
     border-color: var(--tby-accent) !important;
     box-shadow: 0 0 0 3px oklch(0.68 0.17 45 / 0.2) !important;
 }
+/* ── Dropdown option list กว้างขึ้นกว่ากล่องแคบๆ ที่มันอ้างอิง (เช่น ช่อง
+   ตำบล/แขวง ใน column แคบ) ไม่งั้นชื่อยาวๆ ที่ซ้ำกัน (บ้านใหญ่ / อ. ต่างกัน)
+   จะถูกตัดจนแยกไม่ออกว่าอันไหนคืออันไหน — ยังคง 1 บรรทัด/ไม่ wrap เพราะรายการ
+   เป็น virtualized list สูงคงที่ต่อแถว wrap แล้วจะทับกัน */
+div[data-baseweb="popover"]:has(ul[data-testid="stSelectboxVirtualDropdown"]) [data-no-focus-lock="true"] {
+    min-width: 360px !important;
+}
 
 /* ── Radio groups → segmented control, accent-orange selected state ── */
 [data-testid="stRadio"] {
