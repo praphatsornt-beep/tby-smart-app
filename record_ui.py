@@ -1808,13 +1808,39 @@ def render(tab1, products, customers, customer_map):
 
         elif _sub_active == "📮 ส่ง Manual":
             st.subheader("📦 แบ่งกล่อง + ปริ้นใบปะหน้า (manual — ไม่ผ่าน iShip เช่น Inter/J&T)")
-            st.caption("ดึงน้ำหนักจาก tab 🔢 คำนวณยอด — กดคำนวณที่นั่นก่อน "
+            st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ (ใส่รหัสไปรษณีย์แบบ SH-kgXXXXX "
+                       "ในข้อความเดียวกัน) — หรือกดคำนวณไว้แล้วที่ tab 🔢 คำนวณยอด ก็ใช้ต่อได้เลย "
                        "ระบบจะเก็บสินค้าเดียวกันไว้ด้วยกันก่อน แล้วหาเพดานน้ำหนัก/กล่องที่คุ้มสุด "
                        "ของแต่ละขนส่งให้เองอัตโนมัติ")
 
+            _mbx_ver = st.session_state.get("_mbx_ver", 0)
+            _mbx_c1, _mbx_c2 = st.columns([4, 1])
+            with _mbx_c1:
+                _mbx_text = st.text_area(
+                    "รหัสสินค้า", key=f"_mbx_text_v{_mbx_ver}", height=80,
+                    placeholder="TF2581-2 RB2306-1 SH-kg12170",
+                )
+            with _mbx_c2:
+                st.write("")
+                st.write("")
+                if st.button("🔢 คำนวณ", type="primary", key="_mbx_calc_btn", width="stretch"):
+                    if not _mbx_text.strip():
+                        st.warning("กรุณากรอกรหัสสินค้าก่อน")
+                    else:
+                        st.session_state["_calc_result"] = calc_logic.parse_calc_order(_mbx_text, products)
+                if st.button("🗑️ ล้าง", key="_mbx_clear_btn", width="stretch"):
+                    st.session_state.pop("_calc_result", None)
+                    st.session_state["_mbx_ver"] = _mbx_ver + 1
+                    st.rerun()
+
             _bx_cr = st.session_state.get("_calc_result")
+            if _bx_cr and _bx_cr.get("errors"):
+                for _mbx_e in _bx_cr["errors"]:
+                    st.error(f"⚠️ {_mbx_e}")
+            st.divider()
+
             if not _bx_cr or not _bx_cr.get("items"):
-                st.info("กรุณาคำนวณยอดใน tab 🔢 คำนวณยอด ก่อน")
+                st.info("พิมพ์รหัสสินค้าแล้วกดคำนวณด้านบน หรือกดคำนวณไว้แล้วที่ tab 🔢 คำนวณยอด")
             else:
                 _bx_prod_kg  = sum(int(_ci["product"].get("weight_grams",0))*int(_ci["qty"]) for _ci in _bx_cr["items"]) / 1000
                 _bx_postcode = _bx_cr.get("ship_zip", "")
