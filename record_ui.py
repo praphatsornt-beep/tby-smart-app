@@ -2127,10 +2127,10 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 
                                     _addr2_txt = f"ต.{_lbl_district} อ.{_lbl_amphure}"
                                     _addr3_txt = f"จ.{_lbl_province} {_lbl_zip}"
-                                    _name_px  = _fit_px(_lbl_name,      [(8, 48), (14, 38), (22, 30), (999, 24)])
-                                    _addr1_px = _fit_px(_lbl_addr_line, [(12, 40), (20, 32), (30, 26), (999, 20)])
-                                    _addr2_px = _fit_px(_addr2_txt,     [(16, 34), (24, 28), (999, 22)])
-                                    _addr3_px = _fit_px(_addr3_txt,     [(16, 34), (24, 28), (999, 22)])
+                                    _name_px  = _fit_px(_lbl_name,      [(8, 58), (14, 46), (22, 36), (999, 28)])
+                                    _addr1_px = _fit_px(_lbl_addr_line, [(12, 50), (20, 40), (30, 32), (999, 24)])
+                                    _addr2_px = _fit_px(_addr2_txt,     [(16, 42), (24, 34), (999, 26)])
+                                    _addr3_px = _fit_px(_addr3_txt,     [(16, 42), (24, 34), (999, 26)])
 
                                     _src2 = iship_api._src()
                                     _sticker_total = sum(r["qty"] for r in _lbl_rows)
@@ -2144,33 +2144,33 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 <div class="addr3" style="font-size:{_addr3_px}px">{_addr3_txt}</div>
 </div>
 </div>"""
-                                    # ขนาด 4x6 นิ้ว (มาตรฐานใบปะหน้าพัสดุ) — ที่อยู่ปลายทาง
-                                    # ใช้ flex เกลี่ยเต็มความสูงหน้ากระดาษ ตัวอักษรใหญ่สุดที่
-                                    # ยังพอดีหน้า (ดูฟังก์ชัน _fit_px ด้านบน) — overflow:hidden
-                                    # กันไว้อีกชั้น เผื่อข้อความยาวเกินคาด จะได้ตัดแทนที่จะ
-                                    # ล้นทับใบถัดไป (บั๊กที่เจอจริง: ชื่อ/ที่อยู่ยาว ตัวอักษร
-                                    # ใหญ่คงที่แล้วล้นข้ามหน้าไปทับใบปะหน้าใบถัดไป)
+                                    # ขนาดกระดาษ A6 (105x148mm) — ที่อยู่ปลายทางใช้ flex เกลี่ย
+                                    # เต็มความสูงหน้ากระดาษ ตัวอักษรใหญ่สุดที่ยังพอดีหน้า (ดู
+                                    # ฟังก์ชัน _fit_px ด้านบน) — overflow:hidden กันไว้อีกชั้น
+                                    # เผื่อข้อความยาวเกินคาด จะได้ตัดแทนที่จะล้นทับใบถัดไป
+                                    # (บั๊กที่เจอจริง: ชื่อ/ที่อยู่ยาว ตัวอักษรใหญ่คงที่แล้ว
+                                    # ล้นข้ามหน้าไปทับใบปะหน้าใบถัดไป)
                                     _sticker_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 html,body{{background:#fff!important;color:#000!important}}
 body{{font-family:'Prompt',sans-serif}}
 .btn{{display:block;margin:10px;padding:8px 24px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:14px}}
-.pg{{width:4in;height:6in;padding:0.2in;text-align:center;border-bottom:2px dashed #999;
+.pg{{width:105mm;height:148mm;padding:5mm;text-align:center;border-bottom:2px dashed #999;
 display:flex;flex-direction:column;overflow:hidden}}
-.from{{text-align:left;font-size:11px;line-height:1.3;overflow-wrap:break-word}}
+.from{{text-align:left;font-size:20px;font-weight:600;line-height:1.35;overflow-wrap:break-word}}
 .recipient{{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;
-align-items:center;gap:0.12in;overflow:hidden}}
+align-items:center;gap:0.22in;overflow:hidden}}
 .recipient>div{{max-width:100%;overflow-wrap:break-word;line-height:1.15}}
 .name{{font-weight:800}}
-.phone{{font-size:28px;font-weight:700}}
-.addr1{{font-weight:800;text-decoration:underline;margin-top:0.1in}}
+.phone{{font-size:32px;font-weight:700}}
+.addr1{{font-weight:800;margin-top:0.1in}}
 .addr2,.addr3{{font-weight:700}}
-@media print{{.btn{{display:none}} @page{{size:4in 6in;margin:0}} .pg{{border-bottom:none;page-break-after:always}}}}
+@media print{{.btn{{display:none}} @page{{size:105mm 148mm;margin:0}} .pg{{border-bottom:none;page-break-after:always}}}}
 </style></head><body>
 <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้ากล่อง ({_sticker_total} ใบ)</button>
 {_sticker_page * _sticker_total}
 </body></html>"""
                                     st.iframe(_sticker_html, height=650)
-                                    st.caption(f"พิมพ์ {_sticker_total} ใบ (1 ใบ/กล่อง) ขนาด 4×6 นิ้ว — ตัดแยกแล้วแปะหน้ากล่องแต่ละใบ")
+                                    st.caption(f"พิมพ์ {_sticker_total} ใบ (1 ใบ/กล่อง) ขนาด A6 — ตัดแยกแล้วแปะหน้ากล่องแต่ละใบ")
 
