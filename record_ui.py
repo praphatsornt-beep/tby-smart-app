@@ -2094,3 +2094,45 @@ tr:nth-child(even) td{{background:#f0f0f0}}
                                     st.session_state["_lbl_box_rows"] = []
                                     st.success("✅ บันทึกประวัติการส่งแล้ว — ดูได้ที่แท็บ 🚚 ประวัติการส่ง")
 
+                            # ── ใบปะหน้ากล่อง (แบบใหญ่ — แปะหน้ากล่องสินค้า) ──────
+                            # ขนส่ง Inter ต้องใช้ใบปะหน้า 2 แบบ: แบบละเอียด (ด้านบน,
+                            # แปะในใบส่งของ) กับแบบนี้ (ตัวใหญ่ อ่านง่ายจากระยะไกล
+                            # แปะหน้ากล่องสินค้าโดยตรง) — ใช้ข้อมูลชุดเดียวกับฟอร์มด้านบน
+                            # ไม่ผูกกับปุ่มบันทึกประวัติ พิมพ์ซ้ำได้เรื่อยๆ โดยไม่สร้าง
+                            # shipment ซ้ำ
+                            if st.button("🏷️ ปริ้นใบปะหน้ากล่อง (แบบใหญ่ แปะหน้ากล่อง)", key="_lbl_print_sticker_btn"):
+                                if not _lbl_name or not _lbl_addr_line:
+                                    st.error("กรุณากรอกชื่อผู้รับและที่อยู่ก่อน")
+                                elif not _lbl_rows:
+                                    st.error("กรุณาเพิ่มกล่องอย่างน้อย 1 รายการก่อนพิมพ์")
+                                else:
+                                    _src2 = iship_api._src()
+                                    _sticker_total = sum(r["qty"] for r in _lbl_rows)
+                                    _sticker_page = f"""<div class="pg">
+<div class="from">จาก:<br>{_src2.get('ISHIP_SRC_NAME','')}<br>(โทร.{_src2.get('ISHIP_SRC_PHONE','')})</div>
+<div class="name">{_lbl_name}</div>
+<div class="phone">โทร. {_lbl_phone}</div>
+<div class="addr1">{_lbl_addr_line}</div>
+<div class="addr2">ต.{_lbl_district} อ.{_lbl_amphure}</div>
+<div class="addr3">จ.{_lbl_province} {_lbl_zip}</div>
+</div>"""
+                                    _sticker_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+html,body{{background:#fff!important;color:#000!important}}
+body{{font-family:'Prompt',sans-serif}}
+.btn{{display:block;margin:10px;padding:8px 24px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:14px}}
+.pg{{width:9cm;padding:18px 12px;text-align:center;border-bottom:1px dashed #999}}
+.from{{text-align:left;font-size:12px;line-height:1.5;margin-bottom:16px}}
+.name{{font-size:26px;font-weight:700;margin:8px 0}}
+.phone{{font-size:22px;font-weight:700;margin:8px 0}}
+.addr1{{font-size:24px;font-weight:700;text-decoration:underline;margin:14px 0 4px}}
+.addr2,.addr3{{font-size:22px;font-weight:700;margin:2px 0}}
+@media print{{.btn{{display:none}} @page{{size:10cm 15cm;margin:5mm}} .pg{{width:auto;border-bottom:none;page-break-after:always}}}}
+</style></head><body>
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้ากล่อง ({_sticker_total} ใบ)</button>
+{_sticker_page * _sticker_total}
+</body></html>"""
+                                    st.iframe(_sticker_html, height=550)
+                                    st.caption(f"พิมพ์ {_sticker_total} ใบ (1 ใบ/กล่อง) — ตัดแยกแล้วแปะหน้ากล่องแต่ละใบ")
+
