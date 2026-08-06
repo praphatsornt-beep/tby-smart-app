@@ -471,10 +471,13 @@ def _pack_and_price(items: list, carrier_def: tuple, pack_cap: float, box_weight
 
 
 def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: float = 0,
-               box_weight_g: int = 500) -> list[dict]:
+               box_weight_g: int = 500, carrier_ids: list[str] = None) -> list[dict]:
     """วางแผนกล่องที่คุ้มค่าส่งสุดสำหรับทุกขนส่ง — หาจุดตัดราคาของแต่ละขนส่งเอง (ไม่ต้องตั้งค่าเอง)
     แล้วแพ็คด้วย calc_logic.pack_boxes_grouped() ที่จุดตัดนั้นๆ (เก็บสินค้าเดียวกันไว้ด้วยกันก่อน
     ลองทั้งแบบอัดเต็ม/กระจายเท่าๆ กัน) เลือกจุดตัด+วิธีแพ็คที่รวมค่าส่งถูกสุดต่อขนส่ง
+
+    carrier_ids: ถ้าระบุ จะพิจารณาเฉพาะขนส่งที่ id อยู่ในลิสต์นี้ (เช่น ["inter_express"]
+    สำหรับหน้าที่ผูกกับขนส่งเดียวโดยเฉพาะ) — None = พิจารณาทุกขนส่งเหมือนเดิม
 
     Returns list เรียงถูกสุดก่อน: [{id, name, boxes, total_cost, ceiling_used, box_count,
     candidates: [{ceiling, total_cost, box_count} ...]}, ...] — candidates คือทุกจุดตัดที่ลอง
@@ -484,7 +487,8 @@ def plan_boxes(items: list, postcode: str, is_cod: bool = False, cod_amount: flo
     box_weight_kg = box_weight_g / 1000
     plans = []
 
-    for carrier_def in _CARRIER_DEFS:
+    _defs = _CARRIER_DEFS if carrier_ids is None else [d for d in _CARRIER_DEFS if d[0] in carrier_ids]
+    for carrier_def in _defs:
         cid, name, table, max_kg = carrier_def[0], carrier_def[1], carrier_def[2], carrier_def[3]
         best = None
         candidates = []

@@ -1807,11 +1807,11 @@ def render(tab1, products, customers, customer_map):
                             _line_btn_slot.caption("👤 ยังไม่มี LINE ID")
 
         elif _sub_active == "📮 ส่ง Manual":
-            st.subheader("📦 แบ่งกล่อง + ปริ้นใบปะหน้า (manual — ไม่ผ่าน iShip เช่น Inter/J&T)")
+            st.subheader("📦 แบ่งกล่อง + ปริ้นใบปะหน้า — Inter Express")
             st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ (ใส่รหัสไปรษณีย์แบบ SH-kgXXXXX "
                        "ในข้อความเดียวกัน) — หรือกดคำนวณไว้แล้วที่ tab 🔢 คำนวณยอด ก็ใช้ต่อได้เลย "
-                       "ระบบจะเก็บสินค้าเดียวกันไว้ด้วยกันก่อน แล้วหาเพดานน้ำหนัก/กล่องที่คุ้มสุด "
-                       "ของแต่ละขนส่งให้เองอัตโนมัติ")
+                       "คิดค่าส่งเฉพาะ Inter Express (ขนส่ง manual ที่ไม่ผ่าน iShip) ระบบจะเก็บ "
+                       "สินค้าเดียวกันไว้ด้วยกันก่อน แล้วหาเพดานน้ำหนัก/กล่องที่คุ้มสุดให้เองอัตโนมัติ")
 
             _mbx_ver = st.session_state.get("_mbx_ver", 0)
             _mbx_c1, _mbx_c2 = st.columns([4, 1])
@@ -1850,32 +1850,14 @@ def render(tab1, products, customers, customer_map):
                 if not _bx_postcode:
                     st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อวางแผนกล่อง+เทียบค่าส่ง")
                 else:
-                    _bx_plans = carr.plan_boxes(_bx_cr["items"], _bx_postcode)
+                    # หน้านี้ผูกกับ Inter Express โดยเฉพาะ (manual — ไม่ผ่าน iShip)
+                    # ไม่ต้องเทียบกับขนส่งอื่นเหมือน tab คำนวณยอด
+                    _bx_plans = carr.plan_boxes(_bx_cr["items"], _bx_postcode, carrier_ids=["inter_express"])
                     if not _bx_plans:
-                        st.warning("ไม่มีขนส่งไหนรองรับออร์เดอร์นี้ได้เลย")
+                        st.warning("Inter Express รับออร์เดอร์นี้ไม่ได้ (น้ำหนัก/ขนาดเกิน)")
                     else:
-                        # ── สรุปทุกขนส่ง (เรียงถูกสุดก่อน) ────────────────────
-                        _plan_rows = [{
-                            "ขนส่ง":         ("⭐ " if i == 0 else "") + p["name"],
-                            "จำนวนกล่อง":    p["box_count"],
-                            "เพดานกล่อง":    f"{p['ceiling_used']} kg",
-                            "ค่าส่งรวม (฿)":  p["total_cost"],
-                        } for i, p in enumerate(_bx_plans)]
-                        st.dataframe(pd.DataFrame(_plan_rows), hide_index=True, width="stretch",
-                                     column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%.0f ฿")})
-                        st.caption("⭐ = ค่าส่งรวมถูกสุด — ระบบลองแพ็คที่จุดตัดราคาของแต่ละขนส่งให้เองแล้ว")
-
-                        # ── รายละเอียด — เลือกขนส่ง ───────────────────────────
-                        st.divider()
-                        _bx_idx = st.selectbox(
-                            "ดูรายละเอียด — เลือกขนส่ง",
-                            list(range(len(_bx_plans))),
-                            format_func=lambda i: _bx_plans[i]["name"],
-                            key="_bx_sel_carrier",
-                        )
-                        _sel_plan = _bx_plans[_bx_idx]
-
-                        st.markdown(f"**📦 การจัดสินค้า ({_sel_plan['box_count']} กล่อง — เพดาน {_sel_plan['ceiling_used']} kg)**")
+                        _sel_plan = _bx_plans[0]
+                        st.markdown(f"**📦 การจัดสินค้า — Inter Express ({_sel_plan['box_count']} กล่อง — เพดาน {_sel_plan['ceiling_used']} kg)**")
                         for _bi, _box in enumerate(_sel_plan["boxes"], 1):
                             _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
                             _bkg = _box["weight_kg"] + 0.5
@@ -2136,29 +2118,36 @@ tr:nth-child(even) td{{background:#f0f0f0}}
                                     _sticker_total = sum(r["qty"] for r in _lbl_rows)
                                     _sticker_page = f"""<div class="pg">
 <div class="from">จาก:<br>{_src2.get('ISHIP_SRC_NAME','')}<br>(โทร.{_src2.get('ISHIP_SRC_PHONE','')})</div>
+<div class="recipient">
 <div class="name">{_lbl_name}</div>
 <div class="phone">โทร. {_lbl_phone}</div>
 <div class="addr1">{_lbl_addr_line}</div>
 <div class="addr2">ต.{_lbl_district} อ.{_lbl_amphure}</div>
 <div class="addr3">จ.{_lbl_province} {_lbl_zip}</div>
+</div>
 </div>"""
+                                    # ขนาด 4x6 นิ้ว (มาตรฐานใบปะหน้าพัสดุ) — ที่อยู่ปลายทาง
+                                    # ใช้ flex เกลี่ยเต็มความสูงหน้ากระดาษ ตัวอักษรใหญ่
+                                    # เต็มพื้นที่ อ่านง่ายจากระยะไกลตอนแปะหน้ากล่อง
                                     _sticker_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 html,body{{background:#fff!important;color:#000!important}}
 body{{font-family:'Prompt',sans-serif}}
 .btn{{display:block;margin:10px;padding:8px 24px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:14px}}
-.pg{{width:9cm;padding:18px 12px;text-align:center;border-bottom:1px dashed #999}}
-.from{{text-align:left;font-size:12px;line-height:1.5;margin-bottom:16px}}
-.name{{font-size:26px;font-weight:700;margin:8px 0}}
-.phone{{font-size:22px;font-weight:700;margin:8px 0}}
-.addr1{{font-size:24px;font-weight:700;text-decoration:underline;margin:14px 0 4px}}
-.addr2,.addr3{{font-size:22px;font-weight:700;margin:2px 0}}
-@media print{{.btn{{display:none}} @page{{size:10cm 15cm;margin:5mm}} .pg{{width:auto;border-bottom:none;page-break-after:always}}}}
+.pg{{width:4in;height:6in;padding:0.25in;text-align:center;border-bottom:2px dashed #999;
+display:flex;flex-direction:column}}
+.from{{text-align:left;font-size:15px;line-height:1.5}}
+.recipient{{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:0.2in}}
+.name{{font-size:52px;font-weight:800}}
+.phone{{font-size:40px;font-weight:700}}
+.addr1{{font-size:44px;font-weight:800;text-decoration:underline;margin-top:0.15in}}
+.addr2,.addr3{{font-size:40px;font-weight:700}}
+@media print{{.btn{{display:none}} @page{{size:4in 6in;margin:0}} .pg{{border-bottom:none;page-break-after:always}}}}
 </style></head><body>
 <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้ากล่อง ({_sticker_total} ใบ)</button>
 {_sticker_page * _sticker_total}
 </body></html>"""
-                                    st.iframe(_sticker_html, height=550)
-                                    st.caption(f"พิมพ์ {_sticker_total} ใบ (1 ใบ/กล่อง) — ตัดแยกแล้วแปะหน้ากล่องแต่ละใบ")
+                                    st.iframe(_sticker_html, height=650)
+                                    st.caption(f"พิมพ์ {_sticker_total} ใบ (1 ใบ/กล่อง) ขนาด 4×6 นิ้ว — ตัดแยกแล้วแปะหน้ากล่องแต่ละใบ")
 
