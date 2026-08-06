@@ -2114,35 +2114,58 @@ tr:nth-child(even) td{{background:#f0f0f0}}
                                 elif not _lbl_rows:
                                     st.error("กรุณาเพิ่มกล่องอย่างน้อย 1 รายการก่อนพิมพ์")
                                 else:
+                                    def _fit_px(text: str, tiers: list) -> int:
+                                        """ตัวอักษรยาวมากน้อยไม่เท่ากัน (ชื่อ/ที่อยู่จริง) —
+                                        ถ้าใช้ฟอนต์ใหญ่คงที่ตัวเดียว ข้อความยาวจะล้นออกนอก
+                                        หน้าไปทับใบถัดไปตอนพิมพ์ ไล่ tiers (max_len, px)
+                                        จากเข้มงวดสุด คืน px แรกที่ยาวพอ"""
+                                        n = len(text)
+                                        for max_len, px in tiers:
+                                            if n <= max_len:
+                                                return px
+                                        return tiers[-1][1]
+
+                                    _addr2_txt = f"ต.{_lbl_district} อ.{_lbl_amphure}"
+                                    _addr3_txt = f"จ.{_lbl_province} {_lbl_zip}"
+                                    _name_px  = _fit_px(_lbl_name,      [(8, 48), (14, 38), (22, 30), (999, 24)])
+                                    _addr1_px = _fit_px(_lbl_addr_line, [(12, 40), (20, 32), (30, 26), (999, 20)])
+                                    _addr2_px = _fit_px(_addr2_txt,     [(16, 34), (24, 28), (999, 22)])
+                                    _addr3_px = _fit_px(_addr3_txt,     [(16, 34), (24, 28), (999, 22)])
+
                                     _src2 = iship_api._src()
                                     _sticker_total = sum(r["qty"] for r in _lbl_rows)
                                     _sticker_page = f"""<div class="pg">
-<div class="from">จาก:<br>{_src2.get('ISHIP_SRC_NAME','')}<br>(โทร.{_src2.get('ISHIP_SRC_PHONE','')})</div>
+<div class="from">จาก: {_src2.get('ISHIP_SRC_NAME','')} (โทร.{_src2.get('ISHIP_SRC_PHONE','')})</div>
 <div class="recipient">
-<div class="name">{_lbl_name}</div>
+<div class="name" style="font-size:{_name_px}px">{_lbl_name}</div>
 <div class="phone">โทร. {_lbl_phone}</div>
-<div class="addr1">{_lbl_addr_line}</div>
-<div class="addr2">ต.{_lbl_district} อ.{_lbl_amphure}</div>
-<div class="addr3">จ.{_lbl_province} {_lbl_zip}</div>
+<div class="addr1" style="font-size:{_addr1_px}px">{_lbl_addr_line}</div>
+<div class="addr2" style="font-size:{_addr2_px}px">{_addr2_txt}</div>
+<div class="addr3" style="font-size:{_addr3_px}px">{_addr3_txt}</div>
 </div>
 </div>"""
                                     # ขนาด 4x6 นิ้ว (มาตรฐานใบปะหน้าพัสดุ) — ที่อยู่ปลายทาง
-                                    # ใช้ flex เกลี่ยเต็มความสูงหน้ากระดาษ ตัวอักษรใหญ่
-                                    # เต็มพื้นที่ อ่านง่ายจากระยะไกลตอนแปะหน้ากล่อง
+                                    # ใช้ flex เกลี่ยเต็มความสูงหน้ากระดาษ ตัวอักษรใหญ่สุดที่
+                                    # ยังพอดีหน้า (ดูฟังก์ชัน _fit_px ด้านบน) — overflow:hidden
+                                    # กันไว้อีกชั้น เผื่อข้อความยาวเกินคาด จะได้ตัดแทนที่จะ
+                                    # ล้นทับใบถัดไป (บั๊กที่เจอจริง: ชื่อ/ที่อยู่ยาว ตัวอักษร
+                                    # ใหญ่คงที่แล้วล้นข้ามหน้าไปทับใบปะหน้าใบถัดไป)
                                     _sticker_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 html,body{{background:#fff!important;color:#000!important}}
 body{{font-family:'Prompt',sans-serif}}
 .btn{{display:block;margin:10px;padding:8px 24px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:14px}}
-.pg{{width:4in;height:6in;padding:0.25in;text-align:center;border-bottom:2px dashed #999;
-display:flex;flex-direction:column}}
-.from{{text-align:left;font-size:15px;line-height:1.5}}
-.recipient{{flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;gap:0.2in}}
-.name{{font-size:52px;font-weight:800}}
-.phone{{font-size:40px;font-weight:700}}
-.addr1{{font-size:44px;font-weight:800;text-decoration:underline;margin-top:0.15in}}
-.addr2,.addr3{{font-size:40px;font-weight:700}}
+.pg{{width:4in;height:6in;padding:0.2in;text-align:center;border-bottom:2px dashed #999;
+display:flex;flex-direction:column;overflow:hidden}}
+.from{{text-align:left;font-size:11px;line-height:1.3;overflow-wrap:break-word}}
+.recipient{{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;
+align-items:center;gap:0.12in;overflow:hidden}}
+.recipient>div{{max-width:100%;overflow-wrap:break-word;line-height:1.15}}
+.name{{font-weight:800}}
+.phone{{font-size:28px;font-weight:700}}
+.addr1{{font-weight:800;text-decoration:underline;margin-top:0.1in}}
+.addr2,.addr3{{font-weight:700}}
 @media print{{.btn{{display:none}} @page{{size:4in 6in;margin:0}} .pg{{border-bottom:none;page-break-after:always}}}}
 </style></head><body>
 <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้ากล่อง ({_sticker_total} ใบ)</button>
