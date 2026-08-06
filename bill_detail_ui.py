@@ -1540,16 +1540,25 @@ def render(products, customers):
                                 for _, r in grp.iterrows()
                                 if float(r["ค้างจ่าย"]) > 0 or int(r["ค้างรับ"]) > 0
                             ]
-                            # COD ที่โอนแล้วรอเปิดบิล
+                            # COD ที่โอนแล้วรอเปิดบิล — ต้องเช็คว่าลูกค้ายังมีบิล COD
+                            # ที่ "ยังไม่เปิดบิล" ค้างอยู่จริง ไม่งั้นพอเปิดบิลไปแล้ว
+                            # (cod_transferred_at ของ shipment ไม่เคยถูกล้าง) จะเตือน
+                            # ลูกค้าให้ "ติดต่อเปิดบิล" ซ้ำไปเรื่อยๆ ทั้งที่เปิดไปแล้ว
                             _cust_obj  = next((c for c in customers if c["name"] == customer_name), None)
                             _cod_done  = []
                             if _cust_obj:
-                                _sh_list = _ship_by_cust.get(_cust_obj["id"], [])
-                                _cod_done = [
-                                        {"tracking_no": s.get("tracking_no",""), "cod_amount": float(s.get("cod_amount") or 0)}
-                                        for s in _sh_list
-                                        if s.get("cod_transferred_at") and float(s.get("cod_amount") or 0) > 0
-                                    ]
+                                _has_unbilled_cod = not _all_txn_cache[
+                                    (_all_txn_cache["ลูกค้า"] == customer_name)
+                                    & (_all_txn_cache["สถานะจ่าย"] == "COD")
+                                    & (_all_txn_cache["สถานะบิล"] == "ยังไม่เปิดบิล")
+                                ].empty
+                                if _has_unbilled_cod:
+                                    _sh_list = _ship_by_cust.get(_cust_obj["id"], [])
+                                    _cod_done = [
+                                            {"tracking_no": s.get("tracking_no",""), "cod_amount": float(s.get("cod_amount") or 0)}
+                                            for s in _sh_list
+                                            if s.get("cod_transferred_at") and float(s.get("cod_amount") or 0) > 0
+                                        ]
                             if st.button(
                                 "📨 แจ้ง LINE" if _luid else "📨 ไม่มี LINE ID",
                                 key=f"line_out_{customer_name}",
