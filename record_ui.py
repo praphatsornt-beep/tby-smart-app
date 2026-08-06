@@ -1810,15 +1810,17 @@ def render(tab1, products, customers, customer_map):
             st.subheader("📦 แบ่งกล่อง + ปริ้นใบปะหน้า — Inter Express")
             st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ (ใส่รหัสไปรษณีย์แบบ SH-kgXXXXX "
                        "ในข้อความเดียวกัน) — หรือกดคำนวณไว้แล้วที่ tab 🔢 คำนวณยอด ก็ใช้ต่อได้เลย "
-                       "คิดค่าส่งเฉพาะ Inter Express (ขนส่ง manual ที่ไม่ผ่าน iShip) ระบบจะเก็บ "
-                       "สินค้าเดียวกันไว้ด้วยกันก่อน แล้วหาเพดานน้ำหนัก/กล่องที่คุ้มสุดให้เองอัตโนมัติ")
+                       "คิดค่าส่งเฉพาะ Inter Express (ขนส่ง manual ที่ไม่ผ่าน iShip) "
+                       "**พิมพ์บรรทัดเดียว** = ให้ระบบจัดใส่กล่องและคำนวณน้ำหนักให้เองอัตโนมัติ "
+                       "**พิมพ์แยกหลายบรรทัด** = แต่ละบรรทัดคือ 1 กล่องตามที่พิมพ์เป๊ะๆ (ไม่จัดใหม่)")
 
             _mbx_ver = st.session_state.get("_mbx_ver", 0)
             _mbx_c1, _mbx_c2 = st.columns([4, 1])
             with _mbx_c1:
                 _mbx_text = st.text_area(
-                    "รหัสสินค้า", key=f"_mbx_text_v{_mbx_ver}", height=80,
-                    placeholder="TF2581-2 RB2306-1 SH-kg12170",
+                    "รหัสสินค้า (1 บรรทัด/กล่อง ถ้าจะกำหนดเอง)",
+                    key=f"_mbx_text_v{_mbx_ver}", height=80,
+                    placeholder="TF2581-2 RB2306-1 SH-kg12170\nTF2580-18",
                 )
             with _mbx_c2:
                 st.write("")
@@ -1828,8 +1830,12 @@ def render(tab1, products, customers, customer_map):
                         st.warning("กรุณากรอกรหัสสินค้าก่อน")
                     else:
                         st.session_state["_calc_result"] = calc_logic.parse_calc_order(_mbx_text, products)
+                        st.session_state["_mbx_lines"] = [
+                            _l.strip() for _l in _mbx_text.splitlines() if _l.strip()
+                        ]
                 if st.button("🗑️ ล้าง", key="_mbx_clear_btn", width="stretch"):
                     st.session_state.pop("_calc_result", None)
+                    st.session_state.pop("_mbx_lines", None)
                     st.session_state["_mbx_ver"] = _mbx_ver + 1
                     st.rerun()
 
@@ -1852,12 +1858,59 @@ def render(tab1, products, customers, customer_map):
                 else:
                     # หน้านี้ผูกกับ Inter Express โดยเฉพาะ (manual — ไม่ผ่าน iShip)
                     # ไม่ต้องเทียบกับขนส่งอื่นเหมือน tab คำนวณยอด
-                    _bx_plans = carr.plan_boxes(_bx_cr["items"], _bx_postcode, carrier_ids=["inter_express"])
-                    if not _bx_plans:
+
+                    # พิมพ์แยกหลายบรรทัด = ผู้ใช้กำหนดเองว่าแต่ละบรรทัดคือ 1 กล่อง
+                    # (ไม่ให้ระบบจัดกล่องใหม่) — เช็คน้ำหนักรวมจาก _mbx_lines เทียบกับ
+                    # _bx_cr ปัจจุบันก่อนเชื่อ กัน _mbx_lines ค้างจากการคำนวณครั้งก่อน
+                    # (เช่นไปคำนวณคำสั่งอื่นที่ tab คำนวณยอดแทน แล้วย้อนมาโดยไม่กด
+                    # คำนวณซ้ำที่นี่)
+                    _mbx_lines = st.session_state.get("_mbx_lines") or []
+                    _manual_line_crs = [calc_logic.parse_calc_order(_l, products) for _l in _mbx_lines]
+                    _manual_check_kg = sum(
+                        int(_ci["product"].get("weight_grams", 0)) * int(_ci["qty"])
+                        for _lcr in _manual_line_crs for _ci in _lcr["items"]
+                    ) / 1000
+                    _manual_mode = len(_mbx_lines) > 1 and abs(_manual_check_kg - _bx_prod_kg) < 0.001
+
+                    if _manual_mode:
+                        _sel_plan = {"id": "inter_express", "name": "Inter Express",
+                                     "boxes": [], "total_cost": 0.0, "ceiling_used": None}
+                        _manual_exceeds = False
+                        for _lcr in _manual_line_crs:
+                            if not _lcr["items"]:
+                                continue
+                            _box_items: dict = {}
+                            _box_w_g = 0
+                            for _ci in _lcr["items"]:
+                                _code = _ci["product"]["id"].upper()
+                                _cq = int(_ci["qty"])
+                                _box_items[_code] = _box_items.get(_code, 0) + _cq
+                                _box_w_g += int(_ci["product"].get("weight_grams", 0)) * _cq
+                            _box_w_kg = _box_w_g / 1000
+                            _ship_kg = _box_w_kg + BOX_WEIGHT_G / 1000
+                            _inter_opt = next(
+                                (o for o in carr.get_shipping_options(_ship_kg, _bx_postcode) if o["id"] == "inter_express"),
+                                None,
+                            )
+                            _box_price = None
+                            if _inter_opt is None or _inter_opt["exceeds_max"]:
+                                _manual_exceeds = True
+                            else:
+                                _box_price = _inter_opt["total"]
+                                _sel_plan["total_cost"] += _box_price
+                            _sel_plan["boxes"].append({"items": _box_items, "weight_kg": _box_w_kg, "price": _box_price})
+                        _sel_plan["box_count"] = len(_sel_plan["boxes"])
+                        if _manual_exceeds:
+                            st.warning("⚠️ บางกล่องที่พิมพ์เกินน้ำหนักสูงสุดของ Inter Express (ราคาจะไม่ขึ้นให้สำหรับกล่องนั้น) — ลองแยกสินค้าลงหลายกล่องแทน")
+                    else:
+                        _bx_plans = carr.plan_boxes(_bx_cr["items"], _bx_postcode, carrier_ids=["inter_express"])
+                        _sel_plan = _bx_plans[0] if _bx_plans else None
+
+                    if _sel_plan is None:
                         st.warning("Inter Express รับออร์เดอร์นี้ไม่ได้ (น้ำหนัก/ขนาดเกิน)")
                     else:
-                        _sel_plan = _bx_plans[0]
-                        st.markdown(f"**📦 การจัดสินค้า — Inter Express ({_sel_plan['box_count']} กล่อง — เพดาน {_sel_plan['ceiling_used']} kg)**")
+                        _plan_desc = "ตามที่พิมพ์แต่ละบรรทัด" if _manual_mode else f"เพดาน {_sel_plan['ceiling_used']} kg"
+                        st.markdown(f"**📦 การจัดสินค้า — Inter Express ({_sel_plan['box_count']} กล่อง — {_plan_desc})**")
                         for _bi, _box in enumerate(_sel_plan["boxes"], 1):
                             _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
                             _bkg = _box["weight_kg"] + 0.5
