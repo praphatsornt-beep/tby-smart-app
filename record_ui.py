@@ -19,7 +19,7 @@ from ui_helpers import (
 import carriers as carr
 
 
-_T1_TABS = ["📝 บันทึกขาย", "📦 ส่งของ", "🔢 คำนวณยอด"]
+_T1_TABS = ["📝 บันทึกขาย", "📦 ส่งของ", "🔢 คำนวณยอด", "📮 ส่ง Manual"]
 
 
 def _sum_row(label, value, big=False, accent=False):
@@ -1806,238 +1806,235 @@ def render(tab1, products, customers, customer_map):
                         else:
                             _line_btn_slot.caption("👤 ยังไม่มี LINE ID")
 
-            # ── แบ่งกล่อง ──────────────────────────────────────────────────────
-            if st.button("📦 แบ่งกล่อง", key="toggle_boxcalc", width="stretch"):
-                st.session_state["_show_boxcalc"] = not st.session_state.get("_show_boxcalc", False)
-            if st.session_state.get("_show_boxcalc"):
-                st.subheader("📦 คำนวณการแบ่งกล่อง")
-                st.caption("ดึงน้ำหนักจาก tab 🔢 คำนวณยอด — กดคำนวณที่นั่นก่อน "
-                           "ระบบจะเก็บสินค้าเดียวกันไว้ด้วยกันก่อน แล้วหาเพดานน้ำหนัก/กล่องที่คุ้มสุด "
-                           "ของแต่ละขนส่งให้เองอัตโนมัติ")
+        elif _sub_active == "📮 ส่ง Manual":
+            st.subheader("📦 แบ่งกล่อง + ปริ้นใบปะหน้า (manual — ไม่ผ่าน iShip เช่น Inter/J&T)")
+            st.caption("ดึงน้ำหนักจาก tab 🔢 คำนวณยอด — กดคำนวณที่นั่นก่อน "
+                       "ระบบจะเก็บสินค้าเดียวกันไว้ด้วยกันก่อน แล้วหาเพดานน้ำหนัก/กล่องที่คุ้มสุด "
+                       "ของแต่ละขนส่งให้เองอัตโนมัติ")
 
-                _bx_cr = st.session_state.get("_calc_result")
-                if not _bx_cr or not _bx_cr.get("items"):
-                    st.info("กรุณาคำนวณยอดใน tab 🔢 คำนวณยอด ก่อน")
+            _bx_cr = st.session_state.get("_calc_result")
+            if not _bx_cr or not _bx_cr.get("items"):
+                st.info("กรุณาคำนวณยอดใน tab 🔢 คำนวณยอด ก่อน")
+            else:
+                _bx_prod_kg  = sum(int(_ci["product"].get("weight_grams",0))*int(_ci["qty"]) for _ci in _bx_cr["items"]) / 1000
+                _bx_postcode = _bx_cr.get("ship_zip", "")
+                st.markdown(f"⚖️ น้ำหนักสินค้ารวม: **{_bx_prod_kg:.3f} kg**"
+                            + (f"  |  📮 **{_bx_postcode}**" if _bx_postcode else ""))
+
+                if not _bx_postcode:
+                    st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อวางแผนกล่อง+เทียบค่าส่ง")
                 else:
-                    _bx_prod_kg  = sum(int(_ci["product"].get("weight_grams",0))*int(_ci["qty"]) for _ci in _bx_cr["items"]) / 1000
-                    _bx_postcode = _bx_cr.get("ship_zip", "")
-                    st.markdown(f"⚖️ น้ำหนักสินค้ารวม: **{_bx_prod_kg:.3f} kg**"
-                                + (f"  |  📮 **{_bx_postcode}**" if _bx_postcode else ""))
-
-                    if not _bx_postcode:
-                        st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อวางแผนกล่อง+เทียบค่าส่ง")
+                    _bx_plans = carr.plan_boxes(_bx_cr["items"], _bx_postcode)
+                    if not _bx_plans:
+                        st.warning("ไม่มีขนส่งไหนรองรับออร์เดอร์นี้ได้เลย")
                     else:
-                        _bx_plans = carr.plan_boxes(_bx_cr["items"], _bx_postcode)
-                        if not _bx_plans:
-                            st.warning("ไม่มีขนส่งไหนรองรับออร์เดอร์นี้ได้เลย")
-                        else:
-                            # ── สรุปทุกขนส่ง (เรียงถูกสุดก่อน) ────────────────────
-                            _plan_rows = [{
-                                "ขนส่ง":         ("⭐ " if i == 0 else "") + p["name"],
-                                "จำนวนกล่อง":    p["box_count"],
-                                "เพดานกล่อง":    f"{p['ceiling_used']} kg",
-                                "ค่าส่งรวม (฿)":  p["total_cost"],
-                            } for i, p in enumerate(_bx_plans)]
-                            st.dataframe(pd.DataFrame(_plan_rows), hide_index=True, width="stretch",
-                                         column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%.0f ฿")})
-                            st.caption("⭐ = ค่าส่งรวมถูกสุด — ระบบลองแพ็คที่จุดตัดราคาของแต่ละขนส่งให้เองแล้ว")
+                        # ── สรุปทุกขนส่ง (เรียงถูกสุดก่อน) ────────────────────
+                        _plan_rows = [{
+                            "ขนส่ง":         ("⭐ " if i == 0 else "") + p["name"],
+                            "จำนวนกล่อง":    p["box_count"],
+                            "เพดานกล่อง":    f"{p['ceiling_used']} kg",
+                            "ค่าส่งรวม (฿)":  p["total_cost"],
+                        } for i, p in enumerate(_bx_plans)]
+                        st.dataframe(pd.DataFrame(_plan_rows), hide_index=True, width="stretch",
+                                     column_config={"ค่าส่งรวม (฿)": st.column_config.NumberColumn(format="%.0f ฿")})
+                        st.caption("⭐ = ค่าส่งรวมถูกสุด — ระบบลองแพ็คที่จุดตัดราคาของแต่ละขนส่งให้เองแล้ว")
 
-                            # ── รายละเอียด — เลือกขนส่ง ───────────────────────────
+                        # ── รายละเอียด — เลือกขนส่ง ───────────────────────────
+                        st.divider()
+                        _bx_idx = st.selectbox(
+                            "ดูรายละเอียด — เลือกขนส่ง",
+                            list(range(len(_bx_plans))),
+                            format_func=lambda i: _bx_plans[i]["name"],
+                            key="_bx_sel_carrier",
+                        )
+                        _sel_plan = _bx_plans[_bx_idx]
+
+                        st.markdown(f"**📦 การจัดสินค้า ({_sel_plan['box_count']} กล่อง — เพดาน {_sel_plan['ceiling_used']} kg)**")
+                        for _bi, _box in enumerate(_sel_plan["boxes"], 1):
+                            _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
+                            _bkg = _box["weight_kg"] + 0.5
+                            _bprice = _box.get("price")
+                            _price_str = f" &nbsp;·&nbsp; **{_bprice:.0f} ฿**" if _bprice is not None else ""
+                            st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`{_price_str}")
+                        st.markdown(f"**ค่าส่งรวม: {_sel_plan['total_cost']:.0f} ฿**")
+
+                        # ── เทียบทุกจุดตัดที่ลอง (ให้เห็นว่าลองครบจริง ไม่ใช่แค่ค่าที่เลือก)
+                        if len(_sel_plan.get("candidates", [])) > 1:
                             st.divider()
-                            _bx_idx = st.selectbox(
-                                "ดูรายละเอียด — เลือกขนส่ง",
-                                list(range(len(_bx_plans))),
-                                format_func=lambda i: _bx_plans[i]["name"],
-                                key="_bx_sel_carrier",
-                            )
-                            _sel_plan = _bx_plans[_bx_idx]
+                            st.markdown("**⚖️ เทียบทุกเพดานที่ลองของขนส่งนี้**")
+                            _cand_rows = [{
+                                "เพดาน":       ("✅ " if c["ceiling"] == _sel_plan["ceiling_used"] else "") + f"{c['ceiling']} kg",
+                                "จำนวนกล่อง":  c["box_count"] if c["box_count"] is not None else "—",
+                                "ค่าส่งรวม (฿)": c["total_cost"] if c["total_cost"] is not None else "เกินน้ำหนัก",
+                            } for c in _sel_plan["candidates"]]
+                            st.dataframe(pd.DataFrame(_cand_rows), hide_index=True, width="stretch")
+                            st.caption("✅ = เพดานที่เลือกใช้ (ถูกสุดหรือเท่ากับตัวอื่น)")
 
-                            st.markdown(f"**📦 การจัดสินค้า ({_sel_plan['box_count']} กล่อง — เพดาน {_sel_plan['ceiling_used']} kg)**")
-                            for _bi, _box in enumerate(_sel_plan["boxes"], 1):
-                                _items_str = "  ·  ".join(f"{code}×{qty}" for code, qty in _box["items"].items())
-                                _bkg = _box["weight_kg"] + 0.5
-                                _bprice = _box.get("price")
-                                _price_str = f" &nbsp;·&nbsp; **{_bprice:.0f} ฿**" if _bprice is not None else ""
-                                st.markdown(f"กล่อง {_bi}: {_items_str} &nbsp;`{_box['weight_kg']:.3f} kg สินค้า + 0.5 kg กล่อง = {_bkg:.3f} kg`{_price_str}")
-                            st.markdown(f"**ค่าส่งรวม: {_sel_plan['total_cost']:.0f} ฿**")
+                        # ── ปริ้นใบปะหน้า (manual — ไม่ผ่าน iShip เช่น Inter/J&T) ──────
+                        st.divider()
+                        if st.button("🖨️ ปริ้นใบปะหน้า", key="toggle_manual_label"):
+                            st.session_state["_show_manual_label"] = not st.session_state.get("_show_manual_label", False)
+                        if st.session_state.get("_show_manual_label"):
+                            st.markdown("**🖨️ ปริ้นใบปะหน้า (แบบ manual — ไม่ผ่าน iShip)**")
 
-                            # ── เทียบทุกจุดตัดที่ลอง (ให้เห็นว่าลองครบจริง ไม่ใช่แค่ค่าที่เลือก)
-                            if len(_sel_plan.get("candidates", [])) > 1:
-                                st.divider()
-                                st.markdown("**⚖️ เทียบทุกเพดานที่ลองของขนส่งนี้**")
-                                _cand_rows = [{
-                                    "เพดาน":       ("✅ " if c["ceiling"] == _sel_plan["ceiling_used"] else "") + f"{c['ceiling']} kg",
-                                    "จำนวนกล่อง":  c["box_count"] if c["box_count"] is not None else "—",
-                                    "ค่าส่งรวม (฿)": c["total_cost"] if c["total_cost"] is not None else "เกินน้ำหนัก",
-                                } for c in _sel_plan["candidates"]]
-                                st.dataframe(pd.DataFrame(_cand_rows), hide_index=True, width="stretch")
-                                st.caption("✅ = เพดานที่เลือกใช้ (ถูกสุดหรือเท่ากับตัวอื่น)")
+                            # เติมค่าที่ staged ไว้ (เลือกที่อยู่เดิม / รหัสไปรษณีย์ auto-fill)
+                            # ก่อน render widget เสมอ — ห้ามตั้งค่า session_state ของ widget
+                            # ที่ render ไปแล้วในรอบเดียวกัน (Streamlit จะ error)
+                            for _lfk, _lwk in [
+                                ("_lbl_fr_name", "_lbl_name"), ("_lbl_fr_phone", "_lbl_phone"),
+                                ("_lbl_fr_al", "_lbl_addr_line"), ("_lbl_fr_dt", "_lbl_district"),
+                                ("_lbl_fr_am", "_lbl_amphure"), ("_lbl_fr_pv", "_lbl_province"),
+                                ("_lbl_fr_zip", "_lbl_zip"),
+                            ]:
+                                if _lfk in st.session_state:
+                                    st.session_state[_lwk] = st.session_state.pop(_lfk)
 
-                            # ── ปริ้นใบปะหน้า (manual — ไม่ผ่าน iShip เช่น Inter/J&T) ──────
-                            st.divider()
-                            if st.button("🖨️ ปริ้นใบปะหน้า", key="toggle_manual_label"):
-                                st.session_state["_show_manual_label"] = not st.session_state.get("_show_manual_label", False)
-                            if st.session_state.get("_show_manual_label"):
-                                st.markdown("**🖨️ ปริ้นใบปะหน้า (แบบ manual — ไม่ผ่าน iShip)**")
-
-                                # เติมค่าที่ staged ไว้ (เลือกที่อยู่เดิม / รหัสไปรษณีย์ auto-fill)
-                                # ก่อน render widget เสมอ — ห้ามตั้งค่า session_state ของ widget
-                                # ที่ render ไปแล้วในรอบเดียวกัน (Streamlit จะ error)
-                                for _lfk, _lwk in [
-                                    ("_lbl_fr_name", "_lbl_name"), ("_lbl_fr_phone", "_lbl_phone"),
-                                    ("_lbl_fr_al", "_lbl_addr_line"), ("_lbl_fr_dt", "_lbl_district"),
-                                    ("_lbl_fr_am", "_lbl_amphure"), ("_lbl_fr_pv", "_lbl_province"),
-                                    ("_lbl_fr_zip", "_lbl_zip"),
-                                ]:
-                                    if _lfk in st.session_state:
-                                        st.session_state[_lwk] = st.session_state.pop(_lfk)
-
-                                _lbl_cust_opts = ["-- พิมพ์เอง --"] + sorted(customer_map.keys(), key=str.casefold)
-                                _lbl_cust_sel  = st.selectbox("ลูกค้า/ผู้รับ", _lbl_cust_opts, key="_lbl_cust_sel")
-                                _lbl_cust_id  = None
-                                _lbl_addr_sig = None
-                                _lbl_seed     = {}
-                                if _lbl_cust_sel != "-- พิมพ์เอง --":
-                                    _lbl_cust_obj = customer_map[_lbl_cust_sel]
-                                    _lbl_cust_id  = _lbl_cust_obj["id"]
-                                    _lbl_addrs = db.get_customer_addresses(_lbl_cust_id)
-                                    if _lbl_addrs:
-                                        _lbl_addr_labels = [
-                                            f"{a.get('recipient_name','')} · {a.get('phone','')} · "
-                                            f"{a.get('address_line','')} {a.get('district','')} {a.get('amphure','')} {a.get('province','')} {a.get('postal_code','')}"
-                                            for a in _lbl_addrs
-                                        ]
-                                        _lbl_addr_sel = st.selectbox("ที่อยู่ที่บันทึกไว้", _lbl_addr_labels, key="_lbl_addr_sel")
-                                        _lbl_seed     = _lbl_addrs[_lbl_addr_labels.index(_lbl_addr_sel)]
-                                        _lbl_addr_sig = (_lbl_cust_id, _lbl_addr_sel)
-                                    else:
-                                        st.caption("ลูกค้านี้ยังไม่มีที่อยู่บันทึกไว้ — กรอกเองด้านล่าง")
-
-                                # ที่อยู่ที่เลือกเปลี่ยนไปจากเดิม → stage แล้ว rerun เพื่อเติมให้ widget ด้านล่าง
-                                if _lbl_addr_sig is not None and _lbl_addr_sig != st.session_state.get("_lbl_addr_applied"):
-                                    st.session_state["_lbl_addr_applied"] = _lbl_addr_sig
-                                    st.session_state["_lbl_fr_name"]  = _lbl_seed.get("recipient_name", "") or ""
-                                    st.session_state["_lbl_fr_phone"] = _lbl_seed.get("phone", "") or ""
-                                    st.session_state["_lbl_fr_al"]    = _lbl_seed.get("address_line", "") or ""
-                                    st.session_state["_lbl_fr_dt"]    = _lbl_seed.get("district", "") or ""
-                                    st.session_state["_lbl_fr_am"]    = _lbl_seed.get("amphure", "") or ""
-                                    st.session_state["_lbl_fr_pv"]    = _lbl_seed.get("province", "") or ""
-                                    st.session_state["_lbl_fr_zip"]   = _lbl_seed.get("postal_code", "") or ""
-                                    # ตั้งค่า searchbox ของตำบลตรงๆ (ไม่ใช้ value= เฉยๆ เพราะถ้า
-                                    # key นี้เคยมีอยู่แล้ว Streamlit จะไม่ยอมอัปเดตค่าที่แสดงให้)
-                                    st.session_state["_lbl_dt_searchbox"] = _lbl_seed.get("district", "") or ""
-                                    st.session_state["_lbl_amphure_searchbox"] = _lbl_seed.get("amphure", "") or ""
-                                    st.rerun()
-
-                                _lc1, _lc2 = st.columns(2)
-                                _lbl_name  = _lc1.text_input("ชื่อผู้รับ", key="_lbl_name")
-                                _lbl_phone = _lc2.text_input("เบอร์โทร", key="_lbl_phone")
-                                _lbl_addr_line = st.text_input("ที่อยู่ (บ้านเลขที่/ถนน)", key="_lbl_addr_line")
-                                _la1, _la2, _la3, _la4 = st.columns(4)
-                                with _la1:
-                                    _lbl_district = _tambon_selectbox(
-                                        "_lbl_district", "_lbl_amphure", "_lbl_province", "_lbl_zip",
-                                        "_lbl_dt_searchbox", am_searchbox_key="_lbl_amphure_searchbox",
-                                    )
-                                with _la2:
-                                    _lbl_amphure = _amphure_selectbox("_lbl_amphure", "_lbl_province", "_lbl_amphure_searchbox")
-                                _lbl_province = _la3.selectbox("จังหวัด", [""] + _PROVINCES, key="_lbl_province")
-                                _lbl_zip      = _la4.text_input("รหัสไปรษณีย์", max_chars=5, key="_lbl_zip")
-                                _postcode_suggest(_lbl_zip, "_lbl_district", "_lbl_amphure", "_lbl_province",
-                                                  "_lbl_dt_searchbox", "_lbl_pc_suggest",
-                                                  stage_dt="_lbl_fr_dt", stage_am="_lbl_fr_am", stage_pv="_lbl_fr_pv",
-                                                  am_searchbox_key="_lbl_amphure_searchbox")
-
-                                if _lbl_cust_id:
-                                    if st.button("💾 บันทึกที่อยู่นี้", key="_lbl_save_addr_btn"):
-                                        try:
-                                            db.upsert_customer_address({
-                                                "id":             str(uuid.uuid4()),
-                                                "customer_id":    _lbl_cust_id,
-                                                "recipient_name": _lbl_name,
-                                                "phone":          _lbl_phone,
-                                                "address_line":   _lbl_addr_line,
-                                                "district":       _lbl_district,
-                                                "amphure":        _lbl_amphure,
-                                                "province":       _lbl_province,
-                                                "postal_code":    _lbl_zip,
-                                            })
-                                            st.success("✅ บันทึกแล้ว — เลือกจากที่อยู่ที่บันทึกไว้ได้ครั้งถัดไป")
-                                        except Exception as _lbl_sa_e:
-                                            st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_lbl_sa_e}")
+                            _lbl_cust_opts = ["-- พิมพ์เอง --"] + sorted(customer_map.keys(), key=str.casefold)
+                            _lbl_cust_sel  = st.selectbox("ลูกค้า/ผู้รับ", _lbl_cust_opts, key="_lbl_cust_sel")
+                            _lbl_cust_id  = None
+                            _lbl_addr_sig = None
+                            _lbl_seed     = {}
+                            if _lbl_cust_sel != "-- พิมพ์เอง --":
+                                _lbl_cust_obj = customer_map[_lbl_cust_sel]
+                                _lbl_cust_id  = _lbl_cust_obj["id"]
+                                _lbl_addrs = db.get_customer_addresses(_lbl_cust_id)
+                                if _lbl_addrs:
+                                    _lbl_addr_labels = [
+                                        f"{a.get('recipient_name','')} · {a.get('phone','')} · "
+                                        f"{a.get('address_line','')} {a.get('district','')} {a.get('amphure','')} {a.get('province','')} {a.get('postal_code','')}"
+                                        for a in _lbl_addrs
+                                    ]
+                                    _lbl_addr_sel = st.selectbox("ที่อยู่ที่บันทึกไว้", _lbl_addr_labels, key="_lbl_addr_sel")
+                                    _lbl_seed     = _lbl_addrs[_lbl_addr_labels.index(_lbl_addr_sel)]
+                                    _lbl_addr_sig = (_lbl_cust_id, _lbl_addr_sel)
                                 else:
-                                    st.caption("เลือกลูกค้าด้านบนก่อน จึงจะบันทึกที่อยู่นี้ไว้ใช้ครั้งถัดไปได้")
+                                    st.caption("ลูกค้านี้ยังไม่มีที่อยู่บันทึกไว้ — กรอกเองด้านล่าง")
 
-                                st.markdown("**ขนาดกล่อง — เพิ่มได้หลายขนาดในใบเดียว**")
-                                if "_lbl_box_rows" not in st.session_state:
-                                    st.session_state["_lbl_box_rows"] = []
+                            # ที่อยู่ที่เลือกเปลี่ยนไปจากเดิม → stage แล้ว rerun เพื่อเติมให้ widget ด้านล่าง
+                            if _lbl_addr_sig is not None and _lbl_addr_sig != st.session_state.get("_lbl_addr_applied"):
+                                st.session_state["_lbl_addr_applied"] = _lbl_addr_sig
+                                st.session_state["_lbl_fr_name"]  = _lbl_seed.get("recipient_name", "") or ""
+                                st.session_state["_lbl_fr_phone"] = _lbl_seed.get("phone", "") or ""
+                                st.session_state["_lbl_fr_al"]    = _lbl_seed.get("address_line", "") or ""
+                                st.session_state["_lbl_fr_dt"]    = _lbl_seed.get("district", "") or ""
+                                st.session_state["_lbl_fr_am"]    = _lbl_seed.get("amphure", "") or ""
+                                st.session_state["_lbl_fr_pv"]    = _lbl_seed.get("province", "") or ""
+                                st.session_state["_lbl_fr_zip"]   = _lbl_seed.get("postal_code", "") or ""
+                                # ตั้งค่า searchbox ของตำบลตรงๆ (ไม่ใช้ value= เฉยๆ เพราะถ้า
+                                # key นี้เคยมีอยู่แล้ว Streamlit จะไม่ยอมอัปเดตค่าที่แสดงให้)
+                                st.session_state["_lbl_dt_searchbox"] = _lbl_seed.get("district", "") or ""
+                                st.session_state["_lbl_amphure_searchbox"] = _lbl_seed.get("amphure", "") or ""
+                                st.rerun()
 
-                                _lbl_presets = get_bulky_presets()
-                                _lbl_preset_opts = ["กรอกเอง"] + [p["name"] for p in _lbl_presets]
-                                _lbl_preset_sel = st.selectbox(
-                                    "เลือกขนาดกล่อง (จัดการ preset ได้ที่แท็บ ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง)",
-                                    _lbl_preset_opts, key="_lbl_preset_sel",
+                            _lc1, _lc2 = st.columns(2)
+                            _lbl_name  = _lc1.text_input("ชื่อผู้รับ", key="_lbl_name")
+                            _lbl_phone = _lc2.text_input("เบอร์โทร", key="_lbl_phone")
+                            _lbl_addr_line = st.text_input("ที่อยู่ (บ้านเลขที่/ถนน)", key="_lbl_addr_line")
+                            _la1, _la2, _la3, _la4 = st.columns(4)
+                            with _la1:
+                                _lbl_district = _tambon_selectbox(
+                                    "_lbl_district", "_lbl_amphure", "_lbl_province", "_lbl_zip",
+                                    "_lbl_dt_searchbox", am_searchbox_key="_lbl_amphure_searchbox",
                                 )
-                                _lbl_pm = next((p for p in _lbl_presets if p["name"] == _lbl_preset_sel), None)
-                                _lbl_def_l, _lbl_def_w, _lbl_def_h = (_lbl_pm["l"], _lbl_pm["w"], _lbl_pm["h"]) if _lbl_pm else (30, 30, 20)
-                                _lb1, _lb2, _lb3, _lb4, _lb5 = st.columns(5)
-                                _lbl_len = _lb1.number_input("ยาว (cm)", 1, 300, _lbl_def_l, key=f"_lbl_len_{_lbl_preset_sel}")
-                                _lbl_wid = _lb2.number_input("กว้าง (cm)", 1, 300, _lbl_def_w, key=f"_lbl_wid_{_lbl_preset_sel}")
-                                _lbl_hgt = _lb3.number_input("สูง (cm)", 1, 300, _lbl_def_h, key=f"_lbl_hgt_{_lbl_preset_sel}")
-                                _lbl_row_weight = _lb4.number_input("น้ำหนัก/กล่อง (kg)", 0.0, 200.0, 25.0, key="_lbl_row_weight")
-                                _lbl_row_qty    = _lb5.number_input("จำนวน", 1, 100, 1, key="_lbl_row_qty")
+                            with _la2:
+                                _lbl_amphure = _amphure_selectbox("_lbl_amphure", "_lbl_province", "_lbl_amphure_searchbox")
+                            _lbl_province = _la3.selectbox("จังหวัด", [""] + _PROVINCES, key="_lbl_province")
+                            _lbl_zip      = _la4.text_input("รหัสไปรษณีย์", max_chars=5, key="_lbl_zip")
+                            _postcode_suggest(_lbl_zip, "_lbl_district", "_lbl_amphure", "_lbl_province",
+                                              "_lbl_dt_searchbox", "_lbl_pc_suggest",
+                                              stage_dt="_lbl_fr_dt", stage_am="_lbl_fr_am", stage_pv="_lbl_fr_pv",
+                                              am_searchbox_key="_lbl_amphure_searchbox")
 
-                                if st.button("➕ เพิ่มกล่อง", key="_lbl_add_row_btn"):
-                                    st.session_state["_lbl_box_rows"].append({
-                                        "l": int(_lbl_len), "w": int(_lbl_wid), "h": int(_lbl_hgt),
-                                        "weight_kg": float(_lbl_row_weight), "qty": int(_lbl_row_qty),
-                                    })
+                            if _lbl_cust_id:
+                                if st.button("💾 บันทึกที่อยู่นี้", key="_lbl_save_addr_btn"):
+                                    try:
+                                        db.upsert_customer_address({
+                                            "id":             str(uuid.uuid4()),
+                                            "customer_id":    _lbl_cust_id,
+                                            "recipient_name": _lbl_name,
+                                            "phone":          _lbl_phone,
+                                            "address_line":   _lbl_addr_line,
+                                            "district":       _lbl_district,
+                                            "amphure":        _lbl_amphure,
+                                            "province":       _lbl_province,
+                                            "postal_code":    _lbl_zip,
+                                        })
+                                        st.success("✅ บันทึกแล้ว — เลือกจากที่อยู่ที่บันทึกไว้ได้ครั้งถัดไป")
+                                    except Exception as _lbl_sa_e:
+                                        st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_lbl_sa_e}")
+                            else:
+                                st.caption("เลือกลูกค้าด้านบนก่อน จึงจะบันทึกที่อยู่นี้ไว้ใช้ครั้งถัดไปได้")
+
+                            st.markdown("**ขนาดกล่อง — เพิ่มได้หลายขนาดในใบเดียว**")
+                            if "_lbl_box_rows" not in st.session_state:
+                                st.session_state["_lbl_box_rows"] = []
+
+                            _lbl_presets = get_bulky_presets()
+                            _lbl_preset_opts = ["กรอกเอง"] + [p["name"] for p in _lbl_presets]
+                            _lbl_preset_sel = st.selectbox(
+                                "เลือกขนาดกล่อง (จัดการ preset ได้ที่แท็บ ⚙️ จัดการข้อมูล → 📐 ขนาดกล่อง)",
+                                _lbl_preset_opts, key="_lbl_preset_sel",
+                            )
+                            _lbl_pm = next((p for p in _lbl_presets if p["name"] == _lbl_preset_sel), None)
+                            _lbl_def_l, _lbl_def_w, _lbl_def_h = (_lbl_pm["l"], _lbl_pm["w"], _lbl_pm["h"]) if _lbl_pm else (30, 30, 20)
+                            _lb1, _lb2, _lb3, _lb4, _lb5 = st.columns(5)
+                            _lbl_len = _lb1.number_input("ยาว (cm)", 1, 300, _lbl_def_l, key=f"_lbl_len_{_lbl_preset_sel}")
+                            _lbl_wid = _lb2.number_input("กว้าง (cm)", 1, 300, _lbl_def_w, key=f"_lbl_wid_{_lbl_preset_sel}")
+                            _lbl_hgt = _lb3.number_input("สูง (cm)", 1, 300, _lbl_def_h, key=f"_lbl_hgt_{_lbl_preset_sel}")
+                            _lbl_row_weight = _lb4.number_input("น้ำหนัก/กล่อง (kg)", 0.0, 200.0, 25.0, key="_lbl_row_weight")
+                            _lbl_row_qty    = _lb5.number_input("จำนวน", 1, 100, 1, key="_lbl_row_qty")
+
+                            if st.button("➕ เพิ่มกล่อง", key="_lbl_add_row_btn"):
+                                st.session_state["_lbl_box_rows"].append({
+                                    "l": int(_lbl_len), "w": int(_lbl_wid), "h": int(_lbl_hgt),
+                                    "weight_kg": float(_lbl_row_weight), "qty": int(_lbl_row_qty),
+                                })
+                                st.rerun()
+
+                            _lbl_rows = st.session_state["_lbl_box_rows"]
+                            if _lbl_rows:
+                                st.markdown("**รายการกล่องที่เพิ่มแล้ว**")
+                                _rows_df = pd.DataFrame([{
+                                    "ขนาด (ซม.)":         f"{r['l']}×{r['w']}×{r['h']}",
+                                    "น้ำหนัก/กล่อง (kg)": r["weight_kg"],
+                                    "จำนวน":              r["qty"],
+                                } for r in _lbl_rows])
+                                st.dataframe(_rows_df, hide_index=True, width="stretch")
+                                _lbl_total_boxes  = sum(r["qty"] for r in _lbl_rows)
+                                _lbl_total_weight = sum(r["weight_kg"] * r["qty"] for r in _lbl_rows)
+                                st.caption(f"รวม {_lbl_total_boxes} กล่อง &nbsp;|&nbsp; น้ำหนักรวม {_lbl_total_weight:.2f} kg")
+                                if st.button("🗑️ ล้างรายการกล่องทั้งหมด", key="_lbl_clear_rows_btn"):
+                                    st.session_state["_lbl_box_rows"] = []
                                     st.rerun()
+                            else:
+                                st.caption("ยังไม่มีกล่องในรายการ — กด \"➕ เพิ่มกล่อง\" อย่างน้อย 1 ครั้งก่อนพิมพ์")
 
-                                _lbl_rows = st.session_state["_lbl_box_rows"]
-                                if _lbl_rows:
-                                    st.markdown("**รายการกล่องที่เพิ่มแล้ว**")
-                                    _rows_df = pd.DataFrame([{
-                                        "ขนาด (ซม.)":         f"{r['l']}×{r['w']}×{r['h']}",
-                                        "น้ำหนัก/กล่อง (kg)": r["weight_kg"],
-                                        "จำนวน":              r["qty"],
-                                    } for r in _lbl_rows])
-                                    st.dataframe(_rows_df, hide_index=True, width="stretch")
-                                    _lbl_total_boxes  = sum(r["qty"] for r in _lbl_rows)
-                                    _lbl_total_weight = sum(r["weight_kg"] * r["qty"] for r in _lbl_rows)
-                                    st.caption(f"รวม {_lbl_total_boxes} กล่อง &nbsp;|&nbsp; น้ำหนักรวม {_lbl_total_weight:.2f} kg")
-                                    if st.button("🗑️ ล้างรายการกล่องทั้งหมด", key="_lbl_clear_rows_btn"):
-                                        st.session_state["_lbl_box_rows"] = []
-                                        st.rerun()
+                            _lbl_cod_chk = st.checkbox("COD", key="_lbl_cod_chk")
+                            _lbl_cod_amt = st.number_input("ยอดเก็บ COD (บาท)", min_value=0.0, step=1.0, key="_lbl_cod_amt") if _lbl_cod_chk else 0.0
+                            _lbl_notes   = st.text_input("หมายเหตุ", key="_lbl_notes")
+
+                            if st.button("🖨️ พิมพ์ใบปะหน้า + บันทึกประวัติ", type="primary", key="_lbl_print_btn"):
+                                if not _lbl_name or not _lbl_addr_line:
+                                    st.error("กรุณากรอกชื่อผู้รับและที่อยู่ก่อน")
+                                elif not _lbl_rows:
+                                    st.error("กรุณาเพิ่มกล่องอย่างน้อย 1 รายการก่อนพิมพ์")
                                 else:
-                                    st.caption("ยังไม่มีกล่องในรายการ — กด \"➕ เพิ่มกล่อง\" อย่างน้อย 1 ครั้งก่อนพิมพ์")
+                                    _src = iship_api._src()
+                                    _label_items: dict = {}
+                                    for _box in _sel_plan.get("boxes", []):
+                                        for _code, _qty in _box["items"].items():
+                                            _label_items[_code] = _label_items.get(_code, 0) + _qty
 
-                                _lbl_cod_chk = st.checkbox("COD", key="_lbl_cod_chk")
-                                _lbl_cod_amt = st.number_input("ยอดเก็บ COD (บาท)", min_value=0.0, step=1.0, key="_lbl_cod_amt") if _lbl_cod_chk else 0.0
-                                _lbl_notes   = st.text_input("หมายเหตุ", key="_lbl_notes")
-
-                                if st.button("🖨️ พิมพ์ใบปะหน้า + บันทึกประวัติ", type="primary", key="_lbl_print_btn"):
-                                    if not _lbl_name or not _lbl_addr_line:
-                                        st.error("กรุณากรอกชื่อผู้รับและที่อยู่ก่อน")
-                                    elif not _lbl_rows:
-                                        st.error("กรุณาเพิ่มกล่องอย่างน้อย 1 รายการก่อนพิมพ์")
-                                    else:
-                                        _src = iship_api._src()
-                                        _label_items: dict = {}
-                                        for _box in _sel_plan.get("boxes", []):
-                                            for _code, _qty in _box["items"].items():
-                                                _label_items[_code] = _label_items.get(_code, 0) + _qty
-
-                                        _lbl_total_boxes = sum(r["qty"] for r in _lbl_rows)
-                                        _box_rows_html = "".join(
-                                            f"<tr><td>{r['l']}×{r['w']}×{r['h']} ซม.</td>"
-                                            f"<td style='text-align:center'>{r['weight_kg']:.2f} kg</td>"
-                                            f"<td style='text-align:center'>{r['qty']}</td></tr>"
-                                            for r in _lbl_rows
-                                        )
-                                        _cod_line = f"&nbsp;|&nbsp; <b>COD:</b> {_lbl_cod_amt:,.0f} ฿" if _lbl_cod_chk else ""
-                                        _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_lbl_notes}</div>' if _lbl_notes else ""
-                                        _label_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+                                    _lbl_total_boxes = sum(r["qty"] for r in _lbl_rows)
+                                    _box_rows_html = "".join(
+                                        f"<tr><td>{r['l']}×{r['w']}×{r['h']} ซม.</td>"
+                                        f"<td style='text-align:center'>{r['weight_kg']:.2f} kg</td>"
+                                        f"<td style='text-align:center'>{r['qty']}</td></tr>"
+                                        for r in _lbl_rows
+                                    )
+                                    _cod_line = f"&nbsp;|&nbsp; <b>COD:</b> {_lbl_cod_amt:,.0f} ฿" if _lbl_cod_chk else ""
+                                    _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_lbl_notes}</div>' if _lbl_notes else ""
+                                    _label_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 html,body{{background:#fff!important;color:#000!important}}
@@ -2055,8 +2052,8 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 </style></head><body>
 <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้า</button>
 <div class="header">
-    <div><h1>ใบปะหน้า — {_sel_plan['name']}</h1></div>
-    <div class="header-right">วันที่: {date.today().strftime('%d/%m/%Y')}</div>
+<div><h1>ใบปะหน้า — {_sel_plan['name']}</h1></div>
+<div class="header-right">วันที่: {date.today().strftime('%d/%m/%Y')}</div>
 </div>
 <div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · โทร. {_src.get('ISHIP_SRC_PHONE','')}<br>
 {_src.get('ISHIP_SRC_ADDRESS','')} {_src.get('ISHIP_SRC_DISTRICT','')} {_src.get('ISHIP_SRC_AMPHURE','')} {_src.get('ISHIP_SRC_PROVINCE','')} {_src.get('ISHIP_SRC_ZIPCODE','')}</div>
@@ -2067,33 +2064,33 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 รวม {_lbl_total_boxes} กล่อง {_cod_line}</div>
 {_notes_line}
 </body></html>"""
-                                        st.iframe(_label_html, height=600)
+                                    st.iframe(_label_html, height=600)
 
-                                        _box_summary_txt = "; ".join(
-                                            f"{r['l']}x{r['w']}x{r['h']}cm {r['weight_kg']:.1f}kg x{r['qty']}"
-                                            for r in _lbl_rows
-                                        )
-                                        _full_notes = f"[กล่อง: {_box_summary_txt}]" + (f" {_lbl_notes}" if _lbl_notes else "")
+                                    _box_summary_txt = "; ".join(
+                                        f"{r['l']}x{r['w']}x{r['h']}cm {r['weight_kg']:.1f}kg x{r['qty']}"
+                                        for r in _lbl_rows
+                                    )
+                                    _full_notes = f"[กล่อง: {_box_summary_txt}]" + (f" {_lbl_notes}" if _lbl_notes else "")
 
-                                        db.create_shipment({
-                                            "id":            str(uuid.uuid4()),
-                                            "customer_id":   _lbl_cust_id,
-                                            "recipient_name": _lbl_name,
-                                            "phone":         _lbl_phone,
-                                            "address_line":  _lbl_addr_line,
-                                            "district":      _lbl_district,
-                                            "amphure":       _lbl_amphure,
-                                            "province":      _lbl_province,
-                                            "postal_code":   _lbl_zip,
-                                            "carrier":       _sel_plan["name"],
-                                            "shipping_cost": _sel_plan["total_cost"],
-                                            "items":         [{"product_id": code, "name": code, "qty": qty}
-                                                               for code, qty in _label_items.items()],
-                                            "tracking_no":   "",
-                                            "cod_amount":    _lbl_cod_amt,
-                                            "notes":         _full_notes,
-                                            "source":        "manual",
-                                        })
-                                        st.session_state["_lbl_box_rows"] = []
-                                        st.success("✅ บันทึกประวัติการส่งแล้ว — ดูได้ที่แท็บ 🚚 ประวัติการส่ง")
+                                    db.create_shipment({
+                                        "id":            str(uuid.uuid4()),
+                                        "customer_id":   _lbl_cust_id,
+                                        "recipient_name": _lbl_name,
+                                        "phone":         _lbl_phone,
+                                        "address_line":  _lbl_addr_line,
+                                        "district":      _lbl_district,
+                                        "amphure":       _lbl_amphure,
+                                        "province":      _lbl_province,
+                                        "postal_code":   _lbl_zip,
+                                        "carrier":       _sel_plan["name"],
+                                        "shipping_cost": _sel_plan["total_cost"],
+                                        "items":         [{"product_id": code, "name": code, "qty": qty}
+                                                           for code, qty in _label_items.items()],
+                                        "tracking_no":   "",
+                                        "cod_amount":    _lbl_cod_amt,
+                                        "notes":         _full_notes,
+                                        "source":        "manual",
+                                    })
+                                    st.session_state["_lbl_box_rows"] = []
+                                    st.success("✅ บันทึกประวัติการส่งแล้ว — ดูได้ที่แท็บ 🚚 ประวัติการส่ง")
 
