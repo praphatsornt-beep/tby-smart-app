@@ -15,6 +15,7 @@ from ui_helpers import (
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
     get_bulky_presets, _render_cart_card, _cart_add_items, _guard_double_submit,
+    _esc,
 )
 import carriers as carr
 
@@ -653,7 +654,7 @@ def render(tab1, products, customers, customer_map):
                     _bill_tag    = f" · {_bill_color} {m_bill}" if m_bill else ""
                     st.markdown(
                         f"<div style='color:oklch(0.4 0.1 155);font-size:0.95rem'>"
-                        f"📋 <b>{m_customer}</b> · {_deliv_color} {m_delivery}{_pay_tag}{_bill_tag}{_carrier_tag}</div>",
+                        f"📋 <b>{_esc(m_customer)}</b> · {_deliv_color} {m_delivery}{_pay_tag}{_bill_tag}{_carrier_tag}</div>",
                         unsafe_allow_html=True,
                     )
 
@@ -939,20 +940,20 @@ def render(tab1, products, customers, customer_map):
                     if st.session_state.get("_popup_show_print") and st.session_state.get("_print_popup"):
                         _pit = _pd.get("items", [])
                         _rows_html = "".join(
-                            f"<tr><td><b>{it.get('product_id','')}</b></td>"
-                            f"<td>{it['name']}</td><td style='text-align:center'><b>{it['qty']}</b></td>"
+                            f"<tr><td><b>{_esc(it.get('product_id',''))}</b></td>"
+                            f"<td>{_esc(it['name'])}</td><td style='text-align:center'><b>{it['qty']}</b></td>"
                             f"<td style='text-align:right'>{float(it['price']):,.0f}</td>"
                             f"<td style='text-align:right'><b>{float(it['total']):,.0f}</b></td></tr>"
                             for it in _pit
                         )
                         _old_rows_html = "".join(
-                            f"<tr><td><b>{it['product_id']}</b></td>"
-                            f"<td>{it['name']} (เก่า)</td><td style='text-align:center'><b>{it['qty']}</b></td>"
+                            f"<tr><td><b>{_esc(it['product_id'])}</b></td>"
+                            f"<td>{_esc(it['name'])} (เก่า)</td><td style='text-align:center'><b>{it['qty']}</b></td>"
                             f"<td style='text-align:right'>{(float(it['amount'])/it['qty'] if it['qty'] else 0):,.0f}</td>"
                             f"<td style='text-align:right'><b>{float(it['amount']):,.0f}</b></td></tr>"
                             for it in _old_items
                         )
-                        _ship_row = f"<tr><td></td><td>ค่าส่ง ({_pd.get('carrier','')})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
+                        _ship_row = f"<tr><td></td><td>ค่าส่ง ({_esc(_pd.get('carrier',''))})</td><td></td><td></td><td style='text-align:right'>{_pd['ship_fee']:,.0f}</td></tr>" if _pd.get("ship_fee", 0) > 0 else ""
                         _cod_row  = f"<tr><td></td><td>COD (3%)</td><td></td><td></td><td style='text-align:right'>{_pd['cod_fee']:,.0f}</td></tr>" if _pd.get("is_cod") else ""
                         _new_bill_total = _pd.get("collect", _pd["total_amt"])
                         if _old_total:
@@ -980,8 +981,8 @@ def render(tab1, products, customers, customer_map):
     </style></head><body style="background:#fff;color:#000">
     <button class='btn' onclick='window.print()'>🖨️ พิมพ์บิล</button>
     <h3>TBY — ใบเสร็จรับเงิน</h3>
-    <div class='info'>บิล: <b>{_pd['bill_no']}</b> | วันที่: {_pd['bill_date']}<br>
-    ลูกค้า: <b>{_pd['customer_name']}</b> | สถานะ: {_pd['pay_status']}</div>
+    <div class='info'>บิล: <b>{_esc(_pd['bill_no'])}</b> | วันที่: {_pd['bill_date']}<br>
+    ลูกค้า: <b>{_esc(_pd['customer_name'])}</b> | สถานะ: {_pd['pay_status']}</div>
     <table><tr><th>รหัส</th><th>สินค้า</th><th>จำนวน</th><th>ราคา/ชิ้น</th><th>รวม</th></tr>
     {_rows_html}{_old_rows_html}{_ship_row}{_cod_row}
     </table>
@@ -2094,7 +2095,7 @@ def render(tab1, products, customers, customer_map):
                                         for r in _lbl_rows
                                     )
                                     _cod_line = f"&nbsp;|&nbsp; <b>COD:</b> {_lbl_cod_amt:,.0f} ฿" if _lbl_cod_chk else ""
-                                    _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_lbl_notes}</div>' if _lbl_notes else ""
+                                    _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_esc(_lbl_notes)}</div>' if _lbl_notes else ""
                                     _label_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -2118,8 +2119,8 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 </div>
 <div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · โทร. {_src.get('ISHIP_SRC_PHONE','')}<br>
 {_src.get('ISHIP_SRC_ADDRESS','')} {_src.get('ISHIP_SRC_DISTRICT','')} {_src.get('ISHIP_SRC_AMPHURE','')} {_src.get('ISHIP_SRC_PROVINCE','')} {_src.get('ISHIP_SRC_ZIPCODE','')}</div>
-<div class="section"><b>ผู้รับ:</b> {_lbl_name} · โทร. {_lbl_phone}<br>
-{_lbl_addr_line} {_lbl_district} {_lbl_amphure} {_lbl_province} {_lbl_zip}</div>
+<div class="section"><b>ผู้รับ:</b> {_esc(_lbl_name)} · โทร. {_esc(_lbl_phone)}<br>
+{_esc(_lbl_addr_line)} {_esc(_lbl_district)} {_esc(_lbl_amphure)} {_esc(_lbl_province)} {_esc(_lbl_zip)}</div>
 <div class="section"><b>รายการกล่อง:</b>
 <table><tr><th>ขนาด</th><th>น้ำหนัก/กล่อง</th><th>จำนวน</th></tr>{_box_rows_html}</table>
 รวม {_lbl_total_boxes} กล่อง {_cod_line}</div>
@@ -2180,6 +2181,9 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 
                                     _addr2_txt = f"ต.{_lbl_district} อ.{_lbl_amphure}"
                                     _addr3_txt = f"จ.{_lbl_province} {_lbl_zip}"
+                                    # sizing ทำจากความยาวข้อความดิบ (ก่อน escape) — ความยาวหลัง
+                                    # escape ต่างกันเฉพาะกรณี edge case มีอักขระ <>&"' ปนมา ไม่กระทบ
+                                    # การเลือก tier ในทางปฏิบัติ
                                     _name_px  = _fit_px(_lbl_name,      [(8, 58), (14, 46), (22, 36), (999, 28)])
                                     _addr1_px = _fit_px(_lbl_addr_line, [(12, 50), (20, 40), (30, 32), (999, 24)])
                                     _addr2_px = _fit_px(_addr2_txt,     [(16, 42), (24, 34), (999, 26)])
@@ -2188,13 +2192,13 @@ tr:nth-child(even) td{{background:#f0f0f0}}
                                     _src2 = iship_api._src()
                                     _sticker_total = sum(r["qty"] for r in _lbl_rows)
                                     _sticker_page = f"""<div class="pg">
-<div class="from">จาก: {_src2.get('ISHIP_SRC_NAME','')} (โทร.{_src2.get('ISHIP_SRC_PHONE','')})</div>
+<div class="from">จาก: {_esc(_src2.get('ISHIP_SRC_NAME',''))} (โทร.{_esc(_src2.get('ISHIP_SRC_PHONE',''))})</div>
 <div class="recipient">
-<div class="name" style="font-size:{_name_px}px">{_lbl_name}</div>
-<div class="phone">โทร. {_lbl_phone}</div>
-<div class="addr1" style="font-size:{_addr1_px}px">{_lbl_addr_line}</div>
-<div class="addr2" style="font-size:{_addr2_px}px">{_addr2_txt}</div>
-<div class="addr3" style="font-size:{_addr3_px}px">{_addr3_txt}</div>
+<div class="name" style="font-size:{_name_px}px">{_esc(_lbl_name)}</div>
+<div class="phone">โทร. {_esc(_lbl_phone)}</div>
+<div class="addr1" style="font-size:{_addr1_px}px">{_esc(_lbl_addr_line)}</div>
+<div class="addr2" style="font-size:{_addr2_px}px">{_esc(_addr2_txt)}</div>
+<div class="addr3" style="font-size:{_addr3_px}px">{_esc(_addr3_txt)}</div>
 </div>
 </div>"""
                                     # ขนาดกระดาษ A6 (105x148mm) — ที่อยู่ปลายทางใช้ flex เกลี่ย

@@ -1,4 +1,5 @@
 import re
+import html
 import streamlit as st
 import pandas as pd
 from datetime import date, datetime, timezone, timedelta
@@ -31,6 +32,13 @@ _PROVINCES = [
 ]
 
 BOX_WEIGHT_G = 500  # น้ำหนักกล่อง 0.5 kg (ไม่แสดงในระบบ)
+
+
+def _esc(text) -> str:
+    """Escape ข้อความที่มาจากผู้ใช้ (ชื่อ/ที่อยู่/หมายเหตุ/ชื่อสินค้าที่พิมพ์เอง) ก่อนฝังลง
+    raw HTML ที่ render ผ่าน st.iframe/unsafe_allow_html — กัน XSS จากข้อความที่ลูกค้า
+    พิมพ์มาเอง (เช่นผ่าน LINE OA) แล้วพนักงานคัดลอกมาคำนวณ/ปริ้นต่อ"""
+    return html.escape(str(text), quote=True)
 
 _TAMBON_PREFIXES = ["ตำบล", "ต.", "แขวง"]
 _AMPHURE_PREFIXES = ["อำเภอ", "อ.", "เขต"]
@@ -609,7 +617,7 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
                 _line_total = float(_p.get("price") or 0) * _qty
                 _rc1, _rc2, _rc3, _rc4 = st.columns([3, 2, 1.3, 0.6])
                 with _rc1:
-                    st.markdown(f"<div style='font-weight:700;font-size:1.02rem'>{_p['name']}</div>", unsafe_allow_html=True)
+                    st.markdown(f"<div style='font-weight:700;font-size:1.02rem'>{_esc(_p['name'])}</div>", unsafe_allow_html=True)
                     st.caption(
                         f"{_p['id']} · ฿{float(_p.get('price') or 0):,.0f} · "
                         f"{float(_p.get('points_per_unit') or 0):,.0f} PV"
@@ -945,15 +953,15 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
         rows_html += f"""
         <tr>
           <td>{r['วันที่']}</td>
-          <td><b>{r.get('รหัส','')}</b></td>
-          <td>{r['สินค้า']}</td>
+          <td><b>{_esc(r.get('รหัส',''))}</b></td>
+          <td>{_esc(r['สินค้า'])}</td>
           <td style="text-align:center"><b>{int(r['สั่ง'])}</b></td>
           <td style="text-align:center">{int(r['รับแล้ว'])}</td>
           <td style="text-align:right"><b>{r['ยอดรวม']:,.0f}</b></td>
           <td style="text-align:right">{r['จ่ายแล้ว']:,.0f}</td>
           <td style="text-align:right;color:{owed_color};font-weight:700">{r['ค้างจ่าย']:,.0f}</td>
           <td style="text-align:center;color:{bill_color}">{r['สถานะบิล']}</td>
-          <td>{_fmt_note(r.get('หมายเหตุ','') or '')}</td>
+          <td>{_esc(_fmt_note(r.get('หมายเหตุ','') or ''))}</td>
         </tr>"""
 
     total_amount      = show_p["ยอดรวม"].sum()
@@ -995,19 +1003,19 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     ) if is_ship_bill and ship_fee_str else ""
 
     _staff_row_html = (
-        f"<tr><td>ผู้บันทึก</td><td>{staff_tag}</td></tr>"
+        f"<tr><td>ผู้บันทึก</td><td>{_esc(staff_tag)}</td></tr>"
     ) if staff_tag else ""
 
     def _bill_body(label: str) -> str:
-        _lbl = f"<div style='font-size:11px;color:#888;margin-bottom:4px'>{label}</div>" if label else ""
+        _lbl = f"<div style='font-size:11px;color:#888;margin-bottom:4px'>{_esc(label)}</div>" if label else ""
         return f"""{_lbl}
 <div class="header" style="display:flex;justify-content:space-between;align-items:flex-start">
   <div>
     <h1>ใบรับสินค้า ZHULIAN TBY</h1>
-    <h2>ลูกค้า: {sel_p}{"&nbsp;&nbsp;🚚 ส่งพัสดุ" if is_ship_bill else ""}</h2>
+    <h2>ลูกค้า: {_esc(sel_p)}{"&nbsp;&nbsp;🚚 ส่งพัสดุ" if is_ship_bill else ""}</h2>
   </div>
   <div style="text-align:right">
-    <div style="font-size:14px;font-weight:600">เลขที่บิล: {bill_nos_str if bill_nos_str else "—"}</div>
+    <div style="font-size:14px;font-weight:600">เลขที่บิล: {_esc(bill_nos_str) if bill_nos_str else "—"}</div>
     <div style="font-size:14px;font-weight:600;margin-top:4px">วันที่รับเงิน: {_paid_date_str}</div>
     <div class="info" style="margin-top:4px">วันที่พิมพ์: {today_str}</div>
     <div class="info">{filter_label} ({len(show_p)} รายการ)</div>

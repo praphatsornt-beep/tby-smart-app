@@ -14,7 +14,7 @@ from ui_helpers import (
     _to_bkk, _to_excel_bytes,
     _style_status, _fmt_note, _guard_double_submit,
     _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
-    merge_bill_family_products, _unbilled_pv_of,
+    merge_bill_family_products, _unbilled_pv_of, _esc,
 )
 
 
@@ -1449,7 +1449,8 @@ def render(products, customers):
                         if _rp and _rp.get("customer_name") == customer_name:
                             def _prod_label(it):
                                 code = it.get("product_code", "")
-                                return f"[{code}] {it['product']}" if code else it["product"]
+                                label = f"[{code}] {it['product']}" if code else it["product"]
+                                return _esc(label)
                             _recv_rows_html = "".join(
                                 f"<tr><td>{_prod_label(it)}</td><td style='text-align:center'>{it['qty']}</td></tr>"
                                 for it in _rp["received"]
@@ -1479,7 +1480,7 @@ def render(products, customers):
     </style></head><body>
     <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบรับของ</button>
     <div class='header'>
-      <div><h1>ใบรับของ ZHULIAN TBY</h1><h2>ลูกค้า: {_rp['customer_name']}</h2></div>
+      <div><h1>ใบรับของ ZHULIAN TBY</h1><h2>ลูกค้า: {_esc(_rp['customer_name'])}</h2></div>
       <div class='header-right'>วันที่: {_rp['date']}</div>
     </div>
     <div class='section'><b>รายการที่รับวันนี้:</b>

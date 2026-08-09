@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import database as db
 import iship_api
-from ui_helpers import _to_bkk, BOX_WEIGHT_G
+from ui_helpers import _to_bkk, BOX_WEIGHT_G, _esc
 
 
 def render(customers):
@@ -295,7 +295,7 @@ def render(customers):
                             _pr_result = iship_api.get_label_url(_pr_sel)
                         if _pr_result.get("url"):
                             st.iframe(
-                                f'<a id="_lbl" href="{_pr_result["url"]}" target="_blank" '
+                                f'<a id="_lbl" href="{_esc(_pr_result["url"])}" target="_blank" '
                                 f'style="display:inline-block;padding:8px 24px;background:#00A86B;color:#fff;'
                                 f'border-radius:8px;text-decoration:none;font-size:16px">'
                                 f'🖨️ กดที่นี่เพื่อปริ้น</a>'
@@ -337,7 +337,7 @@ def render(customers):
                     )
                     _cod_amt  = float(_pr_m_row.get("cod_amount") or 0)
                     _cod_line = f"&nbsp;|&nbsp; <b>COD:</b> {_cod_amt:,.0f} ฿" if _cod_amt > 0 else ""
-                    _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_extra_notes}</div>' if _extra_notes else ""
+                    _notes_line = f'<div class="section"><b>หมายเหตุ:</b> {_esc(_extra_notes)}</div>' if _extra_notes else ""
                     _label_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
@@ -356,13 +356,13 @@ tr:nth-child(even) td{{background:#f0f0f0}}
 </style></head><body>
 <button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบปะหน้า</button>
 <div class="header">
-    <div><h1>ใบปะหน้า — {_pr_m_row.get('carrier','')}</h1></div>
+    <div><h1>ใบปะหน้า — {_esc(_pr_m_row.get('carrier',''))}</h1></div>
     <div class="header-right">วันที่: {date.today().strftime('%d/%m/%Y')}</div>
 </div>
-<div class="section"><b>ผู้ส่ง:</b> {_src.get('ISHIP_SRC_NAME','')} · โทร. {_src.get('ISHIP_SRC_PHONE','')}<br>
-{_src.get('ISHIP_SRC_ADDRESS','')} {_src.get('ISHIP_SRC_DISTRICT','')} {_src.get('ISHIP_SRC_AMPHURE','')} {_src.get('ISHIP_SRC_PROVINCE','')} {_src.get('ISHIP_SRC_ZIPCODE','')}</div>
-<div class="section"><b>ผู้รับ:</b> {_pr_m_row.get('recipient_name','')} · โทร. {_pr_m_row.get('phone','')}<br>
-{_pr_m_row.get('address_line','')} {_pr_m_row.get('district','')} {_pr_m_row.get('amphure','')} {_pr_m_row.get('province','')} {_pr_m_row.get('postal_code','')}</div>
+<div class="section"><b>ผู้ส่ง:</b> {_esc(_src.get('ISHIP_SRC_NAME',''))} · โทร. {_esc(_src.get('ISHIP_SRC_PHONE',''))}<br>
+{_esc(_src.get('ISHIP_SRC_ADDRESS',''))} {_esc(_src.get('ISHIP_SRC_DISTRICT',''))} {_esc(_src.get('ISHIP_SRC_AMPHURE',''))} {_esc(_src.get('ISHIP_SRC_PROVINCE',''))} {_esc(_src.get('ISHIP_SRC_ZIPCODE',''))}</div>
+<div class="section"><b>ผู้รับ:</b> {_esc(_pr_m_row.get('recipient_name',''))} · โทร. {_esc(_pr_m_row.get('phone',''))}<br>
+{_esc(_pr_m_row.get('address_line',''))} {_esc(_pr_m_row.get('district',''))} {_esc(_pr_m_row.get('amphure',''))} {_esc(_pr_m_row.get('province',''))} {_esc(_pr_m_row.get('postal_code',''))}</div>
 <div class="section"><b>รายการกล่อง:</b>
 <table><tr><th>ขนาด</th><th>น้ำหนัก/กล่อง</th><th>จำนวน</th></tr>{_box_rows_html}</table>
 รวม {_total_boxes} กล่อง {_cod_line}</div>

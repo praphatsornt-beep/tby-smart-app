@@ -7,6 +7,7 @@ import pandas as pd
 from datetime import date
 
 import database as db
+from ui_helpers import _esc
 
 _THAI_MONTHS = ["", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
                 "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
@@ -147,14 +148,14 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 <div class="sheet">
 <div class="headerflex">
   <div class="left">
-    <div class="name-th">{ci.get('our_name','') or '—'}</div>
-    <div class="addr">{ci.get('our_address','') or '—'}</div>
-    <div class="addr">{('Tel. ' + ci.get('our_tel')) if ci.get('our_tel') else ''}</div>
-    <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('our_tax_id','') or '—'}</div>
+    <div class="name-th">{_esc(ci.get('our_name','') or '—')}</div>
+    <div class="addr">{_esc(ci.get('our_address','') or '—')}</div>
+    <div class="addr">{_esc('Tel. ' + ci.get('our_tel')) if ci.get('our_tel') else ''}</div>
+    <div class="taxid">เลขประจำตัวผู้เสียภาษี {_esc(ci.get('our_tax_id','') or '—')}</div>
   </div>
   <div class="right">
     <div class="docbox">
-      <div class="row"><span class="lbl">เล่มที่ No:</span><span class="val">{_book_no}</span></div>
+      <div class="row"><span class="lbl">เล่มที่ No:</span><span class="val">{_esc(_book_no)}</span></div>
       <div class="row"><span class="lbl">เลขที่ No:</span><span class="val">{_no_text}</span></div>
     </div>
     <div class="th">ใบเสร็จรับเงิน / ใบกำกับภาษี</div>
@@ -165,9 +166,9 @@ def _render_receipt_html(cr: dict, ci: dict, period: str) -> str:
 
 <div class="frombox">
   <div class="row"><span></span><span>วันที่ {_doc_date.day} {_THAI_MONTHS[_doc_date.month]} {_doc_date.year+543}</span></div>
-  <div class="row"><span>ได้รับเงินจาก {ci.get('hq_name','') or '—'}</span></div>
-  <div class="row"><span>{ci.get('hq_address','') or '—'}</span></div>
-  <div class="taxid">เลขประจำตัวผู้เสียภาษี {ci.get('hq_tax_id','') or '—'}</div>
+  <div class="row"><span>ได้รับเงินจาก {_esc(ci.get('hq_name','') or '—')}</span></div>
+  <div class="row"><span>{_esc(ci.get('hq_address','') or '—')}</span></div>
+  <div class="taxid">เลขประจำตัวผู้เสียภาษี {_esc(ci.get('hq_tax_id','') or '—')}</div>
 </div>
 
 <div class="items-wrap">
