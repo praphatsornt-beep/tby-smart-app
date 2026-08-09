@@ -23,13 +23,24 @@ def render():
     with st.expander("💾 Backup ข้อมูล", expanded=False):
         st.caption("ดาวน์โหลดข้อมูลทั้งหมดเป็นไฟล์ ZIP (แนะนำทำทุกสิ้นเดือน)")
         if st.button("📦 สร้าง Backup ZIP", type="primary", key="backup_zip_btn"):
+            def _fetch_all_rows(tname: str) -> list:
+                # PostgREST คืนสูงสุด 1000 แถว/request โดยปริยาย — ต้อง .range() วนดึงเอง
+                # ไม่งั้น backup จะขาดข้อมูลเงียบ ๆ ตอนตารางโตเกิน 1000 แถว
+                rows, start, page_size = [], 0, 1000
+                while True:
+                    page = db.get_supabase().table(tname).select("*").range(start, start + page_size - 1).execute().data
+                    rows.extend(page)
+                    if len(page) < page_size:
+                        return rows
+                    start += page_size
+
             _tables = {
-                "customers":         db.get_supabase().table("customers").select("*").execute().data,
-                "transactions":      db.get_supabase().table("transactions").select("*").execute().data,
-                "partial_events":    db.get_supabase().table("partial_events").select("*").execute().data,
-                "shipments":         db.get_supabase().table("shipments").select("*").execute().data,
-                "products":          db.get_supabase().table("products").select("*").execute().data,
-                "customer_addresses":db.get_supabase().table("customer_addresses").select("*").execute().data,
+                "customers":          _fetch_all_rows("customers"),
+                "transactions":       _fetch_all_rows("transactions"),
+                "partial_events":     _fetch_all_rows("partial_events"),
+                "shipments":          _fetch_all_rows("shipments"),
+                "products":           _fetch_all_rows("products"),
+                "customer_addresses": _fetch_all_rows("customer_addresses"),
             }
             _zip_buf = io.BytesIO()
             with zipfile.ZipFile(_zip_buf, "w", zipfile.ZIP_DEFLATED) as _zf:

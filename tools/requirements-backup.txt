@@ -1,0 +1,7 @@
+# ใช้เฉพาะ tools/backup_to_drive.py (รันใน GitHub Actions) — แยกจาก requirements.txt
+# หลักของแอป Streamlit เพื่อไม่ต้องลาก streamlit/pyarrow/numpy (หนักและไม่จำเป็น) มา
+# ติดตั้งในทุกรอบของ cron job รายวัน
+supabase
+httpx>=0.27.0,<0.28.0
+pandas
+python-dotenv

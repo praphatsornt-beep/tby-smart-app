@@ -1,0 +1,29 @@
+name: Daily Supabase Backup to Google Drive
+
+on:
+  schedule:
+    - cron: "0 17 * * *"   # 00:00 น. เวลาไทย (UTC+7) ทุกวัน
+  workflow_dispatch: {}     # กดรันเองได้จาก tab Actions ของ repo
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r tools/requirements-backup.txt
+
+      - name: Run backup
+        env:
+          SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
+          GDRIVE_CLIENT_ID:     ${{ secrets.GDRIVE_CLIENT_ID }}
+          GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
+          GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
+          GDRIVE_FOLDER_ID:     ${{ secrets.GDRIVE_FOLDER_ID }}
+        run: python tools/backup_to_drive.py
