@@ -2,7 +2,7 @@ name: Daily Supabase Backup to Google Drive
 
 on:
   schedule:
-    - cron: "0 17 * * *"   # 00:00 น. เวลาไทย (UTC+7) ทุกวัน
+    - cron: "0 20 * * *"   # 03:00 น. เวลาไทย (UTC+7) ทุกวัน
   workflow_dispatch: {}     # กดรันเองได้จาก tab Actions ของ repo
 
 jobs:
