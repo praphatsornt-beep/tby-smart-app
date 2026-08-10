@@ -589,6 +589,33 @@ def _render_cart_card(cart_key: str, products: list, title: str = "บันท�
         [class*="st-key-qtybox_"] [data-baseweb="base-input"] {
             min-width: 34px !important;
         }
+        /* จอแคบ (มือถือ) — คอลัมน์ −/กล่อง/+ ที่ซ้อนกันจะถูก Streamlit บีบให้
+           สแต็กแนวตั้งเอง ทำให้แต่ละปุ่ม/กล่องยืดเต็มความกว้างจอ (ดูใหญ่เกิน)
+           จำกัดความกว้างสูงสุด + ลดความสูง แล้ว center ไว้แทน */
+        @media (max-width: 640px) {
+            [class*="st-key-stepper_"] button[data-testid="stBaseButton-secondary"],
+            [class*="st-key-stepper_"] button[data-testid="baseButton-secondary"],
+            [class*="st-key-stepper_"] button[kind="secondary"] {
+                min-height: 32px !important;
+                max-width: 72px !important;
+                margin: 0 auto !important;
+                font-size: 1rem !important;
+            }
+            [class*="st-key-qtybox_"] [data-baseweb="base-input"] {
+                max-width: 72px !important;
+                margin: 0 auto !important;
+            }
+            [class*="st-key-qtybox_"] input {
+                min-height: 32px !important;
+            }
+            [class*="st-key-remove_"] button[data-testid="stBaseButton-secondary"],
+            [class*="st-key-remove_"] button[data-testid="baseButton-secondary"],
+            [class*="st-key-remove_"] button[kind="secondary"] {
+                min-height: 32px !important;
+                max-width: 72px !important;
+                margin: 0 auto !important;
+            }
+        }
         </style>
         """,
         unsafe_allow_html=True,

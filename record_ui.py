@@ -325,7 +325,11 @@ def render(tab1, products, customers, customer_map):
                                         tries++;
                                         try {
                                             var doc = window.parent.document;
-                                            var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                                            var inputs = doc.querySelectorAll('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                                            var input = null;
+                                            for (var i = inputs.length - 1; i >= 0; i--) {
+                                                if (inputs[i].offsetParent !== null) { input = inputs[i]; break; }
+                                            }
                                             if (input && doc.activeElement !== input) {
                                                 input.focus({preventScroll: true});
                                                 input.click();
@@ -1198,7 +1202,11 @@ def render(tab1, products, customers, customer_map):
                                 tries++;
                                 try {
                                     var doc = window.parent.document;
-                                    var input = doc.querySelector('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                                    var inputs = doc.querySelectorAll('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                                    var input = null;
+                                    for (var i = inputs.length - 1; i >= 0; i--) {
+                                        if (inputs[i].offsetParent !== null) { input = inputs[i]; break; }
+                                    }
                                     if (input && doc.activeElement !== input) {
                                         input.focus({preventScroll: true});
                                         input.click();
