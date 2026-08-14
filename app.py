@@ -1084,6 +1084,14 @@ def _show_carrier_select():
             _cs_item_detail = _cs_item_codes
             _cs_products    = [{"name": it.get("name",""), "qty": it.get("qty",0), "price": 0} for it in _cs_items]
             _cs_remark      = " ".join(filter(None, [info.get("customer_name",""), _cs_item_codes or info.get("remark","")])).strip()
+            # ขนส่ง Flash ทุกตัว (Thunder/Pro DD/Pro OK/100CM/Pro DD Bulky) — แปะขนาดกล่อง
+            # + น้ำหนักลงหมายเหตุด้วย เพราะ remark นี้ไปโผล่บนใบปะหน้าจริงที่ Flash พิมพ์
+            # (คนขับ/พนักงานหน้าคลัง Flash เช็คขนาด/น้ำหนักจากตรงนี้เวลาคัดแยกกล่อง Bulky)
+            if "Flash" in _cs_carrier:
+                _cs_box_txt = f"{int(_cs_len)}x{int(_cs_wid)}x{int(_cs_hgt)}cm " if (_cs_len and _cs_wid and _cs_hgt) else ""
+                # ใช้ weight_kg_iship (ไม่รวมน้ำหนักกล่อง 0.5kg) ไม่ใช่ weight_kg —
+                # ผู้ใช้ระบุชัดว่าน้ำหนักบนใบปะหน้าไม่ต้องรวมน้ำหนักกล่อง
+                _cs_remark = f"{_cs_remark} | กล่อง {_cs_box_txt}{weight_kg_iship:.2f}kg".strip()
             with st.spinner("กำลังสร้างรายการใน iShip..."):
                 _cs_resp = iship_api.create_order(
                     dst_name     = info.get("dst_name", ""),
