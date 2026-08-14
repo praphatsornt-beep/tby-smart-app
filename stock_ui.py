@@ -9,7 +9,7 @@ import database as db
 import stock_import
 
 
-_T6_TABS = ["📦 สต๊อก", "📋 ของฝาก"]
+_T6_TABS = ["📦 สต๊อก", "🔑 ค้างคีย์", "📋 ของฝาก"]
 
 
 def render():
@@ -207,3 +207,56 @@ def render():
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ บันทึกไม่สำเร็จ: {e}")
+
+    elif _t6_active == "🔑 ค้างคีย์":
+        st.subheader("ลูกค้าที่ยังค้างคีย์สินค้า (ยังไม่เปิดบิลเข้าระบบบริษัท)")
+        _key_src = db.get_all_transactions_df()
+        _key_df = _key_src[_key_src["ยังไม่เปิด"] > 0].copy() if not _key_src.empty else _key_src
+        if _key_df.empty:
+            st.info("ไม่มีรายการค้างคีย์")
+        else:
+            # PV รวม เป็น PV ของทั้งแถว (ตามจำนวน "สั่ง") — ต้องเทียบสัดส่วนกับ
+            # "ยังไม่เปิด" เพราะบางแถวเปิดบิลไปแล้วบางส่วน (ดู get_unbilled_pv_summary)
+            _key_df["PV ค้างคีย์"] = _key_df.apply(
+                lambda r: (r["PV รวม"] / r["สั่ง"] * r["ยังไม่เปิด"]) if r["สั่ง"] else 0.0, axis=1
+            )
+            _total_qty  = int(_key_df["ยังไม่เปิด"].sum())
+            _total_pv   = _key_df["PV ค้างคีย์"].sum()
+            _total_cust = _key_df["ลูกค้า"].nunique()
+            km1, km2, km3 = st.columns(3)
+            km1.metric("ค้างคีย์รวม", f"{_total_qty} ชิ้น")
+            km2.metric("จำนวนลูกค้า", f"{_total_cust} คน")
+            km3.metric("⭐ PV ค้างคีย์รวม", f"{_total_pv:,.0f}")
+            st.divider()
+
+            _cust_sum = (
+                _key_df.groupby("ลูกค้า", as_index=False)
+                .agg(
+                    จำนวนชิ้นค้างคีย์=("ยังไม่เปิด", "sum"),
+                    **{"PV ค้างคีย์": ("PV ค้างคีย์", "sum")},
+                    จำนวนรายการสินค้า=("รหัส", "nunique"),
+                )
+                .sort_values("จำนวนชิ้นค้างคีย์", ascending=False)
+            )
+            st.markdown("**สรุปต่อลูกค้า**")
+            st.dataframe(
+                _cust_sum.style.format({"PV ค้างคีย์": "{:,.0f}"}),
+                hide_index=True, width="stretch",
+            )
+            st.divider()
+
+            st.markdown("**รายละเอียดต่อลูกค้า — สินค้าที่ค้างคีย์**")
+            for _cust_name in _cust_sum["ลูกค้า"]:
+                _rows = _key_df[_key_df["ลูกค้า"] == _cust_name]
+                _prod_rows = (
+                    _rows.groupby(["รหัส", "สินค้า"], as_index=False)
+                    .agg(จำนวน=("ยังไม่เปิด", "sum"), PV=("PV ค้างคีย์", "sum"))
+                    .sort_values("จำนวน", ascending=False)
+                )
+                _c_qty = int(_prod_rows["จำนวน"].sum())
+                _c_pv = _prod_rows["PV"].sum()
+                with st.expander(f"👤 {_cust_name} — {_c_qty} ชิ้น | ⭐ {_c_pv:,.0f} PV"):
+                    st.dataframe(
+                        _prod_rows.style.format({"PV": "{:,.0f}"}),
+                        hide_index=True, width="stretch",
+                    )
