@@ -311,8 +311,9 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 # จริงๆ เป็นของ "KEX Jumbo" (เอกสารต้นทางถูก label ไว้แบบนั้นตั้งแต่แรก) จึง rename แถวนี้
 # เป็น kex_jumbo/"KEX Jumbo" ให้ตรงของจริง — **"KEX Bulky" ตัวจริงยังไม่มีในระบบเลย** ไม่มี
 # ทั้งราคา/iShip code ที่ยืนยันแล้ว ถ้าจะเพิ่มต้องขอตารางราคาใหม่แยกต่างหากจากผู้ใช้
-# iship_api.COURIER_MAP["KEX Jumbo"] ใช้ code "KexBulky" เดิม (ยังไม่ได้ยืนยันว่าถูกจริง —
-# เป็นค่าที่เคยตั้งไว้ตอนเข้าใจผิดว่า Bulky=Jumbo แค่ยังไม่พังจนกว่าจะยิง order จริงแล้วเช็ค)
+# iship_api.COURIER_MAP["KEX Jumbo"] ใช้ code "KexBulky" — ยืนยันแล้ว 2026-08-14 ว่าถูกต้อง
+# จริง (เช็คจาก Network tab: ออเดอร์จริงที่ courier_code="KexBulky" หน้าเว็บ iShip เอง
+# แสดงป้าย "KEX JUMBO" — iShip ใช้ชื่อ code ภายในว่า Bulky แทนสินค้าที่แบรนด์จริงชื่อ Jumbo)
 # max_cm/max_cod_amt ยืนยันจากเงื่อนไขจริงบน iShip (2026-07-26) — เดิมเกือบทุกตัวผิด/
 # ไม่จำกัด (max_cod_amt ที่ 0 = ไม่กรองออกตอนเทียบขนส่ง แม้ COD เกินวงเงินจริงของขนส่งนั้น
 # ก็ตาม — ตัวนี้กระทบจริงเพราะใช้กรองใน _price_one_box, max_cm ใช้แค่โชว์คำเตือนใน app.py)

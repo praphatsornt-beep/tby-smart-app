@@ -19,8 +19,9 @@ COURIER_MAP = {
     "KEX Express":         "KerryExpress",
     # เดิมชื่อ "KEX Bulky" — แก้เป็น "KEX Jumbo" 2026-08-14 (ตารางราคา/เงื่อนไขที่ผูกกับ
     # code นี้เป็นของ Jumbo จริง ไม่ใช่ Bulky — ดูคอมเมนต์ที่ carriers.py _CARRIER_DEFS)
-    # code "KexBulky" เป็นค่าเดิมที่ตั้งไว้ตอนยังเข้าใจผิด — ยังไม่ได้ยืนยันว่าตรงกับ
-    # code จริงของ KEX Jumbo บน iShip หรือเปล่า ก่อนยิง order จริงควรเช็คให้แน่ใจ
+    # code "KexBulky" ยืนยันแล้วว่าถูกต้อง (2026-08-14) — เช็คจาก Network tab บน iShip
+    # จริง: ออเดอร์ที่ courier_code="KexBulky" หน้าเว็บ iShip เองแสดงป้าย "KEX JUMBO"
+    # ติดอยู่ (iShip ใช้ชื่อ code ภายในว่า Bulky แทนสินค้าที่แบรนด์จริงชื่อ Jumbo)
     "KEX Jumbo":           "KexBulky",
     "DHL eCommerce":       "DHL",
     "DHL Next Day":        "DHLND",
