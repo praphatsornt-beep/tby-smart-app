@@ -229,13 +229,17 @@ def render():
             km3.metric("⭐ PV ค้างคีย์รวม", f"{_total_pv:,.0f}")
             st.divider()
 
+            # หมายเหตุ: ห้ามใช้ "จำนวน..." เป็นชื่อ kwarg แบบ literal ใน .agg() — คำที่มี
+            # สระอำ (ำ) โดน Python normalize ตอนเป็น identifier จนไม่ตรงกับ string
+            # literal เดิม (เช่นใน .sort_values()) ทำให้ KeyError เฉพาะตอน deploy จริง
+            # ต้องส่งผ่าน **{...} (dict key ธรรมดา ไม่โดน normalize) แทนเสมอ
             _cust_sum = (
                 _key_df.groupby("ลูกค้า", as_index=False)
-                .agg(
-                    จำนวนชิ้นค้างคีย์=("ยังไม่เปิด", "sum"),
-                    **{"PV ค้างคีย์": ("PV ค้างคีย์", "sum")},
-                    จำนวนรายการสินค้า=("รหัส", "nunique"),
-                )
+                .agg(**{
+                    "จำนวนชิ้นค้างคีย์": ("ยังไม่เปิด", "sum"),
+                    "PV ค้างคีย์": ("PV ค้างคีย์", "sum"),
+                    "จำนวนรายการสินค้า": ("รหัส", "nunique"),
+                })
                 .sort_values("จำนวนชิ้นค้างคีย์", ascending=False)
             )
             st.markdown("**สรุปต่อลูกค้า**")
@@ -250,7 +254,7 @@ def render():
                 _rows = _key_df[_key_df["ลูกค้า"] == _cust_name]
                 _prod_rows = (
                     _rows.groupby(["รหัส", "สินค้า"], as_index=False)
-                    .agg(จำนวน=("ยังไม่เปิด", "sum"), PV=("PV ค้างคีย์", "sum"))
+                    .agg(**{"จำนวน": ("ยังไม่เปิด", "sum"), "PV": ("PV ค้างคีย์", "sum")})
                     .sort_values("จำนวน", ascending=False)
                 )
                 _c_qty = int(_prod_rows["จำนวน"].sum())
