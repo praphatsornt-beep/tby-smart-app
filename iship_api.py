@@ -17,7 +17,11 @@ COURIER_MAP = {
     "Flash Pro DD Bulky":  "FlashExpressDBulky",
     "SPX Express":         "ShopeeExpress",
     "KEX Express":         "KerryExpress",
-    "KEX Bulky":           "KexBulky",
+    # เดิมชื่อ "KEX Bulky" — แก้เป็น "KEX Jumbo" 2026-08-14 (ตารางราคา/เงื่อนไขที่ผูกกับ
+    # code นี้เป็นของ Jumbo จริง ไม่ใช่ Bulky — ดูคอมเมนต์ที่ carriers.py _CARRIER_DEFS)
+    # code "KexBulky" เป็นค่าเดิมที่ตั้งไว้ตอนยังเข้าใจผิด — ยังไม่ได้ยืนยันว่าตรงกับ
+    # code จริงของ KEX Jumbo บน iShip หรือเปล่า ก่อนยิง order จริงควรเช็คให้แน่ใจ
+    "KEX Jumbo":           "KexBulky",
     "DHL eCommerce":       "DHL",
     "DHL Next Day":        "DHLND",
     "ไปรษณีย์ EMS":        "THP_eParcelX",

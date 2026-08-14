@@ -113,7 +113,11 @@ _KEX_SIZE_CM = {  # ต่างจาก Flash — ราคา/ตาราง
     21:180,22:180,23:180,24:180,25:180,26:180,27:180,28:180,29:180,30:180,
 }
 
-_KEX_BULKY = {  # flat rate everywhere, min 30kg use
+_KEX_JUMBO = {  # flat rate everywhere, min 30kg use — เดิมชื่อ _KEX_BULKY แต่ตารางนี้เป็น
+    # ราคาจริงของ "KEX Jumbo" (ยืนยันกับผู้ใช้ 2026-08-14 หลังพบว่า iShip มี KEX Express/
+    # KEX Jumbo/KEX Bulky แยกกัน 3 ตัว ไม่ใช่ 2 ตัวแบบที่เข้าใจผิดไว้ตอนแรก — เอกสารที่ใช้
+    # สร้างตารางนี้ถูก label ว่า "KEX Jumbo" ตั้งแต่ต้น) ระบบนี้ยังไม่มีราคาจริงของ
+    # "KEX Bulky" ตัวจริงเลย — ถ้าจะเพิ่มต้องขอตารางราคาใหม่แยกต่างหาก
     1:255,2:255,3:255,4:255,5:255,6:255,7:255,8:255,9:255,10:255,
     11:255,12:255,13:255,14:255,15:255,16:255,17:255,18:255,19:255,
     20:255,21:255,22:255,23:255,24:255,25:255,26:255,27:255,28:255,
@@ -250,7 +254,10 @@ def _spx_sur(pc: str, _kg: float) -> tuple[int, str]:
     sur = spx_surcharge(pc)
     return sur, ("ห่างไกล" if sur else "")
 
-def _kex_bulky_sur(pc: str, _kg: float) -> tuple[int, str]:
+def _kex_jumbo_sur(pc: str, _kg: float) -> tuple[int, str]:
+    # เรียก kex_bulky_remote_surcharge() ตามชื่อเดิม (flash_zones.py) — ไม่ได้ rename
+    # ตามไปด้วย เพราะรายชื่อโซนห่างไกลชุดนี้ยังไม่ทราบว่าตรงกับ Bulky หรือ Jumbo จริง
+    # แค่ตารางราคา/vol_divisor ที่ยืนยันแล้วว่าเป็นของ Jumbo (ดูคอมเมนต์ที่ _CARRIER_DEFS)
     sur = kex_bulky_remote_surcharge(pc)
     return sur, ("ห่างไกล" if sur else "")
 
@@ -295,9 +302,17 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 # manual_pickup: True = ต้องกดเรียกรถเข้ารับเองในระบบ iShip ทุกครั้ง (ถ้าไม่กด = ไม่มีพนักงานเข้ารับ)
 #                False = รถเข้ารับอัตโนมัติ แค่สร้างรายการก่อนเวลา cut off — ตามอินโฟกราฟิก iShip
 # vol_divisor: ตัวหารสูตรน้ำหนักปริมาตร (กว้าง×ยาว×สูง)/vol_divisor — ค่าปกติ 4000 (ยืนยันจาก
-# ราคาจริงของ Flash Thunder/Pro DD/Pro OK/100CM 2026-08-04) แต่ Flash Pro DD Bulky/KEX Bulky
-# (KEX Jumbo)/J&T Express เอกสารเงื่อนไขจริงระบุสูตร "(กว้างxยาวxสูง÷6000)" ตรงๆ ต่างจาก
-# เจ้าอื่น (2026-08-05) — ใช้ 6000 เฉพาะ 3 ตัวนี้
+# ราคาจริงของ Flash Thunder/Pro DD/Pro OK/100CM 2026-08-04) แต่ Flash Pro DD Bulky/KEX Jumbo/
+# J&T Express เอกสารเงื่อนไขจริงระบุสูตร "(กว้างxยาวxสูง÷6000)" ตรงๆ ต่างจากเจ้าอื่น (2026-08-05)
+# — ใช้ 6000 เฉพาะ 3 ตัวนี้
+# แก้ไข 2026-08-14: "KEX Bulky" ไม่ใช่ตัวเดียวกับ "KEX Jumbo" — เช็คจากหน้าเลือกขนส่งจริงบน
+# iShip แล้วเป็น 3 ตัวเลือกแยกกันชัดเจน (KEX Express / KEX Jumbo / KEX Bulky) คอมเมนต์เดิม
+# ("KEX Bulky (KEX Jumbo)") เข้าใจผิดว่าเป็นตัวเดียวกัน — user ยืนยันแล้วว่าตารางราคาที่มีอยู่
+# จริงๆ เป็นของ "KEX Jumbo" (เอกสารต้นทางถูก label ไว้แบบนั้นตั้งแต่แรก) จึง rename แถวนี้
+# เป็น kex_jumbo/"KEX Jumbo" ให้ตรงของจริง — **"KEX Bulky" ตัวจริงยังไม่มีในระบบเลย** ไม่มี
+# ทั้งราคา/iShip code ที่ยืนยันแล้ว ถ้าจะเพิ่มต้องขอตารางราคาใหม่แยกต่างหากจากผู้ใช้
+# iship_api.COURIER_MAP["KEX Jumbo"] ใช้ code "KexBulky" เดิม (ยังไม่ได้ยืนยันว่าถูกจริง —
+# เป็นค่าที่เคยตั้งไว้ตอนเข้าใจผิดว่า Bulky=Jumbo แค่ยังไม่พังจนกว่าจะยิง order จริงแล้วเช็ค)
 # max_cm/max_cod_amt ยืนยันจากเงื่อนไขจริงบน iShip (2026-07-26) — เดิมเกือบทุกตัวผิด/
 # ไม่จำกัด (max_cod_amt ที่ 0 = ไม่กรองออกตอนเทียบขนส่ง แม้ COD เกินวงเงินจริงของขนส่งนั้น
 # ก็ตาม — ตัวนี้กระทบจริงเพราะใช้กรองใน _price_one_box, max_cm ใช้แค่โชว์คำเตือนใน app.py)
@@ -311,7 +326,7 @@ _CARRIER_DEFS = [
     ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 100,  _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01, 400, True,  50000, True,  6000),
     ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,   180, True,  36000, False, 4000),
     ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,   _KEX_SIZE_CM, True,  50000, False, 4000),
-    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           60,  _kex_bulky_sur,          3, 2.675,False, 0,   400, True,  50000, False, 6000),
+    ("kex_jumbo",         "KEX Jumbo",          _KEX_JUMBO,           60,  _kex_jumbo_sur,          3, 2.675,False, 0,   400, True,  50000, False, 6000),
     ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False, 4000),
     ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False, 4000),
     ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True,  4000),
@@ -328,7 +343,7 @@ def volumetric_weight_kg(length_cm: float, width_cm: float, height_cm: float, di
     ยืนยันจากตารางราคาจริงของ Flash บน iShip (2026-08-04): กล่อง 40×45×23 ซม. =
     41,400 ลบ.ซม. ÷ 4000 = 10.35 → ปัดขึ้น 11 กก. ตรงกับ "ค่าขนส่ง(ปริมาตร)" ที่ iShip
     แสดงจริงทุกเรท (Thunder/Pro DD/Pro OK/100CM) เป๊ะ — ไม่มีให้ 0 ถ้าขนาดไม่ครบ 3 ด้าน
-    divisor default 4000 ใช้กับขนส่งทั่วไป แต่ Pro DD Bulky/KEX Bulky/J&T Express ยืนยัน
+    divisor default 4000 ใช้กับขนส่งทั่วไป แต่ Pro DD Bulky/KEX Jumbo/J&T Express ยืนยัน
     จากเงื่อนไขจริงของตัวเองว่าใช้ 6000 (ดู _CARRIER_DEFS.vol_divisor, 2026-08-05)"""
     if length_cm <= 0 or width_cm <= 0 or height_cm <= 0:
         return 0.0

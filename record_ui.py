@@ -1719,7 +1719,7 @@ def render(tab1, products, customers, customer_map):
                                     st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_ic_carrier_sel}'")
 
                                 # ── กรอกขนาด ถ้าเป็น Bulky carrier ───────────
-                                _ic_is_bulky = "Bulky" in _ic_carrier_sel
+                                _ic_is_bulky = "Bulky" in _ic_carrier_sel or "Jumbo" in _ic_carrier_sel
                                 _ic_len = _ic_wid = _ic_hgt = 0
                                 if _ic_is_bulky:
                                     st.markdown("**📐 ขนาดกล่อง (จำเป็นสำหรับ Bulky)**")

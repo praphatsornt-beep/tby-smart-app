@@ -154,14 +154,15 @@ class TestGetShippingOptions(unittest.TestCase):
                 self.assertEqual(o["base"], expected_base)
 
     def test_vol_divisor_differs_for_bulky_carriers(self):
-        # ยืนยันจากเงื่อนไขจริงของ Flash Pro DD Bulky/KEX Bulky/J&T Express (2026-08-05)
+        # ยืนยันจากเงื่อนไขจริงของ Flash Pro DD Bulky/KEX Jumbo/J&T Express (2026-08-05)
         # — ทั้ง 3 ตัวระบุสูตรน้ำหนักปริมาตร "(กว้างxยาวxสูง÷6000)" ตรงๆ ต่างจากขนส่งอื่น
         # ที่ใช้ 4000 — กล่อง 40x45x23 = 41,400 ลบ.ซม. -> /4000=10.35->11kg, /6000=6.9->7kg
+        # (id เดิม "kex_bulky" แก้เป็น "kex_jumbo" 2026-08-14 — ดู carriers.py _CARRIER_DEFS)
         opts = carriers.get_shipping_options(3, "10110", length_cm=40, width_cm=45, height_cm=23)
         by_id = {o["id"]: o for o in opts}
         self.assertEqual(by_id["flash_thunder"]["billed_kg"], 11.0)
         self.assertEqual(by_id["jt_express"]["billed_kg"], 7.0)
-        self.assertEqual(by_id["kex_bulky"]["billed_kg"], 7.0)
+        self.assertEqual(by_id["kex_jumbo"]["billed_kg"], 7.0)
 
 
 class TestBracketBreakpoints(unittest.TestCase):

@@ -1062,7 +1062,7 @@ def _show_carrier_select():
         if not _cs_code:
             st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_cs_carrier}'")
 
-        _cs_is_bulky   = "Bulky" in _cs_carrier
+        _cs_is_bulky   = "Bulky" in _cs_carrier or "Jumbo" in _cs_carrier
         _cs_missing_dims = _cs_is_bulky and not (_cs_len and _cs_wid and _cs_hgt)
         if _cs_missing_dims:
             st.warning("⚠️ ขนส่งประเภท Bulky ต้องระบุขนาดกล่องด้านบนก่อนถึงจะส่งได้")
