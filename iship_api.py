@@ -23,6 +23,9 @@ COURIER_MAP = {
     # จริง: ออเดอร์ที่ courier_code="KexBulky" หน้าเว็บ iShip เองแสดงป้าย "KEX JUMBO"
     # ติดอยู่ (iShip ใช้ชื่อ code ภายในว่า Bulky แทนสินค้าที่แบรนด์จริงชื่อ Jumbo)
     "KEX Jumbo":           "KexBulky",
+    # ยืนยัน 2026-08-14: user สร้างออเดอร์ทดสอบเลือก "KEX Bulky" ตัวจริงบน iShip (tracking
+    # ISX292047QRMD) ได้ code นี้ — pattern: KexBulky = Jumbo (เฉยๆ), KexBulky01 = Bulky จริง
+    "KEX Bulky":           "KexBulky01",
     "DHL eCommerce":       "DHL",
     "DHL Next Day":        "DHLND",
     "ไปรษณีย์ EMS":        "THP_eParcelX",
