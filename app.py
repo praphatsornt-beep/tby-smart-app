@@ -1088,10 +1088,13 @@ def _show_carrier_select():
             # + น้ำหนักลงหมายเหตุด้วย เพราะ remark นี้ไปโผล่บนใบปะหน้าจริงที่ Flash พิมพ์
             # (คนขับ/พนักงานหน้าคลัง Flash เช็คขนาด/น้ำหนักจากตรงนี้เวลาคัดแยกกล่อง Bulky)
             if "Flash" in _cs_carrier:
+                # เบอร์กล่อง (เช่น "2B") มาจากชื่อ preset ที่เลือกใน ⚙️ จัดการข้อมูล →
+                # 📐 ขนาดกล่อง — ใส่เฉพาะตอนเลือก preset จริง ไม่ใช่ "กรอกเอง"/"-- ไม่ระบุ --"
+                _cs_box_name = f"{_preset_sel} " if _pm else ""
                 _cs_box_txt = f"{int(_cs_len)}x{int(_cs_wid)}x{int(_cs_hgt)}cm " if (_cs_len and _cs_wid and _cs_hgt) else ""
                 # ใช้ weight_kg_iship (ไม่รวมน้ำหนักกล่อง 0.5kg) ไม่ใช่ weight_kg —
                 # ผู้ใช้ระบุชัดว่าน้ำหนักบนใบปะหน้าไม่ต้องรวมน้ำหนักกล่อง
-                _cs_remark = f"{_cs_remark} | กล่อง {_cs_box_txt}{weight_kg_iship:.2f}kg".strip()
+                _cs_remark = f"{_cs_remark} | กล่อง {_cs_box_name}{_cs_box_txt}{weight_kg_iship:.2f}kg".strip()
             with st.spinner("กำลังสร้างรายการใน iShip..."):
                 _cs_resp = iship_api.create_order(
                     dst_name     = info.get("dst_name", ""),
