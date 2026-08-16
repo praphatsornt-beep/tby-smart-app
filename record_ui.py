@@ -800,7 +800,7 @@ def render(tab1, products, customers, customer_map):
                                 "customer_id":  customer["id"],
                                 "customer_name":customer["name"],
                                 "shipment_id":  "",
-                                "remark":       "",
+                                "remark":       st.session_state.get("m_iship_note", "").strip(),
                                 "default_carrier": m_carrier,
                             }
                             pass  # _iship_carrier_select set above — dialog triggers automatically
@@ -1437,14 +1437,9 @@ def render(tab1, products, customers, customer_map):
                     except Exception as _e:
                         st.error(f"❌ บันทึกไม่สำเร็จ: {_e}")
                         st.stop()
-                    # ตั้ง iShip pending เพื่อส่งขนส่ง
-                    _sp_item_codes = " ".join(f"{it['product_id']}-{it['qty']}" for it in _sp_items)
-                    _sp_remark = " ".join(filter(None, [
-                        _sp_cust if _sp_cust != "— เลือกลูกค้า —" else "",
-                        _sp_item_codes,
-                        _sp_notes.strip(),
-                        _sp_iship_note.strip(),
-                    ]))
+                    # ตั้ง iShip pending เพื่อส่งขนส่ง — ไม่ต้องใส่ชื่อลูกค้า/รหัสสินค้าซ้ำ
+                    # ตรงนี้ เพราะ app.py._show_carrier_select ประกอบให้เองจาก customer_name/items
+                    _sp_remark = " ".join(filter(None, [_sp_notes.strip(), _sp_iship_note.strip()]))
                     if iship_api.is_configured():
                         st.session_state.pop("_cs_carrier_sel", None)
                         st.session_state.pop("_cs_carrier_table", None)

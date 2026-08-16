@@ -1083,7 +1083,9 @@ def _show_carrier_select():
             )
             _cs_item_detail = _cs_item_codes
             _cs_products    = [{"name": it.get("name",""), "qty": it.get("qty",0), "price": 0} for it in _cs_items]
-            _cs_remark      = " ".join(filter(None, [info.get("customer_name",""), _cs_item_codes or info.get("remark","")])).strip()
+            # รวมชื่อลูกค้า + รหัสสินค้า + หมายเหตุที่ผู้ใช้พิมพ์เอง (เดิมใช้ "or" ทำให้รหัส
+            # สินค้าทับหมายเหตุที่พิมพ์ไว้ทุกครั้งที่มีสินค้าในตะกร้า — พิมพ์แล้วไม่เคยขึ้นจริง)
+            _cs_remark      = " ".join(filter(None, [info.get("customer_name",""), _cs_item_codes, info.get("remark","")])).strip()
             # ขนส่ง Flash ทุกตัว (Thunder/Pro DD/Pro OK/100CM/Pro DD Bulky) — แปะขนาดกล่อง
             # + น้ำหนักลงหมายเหตุด้วย เพราะ remark นี้ไปโผล่บนใบปะหน้าจริงที่ Flash พิมพ์
             # (คนขับ/พนักงานหน้าคลัง Flash เช็คขนาด/น้ำหนักจากตรงนี้เวลาคัดแยกกล่อง Bulky)
