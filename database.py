@@ -1151,9 +1151,10 @@ def get_ecommerce_shops() -> list[dict]:
 
 
 def upsert_ecommerce_shop(data: dict) -> None:
-    db = get_supabase()
-    _retry(lambda: db.table("ecommerce_shops").delete().eq("id", data["id"]).execute())
-    _retry(lambda: db.table("ecommerce_shops").insert(data).execute())
+    # เดิม delete แล้ว insert แยก 2 คำสั่ง — ไม่ atomic ถ้าเน็ตหลุดกลางคันระหว่างสองคำสั่ง
+    # ทะเบียนร้านหายไปเฉยๆ เปลี่ยนเป็น upsert จริงตัวเดียว (ecommerce_shops.id เป็น
+    # PRIMARY KEY อยู่แล้วตาม ecommerce_setup.sql ใช้เป็น on_conflict ได้ตรงๆ)
+    _retry(lambda: get_supabase().table("ecommerce_shops").upsert(data, on_conflict="id").execute())
 
 
 def delete_ecommerce_shop(shop_id: str) -> None:
