@@ -225,6 +225,18 @@ def render():
         m4.metric("🛒 สิทธิ์สั่งของคงเหลือ (฿)", f"{credit_val:,.2f}",
                   delta=None if credit_val >= 0 else "⚠️ เกินวงเงิน")
 
+        # กลับสูตร สิทธิ์สั่งของ = (1,100,000 + net) / 1.07 − auto_stock เพื่อตอบว่า
+        # สั่งของเพิ่ม X บาท (ไม่รวม VAT) ต้องโอนเพิ่มเท่าไหร่ — ถ้า X ≤ สิทธิ์คงเหลือ
+        # ไม่ต้องโอนเลย ส่วนที่เกินคูณ 1.07 กลับเป็นยอดโอนที่ต้องเพิ่ม
+        with st.expander("🧮 จะสั่งของเท่านี้ ต้องโอนเพิ่มเท่าไหร่?"):
+            _calc_po = st.number_input("PO ที่จะสั่ง ไม่รวม VAT (฿)", min_value=0.0, step=100.0, key="_credit_calc_po")
+            if _calc_po > 0:
+                _calc_need = max(0.0, (_calc_po - credit_val) * 1.07)
+                if _calc_need <= 0:
+                    st.success(f"✅ ไม่ต้องโอนเพิ่ม — อยู่ในสิทธิ์สั่งของคงเหลือ ({credit_val:,.2f} ฿)")
+                else:
+                    st.warning(f"⚠️ ต้องโอนเพิ่ม **{_calc_need:,.2f} ฿** (เกินสิทธิ์คงเหลือ {(_calc_po - credit_val):,.2f} ฿ ไม่รวม VAT)")
+
         st.divider()
 
         with st.expander("🗓️ เปิดเดือนใหม่ (กรอกครั้งเดียวต้นเดือน)"):
