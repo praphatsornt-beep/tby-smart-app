@@ -202,8 +202,19 @@ function doPost(e) {
     var _payPartial = _msg.match(/^(.+?)\s+จ่ายบางส่วน([A-Za-z0-9\-]+)$/);
     // [name] จ่าย[bill]  (เลือกบิลแล้ว ยังไม่ระบุยอด — เลือกจ่ายเต็ม/บางส่วน)
     var _payBillMenu = _msg.match(/^(.+?)\s+จ่าย([A-Za-z0-9\-]+)$/);
+    // ads/bv/scb/po วันที่ ค่า... — บันทึกยอดการเงินรายวัน (finance_daily) จาก LINE
+    // โดยตรง ไม่ต้องเข้าแอป ทับยอดเดิมของฟิลด์นั้นทั้งหมด (ไม่ใช่บวกเพิ่ม — ยืนยันกับ
+    // ผู้ใช้แล้ว 2026-08-20 เพราะพิมพ์ทับผิดจะแก้ตามได้ง่ายกว่าบวกซ้ำแล้วงงว่าทำไมเกิน)
+    var _finAds = _msg.match(/^ads\s+(\S+)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)$/i);
+    var _finBv  = _msg.match(/^bv\s+(\S+)\s+(\d+(?:\.\d+)?)$/i);
+    var _finScb = _msg.match(/^scb\s+(\S+)\s+(\d+(?:\.\d+)?)$/i);
+    var _finPo  = _msg.match(/^po\s+(\S+)\s+(\d+(?:\.\d+)?)$/i);
 
     if (_msg.toLowerCase() === 'คู่มือ' || _msg.toLowerCase() === 'help') { handleManual(replyToken, _staffTag); return; }
+    if (_finAds) { handleFinanceEntry('ads', _finAds[1], [parseFloat(_finAds[2]), parseFloat(_finAds[3])], replyToken, _confirmed, _staffTag); return; }
+    if (_finBv)  { handleFinanceEntry('bv',  _finBv[1],  [parseFloat(_finBv[2])],  replyToken, _confirmed, _staffTag); return; }
+    if (_finScb) { handleFinanceEntry('scb', _finScb[1], [parseFloat(_finScb[2])], replyToken, _confirmed, _staffTag); return; }
+    if (_finPo)  { handleFinanceEntry('po',  _finPo[1],  [parseFloat(_finPo[2])],  replyToken, _confirmed, _staffTag); return; }
     if (_msg.toLowerCase().startsWith('groupid')) {
       var _gid = (event.source || {}).groupId || '';
       if (!_gid) { sendReply(replyToken, '❌ ใช้คำสั่งนี้ในกลุ่มเท่านั้น'); return; }
@@ -470,6 +481,78 @@ function _getNextBillNo(dateStr) {
   return prefix + '-' + nextStr;
 }
 
+// ─── บันทึกยอดการเงินรายวัน (finance_daily) จาก LINE — #milk ads/bv/scb/po ────
+// map ตรงกับคอลัมน์ใน finance_daily / fin_ui.py หน้า 💵 การเงิน → ยอดขาย ทุกตัว
+var _FIN_FIELDS = {
+  ads: { fields: ['registration_fee', 'sales_amount'], labels: ['ค่าสมัคร', 'ยอดขาย รวม VAT'] },
+  bv:  { fields: ['bv_amount'],        labels: ['BV (หักยอดค้าง)'] },
+  scb: { fields: ['transfer_amount'],  labels: ['ยอดโอนให้บริษัท'] },
+  po:  { fields: ['po_amount'],        labels: ['PO สั่งของ ไม่รวม VAT'] },
+};
+
+// แปลง token วันที่จาก LINE เป็น 'YYYY-MM-DD' — รองรับ "วันนี้"/"today" และ D/M
+// (ปีปัจจุบันเสมอ ไม่รองรับข้ามปี — ถ้าต้องย้อนปีเก่ากว่านั้น ให้กรอกในแอปแทน)
+function _parseFinDate(tok) {
+  if (tok === 'วันนี้' || tok.toLowerCase() === 'today') return _today();
+  var m = /^(\d{1,2})\/(\d{1,2})$/.exec(tok);
+  if (!m) return null;
+  var d = parseInt(m[1], 10), mo = parseInt(m[2], 10);
+  if (d < 1 || d > 31 || mo < 1 || mo > 12) return null;
+  var y = new Date().getFullYear();
+  return y + '-' + (mo < 10 ? '0' + mo : mo) + '-' + (d < 10 ? '0' + d : d);
+}
+
+function _getFinanceDay(dateStr) {
+  var rows = _sbGet('/rest/v1/finance_daily?entry_date=eq.' + dateStr + '&select=*');
+  return (rows && rows.length > 0) ? rows[0] : null;
+}
+
+// kind: 'ads'|'bv'|'scb'|'po', dateTok: token วันที่ดิบจาก LINE, values: [เลข, ...]
+// ตามลำดับ _FIN_FIELDS[kind].fields — ทับยอดเดิมของฟิลด์นั้นเท่านั้น ฟิลด์อื่นของวันนั้น
+// (เช่น stock_value/adjustment ที่กรอกจากแอป) คงค่าเดิมไว้ เพราะ finance_daily เป็น
+// delete+insert ทั้งแถวเสมอ (ไม่มี upsert จริงของ Postgres) ต้องอ่านของเดิมมา merge ก่อน
+function handleFinanceEntry(kind, dateTok, values, replyToken, confirmed, staffTag) {
+  var dateStr = _parseFinDate(dateTok);
+  if (!dateStr) {
+    sendReply(replyToken, '❌ วันที่ไม่ถูกต้อง: "' + dateTok + '"\nพิมพ์แบบ วัน/เดือน เช่น 6/8 หรือ วันนี้');
+    return;
+  }
+  var def = _FIN_FIELDS[kind];
+  var preview = def.labels.map(function(lbl, i) { return lbl + ': ฿' + numFmt(values[i]); }).join('\n');
+
+  if (!confirmed) {
+    sendQuickReply(replyToken,
+      '📝 ยืนยันบันทึกข้อมูลการเงินวันที่ ' + dateStr + ' ค่ะ (ทับยอดเดิมของฟิลด์นี้ถ้ามี)\n' + preview,
+      [
+        { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก',
+            text: 'ยืนยัน #' + staffTag + ' ' + kind + ' ' + dateTok + ' ' + values.join(' ') } },
+        { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } }
+      ]);
+    return;
+  }
+
+  var existing = _getFinanceDay(dateStr);
+  var row = {
+    id:               Utilities.getUuid(),
+    entry_date:       dateStr,
+    transfer_amount:  existing ? existing.transfer_amount : 0,
+    sales_amount:     existing ? existing.sales_amount : 0,
+    po_amount:        existing ? existing.po_amount : 0,
+    registration_fee: existing ? existing.registration_fee : 0,
+    bv_amount:        existing ? existing.bv_amount : 0,
+    stock_value:      existing ? existing.stock_value : 0,
+    adjustment:       existing ? existing.adjustment : 0,
+    notes:            existing ? (existing.notes || '') : '',
+  };
+  def.fields.forEach(function(f, i) { row[f] = values[i]; });
+
+  UrlFetchApp.fetch(SUPABASE_URL + '/rest/v1/finance_daily?entry_date=eq.' + dateStr,
+    { method: 'DELETE', headers: _sbWriteHdrs(), muteHttpExceptions: true });
+  _sbPost('finance_daily', row);
+
+  sendReply(replyToken, '✅ บันทึกข้อมูลการเงินวันที่ ' + dateStr + ' แล้วค่ะ\n' + preview);
+}
+
 // ─── ลงทะเบียน LINE ──────────────────────────────────────────────────────────
 
 function registerLineUser(userId, phone, replyToken) {
@@ -660,6 +743,13 @@ function handleManual(replyToken, staffTag) {
   msg += '  • ' + tag + ' [ชื่อ] เบิก CODE-จำนวน CODE-จำนวน ...  — รับของ ค้างจ่าย\n';
   msg += '  • ' + tag + ' [ชื่อ] เบิกจ่าย CODE-จำนวน CODE-จำนวน ...  — รับของ + จ่ายเงินแล้ว\n';
   msg += '  • ' + tag + ' [ชื่อ] เบิกจ่าย CODE-จำนวน CODE-จำนวน ... จ่าย จำนวนเงิน  — รับของ + จ่ายบางส่วน\n\n';
+
+  msg += '💵 บันทึกยอดการเงินรายวัน (ทับยอดเดิมของวันนั้นถ้ามี)\n';
+  msg += '  • ' + tag + ' ads วัน/เดือน ค่าสมัคร ยอดขาย  — เช่น ' + tag + ' ads 6/8 500 12000\n';
+  msg += '  • ' + tag + ' bv วัน/เดือน จำนวนเงิน  — BV หักยอดค้าง\n';
+  msg += '  • ' + tag + ' scb วัน/เดือน จำนวนเงิน  — ยอดโอนให้บริษัท\n';
+  msg += '  • ' + tag + ' po วัน/เดือน จำนวนเงิน  — PO สั่งของ ไม่รวม VAT\n';
+  msg += '  • ใช้ "วันนี้" แทนวัน/เดือนได้ (ไม่รองรับข้ามปี)\n\n';
 
   msg += '✅ ทุกคำสั่งบันทึกจริง จะมีปุ่ม "ยืนยันบันทึก" ให้กดก่อนเสมอ\n';
   msg += '─────────────────\n';
