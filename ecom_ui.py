@@ -321,12 +321,21 @@ def _render_tiktok_upload():
     _tt_file = st.file_uploader("ไฟล์ affiliate_orders...xlsx", type=["xlsx"], key=f"ecom_tiktok_file_{_tt_ver}")
     if _tt_file and st.button("นำเข้ารายงานนายหน้า TikTok", key="ecom_import_tiktok", type="primary"):
         with st.spinner("กำลังอ่านไฟล์..."):
-            _tt_rows = tiktok_affiliate_import.parse_affiliate_orders(_tt_file, _tt_shop.strip() or "zhulian.shop")
+            _tt_shop_val = _tt_shop.strip() or "zhulian.shop"
+            _tt_rows = tiktok_affiliate_import.parse_affiliate_orders(_tt_file, _tt_shop_val)
             if not _tt_rows:
                 st.session_state["_ecom_tiktok_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
             else:
                 db.upsert_tiktok_affiliate_orders(_tt_rows)
-                st.session_state["_ecom_tiktok_import_msg"] = ("success", f"✅ นำเข้า {len(_tt_rows)} รายการแล้ว")
+                _msg = f"✅ นำเข้า {len(_tt_rows)} รายการแล้ว"
+                # ซิงค์เข้าระบบกำไรสินค้าอัตโนมัติทันที (เดิมต้องกดปุ่มแยกด้านล่างเอง
+                # ลืมกดได้ง่าย — ปุ่มด้านล่างยังอยู่ไว้เผื่อต้อง sync ซ้ำ)
+                _sync_result = db.sync_tiktok_to_ecommerce(_tt_shop_val)
+                if _sync_result["sales_rows"]:
+                    _msg += f" · ซิงค์เข้าระบบกำไรสินค้าแล้ว {_sync_result['synced_orders']} ออเดอร์"
+                if _sync_result.get("unmatched"):
+                    _msg += f" · ⚠️ {len(_sync_result['unmatched'])} ออเดอร์แกะสินค้าไม่ได้ (ดูที่แท็บ '⚠️ ตรวจสอบปัญหา')"
+                st.session_state["_ecom_tiktok_import_msg"] = ("success", _msg)
             st.session_state["_ecom_tiktok_file_ver"] = _tt_ver + 1
         st.rerun()
 
@@ -349,12 +358,21 @@ def _render_tiktok_upload():
     _ti_file = st.file_uploader("ไฟล์ income...xlsx", type=["xlsx"], key=f"ecom_tiktok_income_file_{_ti_ver}")
     if _ti_file and st.button("นำเข้ารายงานยอดขายสุทธิ TikTok", key="ecom_import_tiktok_income", type="primary"):
         with st.spinner("กำลังอ่านไฟล์..."):
-            _ti_rows = tiktok_income_import.parse_income_report(_ti_file, _ti_shop.strip() or "zhulian.shop")
+            _ti_shop_val = _ti_shop.strip() or "zhulian.shop"
+            _ti_rows = tiktok_income_import.parse_income_report(_ti_file, _ti_shop_val)
             if not _ti_rows:
                 st.session_state["_ecom_tiktok_income_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
             else:
                 db.upsert_tiktok_order_income(_ti_rows)
-                st.session_state["_ecom_tiktok_income_import_msg"] = ("success", f"✅ นำเข้า {len(_ti_rows)} ออเดอร์แล้ว")
+                _msg = f"✅ นำเข้า {len(_ti_rows)} ออเดอร์แล้ว"
+                # ซิงค์เข้าระบบกำไรสินค้าอัตโนมัติทันที (เดิมต้องกดปุ่มแยกด้านล่างเอง
+                # ลืมกดได้ง่าย — ปุ่มด้านล่างยังอยู่ไว้เผื่อต้อง sync ซ้ำ)
+                _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop_val)
+                if _sync_result["sales_rows"]:
+                    _msg += f" · ซิงค์เข้าระบบกำไรสินค้าแล้ว {_sync_result['synced_orders']} ออเดอร์"
+                if _sync_result.get("unmatched"):
+                    _msg += f" · ⚠️ {len(_sync_result['unmatched'])} ออเดอร์แกะสินค้าไม่ได้ (ดูที่แท็บ '⚠️ ตรวจสอบปัญหา')"
+                st.session_state["_ecom_tiktok_income_import_msg"] = ("success", _msg)
             st.session_state["_ecom_tiktok_income_file_ver"] = _ti_ver + 1
         st.rerun()
 
@@ -364,7 +382,7 @@ def _render_tiktok_upload():
         st.caption(
             "จับคู่ยอดสุทธิแต่ละออเดอร์เข้ากับสินค้า (SKU) — ใช้ข้อมูลนายหน้าด้านบนถ้ามี "
             "ไม่งั้นแกะจากคอลัมน์สินค้าที่อ้างอิงในไฟล์ (ใช้ได้เพราะทุกออเดอร์มีแค่ 1 สินค้า) "
-            "กดครั้งเดียวหลังอัปโหลดไฟล์ใหม่ทุกครั้ง แล้วไป map SKU → สินค้าในระบบด้านบน "
+            "ซิงค์อัตโนมัติทุกครั้งที่อัปโหลดไฟล์ด้านบนแล้ว — ไปจับคู่ SKU → สินค้าในระบบด้านบน "
             "(Map สินค้า → ระบบ) ก่อนดูกำไรที่แท็บ '💰 ยอดขาย/กำไร'"
         )
         _sync_msg = st.session_state.pop("_ecom_tiktok_sync_msg", None)
@@ -373,7 +391,7 @@ def _render_tiktok_upload():
         _tt_pending = db.get_tiktok_pending_sync_count(_ti_shop.strip() or "zhulian.shop")
         if _tt_pending:
             st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ที่ยังไม่ได้ซิงค์เข้าระบบกำไรสินค้า — กดปุ่มด้านล่างเพื่อซิงค์")
-        if st.button("🔗 ซิงค์เข้าระบบกำไรสินค้า", key="ecom_tiktok_sync"):
+        if st.button("🔗 ซิงค์ซ้ำทั้งหมด (ปกติไม่ต้องกด — ซิงค์อัตโนมัติแล้วตอนอัปโหลด)", key="ecom_tiktok_sync"):
             with st.spinner("กำลังซิงค์... (ประมวลผลประวัติทั้งหมดของร้านนี้ อาจใช้เวลาสักครู่ถ้ามีออเดอร์เยอะ)"):
                 _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop.strip() or "zhulian.shop")
             _n_unmatched = len(_sync_result.get("unmatched") or [])
