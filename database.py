@@ -1724,8 +1724,11 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = N
         "สถานะออเดอร์": r.get("order_status") or "",
         "สถานะคืนสินค้า": r.get("return_status") or "",
         "จำนวนที่คืน": r.get("returned_qty") or 0,
-        "เลขพัสดุ": r.get("tracking_no") or "",
-        "ขนส่ง": r.get("carrier_name") or "",
+        # ออเดอร์ที่ "ยกเลิกแล้ว" คือยกเลิกก่อนขนส่งมารับพัสดุเสมอ (ต่างจากตีกลับ/คืนสินค้า
+        # ที่ส่งไปแล้วจริงถึงมีเลขพัสดุ) — Shopee ยังใส่ tracking_no มาให้ในไฟล์แม้ยกเลิกก่อน
+        # ส่งจริง โชว์แล้วเข้าใจผิดว่ามีพัสดุจริงเกิดขึ้น เลยไม่โชว์เลขพัสดุ/ขนส่งกรณีนี้
+        "เลขพัสดุ": "" if r.get("order_status") == "ยกเลิกแล้ว" else (r.get("tracking_no") or ""),
+        "ขนส่ง": "" if r.get("order_status") == "ยกเลิกแล้ว" else (r.get("carrier_name") or ""),
     } for r in problem]).sort_values("วันที่", ascending=False).reset_index(drop=True)
 
 
