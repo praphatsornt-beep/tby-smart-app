@@ -25,7 +25,7 @@ import tiktok_affiliate_import
 import tiktok_income_import
 
 
-_ECOM_TABS = ["⚙️ ตั้งค่า/นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🔍 ตรวจสอบปัญหา", "🎥 TikTok"]
+_ECOM_TABS = ["📥 นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🎯 TikTok Affiliate", "⚠️ ตรวจสอบปัญหา", "⚙️ ตั้งค่า"]
 _PLATFORMS = {"shopee": "Shopee", "lazada": "Lazada", "tiktok": "TikTok"}
 
 
@@ -79,16 +79,42 @@ def render():
     _ecom_active = _pills(_ECOM_TABS, "_ecom_active_sub")
 
     if _ecom_active == _ECOM_TABS[0]:
-        _render_setup()
+        _render_import()
     elif _ecom_active == _ECOM_TABS[1]:
         _render_sales_profit()
     elif _ecom_active == _ECOM_TABS[2]:
-        _render_issues()
-    elif _ecom_active == _ECOM_TABS[3]:
         _render_tiktok_affiliate()
+    elif _ecom_active == _ECOM_TABS[3]:
+        _render_issues()
+    elif _ecom_active == _ECOM_TABS[4]:
+        _render_config()
 
 
-def _render_setup():
+def _render_import():
+    shops = db.get_ecommerce_shops()
+    if not shops:
+        st.info("ยังไม่มีร้านค้า — ไปเพิ่มร้านที่แท็บ '⚙️ ตั้งค่า' ก่อนครับ")
+        return
+
+    _tt_pending_all = db.get_tiktok_pending_sync_count()
+    if _tt_pending_all:
+        st.warning(f"⚠️ TikTok มี {_tt_pending_all} ออเดอร์ค้างซิงค์เข้าระบบกำไรสินค้า (ทุกร้านรวมกัน) — เลือกแพลตฟอร์ม TikTok ด้านล่างแล้วกดซิงค์")
+
+    _plat_with_shops = sorted({s["platform"] for s in shops}, key=list(_PLATFORMS.keys()).index)
+    _upload_platform = st.radio(
+        "แพลตฟอร์ม", _plat_with_shops, format_func=lambda p: _PLATFORMS.get(p, p),
+        horizontal=True, key="ecom_upload_platform",
+    )
+    _plat_shop_names = [s["shop_name"] for s in shops if s["platform"] == _upload_platform]
+    if _upload_platform == "shopee":
+        _render_shopee_upload(_plat_shop_names)
+    elif _upload_platform == "lazada":
+        _render_lazada_upload(_plat_shop_names)
+    else:
+        _render_tiktok_upload(_plat_shop_names)
+
+
+def _render_config():
     # ── ร้านค้า ────────────────────────────────────────────────────────
     st.subheader("ร้านค้า")
     shops = db.get_ecommerce_shops()
@@ -132,26 +158,6 @@ def _render_setup():
                 if _cc2.button("ยกเลิก", key="ecom_confirm_del_shop_no"):
                     del st.session_state["_ecom_confirm_del_shop"]
                     st.rerun()
-
-    st.divider()
-
-    # ── อัปโหลดรายงาน ─────────────────────────────────────────────────
-    st.subheader("อัปโหลดรายงาน")
-    if not shops:
-        st.info("เพิ่มร้านก่อนครับ (ด้านบน)")
-    else:
-        _plat_with_shops = sorted({s["platform"] for s in shops}, key=list(_PLATFORMS.keys()).index)
-        _upload_platform = st.radio(
-            "แพลตฟอร์ม", _plat_with_shops, format_func=lambda p: _PLATFORMS.get(p, p),
-            horizontal=True, key="ecom_upload_platform",
-        )
-        _plat_shop_names = [s["shop_name"] for s in shops if s["platform"] == _upload_platform]
-        if _upload_platform == "shopee":
-            _render_shopee_upload(_plat_shop_names)
-        elif _upload_platform == "lazada":
-            _render_lazada_upload(_plat_shop_names)
-        else:
-            _render_tiktok_upload(_plat_shop_names)
 
     st.divider()
 
@@ -321,7 +327,7 @@ def _render_lazada_upload(shop_names: list[str]):
 def _render_tiktok_upload(shop_names: list[str]):
     # ใช้ทะเบียนร้านร่วมกับ Shopee/Lazada (db.get_ecommerce_shops()) แทน text input
     # อิสระ 2 จุดแบบเดิม (เคยพิมพ์ชื่อร้านไม่ตรงกันระหว่างฟอร์ม affiliate/income ได้โดย
-    # ไม่รู้ตัว ไม่มีการ validate เลย) — เพิ่มร้านใหม่ที่ส่วน "ร้านค้า" ด้านบนก่อนถ้ายังไม่มี
+    # ไม่รู้ตัว ไม่มีการ validate เลย) — เพิ่มร้านใหม่ที่แท็บ '⚙️ ตั้งค่า' ก่อนถ้ายังไม่มี
     _tt_shop = st.selectbox("ร้าน", shop_names, key="ecom_tiktok_shop")
 
     st.markdown("**🎥 ค่าคอมนายหน้า (Affiliate)**")
@@ -329,7 +335,7 @@ def _render_tiktok_upload(shop_names: list[str]):
         "รายงานเฉพาะออเดอร์ที่มาจากนายหน้า/ครีเอเตอร์ (TikTok Shop Seller Center → "
         "Affiliate Marketing → Orders → Export) ไม่ใช่ยอดขายทั้งหมดของร้าน "
         "\"ยอดที่เราได้โดยประมาณ\" หักแค่ค่าคอมนายหน้าออกจากยอดขาย ยังไม่รวมค่าธรรมเนียม "
-        "อื่นๆ ของ TikTok เอง (ไฟล์นี้ไม่มีข้อมูลนั้น) — ดูผลที่แท็บ '🎥 TikTok'"
+        "อื่นๆ ของ TikTok เอง (ไฟล์นี้ไม่มีข้อมูลนั้น) — ดูผลที่แท็บ '🎯 TikTok Affiliate'"
     )
     _tt_ver = st.session_state.get("_ecom_tiktok_file_ver", 0)
     _show_flash("_ecom_tiktok_import_msg")
@@ -424,11 +430,11 @@ def _render_tiktok_affiliate():
         st.warning(
             f"⚠️ มี {_tt_pending} ออเดอร์ TikTok ที่ยังไม่ได้ซิงค์เข้าระบบกำไรสินค้า "
             "(ตัวเลขในแท็บ '💰 ยอดขาย/กำไร' ยังไม่รวมออเดอร์เหล่านี้) — ไปกดซิงค์ที่แท็บ "
-            "'⚙️ ตั้งค่า/นำเข้าข้อมูล' ก่อน"
+            "'📥 นำเข้าข้อมูล' ก่อน"
         )
     _tt_df = db.get_tiktok_affiliate_orders_df()
     if _tt_df.empty:
-        st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' ก่อนครับ")
+        st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ที่แท็บ '📥 นำเข้าข้อมูล' ก่อนครับ")
         return
 
     _tt_df["วันที่"] = pd.to_datetime(_tt_df["order_created_at"]).dt.strftime("%d/%m/%Y")
@@ -443,7 +449,7 @@ def _render_tiktok_affiliate():
     # คะแนน (PV) ต่อแถว = จำนวน x units_per_pack x points_per_unit ของสินค้าที่ map ไว้แล้ว
     # จับคู่ผ่าน sku_id (ไม่ใช่ product_code — เช็คข้อมูลจริงแล้วว่า product_code ในตารางนี้
     # คือรหัส SKU ตัวเลขยาวของ TikTok เอง ไม่ตรงกับ products.id เลย ส่วน sku_id ตรงกับคีย์
-    # platform_item_id ที่ตั้งไว้แล้วใน "Map สินค้า → ระบบ" ของแท็บ ⚙️ ตั้งค่า/นำเข้าข้อมูล)
+    # platform_item_id ที่ตั้งไว้แล้วใน "Map สินค้า → ระบบ" ของแท็บ ⚙️ ตั้งค่า)
     _tt_prod_map = db.get_ecommerce_product_map()
     _tt_points_by_id = {p["id"]: float(p.get("points_per_unit") or 0) for p in db.get_products()}
 
@@ -453,6 +459,14 @@ def _render_tiktok_affiliate():
             return 0.0
         return _tt_points_by_id.get(_m["product_id"], 0.0) * float(_m.get("units_per_pack") or 1) * (qty or 0)
 
+    _render_tiktok_creator_summary(_tt_df)
+    st.divider()
+    _render_tiktok_order_detail(_tt_df, _tt_row_points)
+    st.divider()
+    _render_tiktok_billed_today(_tt_df, _tt_row_points)
+
+
+def _render_tiktok_creator_summary(_tt_df):
     # ── สรุปยอดต่อนายหน้า ─────────────────────────────────────────────
     # นับเฉพาะออเดอร์ที่ยังไม่เปิดบิล — ที่เปิดบิลแล้วถือว่าจัดการเสร็จแล้ว ไม่ควรมาบวก
     # ค้างอยู่ในสรุปยอดที่ต้องตามนี้อีก
@@ -476,8 +490,8 @@ def _render_tiktok_affiliate():
     with _tt_m2: _metric_card("ยอดนายหน้ารวม", f"{_tt_unbilled_df['commission_payable_actual'].sum():,.2f} ฿")
     with _tt_m3: _metric_card("ยอดที่เราได้โดยประมาณ", f"{_tt_unbilled_df['net_amount'].sum():,.0f} ฿")
 
-    st.divider()
 
+def _render_tiktok_order_detail(_tt_df, _tt_row_points):
     # ── รายละเอียดออเดอร์ + เปิดบิลแล้วหรือยัง ──────────────────────────
     # เปลี่ยนจากติ๊ก checkbox แล้วบันทึกทันที (เสี่ยงคลิกพลาด/auto-test แล้วเขียนข้อมูลจริง
     # โดยไม่ตั้งใจ — เกิดขึ้นจริงมาแล้ว) เป็นแบบ "เลือกแถว → ดูยอดรวม → กดยืนยัน" เหมือน
@@ -593,8 +607,8 @@ def _render_tiktok_affiliate():
         st.success(f"↩️ ยกเลิกเปิดบิลแล้ว {len(_tt_undo_rows)} รายการ")
         st.rerun()
 
-    st.divider()
 
+def _render_tiktok_billed_today(_tt_df, _tt_row_points):
     # ── สรุปเปิดบิลไปแล้ววันนี้ — อิง billed_at จริงจาก DB (ไม่ใช่ session_state) เลย
     # ยืนอยู่ได้แม้รีเฟรช/ปิดหน้าไปแล้วเปิดใหม่ ต้องรัน tiktok_affiliate_billed_at_setup.sql
     # ใน Supabase ก่อนคอลัมน์ billed_at ถึงจะมี — ถ้ายังไม่มีคอลัมน์นี้ ส่วนนี้จะไม่โชว์อะไรเลย
@@ -663,35 +677,40 @@ def _render_sales_profit():
 
     _unmapped_n = len(db.get_unmapped_ecommerce_items(_platform))
     if _unmapped_n:
-        st.warning(f"⚠️ มี {_unmapped_n} รายการสินค้าที่ยังไม่ได้ map — ยอดขาย/กำไรของรายการนี้ยังไม่ถูกนับ ไปที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' เพื่อ map สินค้า")
+        st.warning(f"⚠️ มี {_unmapped_n} รายการสินค้าที่ยังไม่ได้ map — ยอดขาย/กำไรของรายการนี้ยังไม่ถูกนับ ไปที่แท็บ '⚙️ ตั้งค่า' เพื่อ map สินค้า")
 
     if _platform == "tiktok":
         _tt_pending = db.get_tiktok_pending_sync_count()
         if _tt_pending:
-            st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ TikTok ค้างซิงค์ — ตัวเลขด้านล่างยังไม่รวมออเดอร์เหล่านี้ (ไปกดซิงค์ที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล')")
+            st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ TikTok ค้างซิงค์ — ตัวเลขด้านล่างยังไม่รวมออเดอร์เหล่านี้ (ไปกดซิงค์ที่แท็บ '📥 นำเข้าข้อมูล')")
 
     _shop_opts = ["ทั้งหมด"] + [s["shop_name"] for s in _shops if s["platform"] == _platform]
     _sel_shop = st.selectbox("ร้าน", _shop_opts, key=f"ecom_profit_shop_filter_{_platform}")
     _shop_filter = None if _sel_shop == "ทั้งหมด" else _sel_shop
 
-    _view_opts = ["💰 กำไรต่อสินค้า", "📦 จำนวนที่ขาย", "🚚 ค่าส่งเกิน"]
-    _view = _pills(_view_opts, "ecom_profit_view")
+    # "ค่าส่งเกิน" มีเฉพาะ Shopee (แพลตฟอร์มเดียวที่ไฟล์ export มีข้อมูลค่าส่ง) — ไม่ใส่ตัวเลือก
+    # นี้เลยตอนเลือกแพลตฟอร์มอื่น กันไม่ให้กดแล้วเจอหน้าว่างเปล่า (คีย์ pills ผูกกับ platform
+    # ด้วย กันปัญหาค่าที่เลือกไว้ค้างเป็นตัวเลือกที่หายไปตอนสลับแพลตฟอร์ม)
+    _view_opts = ["💰 กำไรต่อสินค้า", "📦 จำนวนที่ขาย"]
+    if _platform == "shopee":
+        _view_opts.append("🚚 ค่าส่งเกิน")
+    _view = _pills(_view_opts, f"ecom_profit_view_{_platform}")
 
     st.divider()
 
-    if _view == _view_opts[2]:
+    if _view == "🚚 ค่าส่งเกิน":
         _render_ecom_shipping_view(_platform, _shop_filter)
     else:
         margin_df, pending_qty = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), platform=_platform, shop_name=_shop_filter)
         if pending_qty:
             st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน — ยังไม่รวมในตารางด้านล่าง (อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
         if margin_df.empty:
-            st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' → Map สินค้า)")
+            st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (แท็บ '⚙️ ตั้งค่า' → Map สินค้า)")
         else:
             # db.get_ecommerce_product_margin_df() ตั้งชื่อคอลัมน์ตามแพลตฟอร์มจริง
             # (เช่น "ขายผ่าน Lazada (ชิ้น)") — เปลี่ยนเป็นชื่อกลางให้ใช้ร่วมกันทุก view
             margin_df = margin_df.rename(columns={f"ขายผ่าน {_PLATFORMS.get(_platform, _platform)} (ชิ้น)": "ขาย (ชิ้น)"})
-            if _view == _view_opts[0]:
+            if _view == "💰 กำไรต่อสินค้า":
                 _render_ecom_profit_view(margin_df, margin_warn_pct, _platform, margin_from, margin_to, _shop_filter)
             else:
                 _render_ecom_units_view(margin_df, _platform, margin_from, margin_to, _shop_filter)
@@ -703,7 +722,7 @@ def _render_sales_profit():
         view_from, view_to, _ = _date_range_inputs("ecom_v")
         ecom_df = db.get_ecommerce_sales_df(str(view_from), str(view_to), platform=_platform, shop_name=_shop_filter)
         if ecom_df.empty:
-            st.info("ยังไม่มีข้อมูล — อัปโหลดรายงานคำสั่งซื้อก่อนครับ (แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล')")
+            st.info("ยังไม่มีข้อมูล — อัปโหลดรายงานคำสั่งซื้อก่อนครับ (แท็บ '📥 นำเข้าข้อมูล')")
         else:
             st.dataframe(
                 ecom_df.style.format({"ยอด": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}"}, na_rep="รอยืนยัน"),
@@ -836,7 +855,7 @@ def _render_ecom_units_view(margin_df, platform, date_from, date_to, shop_filter
 def _render_ecom_shipping_view(platform, shop_filter):
     st.info("🚚 ตรวจเฉพาะช้อปปี้ — แพลตฟอร์มอื่นไม่มีข้อมูลค่าส่งในไฟล์ export")
     if platform != "shopee":
-        st.caption("เลือกแพลตฟอร์ม Shopee ด้านบนเพื่อดูมุมมองนี้")
+        # เผื่อไว้เฉยๆ — ตัวเลือก "ค่าส่งเกิน" ไม่โผล่ให้กดตั้งแต่แพลตฟอร์มอื่นแล้ว (ดูจุดเรียกใช้)
         return
 
     ship_from, ship_to, (sc3,) = _date_range_inputs("ecom_ship", n_cols=3, from_label="จาก (วันที่โอนเงิน)")
@@ -927,7 +946,7 @@ def _render_issues():
         st.subheader("TikTok: ออเดอร์ที่ยังไม่ถูกนับกำไร (แกะสินค้าไม่ได้)")
         st.caption(
             "ออเดอร์เหล่านี้มีข้อมูลยอดขายสุทธิ (income) แล้ว แต่ระบบแกะไม่ออกว่าเป็นสินค้าไหน "
-            "จาก product_summary — กดปุ่มซิงค์ที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' ไปก็จะยังไม่หาย "
+            "จาก product_summary — กดปุ่มซิงค์ที่แท็บ '📥 นำเข้าข้อมูล' ไปก็จะยังไม่หาย "
             "ต้องเช็คไฟล์ income ต้นทางว่าคอลัมน์ 'รายละเอียดสินค้าที่ขายได้' ของออเดอร์นี้ ผิดปกติยังไง"
         )
         _tt_unmatched_df = db.get_tiktok_unmatched_organic_orders(_shop_filter)
