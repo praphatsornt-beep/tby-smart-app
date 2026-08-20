@@ -1146,6 +1146,27 @@ def get_cod_orders_df() -> pd.DataFrame:
 
 # ─── E-commerce ──────────────────────────────────────────────────────────────
 
+def _clear_ecommerce_caches() -> None:
+    """เคลียร์ cache ของทุก read function ในโซน e-commerce/TikTok พร้อมกันทีเดียว —
+    เรียกจากทุก mutation ในโซนนี้เสมอ (ดู CLAUDE.md: cache+clear ต้องอยู่คอมมิตเดียวกัน
+    เสมอ ไม่งั้นจะโชว์เลขเก่าค้างหลังอัปโหลด/ซิงค์) รวมศูนย์ไว้จุดเดียวแทนเรียก .clear()
+    กระจายทุกจุดเอง กันพลาดลืม clear บางตัว"""
+    for _fn in (
+        get_ecommerce_shops, get_ecommerce_import_coverage_df,
+        get_ecommerce_unmatched_income_orders_df, get_ecommerce_product_margin_df,
+        _ecommerce_order_costs, get_ecommerce_order_anomaly_df,
+        get_ecommerce_order_profit_summary, get_ecommerce_monthly_summary,
+        get_ecommerce_platform_totals_df, get_ecommerce_units_trend_df,
+        get_ecommerce_shipping_overcharge_df, get_ecommerce_shipping_overcharge_monthly_df,
+        get_ecommerce_problem_orders_df, get_ecommerce_sales_df, get_ecommerce_product_map,
+        get_unmapped_ecommerce_items, get_tiktok_pending_sync_count,
+        get_tiktok_unmatched_organic_orders, get_tiktok_affiliate_orders_df,
+        get_tiktok_order_income_df,
+    ):
+        _fn.clear()
+
+
+@st.cache_data(ttl=120)
 def get_ecommerce_shops() -> list[dict]:
     return _retry(lambda: get_supabase().table("ecommerce_shops").select("*").order("shop_name").execute()).data
 
@@ -1155,10 +1176,12 @@ def upsert_ecommerce_shop(data: dict) -> None:
     # ทะเบียนร้านหายไปเฉยๆ เปลี่ยนเป็น upsert จริงตัวเดียว (ecommerce_shops.id เป็น
     # PRIMARY KEY อยู่แล้วตาม ecommerce_setup.sql ใช้เป็น on_conflict ได้ตรงๆ)
     _retry(lambda: get_supabase().table("ecommerce_shops").upsert(data, on_conflict="id").execute())
+    _clear_ecommerce_caches()
 
 
 def delete_ecommerce_shop(shop_id: str) -> None:
     _retry(lambda: get_supabase().table("ecommerce_shops").delete().eq("id", shop_id).execute())
+    _clear_ecommerce_caches()
 
 
 def shop_has_ecommerce_data(shop_name: str, platform: str = "shopee") -> bool:
@@ -1174,6 +1197,7 @@ def shop_has_ecommerce_data(shop_name: str, platform: str = "shopee") -> bool:
     return bool(income)
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
     """สรุปว่าแต่ละร้านมีข้อมูลนำเข้าครอบคลุมช่วงวันไหนแล้วบ้าง แยกรายงานคำสั่งซื้อ
     (Order.all) กับรายงานรายได้ (Income) คนละคอลัมน์ — เช็คก่อนอัปโหลดว่ายังขาด
@@ -1225,6 +1249,7 @@ def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_unmatched_income_orders_df(platform: str = "shopee") -> pd.DataFrame:
     """หาออเดอร์ที่มีรายงานยอดโอน (Income) แล้วแต่ไม่มีแถวใน ecommerce_sales เลย (Order.all
     ยังไม่ครอบคลุมออเดอร์นี้ หรือหลุดหายตอนอัปโหลด) — เช็คทีละออเดอร์จริง แม่นยำกว่า
@@ -1300,6 +1325,7 @@ def upsert_ecommerce_sales(rows: list[dict]) -> None:
         _retry(lambda: db.table("ecommerce_sales").upsert(
             _chunk, on_conflict="platform,order_sn,item_id_platform"
         ).execute())
+    _clear_ecommerce_caches()
 
 
 def upsert_ecommerce_order_income(rows: list[dict]) -> None:
@@ -1313,6 +1339,7 @@ def upsert_ecommerce_order_income(rows: list[dict]) -> None:
         _retry(lambda: db.table("ecommerce_order_income").upsert(
             _chunk, on_conflict="order_sn"
         ).execute())
+    _clear_ecommerce_caches()
 
 
 def apply_ecommerce_product_map(mappings: list[dict], platform: str = "shopee") -> None:
@@ -1324,6 +1351,7 @@ def apply_ecommerce_product_map(mappings: list[dict], platform: str = "shopee") 
     for m in mappings:
         _retry(lambda _m=m: db.table("ecommerce_sales").update({"product_id": _m["product_id"]})
                .eq("platform", platform).eq("item_id_platform", _m["platform_item_id"]).execute())
+    _clear_ecommerce_caches()
 
 
 def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
@@ -1359,9 +1387,11 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
                 _retry(lambda _id=line_item["id"], _share=share:
                        db.table("ecommerce_sales").update({"net_amount": _share}).eq("id", _id).execute())
                 updated += 1
+    _clear_ecommerce_caches()
     return updated
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_product_margin_df(
     start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
 ) -> tuple[pd.DataFrame, int]:
@@ -1440,6 +1470,7 @@ def get_ecommerce_product_margin_df(
     return df.reset_index(drop=True), int(pending_qty)
 
 
+@st.cache_data(ttl=120)
 def _ecommerce_order_costs(
     start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
 ) -> tuple[dict, dict]:
@@ -1489,6 +1520,7 @@ def _ecommerce_order_costs(
     return incomes, by_order
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_order_anomaly_df(
     start_date: str, end_date: str, platform: str = "shopee", warn_pct: float = 10.0, shop_name: str = None,
 ) -> pd.DataFrame:
@@ -1523,6 +1555,7 @@ def get_ecommerce_order_anomaly_df(
     return df.reset_index(drop=True)
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_order_profit_summary(
     start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
 ) -> dict:
@@ -1551,6 +1584,7 @@ def get_ecommerce_order_profit_summary(
     }
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_monthly_summary(platform: str = "shopee", shop_name: str = None) -> pd.DataFrame:
     """สรุปยอดขาย/กำไร E-commerce รายเดือน (ตาม sale_date) — กำไร/ขาดทุนใช้สูตรเดียวกับ
     get_ecommerce_order_profit_summary (รายออเดอร์ ไม่ใช่ net รายสินค้า) จึงบวกข้ามเดือน
@@ -1586,6 +1620,7 @@ def get_ecommerce_monthly_summary(platform: str = "shopee", shop_name: str = Non
     return pd.DataFrame(out)
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_platform_totals_df(start_date: str, end_date: str) -> pd.DataFrame:
     """ยอดขาย/จำนวนชิ้นรวม แยกตามแพลตฟอร์ม (Shopee/Lazada/TikTok พร้อมกันทุกร้าน) สำหรับ
     ช่วงวันที่ที่กำหนด (ตาม sale_date) — ต่างจากฟังก์ชัน ecommerce อื่นๆ ที่กรองทีละ platform
@@ -1606,6 +1641,7 @@ def get_ecommerce_platform_totals_df(start_date: str, end_date: str) -> pd.DataF
     return pd.DataFrame(out)
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_units_trend_df(platform: str = "shopee", shop_name: str = None, months: int = 6) -> pd.DataFrame:
     """จำนวนชิ้นที่ขายรายเดือน (ตาม sale_date) ย้อนหลัง `months` เดือนล่าสุด — ใช้ทำกราฟเทรนด์
     จำนวนขาย เรียงเดือนเก่า→ใหม่ (ต่างจาก get_ecommerce_monthly_summary ที่เรียงใหม่→เก่าและ
@@ -1629,6 +1665,7 @@ def get_ecommerce_units_trend_df(platform: str = "shopee", shop_name: str = None
     return pd.DataFrame(out[-months:]) if out else pd.DataFrame()
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_shipping_overcharge_df(
     start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 0.0,
     shop_name: str = None,
@@ -1668,6 +1705,7 @@ def get_ecommerce_shipping_overcharge_df(
     return df.reset_index(drop=True)
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_shipping_overcharge_monthly_df(
     start_date: str, end_date: str, platform: str = "shopee", overcharge_threshold: float = 0.0,
     shop_name: str = None,
@@ -1701,6 +1739,7 @@ def get_ecommerce_shipping_overcharge_monthly_df(
     return pd.DataFrame(out)
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = None) -> pd.DataFrame:
     """ออเดอร์ที่ตีกลับ/คืนสินค้า/ยกเลิก พร้อมเลขพัสดุ+ขนส่ง สำหรับตรวจสอบ
     shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
@@ -1733,6 +1772,7 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = N
     } for r in problem]).sort_values("วันที่", ascending=False).reset_index(drop=True)
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None, shop_name: str = None) -> pd.DataFrame:
     """platform: กรองเฉพาะแพลตฟอร์มเดียว (None = รวมทุกแพลตฟอร์ม) shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
     _q = get_supabase().table("ecommerce_sales").select(
@@ -1767,6 +1807,7 @@ def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None,
     } for r in rows])
 
 
+@st.cache_data(ttl=120)
 def get_ecommerce_product_map() -> dict:
     """คืน dict {(platform, platform_item_id): {"product_id", "units_per_pack"}} —
     units_per_pack ใช้กับ SKU ที่เป็นแพ็ครวม (เช่น ยาสีฟัน 3 หลอด) ที่ 1 ออเดอร์
@@ -1786,8 +1827,10 @@ def upsert_ecommerce_product_map(rows: list[dict]) -> None:
         _retry(lambda: db.table("ecommerce_product_map").upsert(
             _chunk, on_conflict="platform,platform_item_id"
         ).execute())
+    _clear_ecommerce_caches()
 
 
+@st.cache_data(ttl=120)
 def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
     rows = _retry(lambda: get_supabase().table("ecommerce_sales").select(
         "item_id_platform,shop_name,item_name"
@@ -1821,7 +1864,7 @@ def upsert_tiktok_affiliate_orders(rows: list[dict]) -> None:
         _retry(lambda: db.table("tiktok_affiliate_orders").upsert(
             _chunk, on_conflict="order_id,sku_id"
         ).execute())
-    get_tiktok_affiliate_orders_df.clear()
+    _clear_ecommerce_caches()
 
 
 @st.cache_data(ttl=120)
@@ -1856,7 +1899,7 @@ def upsert_tiktok_order_income(rows: list[dict]) -> None:
         _retry(lambda: db.table("tiktok_order_income").upsert(
             _chunk, on_conflict="order_id"
         ).execute())
-    get_tiktok_order_income_df.clear()
+    _clear_ecommerce_caches()
 
 
 @st.cache_data(ttl=120)
@@ -1868,6 +1911,7 @@ def get_tiktok_order_income_df(shop_name: str = None) -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
+@st.cache_data(ttl=120)
 def get_tiktok_pending_sync_count(shop_name: str = None) -> int:
     """นับออเดอร์ TikTok ที่มีรายงานยอดขายสุทธิ (tiktok_order_income) แล้ว แต่ยังไม่ถูก
     ซิงค์เข้า ecommerce_order_income (platform='tiktok') — ต่างจาก Shopee/Lazada ที่เขียน
@@ -1885,6 +1929,7 @@ def get_tiktok_pending_sync_count(shop_name: str = None) -> int:
     return len(all_ids - synced_ids)
 
 
+@st.cache_data(ttl=120)
 def get_tiktok_unmatched_organic_orders(shop_name: str = None) -> pd.DataFrame:
     """ออเดอร์ TikTok organic (ไม่มีข้อมูลนายหน้า) ที่แกะ SKU จาก product_summary ไม่ได้ —
     ออเดอร์แบบนี้จะไม่ถูกนับเข้า ecommerce_sales/ecommerce_order_income เลยจนกว่าจะแก้ที่
