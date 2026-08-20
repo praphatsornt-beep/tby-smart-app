@@ -8,28 +8,9 @@ import uuid
 
 import pandas as pd
 
-
-def _id_str_or_none(val) -> str | None:
-    """กัน pandas อ่านคอลัมน์ ID ตัวเลขล้วนเป็น float แล้วได้ต่อท้าย '.0'"""
-    if pd.isna(val):
-        return None
-    if isinstance(val, float) and val.is_integer():
-        return str(int(val))
-    s = str(val).strip()
-    return s or None
-
-
-def _str_or_none(val) -> str | None:
-    if pd.isna(val):
-        return None
-    s = str(val).strip()
-    return s or None
-
-
-def _num_or_zero(val) -> float:
-    if pd.isna(val):
-        return 0.0
-    return float(val)
+from ecom_import_common import (
+    id_str_or_none as _id_str_or_none, str_or_none as _str_or_none, num_or_zero as _num_or_zero,
+)
 
 
 def _parse_datetime(val) -> str | None:

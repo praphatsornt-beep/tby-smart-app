@@ -11,6 +11,11 @@ import re
 
 import pandas as pd
 
+from ecom_import_common import (
+    id_str_or_none as _id_str_or_none, str_or_none as _str_or_none,
+    num_or_zero as _num_or_zero, parse_date as _parse_date,
+)
+
 _SHEET_NAME = "รายละเอียดคำสั่งซื้อ"
 
 _PRODUCT_SUMMARY_RE = re.compile(r"(\d+)\s*\*\s*(\d+)")
@@ -26,36 +31,6 @@ def parse_product_summary(text: str | None) -> tuple[str, int] | None:
     if not m:
         return None
     return m.group(1), int(m.group(2))
-
-
-def _id_str_or_none(val) -> str | None:
-    if pd.isna(val):
-        return None
-    if isinstance(val, float) and val.is_integer():
-        return str(int(val))
-    s = str(val).strip()
-    return s or None
-
-
-def _str_or_none(val) -> str | None:
-    if pd.isna(val):
-        return None
-    s = str(val).strip()
-    return s or None
-
-
-def _num_or_zero(val) -> float:
-    if pd.isna(val):
-        return 0.0
-    return float(val)
-
-
-def _parse_date(val) -> str | None:
-    """รูปแบบในไฟล์คือ 'YYYY/MM/DD' — วันที่ล้วน ไม่มีเวลา"""
-    if pd.isna(val):
-        return None
-    ts = pd.to_datetime(val, errors="coerce")
-    return None if pd.isna(ts) else ts.strftime("%Y-%m-%d")
 
 
 def parse_income_report(file, shop_name: str) -> list[dict]:

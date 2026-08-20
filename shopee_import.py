@@ -5,19 +5,7 @@ import uuid
 
 import pandas as pd
 
-
-def _parse_date(val) -> str | None:
-    if pd.isna(val):
-        return None
-    ts = pd.to_datetime(val, errors="coerce")
-    return None if pd.isna(ts) else ts.strftime("%Y-%m-%d")
-
-
-def _str_or_none(val) -> str | None:
-    if pd.isna(val):
-        return None
-    s = str(val).strip()
-    return s or None
+from ecom_import_common import parse_date as _parse_date, str_or_none as _str_or_none
 
 
 def parse_order_export(file, shop_name: str) -> list[dict]:

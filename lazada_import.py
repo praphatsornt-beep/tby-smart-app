@@ -12,31 +12,9 @@ import uuid
 
 import pandas as pd
 
-
-def _parse_date(val) -> str | None:
-    if pd.isna(val):
-        return None
-    ts = pd.to_datetime(val, errors="coerce")
-    return None if pd.isna(ts) else ts.strftime("%Y-%m-%d")
-
-
-def _str_or_none(val) -> str | None:
-    if pd.isna(val):
-        return None
-    s = str(val).strip()
-    return s or None
-
-
-def _id_str_or_none(val) -> str | None:
-    """เหมือน _str_or_none แต่กัน pandas อ่านคอลัมน์ ID เป็น float แล้วได้ต่อท้าย
-    '.0' (เช่น 'หมายเลขคำสั่งซื้อ'/'รหัสสินค้าในคำสั่งซื้อ' เป็นตัวเลขล้วนในไฟล์
-    แต่ pandas เดา dtype เป็น float เพราะมีบางแถวว่าง)"""
-    if pd.isna(val):
-        return None
-    if isinstance(val, float) and val.is_integer():
-        return str(int(val))
-    s = str(val).strip()
-    return s or None
+from ecom_import_common import (
+    parse_date as _parse_date, str_or_none as _str_or_none, id_str_or_none as _id_str_or_none,
+)
 
 
 _TXN_PRODUCT_TOTAL = "ยอดรวมค่าสินค้า"
