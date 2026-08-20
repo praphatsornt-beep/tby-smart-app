@@ -1147,7 +1147,7 @@ def get_cod_orders_df() -> pd.DataFrame:
 # ─── E-commerce ──────────────────────────────────────────────────────────────
 
 def get_ecommerce_shops() -> list[dict]:
-    return get_supabase().table("ecommerce_shops").select("*").order("shop_name").execute().data
+    return _retry(lambda: get_supabase().table("ecommerce_shops").select("*").order("shop_name").execute()).data
 
 
 def upsert_ecommerce_shop(data: dict) -> None:
@@ -1164,12 +1164,12 @@ def shop_has_ecommerce_data(shop_name: str, platform: str = "shopee") -> bool:
     """เช็คว่าร้านนี้มีข้อมูลขาย/รายได้ผูกอยู่แล้วหรือยัง (อ้างอิงด้วย shop_name ไม่ใช่ id) —
     ใช้เตือนก่อนลบร้านออกจากทะเบียน กันลบร้านที่มีข้อมูลจริงอยู่โดยไม่รู้ตัว"""
     db = get_supabase()
-    sales = db.table("ecommerce_sales").select("order_sn").eq("shop_name", shop_name) \
-        .eq("platform", platform).limit(1).execute().data
+    sales = _retry(lambda: db.table("ecommerce_sales").select("order_sn").eq("shop_name", shop_name)
+                    .eq("platform", platform).limit(1).execute()).data
     if sales:
         return True
-    income = db.table("ecommerce_order_income").select("order_sn").eq("shop_name", shop_name) \
-        .eq("platform", platform).limit(1).execute().data
+    income = _retry(lambda: db.table("ecommerce_order_income").select("order_sn").eq("shop_name", shop_name)
+                     .eq("platform", platform).limit(1).execute()).data
     return bool(income)
 
 
@@ -1182,10 +1182,10 @@ def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
     Income เสมอ (เงินโอนช้ากว่าวันสั่งซื้อ) ถ้า Income มีช่วงวันที่ Order.all ไม่ครอบคลุม
     (ก่อนหรือหลังช่วงของ Order.all) แปลว่ามีออเดอร์ที่ยืนยันยอดโอนแล้วแต่ไม่มีรายละเอียด
     สินค้า — สัญญาณว่าอัปโหลด Order.all ไม่ครบ ควรอัปโหลดเพิ่ม"""
-    sales = get_supabase().table("ecommerce_sales").select("shop_name,sale_date") \
-        .eq("platform", platform).execute().data
-    incomes = get_supabase().table("ecommerce_order_income").select("shop_name,transfer_date") \
-        .eq("platform", platform).execute().data
+    sales = _retry(lambda: get_supabase().table("ecommerce_sales").select("shop_name,sale_date")
+                    .eq("platform", platform).execute()).data
+    incomes = _retry(lambda: get_supabase().table("ecommerce_order_income").select("shop_name,transfer_date")
+                      .eq("platform", platform).execute()).data
 
     by_shop_sales: dict[str, list[str]] = {}
     for r in sales:
@@ -1229,17 +1229,17 @@ def get_ecommerce_unmatched_income_orders_df(platform: str = "shopee") -> pd.Dat
     ยังไม่ครอบคลุมออเดอร์นี้ หรือหลุดหายตอนอัปโหลด) — เช็คทีละออเดอร์จริง แม่นยำกว่า
     get_ecommerce_import_coverage_df ที่เทียบแค่ช่วง min/max วันที่รวม เพราะ transfer_date
     อาจตกอยู่ในช่วงที่ Order.all "ดูเหมือน" ครอบคลุมแล้ว แต่ออเดอร์เฉพาะนั้นกลับหายไปจริงๆ"""
-    incomes = get_supabase().table("ecommerce_order_income").select(
+    incomes = _retry(lambda: get_supabase().table("ecommerce_order_income").select(
         "order_sn,shop_name,transfer_date,net_amount"
-    ).eq("platform", platform).execute().data
+    ).eq("platform", platform).execute()).data
     if not incomes:
         return pd.DataFrame()
     income_sns = [r["order_sn"] for r in incomes]
     matched: set[str] = set()
     for i in range(0, len(income_sns), 50):
         chunk = income_sns[i:i + 50]
-        rows = get_supabase().table("ecommerce_sales").select("order_sn").eq("platform", platform) \
-            .in_("order_sn", chunk).execute().data
+        rows = _retry(lambda _c=chunk: get_supabase().table("ecommerce_sales").select("order_sn").eq("platform", platform)
+                       .in_("order_sn", _c).execute()).data
         matched.update(r["order_sn"] for r in rows)
     out = [
         {"เลขออเดอร์": r["order_sn"], "ร้าน": r["shop_name"], "วันที่โอนเงิน": r["transfer_date"],
@@ -1264,8 +1264,8 @@ def check_ecommerce_shop_mismatch(order_sns: list[str], shop_name: str, platform
     for i in range(0, len(order_sns), 50):
         chunk = order_sns[i:i + 50]
         for _table in ("ecommerce_sales", "ecommerce_order_income"):
-            rows = db.table(_table).select("order_sn,shop_name").eq("platform", platform) \
-                .in_("order_sn", chunk).neq("shop_name", shop_name).execute().data
+            rows = _retry(lambda _t=_table, _c=chunk: db.table(_t).select("order_sn,shop_name").eq("platform", platform)
+                           .in_("order_sn", _c).neq("shop_name", shop_name).execute()).data
             for r in rows:
                 mismatches.setdefault(r["order_sn"], r["shop_name"])
     return mismatches
@@ -1377,7 +1377,7 @@ def get_ecommerce_product_margin_df(
     _income_q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", platform)
     if shop_name:
         _income_q = _income_q.eq("shop_name", shop_name)
-    settled_order_sns = {r["order_sn"] for r in _income_q.execute().data}
+    settled_order_sns = {r["order_sn"] for r in _retry(lambda: _income_q.execute()).data}
 
     _sales_q = get_supabase().table("ecommerce_sales").select(
         "order_sn,product_id,item_id_platform,qty,returned_qty,net_amount,item_price,order_status,sale_date"
@@ -1385,7 +1385,7 @@ def get_ecommerce_product_margin_df(
      .not_.is_("product_id", "null")
     if shop_name:
         _sales_q = _sales_q.eq("shop_name", shop_name)
-    sales = _sales_q.execute().data
+    sales = _retry(lambda: _sales_q.execute()).data
     if not sales:
         return pd.DataFrame(), 0
 
@@ -1453,7 +1453,7 @@ def _ecommerce_order_costs(
         _income_q = _income_q.eq("shop_name", shop_name)
     incomes = {
         r["order_sn"]: (r["shop_name"], float(r.get("net_amount") or 0))
-        for r in _income_q.execute().data
+        for r in _retry(lambda: _income_q.execute()).data
     }
     if not incomes:
         return incomes, {}
@@ -1463,7 +1463,7 @@ def _ecommerce_order_costs(
     ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date)
     if shop_name:
         _sales_q = _sales_q.eq("shop_name", shop_name)
-    sales = _sales_q.execute().data
+    sales = _retry(lambda: _sales_q.execute()).data
     if not sales:
         return incomes, {}
 
@@ -1557,7 +1557,7 @@ def get_ecommerce_monthly_summary(platform: str = "shopee", shop_name: str = Non
     _q = get_supabase().table("ecommerce_sales").select("sale_date,item_price").eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _q.execute().data
+    rows = _retry(lambda: _q.execute()).data
     if not rows:
         return pd.DataFrame()
 
@@ -1589,8 +1589,8 @@ def get_ecommerce_platform_totals_df(start_date: str, end_date: str) -> pd.DataF
     """ยอดขาย/จำนวนชิ้นรวม แยกตามแพลตฟอร์ม (Shopee/Lazada/TikTok พร้อมกันทุกร้าน) สำหรับ
     ช่วงวันที่ที่กำหนด (ตาม sale_date) — ต่างจากฟังก์ชัน ecommerce อื่นๆ ที่กรองทีละ platform
     เดียวเสมอ อันนี้ตั้งใจให้เห็นสัดส่วนเทียบกันข้าม platform คืน [{platform, ยอดขาย, จำนวนชิ้น}, ...]"""
-    rows = get_supabase().table("ecommerce_sales").select("platform,item_price,qty,returned_qty") \
-        .gte("sale_date", start_date).lte("sale_date", end_date).execute().data
+    rows = _retry(lambda: get_supabase().table("ecommerce_sales").select("platform,item_price,qty,returned_qty")
+                  .gte("sale_date", start_date).lte("sale_date", end_date).execute()).data
     if not rows:
         return pd.DataFrame()
 
@@ -1612,7 +1612,7 @@ def get_ecommerce_units_trend_df(platform: str = "shopee", shop_name: str = None
     _q = get_supabase().table("ecommerce_sales").select("sale_date,qty,returned_qty").eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _q.execute().data
+    rows = _retry(lambda: _q.execute()).data
     if not rows:
         return pd.DataFrame()
 
@@ -1643,7 +1643,7 @@ def get_ecommerce_shipping_overcharge_df(
     ).eq("platform", platform).gte("transfer_date", start_date).lte("transfer_date", end_date)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _q.execute().data
+    rows = _retry(lambda: _q.execute()).data
     if not rows:
         return pd.DataFrame()
 
@@ -1679,7 +1679,7 @@ def get_ecommerce_shipping_overcharge_monthly_df(
     ).eq("platform", platform).gte("transfer_date", start_date).lte("transfer_date", end_date)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _q.execute().data
+    rows = _retry(lambda: _q.execute()).data
     if not rows:
         return pd.DataFrame()
 
@@ -1709,7 +1709,7 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = N
     ).eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _q.execute().data
+    rows = _retry(lambda: _q.execute()).data
     problem = [
         r for r in rows
         if r.get("return_status") or r.get("order_status") == "ยกเลิกแล้ว" or float(r.get("returned_qty") or 0) > 0
@@ -1741,7 +1741,7 @@ def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None,
         _q = _q.eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _q.order("sale_date", desc=True).execute().data
+    rows = _retry(lambda: _q.order("sale_date", desc=True).execute()).data
     if not rows:
         return pd.DataFrame()
 
@@ -1750,7 +1750,7 @@ def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None,
     db = get_supabase()
     for i in range(0, len(order_sns), 50):
         chunk = order_sns[i:i + 50]
-        inc = db.table("ecommerce_order_income").select("order_sn").in_("order_sn", chunk).execute().data
+        inc = _retry(lambda _c=chunk: db.table("ecommerce_order_income").select("order_sn").in_("order_sn", _c).execute()).data
         settled.update(x["order_sn"] for x in inc)
 
     return pd.DataFrame([{
@@ -1770,7 +1770,7 @@ def get_ecommerce_product_map() -> dict:
     """คืน dict {(platform, platform_item_id): {"product_id", "units_per_pack"}} —
     units_per_pack ใช้กับ SKU ที่เป็นแพ็ครวม (เช่น ยาสีฟัน 3 หลอด) ที่ 1 ออเดอร์
     จริงคือสินค้าเดี่ยวหลายชิ้น (ค่าเริ่มต้น 1 = ไม่ใช่แพ็ครวม)"""
-    rows = get_supabase().table("ecommerce_product_map").select("*").execute().data
+    rows = _retry(lambda: get_supabase().table("ecommerce_product_map").select("*").execute()).data
     return {(r["platform"], r["platform_item_id"]): {
         "product_id": r["product_id"], "units_per_pack": float(r.get("units_per_pack") or 1),
     } for r in rows}
@@ -1788,9 +1788,9 @@ def upsert_ecommerce_product_map(rows: list[dict]) -> None:
 
 
 def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
-    rows = get_supabase().table("ecommerce_sales").select(
+    rows = _retry(lambda: get_supabase().table("ecommerce_sales").select(
         "item_id_platform,shop_name,item_name"
-    ).eq("platform", platform).is_("product_id", "null").execute().data
+    ).eq("platform", platform).is_("product_id", "null").execute()).data
     seen = set()
     result = []
     for r in rows:
@@ -1828,7 +1828,7 @@ def get_tiktok_affiliate_orders_df(shop_name: str = None) -> pd.DataFrame:
     q = get_supabase().table("tiktok_affiliate_orders").select("*")
     if shop_name:
         q = q.eq("shop_name", shop_name)
-    data = q.order("order_created_at", desc=True).execute().data
+    data = _retry(lambda: q.order("order_created_at", desc=True).execute()).data
     return pd.DataFrame(data)
 
 
@@ -1863,7 +1863,7 @@ def get_tiktok_order_income_df(shop_name: str = None) -> pd.DataFrame:
     q = get_supabase().table("tiktok_order_income").select("*")
     if shop_name:
         q = q.eq("shop_name", shop_name)
-    data = q.order("order_created_at", desc=True).execute().data
+    data = _retry(lambda: q.order("order_created_at", desc=True).execute()).data
     return pd.DataFrame(data)
 
 
@@ -1923,12 +1923,12 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
     ออเดอร์ตามที่มีในตาราง affiliate อยู่แล้ว (ถูกต้อง) แต่ถ้าออเดอร์นั้นไม่มีข้อมูล
     affiliate เลย (organic + หลายสินค้า) จะจับได้แค่ SKU แรกจาก product_summary — เคส
     นี้ยังไม่เจอจริงในข้อมูลที่มี (ดู tests/ไม่ครอบ เป็น edge case ที่รู้ตัวไว้)"""
-    income_rows = get_supabase().table("tiktok_order_income").select("*") \
-        .eq("shop_name", shop_name).execute().data
+    income_rows = _retry(lambda: get_supabase().table("tiktok_order_income").select("*")
+                          .eq("shop_name", shop_name).execute()).data
     if not income_rows:
         return {"synced_orders": 0, "sales_rows": 0, "unmatched": []}
-    aff_rows = get_supabase().table("tiktok_affiliate_orders").select("*") \
-        .eq("shop_name", shop_name).execute().data
+    aff_rows = _retry(lambda: get_supabase().table("tiktok_affiliate_orders").select("*")
+                       .eq("shop_name", shop_name).execute()).data
     aff_by_order: dict[str, list[dict]] = defaultdict(list)
     sku_name_lookup: dict[str, str] = {}
     for r in aff_rows:
@@ -1987,8 +1987,8 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
 
     # ให้แน่ใจว่ามีร้านนี้ลงทะเบียนใน ecommerce_shops แล้ว ไม่งั้น dropdown เลือกร้าน
     # ในแท็บ ยอดขาย/กำไร กับ Map สินค้า จะไม่เห็นร้านนี้เป็นตัวเลือก
-    _existing = get_supabase().table("ecommerce_shops").select("id").eq(
-        "platform", "tiktok").eq("shop_name", shop_name).limit(1).execute().data
+    _existing = _retry(lambda: get_supabase().table("ecommerce_shops").select("id").eq(
+        "platform", "tiktok").eq("shop_name", shop_name).limit(1).execute()).data
     if not _existing:
         upsert_ecommerce_shop({"id": str(uuid.uuid4()), "platform": "tiktok", "shop_name": shop_name, "shop_id": 0})
 
