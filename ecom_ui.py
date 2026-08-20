@@ -191,22 +191,29 @@ def _render_shopee_upload(shop_names: list[str]):
             _mismatch = _pending["mismatches"]
             _examples = ", ".join(f"{sn} (เดิม: {nm})" for sn, nm in list(_mismatch.items())[:5])
             st.warning(
-                f"⚠️ พบ {len(_mismatch)} ออเดอร์ในไฟล์นี้ที่เคยถูกบันทึกเป็น**ร้านอื่น**มาก่อน "
+                f"⚠️ พบ {len(_mismatch)} ออเดอร์ในไฟล์ที่เคยถูกบันทึกเป็น**ร้านอื่น**มาก่อน "
                 f"แต่ตอนนี้กำลังจะนำเข้าเป็นร้าน **{_pending['shop_name']}** — เช่น {_examples}"
                 f"{' ...' if len(_mismatch) > 5 else ''}\n\n"
                 "แน่ใจว่าเลือกร้านถูกต้องแล้ว หรือไฟล์นี้เป็นไฟล์ผิดร้าน?"
             )
             _pc1, _pc2 = st.columns(2)
             if _pc1.button("✅ ยืนยันนำเข้าต่อ (ร้านถูกต้องแล้ว)", key="ecom_confirm_order_mismatch"):
-                _rows = _pending["rows"]
                 prod_map = db.get_ecommerce_product_map()
-                for r in _rows:
-                    _m = prod_map.get(("shopee", r["item_id_platform"]))
-                    r["product_id"] = _m["product_id"] if _m else None
-                db.upsert_ecommerce_sales(_rows)
+                _total = 0
+                # upsert แยกทีละไฟล์ (ไม่รวมทุกไฟล์เป็น list เดียวก่อน upsert) เพราะ
+                # _dedupe_by_key ใน upsert_ecommerce_sales จะ "บวก" qty ของแถวที่ key ซ้ำกัน
+                # ภายในหนึ่ง batch — ถ้าไฟล์คาบเกี่ยววันที่กันแล้วมีออเดอร์เดียวกันซ้ำข้ามไฟล์
+                # รวมเป็น batch เดียวจะได้ qty บวกซ้ำผิด ต้องปล่อยให้ upsert (on_conflict)
+                # ของแต่ละไฟล์ทับกันเองแทน ซึ่งถูกต้องกว่า (ไฟล์หลังทับไฟล์ก่อนด้วยค่าล่าสุด)
+                for _rows in _pending["rows_per_file"]:
+                    for r in _rows:
+                        _m = prod_map.get(("shopee", r["item_id_platform"]))
+                        r["product_id"] = _m["product_id"] if _m else None
+                    db.upsert_ecommerce_sales(_rows)
+                    _total += len(_rows)
                 _n_updated = db.allocate_ecommerce_order_income()
                 st.session_state["_ecom_order_import_msg"] = (
-                    "success", f"✅ นำเข้า {len(_rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
+                    "success", f"✅ นำเข้า {_total} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
                 del st.session_state["_ecom_order_pending_import"]
                 st.session_state["_ecom_order_file_ver"] = _order_ver + 1
                 st.rerun()
@@ -215,29 +222,33 @@ def _render_shopee_upload(shop_names: list[str]):
                 st.session_state["_ecom_order_file_ver"] = _order_ver + 1
                 st.rerun()
         else:
-            _order_file = st.file_uploader("ไฟล์ Order.all...xlsx", type=["xlsx"], key=f"ecom_order_file_{_order_ver}")
-            if _order_file and st.button("นำเข้ารายงานคำสั่งซื้อ", key="ecom_import_orders", type="primary"):
-                with st.spinner("กำลังอ่านไฟล์..."):
-                    rows = shopee_import.parse_order_export(_order_file, _order_shop)
-                    if not rows:
+            _order_files = st.file_uploader(
+                "ไฟล์ Order.all...xlsx (เลือกได้หลายไฟล์พร้อมกัน)", type=["xlsx"],
+                accept_multiple_files=True, key=f"ecom_order_file_{_order_ver}")
+            if _order_files and st.button("นำเข้ารายงานคำสั่งซื้อ", key="ecom_import_orders", type="primary"):
+                with st.spinner(f"กำลังอ่านไฟล์... ({len(_order_files)} ไฟล์)"):
+                    rows_per_file = [shopee_import.parse_order_export(f, _order_shop) for f in _order_files]
+                    all_rows = [r for _rows in rows_per_file for r in _rows]
+                    if not all_rows:
                         st.session_state["_ecom_order_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
                         st.session_state["_ecom_order_file_ver"] = _order_ver + 1
                     else:
-                        _order_sns = list({r["order_sn"] for r in rows})
+                        _order_sns = list({r["order_sn"] for r in all_rows})
                         _mismatch = db.check_ecommerce_shop_mismatch(_order_sns, _order_shop)
                         if _mismatch:
                             st.session_state["_ecom_order_pending_import"] = {
-                                "rows": rows, "mismatches": _mismatch, "shop_name": _order_shop,
+                                "rows_per_file": rows_per_file, "mismatches": _mismatch, "shop_name": _order_shop,
                             }
                         else:
                             prod_map = db.get_ecommerce_product_map()
-                            for r in rows:
-                                _m = prod_map.get(("shopee", r["item_id_platform"]))
-                                r["product_id"] = _m["product_id"] if _m else None
-                            db.upsert_ecommerce_sales(rows)
+                            for _rows in rows_per_file:
+                                for r in _rows:
+                                    _m = prod_map.get(("shopee", r["item_id_platform"]))
+                                    r["product_id"] = _m["product_id"] if _m else None
+                                db.upsert_ecommerce_sales(_rows)  # ทีละไฟล์ — เหตุผลดูคอมเมนต์ด้านบน
                             _n_updated = db.allocate_ecommerce_order_income()
                             st.session_state["_ecom_order_import_msg"] = (
-                                "success", f"✅ นำเข้า {len(rows)} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
+                                "success", f"✅ นำเข้า {len(all_rows)} รายการ จาก {len(_order_files)} ไฟล์ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
                             st.session_state["_ecom_order_file_ver"] = _order_ver + 1
                 st.rerun()
 
