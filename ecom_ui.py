@@ -108,7 +108,7 @@ def _render_setup():
         elif _upload_platform == "lazada":
             _render_lazada_upload(_plat_shop_names)
         else:
-            _render_tiktok_upload()
+            _render_tiktok_upload(_plat_shop_names)
 
     st.divider()
 
@@ -305,7 +305,12 @@ def _render_lazada_upload(shop_names: list[str]):
         st.rerun()
 
 
-def _render_tiktok_upload():
+def _render_tiktok_upload(shop_names: list[str]):
+    # ใช้ทะเบียนร้านร่วมกับ Shopee/Lazada (db.get_ecommerce_shops()) แทน text input
+    # อิสระ 2 จุดแบบเดิม (เคยพิมพ์ชื่อร้านไม่ตรงกันระหว่างฟอร์ม affiliate/income ได้โดย
+    # ไม่รู้ตัว ไม่มีการ validate เลย) — เพิ่มร้านใหม่ที่ส่วน "ร้านค้า" ด้านบนก่อนถ้ายังไม่มี
+    _tt_shop = st.selectbox("ร้าน", shop_names, key="ecom_tiktok_shop")
+
     st.markdown("**🎥 ค่าคอมนายหน้า (Affiliate)**")
     st.caption(
         "รายงานเฉพาะออเดอร์ที่มาจากนายหน้า/ครีเอเตอร์ (TikTok Shop Seller Center → "
@@ -317,12 +322,10 @@ def _render_tiktok_upload():
     _tt_msg = st.session_state.pop("_ecom_tiktok_import_msg", None)
     if _tt_msg:
         getattr(st, _tt_msg[0])(_tt_msg[1])
-    _tt_shop = st.text_input("ชื่อร้าน", value="zhulian.shop", key="ecom_tiktok_shop")
     _tt_file = st.file_uploader("ไฟล์ affiliate_orders...xlsx", type=["xlsx"], key=f"ecom_tiktok_file_{_tt_ver}")
     if _tt_file and st.button("นำเข้ารายงานนายหน้า TikTok", key="ecom_import_tiktok", type="primary"):
         with st.spinner("กำลังอ่านไฟล์..."):
-            _tt_shop_val = _tt_shop.strip() or "zhulian.shop"
-            _tt_rows = tiktok_affiliate_import.parse_affiliate_orders(_tt_file, _tt_shop_val)
+            _tt_rows = tiktok_affiliate_import.parse_affiliate_orders(_tt_file, _tt_shop)
             if not _tt_rows:
                 st.session_state["_ecom_tiktok_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
             else:
@@ -330,7 +333,7 @@ def _render_tiktok_upload():
                 _msg = f"✅ นำเข้า {len(_tt_rows)} รายการแล้ว"
                 # ซิงค์เข้าระบบกำไรสินค้าอัตโนมัติทันที (เดิมต้องกดปุ่มแยกด้านล่างเอง
                 # ลืมกดได้ง่าย — ปุ่มด้านล่างยังอยู่ไว้เผื่อต้อง sync ซ้ำ)
-                _sync_result = db.sync_tiktok_to_ecommerce(_tt_shop_val)
+                _sync_result = db.sync_tiktok_to_ecommerce(_tt_shop)
                 if _sync_result["sales_rows"]:
                     _msg += f" · ซิงค์เข้าระบบกำไรสินค้าแล้ว {_sync_result['synced_orders']} ออเดอร์"
                 if _sync_result.get("unmatched"):
@@ -354,12 +357,10 @@ def _render_tiktok_upload():
     _ti_msg = st.session_state.pop("_ecom_tiktok_income_import_msg", None)
     if _ti_msg:
         getattr(st, _ti_msg[0])(_ti_msg[1])
-    _ti_shop = st.text_input("ชื่อร้าน", value="zhulian.shop", key="ecom_tiktok_income_shop")
     _ti_file = st.file_uploader("ไฟล์ income...xlsx", type=["xlsx"], key=f"ecom_tiktok_income_file_{_ti_ver}")
     if _ti_file and st.button("นำเข้ารายงานยอดขายสุทธิ TikTok", key="ecom_import_tiktok_income", type="primary"):
         with st.spinner("กำลังอ่านไฟล์..."):
-            _ti_shop_val = _ti_shop.strip() or "zhulian.shop"
-            _ti_rows = tiktok_income_import.parse_income_report(_ti_file, _ti_shop_val)
+            _ti_rows = tiktok_income_import.parse_income_report(_ti_file, _tt_shop)
             if not _ti_rows:
                 st.session_state["_ecom_tiktok_income_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
             else:
@@ -367,7 +368,7 @@ def _render_tiktok_upload():
                 _msg = f"✅ นำเข้า {len(_ti_rows)} ออเดอร์แล้ว"
                 # ซิงค์เข้าระบบกำไรสินค้าอัตโนมัติทันที (เดิมต้องกดปุ่มแยกด้านล่างเอง
                 # ลืมกดได้ง่าย — ปุ่มด้านล่างยังอยู่ไว้เผื่อต้อง sync ซ้ำ)
-                _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop_val)
+                _sync_result = db.sync_tiktok_to_ecommerce(_tt_shop)
                 if _sync_result["sales_rows"]:
                     _msg += f" · ซิงค์เข้าระบบกำไรสินค้าแล้ว {_sync_result['synced_orders']} ออเดอร์"
                 if _sync_result.get("unmatched"):
@@ -376,7 +377,7 @@ def _render_tiktok_upload():
             st.session_state["_ecom_tiktok_income_file_ver"] = _ti_ver + 1
         st.rerun()
 
-    _ti_df = db.get_tiktok_order_income_df()
+    _ti_df = db.get_tiktok_order_income_df(_tt_shop)
     if not _ti_df.empty:
         st.caption(f"มีข้อมูลแล้ว {len(_ti_df):,} ออเดอร์")
         st.caption(
@@ -388,18 +389,18 @@ def _render_tiktok_upload():
         _sync_msg = st.session_state.pop("_ecom_tiktok_sync_msg", None)
         if _sync_msg:
             getattr(st, _sync_msg[0])(_sync_msg[1])
-        _tt_pending = db.get_tiktok_pending_sync_count(_ti_shop.strip() or "zhulian.shop")
+        _tt_pending = db.get_tiktok_pending_sync_count(_tt_shop)
         if _tt_pending:
             st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ที่ยังไม่ได้ซิงค์เข้าระบบกำไรสินค้า — กดปุ่มด้านล่างเพื่อซิงค์")
         if st.button("🔗 ซิงค์ซ้ำทั้งหมด (ปกติไม่ต้องกด — ซิงค์อัตโนมัติแล้วตอนอัปโหลด)", key="ecom_tiktok_sync"):
             with st.spinner("กำลังซิงค์... (ประมวลผลประวัติทั้งหมดของร้านนี้ อาจใช้เวลาสักครู่ถ้ามีออเดอร์เยอะ)"):
-                _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop.strip() or "zhulian.shop")
+                _sync_result = db.sync_tiktok_to_ecommerce(_tt_shop)
             _n_unmatched = len(_sync_result.get("unmatched") or [])
             if _sync_result["sales_rows"]:
                 _msg = f"✅ ซิงค์แล้ว {_sync_result['synced_orders']} ออเดอร์ ({_sync_result['sales_rows']} รายการสินค้า)"
                 _kind = "success"
             else:
-                _msg = "⚠️ ไม่มีออเดอร์ที่ซิงค์ได้ — เช็คว่าชื่อร้านตรงกับที่อัปโหลดไฟล์ไว้ไหม"
+                _msg = "⚠️ ไม่มีออเดอร์ที่ซิงค์ได้ — ยังไม่มีรายงานยอดขายสุทธิ (Income) ของร้านนี้"
                 _kind = "warning"
             if _n_unmatched:
                 _msg += (f"\n\n⚠️ มี {_n_unmatched} ออเดอร์ที่แกะสินค้าจาก product_summary "
