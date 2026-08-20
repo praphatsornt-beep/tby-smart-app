@@ -367,17 +367,28 @@ def _render_tiktok_upload():
             "กดครั้งเดียวหลังอัปโหลดไฟล์ใหม่ทุกครั้ง แล้วไป map SKU → สินค้าในระบบด้านบน "
             "(Map สินค้า → ระบบ) ก่อนดูกำไรที่แท็บ '💰 ยอดขาย/กำไร'"
         )
+        _tt_pending = db.get_tiktok_pending_sync_count(_ti_shop.strip() or "zhulian.shop")
+        if _tt_pending:
+            st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ที่ยังไม่ได้ซิงค์เข้าระบบกำไรสินค้า — กดปุ่มด้านล่างเพื่อซิงค์")
         if st.button("🔗 ซิงค์เข้าระบบกำไรสินค้า", key="ecom_tiktok_sync"):
-            with st.spinner("กำลังซิงค์..."):
+            with st.spinner("กำลังซิงค์... (ประมวลผลประวัติทั้งหมดของร้านนี้ อาจใช้เวลาสักครู่ถ้ามีออเดอร์เยอะ)"):
                 _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop.strip() or "zhulian.shop")
             if _sync_result["sales_rows"]:
                 st.success(f"✅ ซิงค์แล้ว {_sync_result['synced_orders']} ออเดอร์ ({_sync_result['sales_rows']} รายการสินค้า)")
+                st.rerun()
             else:
                 st.warning("⚠️ ไม่มีออเดอร์ที่ซิงค์ได้ — เช็คว่าชื่อร้านตรงกับที่อัปโหลดไฟล์ไว้ไหม")
 
 
 def _render_tiktok_affiliate():
     st.subheader("🎥 ค่าคอมนายหน้า (Affiliate)")
+    _tt_pending = db.get_tiktok_pending_sync_count()
+    if _tt_pending:
+        st.warning(
+            f"⚠️ มี {_tt_pending} ออเดอร์ TikTok ที่ยังไม่ได้ซิงค์เข้าระบบกำไรสินค้า "
+            "(ตัวเลขในแท็บ '💰 ยอดขาย/กำไร' ยังไม่รวมออเดอร์เหล่านี้) — ไปกดซิงค์ที่แท็บ "
+            "'⚙️ ตั้งค่า/นำเข้าข้อมูล' ก่อน"
+        )
     _tt_df = db.get_tiktok_affiliate_orders_df()
     if _tt_df.empty:
         st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' ก่อนครับ")
@@ -618,6 +629,11 @@ def _render_sales_profit():
     _unmapped_n = len(db.get_unmapped_ecommerce_items(_platform))
     if _unmapped_n:
         st.warning(f"⚠️ มี {_unmapped_n} รายการสินค้าที่ยังไม่ได้ map — ยอดขาย/กำไรของรายการนี้ยังไม่ถูกนับ ไปที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' เพื่อ map สินค้า")
+
+    if _platform == "tiktok":
+        _tt_pending = db.get_tiktok_pending_sync_count()
+        if _tt_pending:
+            st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ TikTok ค้างซิงค์ — ตัวเลขด้านล่างยังไม่รวมออเดอร์เหล่านี้ (ไปกดซิงค์ที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล')")
 
     _shop_opts = ["ทั้งหมด"] + [s["shop_name"] for s in _shops if s["platform"] == _platform]
     _sel_shop = st.selectbox("ร้าน", _shop_opts, key=f"ecom_profit_shop_filter_{_platform}")

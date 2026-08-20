@@ -1867,6 +1867,23 @@ def get_tiktok_order_income_df(shop_name: str = None) -> pd.DataFrame:
     return pd.DataFrame(data)
 
 
+def get_tiktok_pending_sync_count(shop_name: str = None) -> int:
+    """นับออเดอร์ TikTok ที่มีรายงานยอดขายสุทธิ (tiktok_order_income) แล้ว แต่ยังไม่ถูก
+    ซิงค์เข้า ecommerce_order_income (platform='tiktok') — ต่างจาก Shopee/Lazada ที่เขียน
+    เข้า ecommerce_sales/ecommerce_order_income ทันทีตอนอัปโหลด TikTok ต้องกด "ซิงค์เข้า
+    ระบบกำไรสินค้า" แยกต่างหาก ค้างได้ง่ายถ้าลืมกด — ใช้เตือนผู้ใช้แทนการปล่อยให้ตัวเลข
+    กำไรเงียบๆ ไม่ตรงกับที่อัปโหลดไว้จริง"""
+    _income_df = get_tiktok_order_income_df(shop_name)
+    if _income_df.empty:
+        return 0
+    all_ids = set(_income_df["order_id"].astype(str))
+    q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", "tiktok")
+    if shop_name:
+        q = q.eq("shop_name", shop_name)
+    synced_ids = {r["order_sn"] for r in _retry(lambda: q.execute()).data}
+    return len(all_ids - synced_ids)
+
+
 _TT_PRODUCT_SUMMARY_RE = re.compile(r"(\d+)\s*\*\s*(\d+)")
 
 
