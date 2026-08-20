@@ -1331,8 +1331,8 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
     เดียวกัน — แถวสุดท้ายรับเศษปัดเหลือ (หลักการเดียวกับแบ่งจ่ายบางส่วนใน
     บันทึกขาย) เรียกซ้ำได้ปลอดภัย (คำนวณใหม่ทับของเดิมทุกครั้ง)"""
     db = get_supabase()
-    incomes = db.table("ecommerce_order_income").select("order_sn,net_amount") \
-        .eq("platform", platform).execute().data
+    incomes = _retry(lambda: db.table("ecommerce_order_income").select("order_sn,net_amount")
+                      .eq("platform", platform).execute()).data
     if not incomes:
         return 0
     income_map = {r["order_sn"]: float(r["net_amount"]) for r in incomes}
@@ -1340,8 +1340,8 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
     updated = 0
     for i in range(0, len(order_sns), 50):
         chunk = order_sns[i:i + 50]
-        sales = db.table("ecommerce_sales").select("id,order_sn,item_price") \
-            .eq("platform", platform).in_("order_sn", chunk).execute().data
+        sales = _retry(lambda _chunk=chunk: db.table("ecommerce_sales").select("id,order_sn,item_price")
+                        .eq("platform", platform).in_("order_sn", _chunk).execute()).data
         by_order: dict[str, list[dict]] = {}
         for s in sales:
             by_order.setdefault(s["order_sn"], []).append(s)
