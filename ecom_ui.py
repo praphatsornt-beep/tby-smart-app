@@ -29,11 +29,54 @@ _ECOM_TABS = ["⚙️ ตั้งค่า/นำเข้าข้อมูล
 _PLATFORMS = {"shopee": "Shopee", "lazada": "Lazada", "tiktok": "TikTok"}
 
 
-def render():
+def _pills(options: list[str], key: str) -> str:
+    """st.pills ถ้ามี (Streamlit ใหม่) ไม่งั้น fallback เป็น st.radio (Streamlit เก่า)."""
     try:
-        _ecom_active = st.pills(" ", _ECOM_TABS, key="_ecom_active_sub", default=_ECOM_TABS[0], label_visibility="collapsed") or _ECOM_TABS[0]
+        return st.pills(" ", options, key=key, default=options[0], label_visibility="collapsed") or options[0]
     except AttributeError:
-        _ecom_active = st.radio(" ", _ECOM_TABS, horizontal=True, key="_ecom_active_sub", label_visibility="collapsed")
+        return st.radio(" ", options, horizontal=True, key=key, label_visibility="collapsed")
+
+
+def _set_flash(key: str, kind: str, msg: str):
+    """เก็บข้อความ success/warning ไว้ใน session_state ให้โผล่หลัง st.rerun() รอบถัดไป
+    (ปุ่มที่กด rerun ทันทีจะ render ข้อความไม่ทันถ้าเรียก st.success/st.warning ตรงๆ ก่อน rerun)."""
+    st.session_state[key] = (kind, msg)
+
+
+def _show_flash(key: str):
+    _msg = st.session_state.pop(key, None)
+    if _msg:
+        getattr(st, _msg[0])(_msg[1])
+
+
+def _date_range_inputs(key_prefix: str, n_cols: int = 2, from_label: str = "จาก", to_label: str = "ถึง"):
+    """คู่ date_input จาก/ถึง (default = ต้นเดือนนี้ → วันนี้) — n_cols>2 เผื่อ column
+    เพิ่มให้ widget อื่นวางในแถวเดียวกัน (เช่น number_input เกณฑ์เตือน) คืน columns
+    ที่เหลือให้ผู้เรียกใช้เอง"""
+    cols = st.columns(n_cols)
+    date_from = cols[0].date_input(from_label, value=date.today().replace(day=1), key=f"{key_prefix}_from")
+    date_to = cols[1].date_input(to_label, value=date.today(), key=f"{key_prefix}_to")
+    return date_from, date_to, cols[2:]
+
+
+def _map_products_and_upsert(rows_per_file: list[list[dict]], platform: str) -> int:
+    """ใส่ product_id ให้แต่ละแถวขาย (map จาก platform_item_id) แล้ว upsert เข้า
+    ecommerce_sales — ทีละไฟล์ ไม่รวมทุกไฟล์เป็น batch เดียว (ดูเหตุผลที่จุดเรียกใช้ของ
+    Shopee: _dedupe_by_key ใน upsert_ecommerce_sales จะ "บวก" qty ผิดถ้าออเดอร์เดียวกัน
+    ซ้ำข้ามไฟล์อยู่ใน batch เดียวกัน) คืนจำนวนแถวที่ upsert ทั้งหมด"""
+    prod_map = db.get_ecommerce_product_map()
+    total = 0
+    for _rows in rows_per_file:
+        for r in _rows:
+            _m = prod_map.get((platform, r["item_id_platform"]))
+            r["product_id"] = _m["product_id"] if _m else None
+        db.upsert_ecommerce_sales(_rows)
+        total += len(_rows)
+    return total
+
+
+def render():
+    _ecom_active = _pills(_ECOM_TABS, "_ecom_active_sub")
 
     if _ecom_active == _ECOM_TABS[0]:
         _render_setup()
@@ -182,9 +225,7 @@ def _render_shopee_upload(shop_names: list[str]):
     oc1, oc2 = st.columns(2)
     with oc1:
         st.markdown("**📦 รายงานคำสั่งซื้อ** (คำสั่งซื้อ → Export)")
-        _order_msg = st.session_state.pop("_ecom_order_import_msg", None)
-        if _order_msg:
-            getattr(st, _order_msg[0])(_order_msg[1])
+        _show_flash("_ecom_order_import_msg")
         _order_shop = st.selectbox("ร้าน", shop_names, key="ecom_order_shop")
         _pending = st.session_state.get("_ecom_order_pending_import")
         if _pending:
@@ -198,22 +239,9 @@ def _render_shopee_upload(shop_names: list[str]):
             )
             _pc1, _pc2 = st.columns(2)
             if _pc1.button("✅ ยืนยันนำเข้าต่อ (ร้านถูกต้องแล้ว)", key="ecom_confirm_order_mismatch"):
-                prod_map = db.get_ecommerce_product_map()
-                _total = 0
-                # upsert แยกทีละไฟล์ (ไม่รวมทุกไฟล์เป็น list เดียวก่อน upsert) เพราะ
-                # _dedupe_by_key ใน upsert_ecommerce_sales จะ "บวก" qty ของแถวที่ key ซ้ำกัน
-                # ภายในหนึ่ง batch — ถ้าไฟล์คาบเกี่ยววันที่กันแล้วมีออเดอร์เดียวกันซ้ำข้ามไฟล์
-                # รวมเป็น batch เดียวจะได้ qty บวกซ้ำผิด ต้องปล่อยให้ upsert (on_conflict)
-                # ของแต่ละไฟล์ทับกันเองแทน ซึ่งถูกต้องกว่า (ไฟล์หลังทับไฟล์ก่อนด้วยค่าล่าสุด)
-                for _rows in _pending["rows_per_file"]:
-                    for r in _rows:
-                        _m = prod_map.get(("shopee", r["item_id_platform"]))
-                        r["product_id"] = _m["product_id"] if _m else None
-                    db.upsert_ecommerce_sales(_rows)
-                    _total += len(_rows)
+                _total = _map_products_and_upsert(_pending["rows_per_file"], "shopee")
                 _n_updated = db.allocate_ecommerce_order_income()
-                st.session_state["_ecom_order_import_msg"] = (
-                    "success", f"✅ นำเข้า {_total} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
+                _set_flash("_ecom_order_import_msg", "success", f"✅ นำเข้า {_total} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
                 del st.session_state["_ecom_order_pending_import"]
                 st.session_state["_ecom_order_file_ver"] = _order_ver + 1
                 st.rerun()
@@ -230,7 +258,7 @@ def _render_shopee_upload(shop_names: list[str]):
                     rows_per_file = [shopee_import.parse_order_export(f, _order_shop) for f in _order_files]
                     all_rows = [r for _rows in rows_per_file for r in _rows]
                     if not all_rows:
-                        st.session_state["_ecom_order_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+                        _set_flash("_ecom_order_import_msg", "warning", "⚠️ ไม่พบข้อมูลในไฟล์")
                         st.session_state["_ecom_order_file_ver"] = _order_ver + 1
                     else:
                         _order_sns = list({r["order_sn"] for r in all_rows})
@@ -240,23 +268,16 @@ def _render_shopee_upload(shop_names: list[str]):
                                 "rows_per_file": rows_per_file, "mismatches": _mismatch, "shop_name": _order_shop,
                             }
                         else:
-                            prod_map = db.get_ecommerce_product_map()
-                            for _rows in rows_per_file:
-                                for r in _rows:
-                                    _m = prod_map.get(("shopee", r["item_id_platform"]))
-                                    r["product_id"] = _m["product_id"] if _m else None
-                                db.upsert_ecommerce_sales(_rows)  # ทีละไฟล์ — เหตุผลดูคอมเมนต์ด้านบน
+                            _map_products_and_upsert(rows_per_file, "shopee")
                             _n_updated = db.allocate_ecommerce_order_income()
-                            st.session_state["_ecom_order_import_msg"] = (
-                                "success", f"✅ นำเข้า {len(all_rows)} รายการ จาก {len(_order_files)} ไฟล์ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
+                            _set_flash("_ecom_order_import_msg", "success",
+                                       f"✅ นำเข้า {len(all_rows)} รายการ จาก {len(_order_files)} ไฟล์ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
                             st.session_state["_ecom_order_file_ver"] = _order_ver + 1
                 st.rerun()
 
     with oc2:
         st.markdown("**💰 รายงานรายได้** (การเงิน → รายได้ของฉัน → Export)")
-        _income_msg = st.session_state.pop("_ecom_income_import_msg", None)
-        if _income_msg:
-            getattr(st, _income_msg[0])(_income_msg[1])
+        _show_flash("_ecom_income_import_msg")
         _income_file = st.file_uploader("ไฟล์ Income...xlsx", type=["xlsx"], key=f"ecom_income_file_{_income_ver}")
         if _income_file and st.button("นำเข้ารายงานรายได้", key="ecom_import_income", type="primary"):
             with st.spinner("กำลังอ่านไฟล์..."):
@@ -264,11 +285,10 @@ def _render_shopee_upload(shop_names: list[str]):
                 if rows:
                     db.upsert_ecommerce_order_income(rows)
                     _n_updated = db.allocate_ecommerce_order_income()
-                    st.session_state["_ecom_income_import_msg"] = (
-                        "success",
-                        f"✅ นำเข้า {len(rows)} ออเดอร์ (ร้าน {_detected_shop}) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
+                    _set_flash("_ecom_income_import_msg", "success",
+                               f"✅ นำเข้า {len(rows)} ออเดอร์ (ร้าน {_detected_shop}) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
                 else:
-                    st.session_state["_ecom_income_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+                    _set_flash("_ecom_income_import_msg", "warning", "⚠️ ไม่พบข้อมูลในไฟล์")
             st.session_state["_ecom_income_file_ver"] = _income_ver + 1
             st.rerun()
 
@@ -280,27 +300,20 @@ def _render_lazada_upload(shop_names: list[str]):
     )
     _laz_ver = st.session_state.get("_ecom_lazada_file_ver", 0)
     st.markdown("**📊 รายงาน Income Overview** (รายรับของฉัน → รายละเอียดรายรับ → เลือกวันที่ → ดาวน์โหลด)")
-    _laz_msg = st.session_state.pop("_ecom_lazada_import_msg", None)
-    if _laz_msg:
-        getattr(st, _laz_msg[0])(_laz_msg[1])
+    _show_flash("_ecom_lazada_import_msg")
     _laz_shop = st.selectbox("ร้าน", shop_names, key="ecom_lazada_shop")
     _laz_file = st.file_uploader("ไฟล์ Income Overview...xlsx", type=["xlsx"], key=f"ecom_lazada_file_{_laz_ver}")
     if _laz_file and st.button("นำเข้ารายงาน Lazada", key="ecom_import_lazada", type="primary"):
         with st.spinner("กำลังอ่านไฟล์..."):
             sales_rows, income_rows = lazada_import.parse_income_overview(_laz_file, _laz_shop)
             if not sales_rows:
-                st.session_state["_ecom_lazada_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+                _set_flash("_ecom_lazada_import_msg", "warning", "⚠️ ไม่พบข้อมูลในไฟล์")
             else:
-                prod_map = db.get_ecommerce_product_map()
-                for r in sales_rows:
-                    _m = prod_map.get(("lazada", r["item_id_platform"]))
-                    r["product_id"] = _m["product_id"] if _m else None
-                db.upsert_ecommerce_sales(sales_rows)
+                _map_products_and_upsert([sales_rows], "lazada")
                 db.upsert_ecommerce_order_income(income_rows)
                 _n_updated = db.allocate_ecommerce_order_income("lazada")
-                st.session_state["_ecom_lazada_import_msg"] = (
-                    "success",
-                    f"✅ นำเข้า {len(sales_rows)} รายการ ({len(income_rows)} ออเดอร์) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
+                _set_flash("_ecom_lazada_import_msg", "success",
+                           f"✅ นำเข้า {len(sales_rows)} รายการ ({len(income_rows)} ออเดอร์) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
             st.session_state["_ecom_lazada_file_ver"] = _laz_ver + 1
         st.rerun()
 
@@ -319,15 +332,13 @@ def _render_tiktok_upload(shop_names: list[str]):
         "อื่นๆ ของ TikTok เอง (ไฟล์นี้ไม่มีข้อมูลนั้น) — ดูผลที่แท็บ '🎥 TikTok'"
     )
     _tt_ver = st.session_state.get("_ecom_tiktok_file_ver", 0)
-    _tt_msg = st.session_state.pop("_ecom_tiktok_import_msg", None)
-    if _tt_msg:
-        getattr(st, _tt_msg[0])(_tt_msg[1])
+    _show_flash("_ecom_tiktok_import_msg")
     _tt_file = st.file_uploader("ไฟล์ affiliate_orders...xlsx", type=["xlsx"], key=f"ecom_tiktok_file_{_tt_ver}")
     if _tt_file and st.button("นำเข้ารายงานนายหน้า TikTok", key="ecom_import_tiktok", type="primary"):
         with st.spinner("กำลังอ่านไฟล์..."):
             _tt_rows = tiktok_affiliate_import.parse_affiliate_orders(_tt_file, _tt_shop)
             if not _tt_rows:
-                st.session_state["_ecom_tiktok_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+                _set_flash("_ecom_tiktok_import_msg", "warning", "⚠️ ไม่พบข้อมูลในไฟล์")
             else:
                 db.upsert_tiktok_affiliate_orders(_tt_rows)
                 _msg = f"✅ นำเข้า {len(_tt_rows)} รายการแล้ว"
@@ -338,7 +349,7 @@ def _render_tiktok_upload(shop_names: list[str]):
                     _msg += f" · ซิงค์เข้าระบบกำไรสินค้าแล้ว {_sync_result['synced_orders']} ออเดอร์"
                 if _sync_result.get("unmatched"):
                     _msg += f" · ⚠️ {len(_sync_result['unmatched'])} ออเดอร์แกะสินค้าไม่ได้ (ดูที่แท็บ '⚠️ ตรวจสอบปัญหา')"
-                st.session_state["_ecom_tiktok_import_msg"] = ("success", _msg)
+                _set_flash("_ecom_tiktok_import_msg", "success", _msg)
             st.session_state["_ecom_tiktok_file_ver"] = _tt_ver + 1
         st.rerun()
 
@@ -354,15 +365,13 @@ def _render_tiktok_upload(shop_names: list[str]):
         "ได้เหมือน Shopee/Lazada"
     )
     _ti_ver = st.session_state.get("_ecom_tiktok_income_file_ver", 0)
-    _ti_msg = st.session_state.pop("_ecom_tiktok_income_import_msg", None)
-    if _ti_msg:
-        getattr(st, _ti_msg[0])(_ti_msg[1])
+    _show_flash("_ecom_tiktok_income_import_msg")
     _ti_file = st.file_uploader("ไฟล์ income...xlsx", type=["xlsx"], key=f"ecom_tiktok_income_file_{_ti_ver}")
     if _ti_file and st.button("นำเข้ารายงานยอดขายสุทธิ TikTok", key="ecom_import_tiktok_income", type="primary"):
         with st.spinner("กำลังอ่านไฟล์..."):
             _ti_rows = tiktok_income_import.parse_income_report(_ti_file, _tt_shop)
             if not _ti_rows:
-                st.session_state["_ecom_tiktok_income_import_msg"] = ("warning", "⚠️ ไม่พบข้อมูลในไฟล์")
+                _set_flash("_ecom_tiktok_income_import_msg", "warning", "⚠️ ไม่พบข้อมูลในไฟล์")
             else:
                 db.upsert_tiktok_order_income(_ti_rows)
                 _msg = f"✅ นำเข้า {len(_ti_rows)} ออเดอร์แล้ว"
@@ -373,7 +382,7 @@ def _render_tiktok_upload(shop_names: list[str]):
                     _msg += f" · ซิงค์เข้าระบบกำไรสินค้าแล้ว {_sync_result['synced_orders']} ออเดอร์"
                 if _sync_result.get("unmatched"):
                     _msg += f" · ⚠️ {len(_sync_result['unmatched'])} ออเดอร์แกะสินค้าไม่ได้ (ดูที่แท็บ '⚠️ ตรวจสอบปัญหา')"
-                st.session_state["_ecom_tiktok_income_import_msg"] = ("success", _msg)
+                _set_flash("_ecom_tiktok_income_import_msg", "success", _msg)
             st.session_state["_ecom_tiktok_income_file_ver"] = _ti_ver + 1
         st.rerun()
 
@@ -386,9 +395,7 @@ def _render_tiktok_upload(shop_names: list[str]):
             "ซิงค์อัตโนมัติทุกครั้งที่อัปโหลดไฟล์ด้านบนแล้ว — ไปจับคู่ SKU → สินค้าในระบบด้านบน "
             "(Map สินค้า → ระบบ) ก่อนดูกำไรที่แท็บ '💰 ยอดขาย/กำไร'"
         )
-        _sync_msg = st.session_state.pop("_ecom_tiktok_sync_msg", None)
-        if _sync_msg:
-            getattr(st, _sync_msg[0])(_sync_msg[1])
+        _show_flash("_ecom_tiktok_sync_msg")
         _tt_pending = db.get_tiktok_pending_sync_count(_tt_shop)
         if _tt_pending:
             st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ที่ยังไม่ได้ซิงค์เข้าระบบกำไรสินค้า — กดปุ่มด้านล่างเพื่อซิงค์")
@@ -406,7 +413,7 @@ def _render_tiktok_upload(shop_names: list[str]):
                 _msg += (f"\n\n⚠️ มี {_n_unmatched} ออเดอร์ที่แกะสินค้าจาก product_summary "
                          "ไม่ได้ ข้ามไปไม่นับเข้าเลย — ดูรายการที่แท็บ '⚠️ ตรวจสอบปัญหา'")
                 _kind = "warning"
-            st.session_state["_ecom_tiktok_sync_msg"] = (_kind, _msg)
+            _set_flash("_ecom_tiktok_sync_msg", _kind, _msg)
             st.rerun()
 
 
@@ -465,9 +472,9 @@ def _render_tiktok_affiliate():
         hide_index=True, width="stretch",
     )
     _tt_m1, _tt_m2, _tt_m3 = st.columns(3)
-    _tt_m1.metric("ยอดขายรวม", f"{_tt_unbilled_df['payment_amount'].sum():,.0f} ฿")
-    _tt_m2.metric("ยอดนายหน้ารวม", f"{_tt_unbilled_df['commission_payable_actual'].sum():,.2f} ฿")
-    _tt_m3.metric("ยอดที่เราได้โดยประมาณ", f"{_tt_unbilled_df['net_amount'].sum():,.0f} ฿")
+    with _tt_m1: _metric_card("ยอดขายรวม", f"{_tt_unbilled_df['payment_amount'].sum():,.0f} ฿")
+    with _tt_m2: _metric_card("ยอดนายหน้ารวม", f"{_tt_unbilled_df['commission_payable_actual'].sum():,.2f} ฿")
+    with _tt_m3: _metric_card("ยอดที่เราได้โดยประมาณ", f"{_tt_unbilled_df['net_amount'].sum():,.0f} ฿")
 
     st.divider()
 
@@ -544,9 +551,9 @@ def _render_tiktok_affiliate():
 
     st.markdown(f"**เลือกอยู่: {_tt_sel_n} รายการ**")
     _tt_s1, _tt_s2, _tt_s3 = st.columns(3)
-    _tt_s1.metric("ยอดขายรวม", f"{_tt_sel_rows['payment_amount'].sum():,.0f} ฿")
-    _tt_s2.metric("ยอดค่านายหน้ารวม", f"{_tt_sel_rows['commission_payable_actual'].sum():,.2f} ฿")
-    _tt_s3.metric("คะแนนรวม", f"{_tt_sel_points:,.0f} PV")
+    with _tt_s1: _metric_card("ยอดขายรวม", f"{_tt_sel_rows['payment_amount'].sum():,.0f} ฿")
+    with _tt_s2: _metric_card("ยอดค่านายหน้ารวม", f"{_tt_sel_rows['commission_payable_actual'].sum():,.2f} ฿")
+    with _tt_s3: _metric_card("คะแนนรวม", f"{_tt_sel_points:,.0f} PV")
 
     if _tt_sel_n > 0:
         # ใช้ชื่อ ASCII ตอน .agg() แล้วค่อย .rename() เป็นภาษาไทยทีหลัง — ห้ามใช้ข้อความไทย
@@ -599,9 +606,9 @@ def _render_tiktok_affiliate():
                                  zip(_tt_billed_today["sku_id"], _tt_billed_today["qty"]))
             st.markdown(f"**📅 เปิดบิลไปแล้ววันนี้: {len(_tt_billed_today)} รายการ**")
             _tt_bt1, _tt_bt2, _tt_bt3 = st.columns(3)
-            _tt_bt1.metric("ยอดขายรวม", f"{_tt_billed_today['payment_amount'].sum():,.0f} ฿")
-            _tt_bt2.metric("ยอดค่านายหน้ารวม", f"{_tt_billed_today['commission_payable_actual'].sum():,.2f} ฿")
-            _tt_bt3.metric("คะแนนรวม", f"{_tt_bt_points:,.0f} PV")
+            with _tt_bt1: _metric_card("ยอดขายรวม", f"{_tt_billed_today['payment_amount'].sum():,.0f} ฿")
+            with _tt_bt2: _metric_card("ยอดค่านายหน้ารวม", f"{_tt_billed_today['commission_payable_actual'].sum():,.2f} ฿")
+            with _tt_bt3: _metric_card("คะแนนรวม", f"{_tt_bt_points:,.0f} PV")
 
 
 _PROFIT_GREEN = "#14874e"   # ตรงกับ --tby-green ใน app.py
@@ -641,9 +648,7 @@ def _render_platform_totals_banner(date_from: str, date_to: str):
 
 
 def _render_sales_profit():
-    mc1, mc2, mc3 = st.columns([1, 1, 1])
-    margin_from = mc1.date_input("จาก", value=date.today().replace(day=1), key="ecom_margin_from")
-    margin_to   = mc2.date_input("ถึง",  value=date.today(), key="ecom_margin_to")
+    margin_from, margin_to, (mc3,) = _date_range_inputs("ecom_margin", n_cols=3)
     margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
 
     _render_platform_totals_banner(str(margin_from), str(margin_to))
@@ -670,10 +675,7 @@ def _render_sales_profit():
     _shop_filter = None if _sel_shop == "ทั้งหมด" else _sel_shop
 
     _view_opts = ["💰 กำไรต่อสินค้า", "📦 จำนวนที่ขาย", "🚚 ค่าส่งเกิน"]
-    try:
-        _view = st.pills(" ", _view_opts, key="ecom_profit_view", default=_view_opts[0], label_visibility="collapsed") or _view_opts[0]
-    except AttributeError:
-        _view = st.radio(" ", _view_opts, horizontal=True, key="ecom_profit_view", label_visibility="collapsed")
+    _view = _pills(_view_opts, "ecom_profit_view")
 
     st.divider()
 
@@ -698,10 +700,8 @@ def _render_sales_profit():
 
     # ── ยอดขาย E-commerce (รายการดิบ) ────────────────────────────────────
     with st.expander("ดูยอดขาย E-commerce (รายการดิบ)"):
-        ev1, ev2 = st.columns(2)
-        view_from = ev1.date_input("จาก", value=date.today().replace(day=1), key="ecom_vfrom")
-        view_to   = ev2.date_input("ถึง",  value=date.today(), key="ecom_vto")
-        ecom_df   = db.get_ecommerce_sales_df(str(view_from), str(view_to), platform=_platform, shop_name=_shop_filter)
+        view_from, view_to, _ = _date_range_inputs("ecom_v")
+        ecom_df = db.get_ecommerce_sales_df(str(view_from), str(view_to), platform=_platform, shop_name=_shop_filter)
         if ecom_df.empty:
             st.info("ยังไม่มีข้อมูล — อัปโหลดรายงานคำสั่งซื้อก่อนครับ (แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล')")
         else:
@@ -769,10 +769,7 @@ def _render_ecom_profit_view(margin_df, margin_warn_pct, platform, date_from, da
                  f"🟡 กำไรต่ำ ({(margin_df['สถานะ'] == '🟡 กำไรต่ำ').sum()})", f"✅ ปกติ ({(margin_df['สถานะ'] == '✅ ปกติ').sum()})"]
     _status_map = {_seg_opts[1]: "🔴 ขาดทุน", _seg_opts[2]: "🟡 กำไรต่ำ", _seg_opts[3]: "✅ ปกติ"}
     st.markdown("**รายละเอียดกำไรต่อสินค้า**")
-    try:
-        _seg = st.pills(" ", _seg_opts, key="ecom_profit_seg", default=_seg_opts[0], label_visibility="collapsed") or _seg_opts[0]
-    except AttributeError:
-        _seg = st.radio(" ", _seg_opts, horizontal=True, key="ecom_profit_seg", label_visibility="collapsed")
+    _seg = _pills(_seg_opts, "ecom_profit_seg")
     _table_df = margin_df if _seg == _seg_opts[0] else margin_df[margin_df["สถานะ"] == _status_map.get(_seg, "")]
 
     st.dataframe(
@@ -842,9 +839,7 @@ def _render_ecom_shipping_view(platform, shop_filter):
         st.caption("เลือกแพลตฟอร์ม Shopee ด้านบนเพื่อดูมุมมองนี้")
         return
 
-    sc1, sc2, sc3 = st.columns(3)
-    ship_from = sc1.date_input("จาก (วันที่โอนเงิน)", value=date.today().replace(day=1), key="ecom_ship_from")
-    ship_to   = sc2.date_input("ถึง", value=date.today(), key="ecom_ship_to")
+    ship_from, ship_to, (sc3,) = _date_range_inputs("ecom_ship", n_cols=3, from_label="จาก (วันที่โอนเงิน)")
     ship_threshold = sc3.number_input("เกณฑ์ส่วนต่าง (บาท)", min_value=0.0, value=0.0, step=5.0, key="ecom_ship_threshold")
 
     overcharge_df = db.get_ecommerce_shipping_overcharge_df(
@@ -902,9 +897,7 @@ def _render_issues():
     # ── ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) ───────────────────────
     st.subheader("ออเดอร์ที่กำไรผิดปกติ")
     st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")
-    ac1, ac2, ac3 = st.columns([1, 1, 1])
-    anomaly_from = ac1.date_input("จาก", value=date.today().replace(day=1), key="ecom_anomaly_from")
-    anomaly_to   = ac2.date_input("ถึง",  value=date.today(), key="ecom_anomaly_to")
+    anomaly_from, anomaly_to, (ac3,) = _date_range_inputs("ecom_anomaly", n_cols=3)
     anomaly_warn_pct = ac3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
     anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), platform=_platform, warn_pct=anomaly_warn_pct, shop_name=_shop_filter)
     if anomaly_df.empty:
