@@ -686,9 +686,9 @@ def _render_sales_profit():
         if margin_df.empty:
             st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' → Map สินค้า)")
         else:
-            # db.get_ecommerce_product_margin_df() ตั้งชื่อคอลัมน์นี้ตายตัวว่า "Shopee" เสมอ
-            # ไม่ว่า platform ไหน (ดู database.py) — เปลี่ยนเป็นชื่อกลางให้ใช้ร่วมกันทุก view
-            margin_df = margin_df.rename(columns={"ขายผ่าน Shopee (ชิ้น)": "ขาย (ชิ้น)"})
+            # db.get_ecommerce_product_margin_df() ตั้งชื่อคอลัมน์ตามแพลตฟอร์มจริง
+            # (เช่น "ขายผ่าน Lazada (ชิ้น)") — เปลี่ยนเป็นชื่อกลางให้ใช้ร่วมกันทุก view
+            margin_df = margin_df.rename(columns={f"ขายผ่าน {_PLATFORMS.get(_platform, _platform)} (ชิ้น)": "ขาย (ชิ้น)"})
             if _view == _view_opts[0]:
                 _render_ecom_profit_view(margin_df, margin_warn_pct, _platform, margin_from, margin_to, _shop_filter)
             else:

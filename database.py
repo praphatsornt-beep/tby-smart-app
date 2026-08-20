@@ -8,6 +8,7 @@ from collections import defaultdict
 from math import floor
 import uuid
 import tiktok_income_import
+import ecom_calc
 
 
 def _retry(fn, attempts: int = 2, delay: float = 0.5):
@@ -1408,7 +1409,7 @@ def get_ecommerce_product_margin_df(
     _income_q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", platform)
     if shop_name:
         _income_q = _income_q.eq("shop_name", shop_name)
-    settled_order_sns = {r["order_sn"] for r in _retry(lambda: _income_q.execute()).data}
+    settled_sns = ecom_calc.settled_order_sns(_retry(lambda: _income_q.execute()).data)
 
     _sales_q = get_supabase().table("ecommerce_sales").select(
         "order_sn,product_id,item_id_platform,qty,returned_qty,net_amount,item_price,order_status,sale_date"
@@ -1423,47 +1424,8 @@ def get_ecommerce_product_margin_df(
     products = {p["id"]: p for p in get_products()}
     prod_map = get_ecommerce_product_map()
 
-    agg: dict[str, dict] = {}
-    pending_qty = 0.0
-    for r in sales:
-        if r.get("order_status") == "ยกเลิกแล้ว":
-            continue
-        pid = r["product_id"]
-        mult = prod_map.get((platform, r["item_id_platform"]), {}).get("units_per_pack", 1)
-        net_qty = (float(r["qty"] or 0) - float(r.get("returned_qty") or 0)) * mult
-        if r["order_sn"] not in settled_order_sns:
-            pending_qty += net_qty
-            continue
-        a = agg.setdefault(pid, {"qty": 0.0, "net": 0.0, "gross": 0.0})
-        a["qty"] += net_qty
-        a["net"] += float(r.get("net_amount") or 0)
-        a["gross"] += float(r.get("item_price") or 0)
-
-    rows = []
-    for pid, a in agg.items():
-        prod = products.get(pid, {})
-        cost = float(prod.get("cost_price") or 0)
-        pv = float(prod.get("points_per_unit") or 0)
-        qty_sold = a["qty"]
-        profit = a["net"] - cost * qty_sold
-        # อัตราส่วนยอดเงินที่ได้รับจริงเทียบกับ "ราคาขายสุทธิ" ต่อบรรทัด (item_price
-        # จาก Order.all — ราคาที่ขายจริงในแต่ละออเดอร์ หลังหักโค้ดส่วนลด/โปรโมชัน
-        # ที่ Shopee/ผู้ซื้อใช้ ณ ตอนนั้น ไม่ใช่ราคาที่ตั้งไว้ในหน้าสินค้า) ใช้ย้อน
-        # คำนวณว่าราคาขายสุทธิเฉลี่ยต่อชิ้นต้องได้อย่างน้อยเท่าไหร่ถึงจะคุ้มทุน —
-        # ถ้ามีโค้ดส่วนลดเพิ่มอีกตอนขายจริง ราคาที่ตั้งในหน้าสินค้าอาจต้องสูงกว่านี้
-        _net_rate = (a["net"] / a["gross"]) if a["gross"] else 0
-        breakeven_price = round(cost / _net_rate, 2) if _net_rate > 0 else None
-        rows.append({
-            "รหัสสินค้า": pid,
-            "ชื่อสินค้า": prod.get("name", pid),
-            "ต้นทุน/ชิ้น": cost,
-            "ขายผ่าน Shopee (ชิ้น)": qty_sold,
-            "PV": round(pv * qty_sold, 2),
-            "ยอดเงินที่ได้รับจริง": round(a["net"], 2),
-            "กำไรรวม": round(profit, 2),
-            "กำไร/ชิ้น": round(profit / qty_sold, 2) if qty_sold else 0,
-            "ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)": breakeven_price,
-        })
+    agg, pending_qty = ecom_calc.aggregate_product_margin(sales, settled_sns, prod_map, platform)
+    rows = ecom_calc.product_margin_rows(agg, products, platform)
     df = pd.DataFrame(rows)
     if not df.empty:
         df.sort_values("กำไรรวม", ascending=True, inplace=True)
@@ -1502,21 +1464,7 @@ def _ecommerce_order_costs(
     products = {p["id"]: p for p in get_products()}
     prod_map = get_ecommerce_product_map()
 
-    by_order: dict[str, dict] = {}
-    for r in sales:
-        sn = r["order_sn"]
-        if sn not in incomes or r.get("order_status") == "ยกเลิกแล้ว":
-            continue
-        o = by_order.setdefault(sn, {"cost": 0.0, "unmapped": False, "items": [], "sale_date": r.get("sale_date")})
-        pid = r["product_id"]
-        if not pid:
-            o["unmapped"] = True
-            continue
-        mult = prod_map.get((platform, r["item_id_platform"]), {}).get("units_per_pack", 1)
-        qty = (float(r["qty"] or 0) - float(r.get("returned_qty") or 0)) * mult
-        cost = float(products.get(pid, {}).get("cost_price") or 0)
-        o["cost"] += cost * qty
-        o["items"].append(products.get(pid, {}).get("name") or r.get("item_name") or pid)
+    by_order = ecom_calc.aggregate_order_costs(sales, incomes, prod_map, products, platform)
     return incomes, by_order
 
 
@@ -1530,25 +1478,7 @@ def get_ecommerce_order_anomaly_df(
     if not incomes or not by_order:
         return pd.DataFrame()
 
-    rows = []
-    for sn, o in by_order.items():
-        if o["unmapped"] or not o["items"]:
-            continue
-        shop_name, net = incomes[sn]
-        profit = net - o["cost"]
-        margin_pct = (profit / net * 100) if net else 0
-        if profit >= 0 and margin_pct >= warn_pct:
-            continue
-        rows.append({
-            "สถานะ": "🔴 ขาดทุน" if profit < 0 else "🟡 กำไรต่ำ",
-            "เลขออเดอร์": sn,
-            "วันที่สั่งซื้อ": o["sale_date"],
-            "ร้าน": shop_name,
-            "สินค้า": ", ".join(dict.fromkeys(o["items"])),
-            "ต้นทุนรวม": round(o["cost"], 2),
-            "ยอดเงินที่ได้รับจริง": round(net, 2),
-            "กำไร": round(profit, 2),
-        })
+    rows = ecom_calc.order_anomaly_rows(incomes, by_order, warn_pct)
     df = pd.DataFrame(rows)
     if not df.empty:
         df.sort_values("กำไร", ascending=True, inplace=True)
@@ -1566,22 +1496,7 @@ def get_ecommerce_order_profit_summary(
     ทั้งช่วงแล้วตัวเลขจะไม่เท่ากับเอาแต่ละเดือนมาบวกกัน shop_name: กรองเฉพาะร้านเดียว
     (None = รวมทุกร้าน)"""
     incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform, shop_name)
-    total_profit = 0.0
-    total_loss = 0.0
-    for sn, o in by_order.items():
-        if o["unmapped"] or not o["items"]:
-            continue
-        _, net = incomes[sn]
-        profit = net - o["cost"]
-        if profit >= 0:
-            total_profit += profit
-        else:
-            total_loss += profit
-    return {
-        "total_profit": round(total_profit, 2),
-        "total_loss": round(total_loss, 2),
-        "net": round(total_profit + total_loss, 2),
-    }
+    return ecom_calc.order_profit_summary(incomes, by_order)
 
 
 @st.cache_data(ttl=120)
@@ -1687,16 +1602,15 @@ def get_ecommerce_shipping_overcharge_df(
 
     out = []
     for r in rows:
-        estimated = float(r.get("buyer_paid_shipping") or 0) + float(r.get("shopee_subsidized_shipping") or 0)
-        actual = float(r.get("shipping_fee_charged") or 0)
-        extra = actual - estimated
+        extra = ecom_calc.shipping_overcharge_extra(r)
         if extra <= overcharge_threshold:
             continue
         out.append({
             "เลขออเดอร์": r["order_sn"],
             "ร้าน": r["shop_name"],
-            "ค่าส่งที่ประเมินไว้ (ผู้ซื้อ+Shopee)": round(estimated, 2),
-            "ค่าส่งที่หักจริง": round(actual, 2),
+            "ค่าส่งที่ประเมินไว้ (ผู้ซื้อ+Shopee)": round(
+                float(r.get("buyer_paid_shipping") or 0) + float(r.get("shopee_subsidized_shipping") or 0), 2),
+            "ค่าส่งที่หักจริง": round(float(r.get("shipping_fee_charged") or 0), 2),
             "ส่วนต่างที่โดนหักเพิ่ม": round(extra, 2),
         })
     df = pd.DataFrame(out)
@@ -1724,9 +1638,7 @@ def get_ecommerce_shipping_overcharge_monthly_df(
 
     by_month: dict[str, float] = {}
     for r in rows:
-        estimated = float(r.get("buyer_paid_shipping") or 0) + float(r.get("shopee_subsidized_shipping") or 0)
-        actual = float(r.get("shipping_fee_charged") or 0)
-        extra = actual - estimated
+        extra = ecom_calc.shipping_overcharge_extra(r)
         if extra <= overcharge_threshold:
             continue
         d = r.get("transfer_date")
@@ -1792,7 +1704,7 @@ def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None,
     for i in range(0, len(order_sns), 50):
         chunk = order_sns[i:i + 50]
         inc = _retry(lambda _c=chunk: db.table("ecommerce_order_income").select("order_sn").in_("order_sn", _c).execute()).data
-        settled.update(x["order_sn"] for x in inc)
+        settled |= ecom_calc.settled_order_sns(inc)
 
     return pd.DataFrame([{
         "วันที่": r["sale_date"],
