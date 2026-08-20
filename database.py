@@ -1,5 +1,4 @@
 import os
-import re
 import time
 import streamlit as st
 from dotenv import load_dotenv
@@ -8,6 +7,7 @@ import pandas as pd
 from collections import defaultdict
 from math import floor
 import uuid
+import tiktok_income_import
 
 
 def _retry(fn, attempts: int = 2, delay: float = 0.5):
@@ -1884,7 +1884,33 @@ def get_tiktok_pending_sync_count(shop_name: str = None) -> int:
     return len(all_ids - synced_ids)
 
 
-_TT_PRODUCT_SUMMARY_RE = re.compile(r"(\d+)\s*\*\s*(\d+)")
+def get_tiktok_unmatched_organic_orders(shop_name: str = None) -> pd.DataFrame:
+    """ออเดอร์ TikTok organic (ไม่มีข้อมูลนายหน้า) ที่แกะ SKU จาก product_summary ไม่ได้ —
+    ออเดอร์แบบนี้จะไม่ถูกนับเข้า ecommerce_sales/ecommerce_order_income เลยจนกว่าจะแก้ที่
+    ต้นเหตุ (product_summary ไม่ตรง pattern คาดไว้) ต่างจาก get_tiktok_pending_sync_count
+    ที่นับรวมทุกออเดอร์ที่ยังไม่ sync (แค่ยังไม่ได้กดปุ่ม) — อันนี้กดปุ่ม sync ไปก็ไม่หาย
+    เพราะ parse ไม่ผ่านจริงๆ ใช้แสดงในแท็บ '⚠️ ตรวจสอบปัญหา' ให้ผู้ใช้เห็นว่าต้องเช็ค
+    ไฟล์ต้นทางเอง ไม่ใช่แค่กดซิงค์ซ้ำ"""
+    q = get_supabase().table("tiktok_order_income").select("order_id,product_summary,net_settlement,order_created_at")
+    if shop_name:
+        q = q.eq("shop_name", shop_name)
+    income_rows = _retry(lambda: q.execute()).data
+    if not income_rows:
+        return pd.DataFrame()
+
+    aq = get_supabase().table("tiktok_affiliate_orders").select("order_id")
+    if shop_name:
+        aq = aq.eq("shop_name", shop_name)
+    aff_order_ids = {r["order_id"] for r in _retry(lambda: aq.execute()).data}
+
+    rows = [{
+        "วันที่": r.get("order_created_at"), "เลขออเดอร์": r["order_id"],
+        "product_summary (ดิบ)": r.get("product_summary") or "",
+        "ยอดสุทธิ": r.get("net_settlement") or 0,
+    } for r in income_rows
+        if r["order_id"] not in aff_order_ids
+        and tiktok_income_import.parse_product_summary(r.get("product_summary")) is None]
+    return pd.DataFrame(rows)
 
 
 def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
@@ -1900,7 +1926,7 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
     income_rows = get_supabase().table("tiktok_order_income").select("*") \
         .eq("shop_name", shop_name).execute().data
     if not income_rows:
-        return {"synced_orders": 0, "sales_rows": 0}
+        return {"synced_orders": 0, "sales_rows": 0, "unmatched": []}
     aff_rows = get_supabase().table("tiktok_affiliate_orders").select("*") \
         .eq("shop_name", shop_name).execute().data
     aff_by_order: dict[str, list[dict]] = defaultdict(list)
@@ -1912,6 +1938,7 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
 
     sales_rows = []
     income_out_rows = []
+    unmatched = []  # ออเดอร์ organic ที่แกะ SKU จาก product_summary ไม่ได้ — ไม่ทิ้งเงียบ
     for inc in income_rows:
         oid = inc["order_id"]
         _sale_date = inc.get("order_created_at") or inc.get("order_paid_at")
@@ -1930,10 +1957,14 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
             # ออเดอร์ organic (ไม่ผ่านนายหน้า) — แกะ SKU จาก product_summary ของไฟล์
             # income เอง ("SKU_ID * qty;") ยืนยันจากข้อมูลจริงแล้วว่าออเดอร์แบบนี้มีแค่
             # 1 SKU เสมอ เลยให้ยอดทั้งออเดอร์ (gross_revenue) เป็นของ SKU นั้น 100% ได้
-            _m = _TT_PRODUCT_SUMMARY_RE.search(inc.get("product_summary") or "")
-            if not _m:
-                continue  # ไม่มี SKU ให้แม็ปเลย ข้ามแถวนี้ (นับใน income แต่ไม่มีรายการสินค้า)
-            _sku, _qty = _m.group(1), int(_m.group(2))
+            _parsed = tiktok_income_import.parse_product_summary(inc.get("product_summary"))
+            if not _parsed:
+                # ข้ามออเดอร์นี้จริง (ไม่มี SKU ให้แม็ป ทั้ง ecommerce_sales และ
+                # ecommerce_order_income จะไม่มีแถวนี้เลย) แต่เก็บไว้รายงานผู้ใช้แทนการ
+                # ทิ้งเงียบแบบเดิม — ดู get_tiktok_unmatched_organic_orders()
+                unmatched.append({"order_id": oid, "product_summary": inc.get("product_summary") or ""})
+                continue
+            _sku, _qty = _parsed
             # ชื่อสินค้า: หาจาก SKU เดียวกันในออเดอร์อื่นที่มีข้อมูลนายหน้า (SKU เดียวกัน
             # ย่อมเป็นสินค้าเดียวกันไม่ว่าจะออเดอร์ไหน) ก่อน — ไม่งั้นจะเห็นแค่รหัส SKU
             # ล้วนๆ ใน "Map สินค้า" หาไม่เจอว่าคือสินค้าอะไร (ผู้ใช้เจอปัญหานี้จริง)
@@ -1952,7 +1983,7 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
         })
 
     if not sales_rows:
-        return {"synced_orders": 0, "sales_rows": 0}
+        return {"synced_orders": 0, "sales_rows": 0, "unmatched": unmatched}
 
     # ให้แน่ใจว่ามีร้านนี้ลงทะเบียนใน ecommerce_shops แล้ว ไม่งั้น dropdown เลือกร้าน
     # ในแท็บ ยอดขาย/กำไร กับ Map สินค้า จะไม่เห็นร้านนี้เป็นตัวเลือก
@@ -1964,7 +1995,10 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
     upsert_ecommerce_sales(sales_rows)
     upsert_ecommerce_order_income(income_out_rows)
     _n_alloc = allocate_ecommerce_order_income("tiktok")
-    return {"synced_orders": len(income_out_rows), "sales_rows": len(sales_rows), "allocated": _n_alloc}
+    return {
+        "synced_orders": len(income_out_rows), "sales_rows": len(sales_rows),
+        "allocated": _n_alloc, "unmatched": unmatched,
+    }
 
 
 # ─── Shipments ────────────────────────────────────────────────────────────────

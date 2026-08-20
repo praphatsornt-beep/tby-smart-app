@@ -367,17 +367,28 @@ def _render_tiktok_upload():
             "กดครั้งเดียวหลังอัปโหลดไฟล์ใหม่ทุกครั้ง แล้วไป map SKU → สินค้าในระบบด้านบน "
             "(Map สินค้า → ระบบ) ก่อนดูกำไรที่แท็บ '💰 ยอดขาย/กำไร'"
         )
+        _sync_msg = st.session_state.pop("_ecom_tiktok_sync_msg", None)
+        if _sync_msg:
+            getattr(st, _sync_msg[0])(_sync_msg[1])
         _tt_pending = db.get_tiktok_pending_sync_count(_ti_shop.strip() or "zhulian.shop")
         if _tt_pending:
             st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ที่ยังไม่ได้ซิงค์เข้าระบบกำไรสินค้า — กดปุ่มด้านล่างเพื่อซิงค์")
         if st.button("🔗 ซิงค์เข้าระบบกำไรสินค้า", key="ecom_tiktok_sync"):
             with st.spinner("กำลังซิงค์... (ประมวลผลประวัติทั้งหมดของร้านนี้ อาจใช้เวลาสักครู่ถ้ามีออเดอร์เยอะ)"):
                 _sync_result = db.sync_tiktok_to_ecommerce(_ti_shop.strip() or "zhulian.shop")
+            _n_unmatched = len(_sync_result.get("unmatched") or [])
             if _sync_result["sales_rows"]:
-                st.success(f"✅ ซิงค์แล้ว {_sync_result['synced_orders']} ออเดอร์ ({_sync_result['sales_rows']} รายการสินค้า)")
-                st.rerun()
+                _msg = f"✅ ซิงค์แล้ว {_sync_result['synced_orders']} ออเดอร์ ({_sync_result['sales_rows']} รายการสินค้า)"
+                _kind = "success"
             else:
-                st.warning("⚠️ ไม่มีออเดอร์ที่ซิงค์ได้ — เช็คว่าชื่อร้านตรงกับที่อัปโหลดไฟล์ไว้ไหม")
+                _msg = "⚠️ ไม่มีออเดอร์ที่ซิงค์ได้ — เช็คว่าชื่อร้านตรงกับที่อัปโหลดไฟล์ไว้ไหม"
+                _kind = "warning"
+            if _n_unmatched:
+                _msg += (f"\n\n⚠️ มี {_n_unmatched} ออเดอร์ที่แกะสินค้าจาก product_summary "
+                         "ไม่ได้ ข้ามไปไม่นับเข้าเลย — ดูรายการที่แท็บ '⚠️ ตรวจสอบปัญหา'")
+                _kind = "warning"
+            st.session_state["_ecom_tiktok_sync_msg"] = (_kind, _msg)
+            st.rerun()
 
 
 def _render_tiktok_affiliate():
@@ -897,3 +908,19 @@ def _render_issues():
         st.success("✅ ไม่มีออเดอร์คืนสินค้า/ยกเลิกที่บันทึกไว้")
     else:
         st.dataframe(problem_df, width="stretch", hide_index=True)
+
+    if _platform == "tiktok":
+        st.divider()
+        # ── TikTok organic ที่แกะสินค้าจาก product_summary ไม่ได้ ─────────
+        st.subheader("TikTok: ออเดอร์ที่ยังไม่ถูกนับกำไร (แกะสินค้าไม่ได้)")
+        st.caption(
+            "ออเดอร์เหล่านี้มีข้อมูลยอดขายสุทธิ (income) แล้ว แต่ระบบแกะไม่ออกว่าเป็นสินค้าไหน "
+            "จาก product_summary — กดปุ่มซิงค์ที่แท็บ '⚙️ ตั้งค่า/นำเข้าข้อมูล' ไปก็จะยังไม่หาย "
+            "ต้องเช็คไฟล์ income ต้นทางว่าคอลัมน์ 'รายละเอียดสินค้าที่ขายได้' ของออเดอร์นี้ ผิดปกติยังไง"
+        )
+        _tt_unmatched_df = db.get_tiktok_unmatched_organic_orders(_shop_filter)
+        if _tt_unmatched_df.empty:
+            st.success("✅ ไม่มีออเดอร์ที่แกะสินค้าไม่ได้")
+        else:
+            st.warning(f"⚠️ พบ {len(_tt_unmatched_df)} ออเดอร์")
+            st.dataframe(_tt_unmatched_df, width="stretch", hide_index=True)

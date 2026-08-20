@@ -7,9 +7,25 @@ Shopee "Income" / Lazada "Income Overview" แต่ไม่มีราคา�
 ยืนยันจากไฟล์จริงแล้วว่า 'จำนวนเงินที่ชำระทั้งหมด' (ชื่อคอลัมน์เข้าใจผิดได้ว่าลูกค้าจ่าย
 เท่าไหร่ แต่จริงๆ คือยอดสุทธิที่ร้านได้รับ) = 'รายได้รวม' + 'ค่าธรรมเนียมทั้งหมด' (ค่าลบ)
 พอดีเป๊ะทุกแถวที่เช็ค"""
+import re
+
 import pandas as pd
 
 _SHEET_NAME = "รายละเอียดคำสั่งซื้อ"
+
+_PRODUCT_SUMMARY_RE = re.compile(r"(\d+)\s*\*\s*(\d+)")
+
+
+def parse_product_summary(text: str | None) -> tuple[str, int] | None:
+    """แกะ (sku_id, qty) จากคอลัมน์ product_summary ดิบๆ ("SKU_ID * qty;") — ใช้ตอน
+    ออเดอร์ organic (ไม่มีข้อมูลนายหน้า) ใน db.sync_tiktok_to_ecommerce() คืน None ถ้า
+    parse ไม่ได้ (ฟอร์แมตเปลี่ยน/ว่างเปล่า) — ผู้เรียกต้องเช็ค None แล้วรายงานออเดอร์ที่
+    parse ไม่ได้ ห้ามทิ้งเงียบ (เคยเป็นบั๊ก: ออเดอร์แบบนี้หายไปทั้งจาก ecommerce_sales
+    และ ecommerce_order_income โดยไม่มีสัญญาณเตือนอะไรเลย)"""
+    m = _PRODUCT_SUMMARY_RE.search(text or "")
+    if not m:
+        return None
+    return m.group(1), int(m.group(2))
 
 
 def _id_str_or_none(val) -> str | None:
