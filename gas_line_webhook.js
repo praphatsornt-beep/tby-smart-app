@@ -230,7 +230,13 @@ function doPost(e) {
       return;
     }
     if (_msg.toLowerCase() === 'check') { handleCheckMenu(replyToken); return; }
-    if (_chk) { handleCustomerByName(_chk[1].trim(), replyToken); return; }
+    if (_chk) {
+      var _chkArg = _chk[1].trim();
+      // check today / check วันนี้ — สิทธิ์สั่งของคงเหลือ ไม่ใช่ชื่อลูกค้า
+      if (_chkArg.toLowerCase() === 'today' || _chkArg === 'วันนี้') { handleFinanceCredit(replyToken); return; }
+      handleCustomerByName(_chkArg, replyToken);
+      return;
+    }
 
     if (_old) {
       var _oldItems = _old[2].trim().split(/\s+/).map(function(tok) {
@@ -507,6 +513,43 @@ function _getFinanceDay(dateStr) {
   return (rows && rows.length > 0) ? rows[0] : null;
 }
 
+// ─── check today — สิทธิ์สั่งของคงเหลือ (คำนวณซ้ำสูตรเดียวกับ database.py) ─────
+// สูตรนี้ต้อง sync มือกับ get_finance_df()/get_finance_summary() ใน database.py
+// เสมอถ้าแก้ตรงนั้น (net = Σ(โอน+bv+ปรับ) − Σ(ขาย+ค่าสมัคร), auto_stock = สต๊อกยกมา
+// (ค่า stock_value>0 ตัวแรกตามวันที่) + ΣPO − Σ(ขาย/1.07), เพดาน 1,100,000)
+// — เอาผลรวมทั้งประวัติ (เทียบเท่า cumsum ที่แถวสุดท้าย) ไม่ต้องมี array ราย row
+function handleFinanceCredit(replyToken) {
+  var rows = _sbGet('/rest/v1/finance_daily?select=entry_date,transfer_amount,sales_amount,'
+    + 'po_amount,registration_fee,bv_amount,stock_value,adjustment&order=entry_date.asc') || [];
+  if (!Array.isArray(rows) || rows.length === 0) {
+    sendReply(replyToken, '❌ ยังไม่มีข้อมูลการเงินในระบบเลยค่ะ');
+    return;
+  }
+  var sumTransferBvAdj = 0, sumSalesReg = 0, sumPo = 0, sumSales = 0;
+  var openingStock = 0, openingFound = false;
+  rows.forEach(function(r) {
+    sumTransferBvAdj += (r.transfer_amount || 0) + (r.bv_amount || 0) + (r.adjustment || 0);
+    sumSalesReg      += (r.sales_amount || 0) + (r.registration_fee || 0);
+    sumPo            += (r.po_amount || 0);
+    sumSales         += (r.sales_amount || 0);
+    if (!openingFound && (r.stock_value || 0) > 0) { openingStock = r.stock_value; openingFound = true; }
+  });
+  var net        = sumTransferBvAdj - sumSalesReg;
+  var autoStock  = openingStock + sumPo - (sumSales / 1.07);
+  var credit     = (1100000 + net) / 1.07 - autoStock;
+  var overpaid   = Math.max(0, net);
+  var outstanding = Math.max(0, -net);
+  var lastDate   = rows[rows.length - 1].entry_date;
+
+  var msg = '📊 สิทธิ์สั่งของ (ข้อมูลล่าสุดถึง ' + lastDate + ')\n─────────────────\n';
+  msg += '🚩 ยอดค้างโอน: ฿' + numFmt(outstanding) + '\n';
+  msg += '💰 เงินโอนเกิน: ฿' + numFmt(overpaid) + '\n';
+  msg += '📦 สต๊อก ไม่รวม VAT: ฿' + numFmt(autoStock) + '\n';
+  msg += '🛒 สิทธิ์สั่งของคงเหลือ: ฿' + numFmt(credit) + (credit < 0 ? ' ⚠️ เกินวงเงิน' : '') + '\n';
+
+  sendReply(replyToken, msg);
+}
+
 // kind: 'ads'|'bv'|'scb'|'po', dateTok: token วันที่ดิบจาก LINE, values: [เลข, ...]
 // ตามลำดับ _FIN_FIELDS[kind].fields — ทับยอดเดิมของฟิลด์นั้นเท่านั้น ฟิลด์อื่นของวันนั้น
 // (เช่น stock_value/adjustment ที่กรอกจากแอป) คงค่าเดิมไว้ เพราะ finance_daily เป็น
@@ -728,7 +771,8 @@ function handleManual(replyToken, staffTag) {
 
   msg += '🔍 ดูยอด/ตรวจสอบ\n';
   msg += '  • ' + tag + ' check  — เลือกลูกค้าจากเมนู\n';
-  msg += '  • ' + tag + ' check [ชื่อ]  — ดูยอดค้างจ่าย/ค้างรับของลูกค้า\n\n';
+  msg += '  • ' + tag + ' check [ชื่อ]  — ดูยอดค้างจ่าย/ค้างรับของลูกค้า\n';
+  msg += '  • ' + tag + ' check today  — สิทธิ์สั่งของคงเหลือ (ข้อมูลล่าสุดในระบบ)\n\n';
 
   msg += '📦 รับของเก่าที่ค้างส่ง\n';
   msg += '  • ' + tag + ' [ชื่อ] เก่า  — แสดงรายการของค้างรับทั้งหมด แยกตามบิล\n';
