@@ -890,6 +890,31 @@ def get_finance_summary() -> dict:
     }
 
 
+# ─── ค่าใช้จ่าย (ใบเสร็จรายรับ-รายจ่ายทั่วไป — น้ำมัน/อาหาร/ซุปเปอร์/เบ็ดเตล็ด ฯลฯ) ────────
+
+@st.cache_data(ttl=60)
+def get_expense_records_df(start_date: str = None, end_date: str = None) -> pd.DataFrame:
+    """คืนทุกแถว expense_records เรียงวันที่ล่าสุดก่อน กรองช่วงวันที่ถ้าระบุ (None = ทั้งหมด)"""
+    q = get_supabase().table("expense_records").select("*")
+    if start_date:
+        q = q.gte("expense_date", start_date)
+    if end_date:
+        q = q.lte("expense_date", end_date)
+    rows = _retry(lambda: q.order("expense_date", desc=True).execute()).data
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def upsert_expense_record(data: dict) -> None:
+    """insert แถวใหม่เสมอ (v1 ยังไม่รองรับแก้ไขแถวเดิม — พิมพ์ผิดให้ลบแล้วเพิ่มใหม่)"""
+    _retry(lambda: get_supabase().table("expense_records").insert(data).execute())
+    get_expense_records_df.clear()
+
+
+def delete_expense_record(expense_id: str) -> None:
+    _retry(lambda: get_supabase().table("expense_records").delete().eq("id", expense_id).execute())
+    get_expense_records_df.clear()
+
+
 # ─── Commission / ใบหัก ณ ที่จ่าย (50 ทวิ) / เคลม VAT ────────────────────────
 
 @st.cache_data(ttl=60)
