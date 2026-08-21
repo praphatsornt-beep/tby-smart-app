@@ -12,7 +12,26 @@ from ui_helpers import _esc
 _THAI_MONTHS = ["", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
                 "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]
 
-_FIN_TABS = ["💰 ยอดขาย", "📑 ใบเสร็จ/เคลม VAT"]
+_FIN_TABS = ["💰 ยอดขาย", "📑 ใบเสร็จ/เคลม VAT", "🧾 ค่าใช้จ่าย"]
+
+# คำแนะนำหมวดหมู่ค่าใช้จ่าย — แนวทางทั่วไปจากประมวลรัษฎากร ไม่ใช่คำวินิจฉัยเฉพาะร้านนี้
+# (ดู caption เตือนใน _render_expenses ด้วย) key เก็บใน DB, value = (label, คำอธิบายหักภาษี)
+_EXPENSE_CATEGORIES = {
+    "fuel": ("⛽ ค่าน้ำมัน/เดินทาง",
+             "หักได้เต็มถ้าใช้เพื่อกิจการจริง — ถ้ารถปนใช้ส่วนตัว สรรพากรอาจเถียงสัดส่วน ควรมีบันทึกการเดินทาง"),
+    "meals": ("🍽️ ค่าอาหาร/รับรอง",
+              "เลี้ยงลูกค้า/คู่ค้าหักได้แต่มีเพดาน \"ค่ารับรอง\" ตามกฎหมาย (ไม่เกิน 0.3% ของรายได้/ทุน สูงสุด 10 ล้าน) "
+              "ต้องมีชื่อผู้ถูกรับรอง — ถ้าเป็นอาหารส่วนตัวเจ้าของร้าน มักหักไม่ได้เลย"),
+    "supplies": ("🛒 ซุปเปอร์/วัสดุสิ้นเปลือง",
+                 "หักได้เต็มถ้าเป็นของใช้ในร้านจริง (ถุง เทป กล่อง) — ถ้าปนของใช้ส่วนตัว/ในบ้านต้องแยกออก จุดที่สรรพากรตรวจบ่อย"),
+    "shipping": ("🚚 ค่าส่ง/ขนส่ง", "หักได้เต็มเป็นต้นทุน/ค่าใช้จ่ายขาย"),
+    "wages": ("👷 เงินเดือน/ค่าแรง",
+              "หักได้เต็ม แต่ต้องหัก ณ ที่จ่าย (ภ.ง.ด.1) นำส่งให้ครบ ไม่งั้นอาจถูกตัดเป็นรายจ่ายต้องห้าม"),
+    "rent_utilities": ("🏠 ค่าเช่า/น้ำ/ไฟ",
+                        "หักได้เต็มถ้าใบเสร็จ/ใบกำกับภาษีระบุชื่อร้านถูกต้อง — ถ้าบ้านเช่าปนที่อยู่อาศัย ต้องแยกสัดส่วนพื้นที่ใช้กิจการ"),
+    "advertising": ("📣 ค่าโฆษณา/การตลาด", "หักได้เต็ม เป็นรายจ่ายเพื่อกิจการโดยตรง"),
+    "misc": ("📎 เบ็ดเตล็ด/อื่นๆ", "แล้วแต่กรณี ให้นักบัญชีช่วยพิจารณาเป็นรายรายการ"),
+}
 
 
 def _parse_date(s):
@@ -570,3 +589,101 @@ def render():
                 }),
                 width="stretch", hide_index=True,
             )
+
+    elif _fin_active == _FIN_TABS[2]:
+        _render_expenses()
+
+
+def _render_expenses():
+    st.caption(
+        "⚠️ คำแนะนำหมวดหมู่ด้านล่างเป็นแนวทางทั่วไปจากประมวลรัษฎากร ไม่ใช่คำวินิจฉัยเฉพาะร้านนี้ "
+        "— ยืนยันตัวเลขจริงกับนักบัญชีก่อนใช้ยื่นภาษี"
+    )
+
+    with st.expander("➕ เพิ่มใบเสร็จ", expanded=True):
+        ex_date = st.date_input("วันที่", value=date.today(), key="ex_date")
+        ex_cat = st.selectbox(
+            "หมวดหมู่", list(_EXPENSE_CATEGORIES.keys()),
+            format_func=lambda k: _EXPENSE_CATEGORIES[k][0], key="ex_cat",
+        )
+        st.caption(_EXPENSE_CATEGORIES[ex_cat][1])
+        exc1, exc2 = st.columns(2)
+        with exc1:
+            ex_amount = st.number_input("ยอดเงิน (฿)", min_value=0.0, step=10.0, key="ex_amount")
+            ex_vendor = st.text_input("ร้าน/ผู้รับเงิน (ถ้ามี)", key="ex_vendor")
+        with exc2:
+            ex_has_invoice = st.checkbox(
+                "🧾 มีใบกำกับภาษีเต็มรูป (ระบุชื่อ-เลขผู้เสียภาษีร้าน — เคลม VAT ซื้อได้)", key="ex_has_invoice")
+            ex_notes = st.text_input("หมายเหตุ", key="ex_notes")
+        if st.button("💾 บันทึก", type="primary", width="stretch", key="ex_save"):
+            if ex_amount <= 0:
+                st.warning("⚠️ กรอกยอดเงินก่อนครับ")
+            else:
+                db.upsert_expense_record({
+                    "expense_date": str(ex_date),
+                    "category": ex_cat,
+                    "amount": ex_amount,
+                    "vendor": ex_vendor.strip() or None,
+                    "has_tax_invoice": ex_has_invoice,
+                    "notes": ex_notes.strip() or None,
+                })
+                st.success("✅ บันทึกแล้ว")
+                st.rerun()
+
+    st.divider()
+
+    _ex_df = db.get_expense_records_df()
+    if _ex_df.empty:
+        st.info("ยังไม่มีข้อมูล — เพิ่มใบเสร็จด้านบนก่อนครับ")
+        return
+
+    _ex_df["expense_date"] = pd.to_datetime(_ex_df["expense_date"])
+    _ex_df["หมวดหมู่"] = _ex_df["category"].apply(lambda k: _EXPENSE_CATEGORIES.get(k, (k, ""))[0])
+
+    # ── ยืนยันก่อนลบ (pattern เดียวกับลบร้านค้าใน ecom_ui.py) ────────────────────
+    _del_id = st.session_state.get("_ex_confirm_del")
+    if _del_id:
+        _del_row = _ex_df[_ex_df["id"] == _del_id]
+        if not _del_row.empty:
+            _r = _del_row.iloc[0]
+            st.warning(
+                f"⚠️ ยืนยันลบรายการ {_r['expense_date'].strftime('%d/%m/%Y')} · {_r['หมวดหมู่']} "
+                f"· {_r['amount']:,.2f} ฿ ?"
+            )
+            _dc1, _dc2 = st.columns(2)
+            if _dc1.button("✅ ยืนยันลบ", key="ex_confirm_del_yes"):
+                db.delete_expense_record(_del_id)
+                del st.session_state["_ex_confirm_del"]
+                st.success("ลบแล้ว")
+                st.rerun()
+            if _dc2.button("ยกเลิก", key="ex_confirm_del_no"):
+                del st.session_state["_ex_confirm_del"]
+                st.rerun()
+
+    _periods = sorted(_ex_df["expense_date"].dt.to_period("M").unique(), reverse=True)
+    for _i, _per in enumerate(_periods):
+        _mdf = _ex_df[_ex_df["expense_date"].dt.to_period("M") == _per].sort_values("expense_date", ascending=False)
+        _label = f"📅 {_THAI_MONTHS[_per.month]} {_per.year + 543} — รวม {_mdf['amount'].sum():,.0f} ฿ ({len(_mdf)} รายการ)"
+        with st.expander(_label, expanded=(_i == 0)):
+            st.markdown("**สรุปตามหมวดหมู่**")
+            _cat_totals = _mdf.groupby("หมวดหมู่", as_index=False)["amount"].sum() \
+                .rename(columns={"amount": "ยอดรวม (฿)"}).sort_values("ยอดรวม (฿)", ascending=False)
+            st.dataframe(
+                _cat_totals.style.format({"ยอดรวม (฿)": "{:,.2f}"}),
+                hide_index=True, width="stretch",
+            )
+
+            st.markdown("**รายการ**")
+            for _, _r in _mdf.iterrows():
+                _rc1, _rc2 = st.columns([6, 1])
+                _line = f"{_r['expense_date'].strftime('%d/%m/%Y')} · {_r['หมวดหมู่']} · {_r['amount']:,.2f} ฿"
+                if _r.get("vendor"):
+                    _line += f" · {_r['vendor']}"
+                if _r.get("has_tax_invoice"):
+                    _line += " · 🧾 มีใบกำกับภาษี"
+                if _r.get("notes"):
+                    _line += f" · {_r['notes']}"
+                _rc1.write(_line)
+                if _rc2.button("🗑️", key=f"ex_del_{_r['id']}"):
+                    st.session_state["_ex_confirm_del"] = _r["id"]
+                    st.rerun()
