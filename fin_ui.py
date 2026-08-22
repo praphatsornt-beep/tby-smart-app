@@ -350,8 +350,26 @@ def render():
                 _sales_ex_vat = _sales_vat / 1.07
                 _output_vat   = _sales_vat - _sales_ex_vat
                 _po_ex_vat    = float(_tdf["po_amount"].sum())
-                _input_vat    = _po_ex_vat * 0.07
-                _net_vat      = _output_vat - _input_vat
+                _po_input_vat = _po_ex_vat * 0.07
+
+                _expense_df = db.get_expense_records_df()
+                if not _expense_df.empty:
+                    _expense_df["expense_date"] = pd.to_datetime(_expense_df["expense_date"])
+                    _exp_mask = (
+                        (_expense_df["expense_date"].dt.to_period("M") >= pd.Period(_sel_from, "M")) &
+                        (_expense_df["expense_date"].dt.to_period("M") <= pd.Period(_sel_to, "M"))
+                    )
+                    _exp_period_df = _expense_df[_exp_mask]
+                else:
+                    _exp_period_df = _expense_df
+                _invoiced = (_exp_period_df[_exp_period_df["has_tax_invoice"] == True]
+                             if not _exp_period_df.empty else _exp_period_df)
+                _expense_vat_incl  = float(_invoiced["amount"].sum()) if not _invoiced.empty else 0.0
+                _expense_ex_vat    = _expense_vat_incl / 1.07
+                _expense_input_vat = _expense_vat_incl - _expense_ex_vat
+
+                _input_vat = _po_input_vat + _expense_input_vat
+                _net_vat   = _output_vat - _input_vat
 
                 tv1, tv2 = st.columns(2)
                 with tv1:
@@ -361,8 +379,10 @@ def render():
                     st.metric("ภาษีขาย 7%",        f"{_output_vat:,.2f} ฿")
                 with tv2:
                     st.markdown("**📥 ภาษีซื้อ (Input VAT)**")
-                    st.metric("ยอดซื้อ ไม่รวม VAT", f"{_po_ex_vat:,.2f} ฿")
-                    st.metric("ภาษีซื้อ 7%",        f"{_input_vat:,.2f} ฿")
+                    st.metric("ยอดซื้อ ไม่รวม VAT (PO)", f"{_po_ex_vat:,.2f} ฿")
+                    st.metric("ภาษีซื้อจาก PO",           f"{_po_input_vat:,.2f} ฿")
+                    st.metric("ภาษีซื้อจากค่าใช้จ่ายอื่น (มีใบกำกับภาษี)", f"{_expense_input_vat:,.2f} ฿")
+                    st.metric("ภาษีซื้อรวม",              f"{_input_vat:,.2f} ฿")
                     _color = "normal" if _net_vat >= 0 else "inverse"
                     st.metric("VAT ต้องชำระสุทธิ",
                                f"{abs(_net_vat):,.2f} ฿",
@@ -370,6 +390,40 @@ def render():
                                delta_color=_color)
 
         st.divider()
+
+        # ── กำไรโดยประมาณ ────────────────────────────────────────────────────────
+        if not _tax_df.empty:
+            st.markdown("### 📊 กำไรโดยประมาณ")
+            st.caption(
+                "ตัวเลขประมาณการ ผสมกระแสเงินสด (PO/ค่าใช้จ่าย/คอมมิชชั่น) กับกำไรสุทธิที่ตัดต้นทุนแล้ว "
+                "(E-commerce) — สต๊อกที่ซื้อมาแต่ยังไม่ได้ขายเดือนนี้ยังไม่ถูกหักออกจากตัวเลขนี้ "
+                "ให้ดูเป็นภาพกว้างๆ ไม่ใช่ตัวเลขบัญชีที่แม่นยำ 100% ยืนยันตัวเลขจริงกับนักบัญชีอีกที"
+            )
+            _prof_from = pd.Period(_sel_from, "M").start_time.date()
+            _prof_to   = pd.Period(_sel_to, "M").end_time.date()
+            _ecom_net = sum(
+                db.get_ecommerce_order_profit_summary(str(_prof_from), str(_prof_to), platform=p)["net"]
+                for p in ("shopee", "lazada", "tiktok")
+            )
+            _cm_df = db.get_commission_records()
+            if not _cm_df.empty:
+                _cm_period = _cm_df["period"].apply(lambda p: pd.Period(p, "M"))
+                _cm_mask = (_cm_period >= pd.Period(_sel_from, "M")) & (_cm_period <= pd.Period(_sel_to, "M"))
+                _commission_net = float(_cm_df[_cm_mask]["net_amount"].sum())
+            else:
+                _commission_net = 0.0
+            _expenses_total = float(_exp_period_df["amount"].sum()) if not _exp_period_df.empty else 0.0
+            _net_profit_est = _sales_ex_vat + _ecom_net + _commission_net - _po_ex_vat - _expenses_total
+
+            st.metric("กำไรโดยประมาณ (สุทธิ)", f"{_net_profit_est:,.2f} ฿")
+            pc1, pc2, pc3, pc4, pc5 = st.columns(5)
+            pc1.metric("ยอดขายออฟไลน์ (ไม่รวม VAT)", f"{_sales_ex_vat:,.2f} ฿")
+            pc2.metric("กำไร E-commerce",            f"{_ecom_net:,.2f} ฿")
+            pc3.metric("ค่าคอมมิชชั่นสุทธิ",           f"{_commission_net:,.2f} ฿")
+            pc4.metric("ต้นทุน PO",                   f"-{_po_ex_vat:,.2f} ฿")
+            pc5.metric("ค่าใช้จ่ายดำเนินงาน",          f"-{_expenses_total:,.2f} ฿")
+
+            st.divider()
 
         fin_df = db.get_finance_df()
         if fin_df.empty:
