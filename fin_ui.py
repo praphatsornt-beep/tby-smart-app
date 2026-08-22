@@ -334,6 +334,15 @@ def render():
                 _tax_df["entry_date"] = pd.to_datetime(_tax_df["entry_date"])
                 _min_m = _tax_df["entry_date"].dt.to_period("M").min()
                 _max_m = _tax_df["entry_date"].dt.to_period("M").max()
+
+                # เดือนใน dropdown ต้องครอบคลุมทั้ง finance_daily และ expense_records — ไม่งั้น
+                # ใบเสร็จเดือนล่าสุดที่เพิ่งลงจะเลือกดูไม่ได้ถ้ายังไม่ได้กรอกข้อมูลประจำวันเดือนนั้น
+                _expense_df = db.get_expense_records_df()
+                if not _expense_df.empty:
+                    _expense_df["expense_date"] = pd.to_datetime(_expense_df["expense_date"])
+                    _min_m = min(_min_m, _expense_df["expense_date"].dt.to_period("M").min())
+                    _max_m = max(_max_m, _expense_df["expense_date"].dt.to_period("M").max())
+
                 _months = pd.period_range(_min_m, _max_m, freq="M")
                 _month_labels = [str(m) for m in _months]
                 tc1, tc2 = st.columns(2)
@@ -352,9 +361,7 @@ def render():
                 _po_ex_vat    = float(_tdf["po_amount"].sum())
                 _po_input_vat = _po_ex_vat * 0.07
 
-                _expense_df = db.get_expense_records_df()
                 if not _expense_df.empty:
-                    _expense_df["expense_date"] = pd.to_datetime(_expense_df["expense_date"])
                     _exp_mask = (
                         (_expense_df["expense_date"].dt.to_period("M") >= pd.Period(_sel_from, "M")) &
                         (_expense_df["expense_date"].dt.to_period("M") <= pd.Period(_sel_to, "M"))
