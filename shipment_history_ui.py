@@ -73,8 +73,12 @@ def render(customers):
         if _br.get("error"):
             st.error(f"❌ {_br['error']}")
         else:
-            st.session_state["_sh_billing_map"] = _br.get("report", {})
-            st.success(f"✅ ดึงข้อมูล {len(_br.get('report', {}))} tracking")
+            _report = _br.get("report", {})
+            st.session_state["_sh_billing_map"] = _report
+            _actual_costs = {tn: info.get("discount_price") for tn, info in _report.items()
+                              if float(info.get("discount_price") or 0) > 0}
+            db.mark_actual_shipping_costs(_actual_costs)
+            st.success(f"✅ ดึงข้อมูล {len(_report)} tracking")
             st.rerun()
     _sh_cod_map = st.session_state.get("_sh_cod_map", {})
     _sh_billing_map = st.session_state.get("_sh_billing_map", {})
@@ -133,10 +137,12 @@ def render(customers):
         if r.get("source") == "recovered":
             return False
         tn = r.get("tracking_no", "") or ""
-        if not tn or tn not in _sh_billing_map:
+        if not tn:
             return False
-        actual = float(_sh_billing_map[tn].get("discount_price") or 0)
-        est    = float(r.get("shipping_cost") or 0)
+        actual = float(r.get("actual_shipping_cost") or 0)
+        if actual <= 0 and tn in _sh_billing_map:
+            actual = float(_sh_billing_map[tn].get("discount_price") or 0)
+        est = float(r.get("shipping_cost") or 0)
         return actual > 0 and est > 0 and (actual - est) > 0
 
     _f1, _f2, _f3 = st.columns(3)
@@ -190,9 +196,14 @@ def render(customers):
             if r.get("source") == "recovered":
                 return "-"  # shipping_cost เป็นค่าประมาณตอนกู้คืนข้อมูล เทียบไม่ได้แม่นยำ
             tn = r.get("tracking_no", "") or ""
-            if not tn or tn not in _sh_billing_map:
+            if not tn:
                 return "-"
-            actual = float(_sh_billing_map[tn].get("discount_price") or 0)
+            # actual_shipping_cost ที่บันทึกถาวรไว้ใน DB มาก่อน — ไม่ต้องกด "เทียบยอดจริง"
+            # ซ้ำทุก session ถ้าเคยดึงมาแล้วครั้งหนึ่ง ส่วน _sh_billing_map (session เดียวกัน)
+            # ใช้เสริมกรณีเพิ่งกดดึงมาสดๆ
+            actual = float(r.get("actual_shipping_cost") or 0)
+            if actual <= 0 and tn in _sh_billing_map:
+                actual = float(_sh_billing_map[tn].get("discount_price") or 0)
             if actual <= 0:
                 return "⏳ รอตีราคา"
             est = float(r.get("shipping_cost") or 0)

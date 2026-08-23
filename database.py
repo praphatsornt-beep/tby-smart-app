@@ -2150,6 +2150,29 @@ def get_pending_cod_tracking() -> list[str]:
     return [r["tracking_no"] for r in rows if r.get("tracking_no")]
 
 
+def mark_actual_shipping_costs(tracking_no_to_cost: dict[str, float]) -> int:
+    """บันทึก actual_shipping_cost (ยอดที่ iShip คิดจริง จาก get_shipping_report) ลง shipments
+    ให้ถาวร แทนที่จะเก็บแค่ session_state — group ตามค่าเดียวกันแล้ว batch .in_() เหมือน
+    update_delivery_statuses คืนจำนวนที่อัปเดต"""
+    if not tracking_no_to_cost:
+        return 0
+    db = get_supabase()
+    by_cost: dict[float, list[str]] = defaultdict(list)
+    for track_no, cost in tracking_no_to_cost.items():
+        if track_no and cost:
+            by_cost[float(cost)].append(track_no)
+    count = 0
+    for cost, track_nos in by_cost.items():
+        for i in range(0, len(track_nos), 50):
+            chunk = track_nos[i:i + 50]
+            _retry(lambda: db.table("shipments").update(
+                {"actual_shipping_cost": cost}).in_("tracking_no", chunk).execute())
+            count += len(chunk)
+    if count:
+        get_shipments.clear()
+    return count
+
+
 _DELIVERY_TERMINAL = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
 
 def update_delivery_statuses(statuses: dict) -> int:

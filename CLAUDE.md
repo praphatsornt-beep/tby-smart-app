@@ -165,7 +165,7 @@ Products/customers/addresses/box-size presets editable via `st.data_editor` (`nu
 - `transactions`: one row = one product line. Multiple rows share the same `bill_no`.
 - `partial_events`: records each payment/receipt event against a transaction.
 - `customer_addresses`: separate table, one customer → many addresses.
-- `shipments`: records iShip shipments with `items` as JSONB.
+- `shipments`: records iShip shipments with `items` as JSONB. `shipping_cost` is the estimated/customer-charged amount set at creation; `actual_shipping_cost` (added via `add_actual_shipping_cost.sql`, ALTER TABLE) is the real amount iShip charged after weighing, written by `db.mark_actual_shipping_costs()` when "💰 เทียบยอดจริง" is clicked in 🚚 ประวัติการส่ง — persisted so the บิลลิ่ง comparison survives a session/app restart instead of living only in `st.session_state`.
 - `pay_status` CHECK includes `'COD'` (added via ALTER TABLE, not in setup SQL).
 - `finance_daily`: one row per calendar date — daily company-transfer/sales/PO/BV entries (see การเงิน above).
 - `commission_records`: one row per period (`YYYY-MM`) — commission/WHT/receipt/VAT-claim tracking. RLS must be disabled (`commission_rls_fix.sql`) or inserts fail.
