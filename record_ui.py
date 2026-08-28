@@ -1554,7 +1554,6 @@ def render(tab1, products, customers, customer_map):
         elif _sub_active == "🔢 คำนวณยอด":
             st.subheader("คำนวณยอด")
             st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ เช่น `TF2581-2 RB2306-1 SH-kg12170 COD`")
-            st.caption("แผนคะแนน: เติม `plan 2500 2500 1000` ท้ายข้อความ เพื่อแบ่งของที่สั่งเป็นหลายบิลย่อยให้ PV ใกล้แต่ละเป้าหมาย (ลัด `plan 2500*2 1000` = เป้า 2500 สองบิล)")
 
             _parse_calc_order = calc_logic.parse_calc_order
 
@@ -1581,6 +1580,11 @@ def render(tab1, products, customers, customer_map):
                         placeholder="12170",
                     )
                 _calc_cod_chk = _ccb3.checkbox("COD", key=f"_calc_cod_chk_v{_calc_ver}")
+                _calc_plan_text = st.text_input(
+                    "แผนคะแนน (PV) — ไม่บังคับ", key=f"_calc_plan_v{_calc_ver}",
+                    placeholder="2500 2500 1000 (หรือลัด 2500*2 1000)",
+                    help="แบ่งของที่สั่งเป็นหลายบิลย่อยให้ยอด PV แต่ละบิลใกล้เคียงตัวเลขที่ใส่ไว้ที่สุด",
+                )
             with _calc_col2:
                 _calc_cust_opts = ["— ไม่ระบุ —"] + sorted(_calc_cust_map.keys(), key=str.casefold)
                 _calc_cust_sel  = st.selectbox("ลูกค้า (ถ้าจะส่ง LINE)", _calc_cust_opts,
@@ -1593,7 +1597,10 @@ def render(tab1, products, customers, customer_map):
                     st.warning("กรุณากรอกรหัสสินค้าก่อน")
                 else:
                     _cr = _parse_calc_order(_calc_text, _calc_products)
-                    _plan_targets = calc_logic.parse_plan_targets(_calc_text)
+                    # เช็คช่อง "แผนคะแนน" แยกก่อน ถ้าไม่ได้กรอกค่อย fallback ไปแกะจากคำว่า
+                    # "plan ..." ในข้อความหลัก (เผื่อ paste ข้อความจาก LINE OA มาทั้งดุ้น)
+                    _plan_targets = (calc_logic.parse_plan_target_list(_calc_plan_text)
+                                      or calc_logic.parse_plan_targets(_calc_text))
                     # คำนวณครั้งเดียวตอนกดปุ่ม เก็บผลไว้ใน session_state — ไม่คำนวณซ้ำทุก
                     # rerun เพราะ split_bills_by_pv สุ่มลำดับ ผลจะเปลี่ยนไปเรื่อยๆ ถ้าคำนวณ
                     # ใหม่ทุกครั้งที่หน้าจอ rerun จากปุ่ม/ช่องอื่นที่ไม่เกี่ยวข้อง

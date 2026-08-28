@@ -58,6 +58,20 @@ class TestParsePlanTargets(unittest.TestCase):
         self.assertEqual(calc_logic.parse_plan_targets("plan 1000 2500"), [2500, 1000])
 
 
+class TestParsePlanTargetList(unittest.TestCase):
+    def test_basic_no_plan_keyword(self):
+        self.assertEqual(calc_logic.parse_plan_target_list("2500 2500 1000"), [2500, 2500, 1000])
+
+    def test_shorthand_multiplier(self):
+        self.assertEqual(calc_logic.parse_plan_target_list("2500*2 1000"), [2500, 2500, 1000])
+
+    def test_empty_string(self):
+        self.assertEqual(calc_logic.parse_plan_target_list(""), [])
+
+    def test_sorts_descending(self):
+        self.assertEqual(calc_logic.parse_plan_target_list("1000 2500"), [2500, 1000])
+
+
 class TestSplitBillsByPv(unittest.TestCase):
     def test_splits_evenly_divisible_targets(self):
         items = [{"product": PRODUCTS[0], "qty": 10}]  # 10 หน่วย x 10 PV = 100 PV

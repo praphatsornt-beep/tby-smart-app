@@ -55,15 +55,12 @@ def parse_calc_order(text: str, products: list) -> dict:
             "manual_ship": manual_ship, "is_cod": is_cod, "errors": errors}
 
 
-def parse_plan_targets(text: str) -> list[int]:
-    """แกะ token 'plan 2500 2500 1000' (หรือลัด 'plan 2500*2 1000' = เป้าหมาย 2500 สองบิล
-    บวก 1000 อีกหนึ่งบิล) เป็นลิสต์เป้าหมาย PV เรียงมากไปน้อย — พอร์ตมาจาก
-    gas_line_webhook.js (planMatches) ให้ LINE OA กับ Streamlit ใช้กติกาเดียวกัน"""
-    m = re.search(r"plan\s+([\d*\s]+)", text.lower())
-    if not m:
-        return []
+def _parse_target_list(raw: str) -> list[int]:
+    """แกะ '2500 2500 1000' (หรือลัด '2500*2 1000' = เป้าหมาย 2500 สองบิล บวก 1000
+    อีกหนึ่งบิล) เป็นลิสต์เป้าหมาย PV เรียงมากไปน้อย — ตัวช่วยกลางที่ parse_plan_targets()/
+    parse_plan_target_list() เรียกใช้ร่วมกัน"""
     targets: list[int] = []
-    for p in m.group(1).strip().split():
+    for p in raw.strip().split():
         bits = p.split("*")
         try:
             target_pv = int(bits[0])
@@ -73,6 +70,21 @@ def parse_plan_targets(text: str) -> list[int]:
         targets.extend([target_pv] * count)
     targets.sort(reverse=True)
     return targets
+
+
+def parse_plan_targets(text: str) -> list[int]:
+    """แกะ token 'plan 2500 2500 1000' (หรือลัด 'plan 2500*2 1000') จากข้อความสั่งของแบบ
+    LINE OA เป็นลิสต์เป้าหมาย PV เรียงมากไปน้อย — พอร์ตมาจาก gas_line_webhook.js
+    (planMatches) ให้ LINE OA กับ Streamlit ใช้กติกาเดียวกัน"""
+    m = re.search(r"plan\s+([\d*\s]+)", text.lower())
+    return _parse_target_list(m.group(1)) if m else []
+
+
+def parse_plan_target_list(text: str) -> list[int]:
+    """เหมือน parse_plan_targets() แต่ไม่ต้องมีคำว่า 'plan' นำหน้า — ใช้กับช่องกรอกแผน
+    คะแนนแยกต่างหากใน UI (ผู้ใช้พิมพ์แค่ '2500 2500 1000' ตรงๆ ไม่ต้องพิมพ์เป็นโค้ดปนกับ
+    รหัสสินค้า)"""
+    return _parse_target_list(text)
 
 
 def split_bills_by_pv(items: list, targets: list[int], tolerance: int = 25,
