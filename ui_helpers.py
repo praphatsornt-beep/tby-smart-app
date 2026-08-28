@@ -812,21 +812,25 @@ def _unbilled_pv_of(df: pd.DataFrame) -> float:
 
 def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
     """รวมรายการในแต่ละบิล (groupby เลขที่บิล) คืน DataFrame หนึ่งแถวต่อบิล:
-    เลขที่บิล, วันที่, ยอดรวม, ค้างจ่าย, ค้างรับ, is_paid, is_billed, pv_unbilled
+    เลขที่บิล, วันที่, ยอดรวม, จ่ายแล้ว, ค้างจ่าย, ค้างรับ, is_paid, is_partial, is_billed, pv_unbilled
     """
-    _cols = ["เลขที่บิล", "วันที่", "ยอดรวม", "ค้างจ่าย", "ค้างรับ", "is_paid", "is_billed", "pv_unbilled"]
+    _cols = ["เลขที่บิล", "วันที่", "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "ค้างรับ",
+             "is_paid", "is_partial", "is_billed", "pv_unbilled"]
     if df.empty:
         return pd.DataFrame(columns=_cols)
 
     _bills = (df.groupby("เลขที่บิล", dropna=False)
               .agg(วันที่=("วันที่", "max"),
                    ยอดรวม=("ยอดรวม", "sum"),
+                   จ่ายแล้ว=("จ่ายแล้ว", "sum"),
                    ค้างจ่าย=("ค้างจ่าย", "sum"),
                    ค้างรับ=("ค้างรับ", "sum"),
                    is_billed=("สถานะบิล", lambda x: (x == "เปิดบิลแล้ว").all()))
               .reset_index()
               .sort_values("วันที่", ascending=False))
     _bills["is_paid"] = _bills["ค้างจ่าย"] <= 0.01
+    # จ่ายบางส่วน = มีทั้งยอดที่จ่ายไปแล้วและยอดที่ยังค้างอยู่พร้อมกัน
+    _bills["is_partial"] = (~_bills["is_paid"]) & (_bills["จ่ายแล้ว"] > 0.01)
 
     if "PV รวม" in df.columns and "ยังไม่เปิด" in df.columns and "สั่ง" in df.columns:
         _pv_df = df.copy()
@@ -942,13 +946,18 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             for _, _br in _bills.iterrows():
                 _bno      = _br["เลขที่บิล"] or "—"
                 _owing    = _br["ค้างจ่าย"]
+                _paid     = _br["จ่ายแล้ว"]
                 _pending  = int(_br["ค้างรับ"])
                 _color    = "🔴" if _owing > 0.01 else "✅"
                 _pv_un    = _br["pv_unbilled"]
                 _pv_str   = f" &nbsp; ⭐ {_pv_un:,.0f} PV" if _pv_un > 0 else ""
                 _recv_str = f" &nbsp; 📦 ยังไม่รับของ {_pending} ชิ้น" if _pending > 0 else ""
+                # จ่ายบางส่วน — โชว์ทั้งจ่ายไปแล้ว/เหลือเท่าไหร่ แทนโชว์แค่ยอดค้างเฉยๆ
+                _owe_str  = (f"จ่ายแล้ว {_paid:,.0f} เหลือ {_owing:,.0f} บาท"
+                             if _owing > 0.01 and _paid > 0.01 else
+                             f"ค้างจ่าย {_owing:,.0f} บาท")
                 _lbl = (f"📄 **{_bno}** &nbsp; {_br['วันที่']} &nbsp; "
-                        f"{_color} ค้างจ่าย {_owing:,.0f} บาท{_recv_str}{_pv_str}")
+                        f"{_color} {_owe_str}{_recv_str}{_pv_str}")
                 if st.button(_lbl, key=f"{key_prefix}_pbill_{_bno}", width="stretch",
                              type=("primary" if _bill_picked == _bno else "secondary")):
                     st.session_state[_pk] = _bno

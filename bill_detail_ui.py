@@ -402,6 +402,10 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
         _l_bills_owed["เลขที่บิล"].replace("", "—"),
         _l_bills_owed["ค้างจ่าย"],
     ))
+    _paid_map = dict(zip(
+        _l_bills_owed["เลขที่บิล"].replace("", "—"),
+        _l_bills_owed["จ่ายแล้ว"],
+    ))
 
     # ── บิลหลัก: กลุ่มบิลที่แยกมาจากเลขอ้างอิงเดียวกัน (เปิดบิล
     # บางส่วนแล้วแยกเลขบิลจริงออกไป) — โชว์สรุปรวมทั้งกลุ่มก่อน
@@ -460,12 +464,13 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
                     "วันที่": _bbv["date"],
                     "ยอดรวม": _bbv["total"],
                     "ค้างรับ": max(0, _bbv["qty"] - _bb_recv),
+                    "จ่ายแล้ว": _paid_map.get(_bbk, 0.0),
                     "ค้างจ่าย": _owed_map.get(_bbk, 0.0),
                     "สถานะบิล": _bbv["bill_status"],
                 })
             _bl_df = pd.DataFrame(_bl_rows)
             st.dataframe(
-                _bl_df.style.format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
+                _bl_df.style.format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
                 .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
                      if isinstance(v, (int, float)) and v > 0 else "",
                      subset=["ค้างรับ", "ค้างจ่าย"]),
@@ -476,24 +481,32 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
         _bills_tl.items(), key=lambda x: x[1]["date"], reverse=True
     ):
         _b_owed  = _owed_map.get(_bk, 0.0)
+        _b_paid  = _paid_map.get(_bk, 0.0)
         _b_recv  = _recv_cumul.get(_bk, 0)
         _b_pend  = max(0, _bv["qty"] - _b_recv)
         _pay_ico = "✅" if _b_owed <= 0.01 else "🔴"
         _recv_lbl = f" &nbsp;|&nbsp; 📦 ค้างรับ **{_b_pend} ชิ้น**" if _b_pend > 0 else ""
         _pv_lbl   = (f" &nbsp;|&nbsp; ⭐ **{_bv['pv']:.0f} PV**"
                      if _bv["pv"] > 0 and _bv["bill_status"] == "ยังไม่เปิดบิล" else "")
+        # จ่ายบางส่วน — โชว์ทั้งจ่ายไปแล้ว/เหลือเท่าไหร่ แทนโชว์แค่ยอดค้างเฉยๆ
+        _pay_lbl = (f"จ่ายแล้ว **{_b_paid:,.0f}฿** เหลือ **{_b_owed:,.0f}฿**"
+                    if _b_owed > 0.01 and _b_paid > 0.01 else
+                    f"ค้างจ่าย **{_b_owed:,.0f}฿**")
         _exp_hdr  = (
             f"📋 **{_bk}** &nbsp; {_bv['date']} &nbsp;|&nbsp; "
-            f"{_pay_ico} ค้างจ่าย **{_b_owed:,.0f}฿**{_recv_lbl}{_pv_lbl}"
+            f"{_pay_ico} {_pay_lbl}{_recv_lbl}{_pv_lbl}"
         )
         # ถ้าเป็นสมาชิกของ "บิลหลัก" (โชว์ตารางรวม+ประวัติรวมไปแล้วด้านบน)
         # ให้ย่อ expander นี้ไว้ก่อน — เปิดดูเพิ่มได้เมื่อต้องการ (ลบบิล/ส่ง LINE)
         _in_family = len(_families.get(_bk_to_origin.get(_bk, _bk), [])) > 1
         with st.expander(_exp_hdr, expanded=not _in_family):
             _pv_unbilled = _bv["pv"] if _bv["bill_status"] == "ยังไม่เปิดบิล" else 0.0
+            _pay_cap = (f"💰 จ่ายแล้ว {_b_paid:,.0f}฿ เหลือ {_b_owed:,.0f}฿"
+                        if _b_owed > 0.01 and _b_paid > 0.01 else
+                        f"💰 ค้างจ่าย {_b_owed:,.0f}฿")
             st.caption(
                 f"📦 ค้างรับ {_b_pend} ชิ้น  |  "
-                f"💰 ค้างจ่าย {_b_owed:,.0f}฿  |  "
+                f"{_pay_cap}  |  "
                 f"⭐ PV ค้างเปิดบิล {_pv_unbilled:,.0f}"
             )
             _bill_filter = "" if _bk == "—" else _bk
@@ -746,19 +759,23 @@ def render(products, customers):
                         _cb_bno   = _cb["เลขที่บิล"] if pd.notna(_cb["เลขที่บิล"]) and str(_cb["เลขที่บิล"]).strip() else "—"
                         _cb_total = float(_cb["ยอดรวม"])
                         _cb_owed  = float(_cb["ค้างจ่าย"])
+                        _cb_paid  = float(_cb["จ่ายแล้ว"])
                         if not _cb["is_billed"]:
                             _pill_txt, _pill_css = "ยังไม่เปิดบิล", _PILL_WARN
                         elif _cb["is_paid"]:
                             _pill_txt, _pill_css = "ชำระแล้ว", _PILL_GOOD
+                        elif _cb["is_partial"]:
+                            _pill_txt, _pill_css = "จ่ายบางส่วน", _PILL_WARN
                         else:
                             _cb_date = pd.to_datetime(_cb["วันที่"], errors="coerce")
                             _overdue = pd.notna(_cb_date) and (pd.Timestamp.now() - _cb_date).days > _BILL_OVERDUE_DAYS
                             _pill_txt, _pill_css = ("เกินกำหนด", _PILL_BAD) if _overdue else ("ค้างชำระ", _PILL_WARN)
-                        _bill_rows_info.append((_cb_bno, _cb_total, _cb_owed, _pill_txt, _pill_css))
+                        _bill_rows_info.append((_cb_bno, _cb_total, _cb_owed, _pill_txt, _pill_css, _cb_paid))
 
                     _bill_count = len(_bill_rows_info)
                     _grp_total  = sum(r[1] for r in _bill_rows_info)
-                    _pill_priority = {"เกินกำหนด": 3, "ยังไม่เปิดบิล": 2, "ค้างชำระ": 1, "ชำระแล้ว": 0}
+                    _pill_priority = {"เกินกำหนด": 4, "ยังไม่เปิดบิล": 3, "ค้างชำระ": 2,
+                                       "จ่ายบางส่วน": 1, "ชำระแล้ว": 0}
                     _agg_txt, _agg_css = max(
                         ((r[3], r[4]) for r in _bill_rows_info),
                         key=lambda x: _pill_priority.get(x[0], 0),
@@ -794,6 +811,7 @@ def render(products, customers):
                         for _r in _bill_rows_info:
                             if _r[3] != "ชำระแล้ว":
                                 _status_counts[_r[3]] = _status_counts.get(_r[3], 0) + 1
+                        _partial_paid = sum(_r[5] for _r in _bill_rows_info if _r[3] == "จ่ายบางส่วน")
                         _extra_bits = []
                         if _unbilled_pv > 0:
                             _extra_bits.append(f"⭐ ค้างเปิดบิล {_unbilled_pv:,.0f} คะแนน")
@@ -801,6 +819,8 @@ def render(products, customers):
                             _extra_bits.append(f"📦 ค้างรับ {pending} ชิ้น")
                         for _st_txt, _st_cnt in _status_counts.items():
                             _extra_bits.append(f"{_st_txt} {_st_cnt} บิล")
+                        if _partial_paid > 0.01:
+                            _extra_bits.append(f"💵 จ่ายแล้ว {_partial_paid:,.0f} ฿")
                         if _extra_bits:
                             st.caption("  ·  ".join(_extra_bits))
 
@@ -822,7 +842,7 @@ def render(products, customers):
 
                         # ── Styled table + row selection ──────────────────────
                         _dcols  = ["เลขที่บิล", "วันที่", "รหัส", "สินค้า", "สั่ง", "ค้างรับ",
-                                   "ยอดรวม", "ค้างจ่าย", "เปิดบิลแล้ว", "ยังไม่เปิด",
+                                   "ยอดรวม", "จ่ายแล้ว", "ค้างจ่าย", "เปิดบิลแล้ว", "ยังไม่เปิด",
                                    "สถานะจ่าย", "สถานะบิล"]
                         _id_map = grp["id"].reset_index(drop=True)
                         # "เลขที่บิล" ในตารางนี้โชว์เลขอ้างอิงภายในที่คงที่เสมอ (origin_bill_no
@@ -855,7 +875,7 @@ def render(products, customers):
                         st.caption("คลิกแถวเพื่อเลือก (Ctrl/Shift สำหรับหลายแถว)")
                         _evt = st.dataframe(
                             _grp_disp.style
-                                .format({"ยอดรวม": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
+                                .format({"ยอดรวม": "{:,.0f}", "จ่ายแล้ว": "{:,.0f}", "ค้างจ่าย": "{:,.0f}"})
                                 .map(_style_status, subset=["สถานะบิล", "สถานะจ่าย"])
                                 .map(lambda v: "background-color:#FDECEA;color:#C0392B;font-weight:600"
                                      if isinstance(v, (int, float)) and v > 0 else "",
