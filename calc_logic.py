@@ -4,12 +4,28 @@ import re
 from math import ceil
 
 
+_CUSTOMER_TYPO_RE = re.compile(r"([A-Za-z]{1,4})\s*-{0,2}\s*(\d{4})\s*=\s*(\d+(?:\.\d+)?)")
+
+
+def _normalize_customer_codes(text: str) -> str:
+    """ลูกค้าพิมพ์รหัสสินค้าเองมักไม่ตรงรูปแบบ CODE-QTY มาตรฐาน — เจอจริงเช่น
+    'Ty -2010=1' (เว้นวรรค+ขีดนำหน้าตัวเลข) หรือ 'TF--2581=1' (ขีดคู่ + ใช้ '=' คั่นจำนวน
+    แทน '-') — normalize เป็น 'TY2010-1'/'TF2581-1' (รูปแบบมาตรฐาน) ก่อนเข้า tokenizer
+    ปกติเสมอ เพราะรหัสสินค้าจริงในระบบเป็น LETTERS+4DIGITS ล้วน ไม่มีขีดคั่นเอง (ตรวจสอบ
+    แล้วครบ 98/98 ตัวในระบบ 2026-08-28) — จำกัดตัวเลข 4 หลักเป๊ะ กันชนกับรหัสไปรษณีย์
+    5 หลักใน SH-kgXXXXX โดยไม่ตั้งใจ"""
+    return _CUSTOMER_TYPO_RE.sub(lambda m: f"{m.group(1)}{m.group(2)}-{m.group(3)}", text)
+
+
 def parse_calc_order(text: str, products: list) -> dict:
     """แปลงข้อความรหัสสินค้าแบบ LINE OA เป็นรายการสินค้า/รหัสไปรษณีย์/COD
 
     ตัวอย่าง: "TF2581-2 RB2306-1 SH-kg 12170 COD"
     รองรับทั้ง "SH-kg12170" (ติดกัน) และ "SH-kg 12170" (เว้นวรรค)
+    ก่อน tokenize จะ normalize รูปแบบที่ลูกค้าพิมพ์เพี้ยนบ่อยๆ ก่อนเสมอ (ดู
+    _normalize_customer_codes) เช่น "Ty -2010=1"/"TF--2581=1" → "TY2010-1"/"TF2581-1"
     """
+    text = _normalize_customer_codes(text)
     product_map = {p["id"].upper(): p for p in products}
     tokens = text.strip().upper().split()
     items, ship_zip, manual_ship, is_cod, errors = [], "", -1, False, []

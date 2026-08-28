@@ -43,6 +43,38 @@ class TestParseCalcOrder(unittest.TestCase):
         self.assertEqual(r["manual_ship"], 50.0)
         self.assertEqual(r["ship_zip"], "")
 
+    def test_customer_typo_space_dash_equals(self):
+        # ลูกค้าพิมพ์จริง: "Ty -2010=1" / "TF--2581=1" — เว้นวรรค+ขีด(คู่)หน้าเลข, ใช้ =
+        # คั่นจำนวนแทน -
+        r = calc_logic.parse_calc_order("TF -2581=2", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["items"][0]["qty"], 2)
+        self.assertEqual(r["errors"], [])
+
+    def test_customer_typo_double_dash_equals(self):
+        r = calc_logic.parse_calc_order("TF--2581=2", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["items"][0]["qty"], 2)
+
+    def test_customer_typo_no_dash_equals(self):
+        r = calc_logic.parse_calc_order("TF2581=2", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["items"][0]["qty"], 2)
+
+    def test_customer_typo_multi_line(self):
+        r = calc_logic.parse_calc_order("TY -2010=1\nTF--2581=1", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)  # TY2010 ไม่มีในระบบทดสอบ → error, ไม่ใช่ item
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertIn("TY2010", r["errors"][0])
+
+    def test_typo_normalization_does_not_break_sh_kg(self):
+        # ตัวเลข 5 หลักของรหัสไปรษณีย์ต้องไม่ถูกกฎ typo (ต้องการเลข 4 หลักเป๊ะ) จับผิด
+        r = calc_logic.parse_calc_order("TF2581-1 SH-KG12170", PRODUCTS)
+        self.assertEqual(r["ship_zip"], "12170")
+
 
 class TestParsePlanTargets(unittest.TestCase):
     def test_basic(self):

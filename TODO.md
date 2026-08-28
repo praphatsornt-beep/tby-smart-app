@@ -28,3 +28,4 @@
 
 - [x] ~~`gas_line_webhook.js` — มีการเปลี่ยนแปลงหลายอย่างในไฟล์ local (คู่มือ, จ่ายบางส่วน, เก่าเมนู, เบิกจ่าย+จ่ายบางส่วน, ปุ่มยกเลิก, tourist_island fix ฯลฯ)~~ — copy ไป Apps Script editor + deploy แล้ว
 - [ ] `gas_line_webhook.js` — แก้ `SH-kg รหัสไปรษณีย์` ให้รองรับเว้นวรรค (commit `ee90e22`) — ยังไม่ deploy
+- [ ] `gas_line_webhook.js` — normalize รหัสสินค้าที่ลูกค้าพิมพ์เพี้ยนก่อน tokenize (เช่น "ty -2010=1", "tf--2581=1") ให้ตรงกับ calc_logic.py — ยังไม่ deploy

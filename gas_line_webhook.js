@@ -305,6 +305,15 @@ function doPost(e) {
   if (userMsg.startsWith('th ')) { lang = 'th'; userMsg = userMsg.replace('th ', '').trim(); }
   else if (userMsg.startsWith('mm ')) { lang = 'mm'; userMsg = userMsg.replace('mm ', '').trim(); }
 
+  // ลูกค้าพิมพ์รหัสสินค้าเองมักไม่ตรงรูปแบบ CODE-QTY มาตรฐาน — เจอจริงเช่น "ty -2010=1"
+  // (เว้นวรรค+ขีดนำหน้าเลข) หรือ "tf--2581=1" (ขีดคู่ + ใช้ = คั่นจำนวนแทน -) —
+  // normalize เป็น "ty2010-1"/"tf2581-1" ก่อน tokenize เสมอ เพราะรหัสสินค้าจริงเป็น
+  // LETTERS+4DIGITS ล้วน ไม่มีขีดคั่นเอง (พอร์ตมาจาก calc_logic._normalize_customer_codes
+  // ในแอป Streamlit ให้ทั้งสองฝั่งอ่านรหัสแบบเดียวกัน) เลข 4 หลักเป๊ะกันชนกับรหัส
+  // ไปรษณีย์ 5 หลักใน SH-kgXXXXX โดยไม่ตั้งใจ
+  userMsg = userMsg.replace(/([a-z]{1,4})\s*-{0,2}\s*(\d{4})\s*=\s*(\d+(?:\.\d+)?)/g,
+    function (_, prefix, num, qty) { return prefix + num + '-' + qty; });
+
   var pData = _getProducts();
   var tokens = userMsg.split(/[\s\n]+/);
 
