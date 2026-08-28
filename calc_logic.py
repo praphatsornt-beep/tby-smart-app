@@ -1,4 +1,6 @@
 """Pure calculation helpers shared by the คำนวณยอด tab and LINE OA order parsing."""
+import random
+import re
 from math import ceil
 
 
@@ -51,6 +53,84 @@ def parse_calc_order(text: str, products: list) -> dict:
         i += 1
     return {"items": items, "ship_zip": ship_zip,
             "manual_ship": manual_ship, "is_cod": is_cod, "errors": errors}
+
+
+def parse_plan_targets(text: str) -> list[int]:
+    """แกะ token 'plan 2500 2500 1000' (หรือลัด 'plan 2500*2 1000' = เป้าหมาย 2500 สองบิล
+    บวก 1000 อีกหนึ่งบิล) เป็นลิสต์เป้าหมาย PV เรียงมากไปน้อย — พอร์ตมาจาก
+    gas_line_webhook.js (planMatches) ให้ LINE OA กับ Streamlit ใช้กติกาเดียวกัน"""
+    m = re.search(r"plan\s+([\d*\s]+)", text.lower())
+    if not m:
+        return []
+    targets: list[int] = []
+    for p in m.group(1).strip().split():
+        bits = p.split("*")
+        try:
+            target_pv = int(bits[0])
+            count = int(bits[1]) if len(bits) > 1 else 1
+        except ValueError:
+            continue
+        targets.extend([target_pv] * count)
+    targets.sort(reverse=True)
+    return targets
+
+
+def split_bills_by_pv(items: list, targets: list[int], tolerance: int = 25,
+                       attempts: int = 1000, rng: random.Random | None = None) -> dict:
+    """แบ่งสินค้าที่สั่ง (แต่ละชิ้นแยกจากกัน ไม่ใช่ทั้งบรรทัด) ออกเป็นหลายบิลย่อยตาม
+    targets (เรียงมากไปน้อย) โดยแต่ละบิลพยายามให้ยอด PV ใกล้เคียง target ที่สุด (ไม่เกิน
+    target+tolerance) — สุ่มลำดับสินค้าแล้วหยิบใส่บิลแบบ greedy ซ้ำ attempts ครั้ง เลือก
+    ผลลัพธ์ที่ยอด PV ใกล้ target ที่สุดในแต่ละรอบ (พอร์ตจาก gas_line_webhook.js's 'plan'
+    keyword ทุกประการ รวมพฤติกรรมสุ่ม — ผลลัพธ์จึงไม่ deterministic ข้ามการเรียกเว้นแต่จะ
+    ส่ง rng ที่ seed ไว้)
+
+    คืน {"bills": [{"target": int, "items": {code: qty}, "pv": float}, ...],
+         "remaining": {"items": {code: qty}, "pv": float}}
+    """
+    rng = rng or random
+    stock_pool = []
+    for it in items:
+        p = it["product"]
+        code = p["id"].upper()
+        pv = float(p.get("points_per_unit", 0))
+        for _ in range(int(it["qty"])):
+            stock_pool.append({"code": code, "pv": pv})
+
+    bills = []
+    for target in targets:
+        if not stock_pool:
+            break
+        best_sum, best_indices, min_diff = 0.0, [], float("inf")
+        for _ in range(attempts):
+            temp_sum, temp_indices = 0.0, []
+            order = list(range(len(stock_pool)))
+            rng.shuffle(order)
+            for idx in order:
+                pv = stock_pool[idx]["pv"]
+                if temp_sum + pv <= target + tolerance:
+                    temp_sum += pv
+                    temp_indices.append(idx)
+                    diff = abs(target - temp_sum)
+                    if diff < min_diff:
+                        min_diff = diff
+                        best_sum = temp_sum
+                        best_indices = temp_indices.copy()
+                    if temp_sum >= target:
+                        break
+        if best_indices:
+            bill_items: dict = {}
+            for idx in sorted(best_indices, reverse=True):
+                itm = stock_pool.pop(idx)
+                bill_items[itm["code"]] = bill_items.get(itm["code"], 0) + 1
+            bills.append({"target": target, "items": bill_items, "pv": best_sum})
+
+    remaining_items: dict = {}
+    remaining_pv = 0.0
+    for itm in stock_pool:
+        remaining_items[itm["code"]] = remaining_items.get(itm["code"], 0) + 1
+        remaining_pv += itm["pv"]
+
+    return {"bills": bills, "remaining": {"items": remaining_items, "pv": remaining_pv}}
 
 
 def cod_fee(amount: float, pct: float = 0.0321) -> int:

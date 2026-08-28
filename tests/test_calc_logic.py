@@ -1,3 +1,4 @@
+import random
 import unittest
 
 import calc_logic
@@ -41,6 +42,48 @@ class TestParseCalcOrder(unittest.TestCase):
         r = calc_logic.parse_calc_order("TF2581-1 SH-50", PRODUCTS)
         self.assertEqual(r["manual_ship"], 50.0)
         self.assertEqual(r["ship_zip"], "")
+
+
+class TestParsePlanTargets(unittest.TestCase):
+    def test_basic(self):
+        self.assertEqual(calc_logic.parse_plan_targets("plan 2500 2500 1000"), [2500, 2500, 1000])
+
+    def test_shorthand_multiplier(self):
+        self.assertEqual(calc_logic.parse_plan_targets("plan 2500*2 1000"), [2500, 2500, 1000])
+
+    def test_no_plan_token(self):
+        self.assertEqual(calc_logic.parse_plan_targets("TF2581-2 RB2306-1"), [])
+
+    def test_sorts_descending(self):
+        self.assertEqual(calc_logic.parse_plan_targets("plan 1000 2500"), [2500, 1000])
+
+
+class TestSplitBillsByPv(unittest.TestCase):
+    def test_splits_evenly_divisible_targets(self):
+        items = [{"product": PRODUCTS[0], "qty": 10}]  # 10 หน่วย x 10 PV = 100 PV
+        result = calc_logic.split_bills_by_pv(items, [50, 50], rng=random.Random(1))
+        self.assertEqual(len(result["bills"]), 2)
+        for bill in result["bills"]:
+            self.assertEqual(bill["pv"], 50)
+        self.assertEqual(result["remaining"]["pv"], 0)
+
+    def test_conserves_total_pv(self):
+        items = [{"product": PRODUCTS[0], "qty": 7}, {"product": PRODUCTS[1], "qty": 5}]
+        total_pv = 7 * 10 + 5 * 5
+        result = calc_logic.split_bills_by_pv(items, [40, 20], rng=random.Random(2))
+        assigned = sum(b["pv"] for b in result["bills"]) + result["remaining"]["pv"]
+        self.assertEqual(assigned, total_pv)
+
+    def test_bill_pv_never_exceeds_target_plus_tolerance(self):
+        items = [{"product": PRODUCTS[0], "qty": 20}]
+        result = calc_logic.split_bills_by_pv(items, [33], tolerance=5, rng=random.Random(4))
+        self.assertLessEqual(result["bills"][0]["pv"], 33 + 5)
+
+    def test_empty_targets_returns_all_remaining(self):
+        items = [{"product": PRODUCTS[0], "qty": 3}]
+        result = calc_logic.split_bills_by_pv(items, [], rng=random.Random(3))
+        self.assertEqual(result["bills"], [])
+        self.assertEqual(result["remaining"]["pv"], 30)
 
 
 class TestCodFee(unittest.TestCase):

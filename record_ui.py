@@ -1554,6 +1554,7 @@ def render(tab1, products, customers, customer_map):
         elif _sub_active == "🔢 คำนวณยอด":
             st.subheader("คำนวณยอด")
             st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ เช่น `TF2581-2 RB2306-1 SH-kg12170 COD`")
+            st.caption("แผนคะแนน: เติม `plan 2500 2500 1000` ท้ายข้อความ เพื่อแบ่งของที่สั่งเป็นหลายบิลย่อยให้ PV ใกล้แต่ละเป้าหมาย (ลัด `plan 2500*2 1000` = เป้า 2500 สองบิล)")
 
             _parse_calc_order = calc_logic.parse_calc_order
 
@@ -1592,6 +1593,14 @@ def render(tab1, products, customers, customer_map):
                     st.warning("กรุณากรอกรหัสสินค้าก่อน")
                 else:
                     _cr = _parse_calc_order(_calc_text, _calc_products)
+                    _plan_targets = calc_logic.parse_plan_targets(_calc_text)
+                    # คำนวณครั้งเดียวตอนกดปุ่ม เก็บผลไว้ใน session_state — ไม่คำนวณซ้ำทุก
+                    # rerun เพราะ split_bills_by_pv สุ่มลำดับ ผลจะเปลี่ยนไปเรื่อยๆ ถ้าคำนวณ
+                    # ใหม่ทุกครั้งที่หน้าจอ rerun จากปุ่ม/ช่องอื่นที่ไม่เกี่ยวข้อง
+                    _cr["plan_result"] = (
+                        calc_logic.split_bills_by_pv(_cr["items"], _plan_targets)
+                        if _plan_targets and _cr["items"] else None
+                    )
                     if _calc_ship_chk:
                         if len(_calc_zip) == 5:
                             _cr["ship_zip"] = _calc_zip
@@ -1630,6 +1639,17 @@ def render(tab1, products, customers, customer_map):
                         _line_str = f"📦 [{_cp['id'].upper()}] - {_cq} * {int(_cp['price']):,} = {int(_camt):,}"
                         st.markdown(_line_str)
                         _c_lines.append(_line_str)
+
+                    _c_plan = _cr.get("plan_result")
+                    if _c_plan:
+                        st.markdown("**📋 แผนจัดบิลผสม:**")
+                        for _pi, _pb in enumerate(_c_plan["bills"]):
+                            _pb_items = ", ".join(f"{k}-{v}" for k, v in _pb["items"].items())
+                            st.markdown(f"🎯 บิล {_pi + 1} (PLAN {_pb['target']:,}): {_pb_items} ({_pb['pv']:,.0f} PV)")
+                        _c_remain = _c_plan["remaining"]
+                        if _c_remain["items"]:
+                            _rem_items = ", ".join(f"{k}-{v}" for k, v in _c_remain["items"].items())
+                            st.markdown(f"♻️ สินค้าที่ยังไม่เปิดบิล: {_rem_items} (รวม {_c_remain['pv']:,.0f} PV)")
 
                     _c_weight_kg = (_c_total_w + BOX_WEIGHT_G) / 1000
                     st.markdown(f"✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg")
