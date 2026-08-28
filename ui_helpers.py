@@ -984,20 +984,13 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
 
     rows_html = ""
     for _, r in show_p.iterrows():
-        bill_color  = "#b8860b" if r["สถานะบิล"] == "ยังไม่เปิดบิล" else "#1a7a3a"
-        owed_color  = "#c0392b" if r["ค้างจ่าย"] > 0.01 else "#1a7a3a"
         rows_html += f"""
         <tr>
           <td>{r['วันที่']}</td>
           <td><b>{_esc(r.get('รหัส',''))}</b></td>
           <td>{_esc(r['สินค้า'])}</td>
           <td style="text-align:center"><b>{int(r['สั่ง'])}</b></td>
-          <td style="text-align:center">{int(r['รับแล้ว'])}</td>
           <td style="text-align:right"><b>{r['ยอดรวม']:,.0f}</b></td>
-          <td style="text-align:right">{r['จ่ายแล้ว']:,.0f}</td>
-          <td style="text-align:right;color:{owed_color};font-weight:700">{r['ค้างจ่าย']:,.0f}</td>
-          <td style="text-align:center;color:{bill_color}">{r['สถานะบิล']}</td>
-          <td>{_esc(_fmt_note(r.get('หมายเหตุ','') or ''))}</td>
         </tr>"""
 
     total_amount      = show_p["ยอดรวม"].sum()
@@ -1060,10 +1053,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
 <table>
   <thead><tr>
     <th>วันที่</th><th>รหัส</th><th>สินค้า</th>
-    <th style="text-align:center">สั่ง</th><th style="text-align:center">รับแล้ว</th>
-    <th style="text-align:right">ยอดรวม</th><th style="text-align:right">จ่ายแล้ว</th>
-    <th style="text-align:right">ค้างจ่าย</th><th style="text-align:center">สถานะบิล</th>
-    <th>หมายเหตุ</th>
+    <th style="text-align:center">จำนวน</th><th style="text-align:right">ยอด</th>
   </tr></thead>
   <tbody>{rows_html}</tbody>
 </table>
