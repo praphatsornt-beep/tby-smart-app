@@ -97,6 +97,20 @@ class TestParseCalcOrder(unittest.TestCase):
         self.assertIn("TU2315", r["errors"][0])
         self.assertIn("TU3601", r["errors"][1])
 
+    def test_customer_typo_plain_space_before_qty(self):
+        # "TF2581 2" — เว้นวรรคเฉยๆ ไม่มีสัญลักษณ์เลยคั่นจำนวน
+        r = calc_logic.parse_calc_order("TF2581 2", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["items"][0]["qty"], 2)
+
+    def test_customer_typo_plain_space_both_sides(self):
+        # "TF 2581 2" — เว้นวรรคล้วนๆ ทั้งสองฝั่ง ไม่มีสัญลักษณ์เลย
+        r = calc_logic.parse_calc_order("TF 2581 2", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["items"][0]["qty"], 2)
+
 
 class TestParsePlanTargets(unittest.TestCase):
     def test_basic(self):
