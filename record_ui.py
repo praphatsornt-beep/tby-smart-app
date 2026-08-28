@@ -22,6 +22,15 @@ import carriers as carr
 
 _T1_TABS = ["📝 บันทึกขาย", "📦 ส่งของ", "🔢 คำนวณยอด", "📮 ส่ง Manual"]
 
+# โน้ตพื้นที่ห่างไกล/เกาะ (สรุปยอดคำนวณยอด ตอนยังไม่รู้วิธีส่ง) — ภาษาพม่าล้วน
+# เพราะลูกค้าส่วนใหญ่เป็นแรงงานพม่า ไม่บอกราคาที่แน่นอน (ค่าธรรมเนียมจริงแตกต่าง
+# กันตามโซน 30/50/60 บาท) แค่แจ้งว่ามีค่าเพิ่มแล้วจะแจ้งราคาจริงทีหลัง — เก็บเป็น
+# plain text ไม่มี markdown ** เพราะข้อความ LINE ก็ใช้ค่านี้ตรงๆ (ไม่ render markdown)
+_MM_REMOTE_NOTE = (
+    "ကျွန်းများ သို့မဟုတ် တောင်တန်းဒေသများအတွက် ပို့ဆောင်ခ 50 ဘတ် "
+    "ထပ်မံပေးဆောင်ရမည် (ကျွန်ုပ်တို့ အမြန်ဆုံး အကြောင်းကြားပါမည်)။"
+)
+
 
 def _sum_row(label, value, big=False, accent=False):
     """label/value row for the right-hand สรุปยอด card — shared by
@@ -1698,8 +1707,9 @@ def render(tab1, products, customers, customer_map):
 
                     # ─── ส่วนลูกค้า (copy / ส่ง LINE) ────────────────────────
                     if _no_ship_info:
-                        st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
-                        st.markdown(f"**🚚📦 จัดส่ง: +{_ship_add:,.0f} = ฿{_deliver_est:,.0f}**")
+                        st.markdown(f"💵 สินค้า (ဆိုင်မှာ လာယူပါ): ฿{_c_total_amt:,.0f}")
+                        st.markdown(f"**🚚📦 จัดส่ง (စံပို့ဆောင်မှု): +{_ship_add:,.0f} = ฿{_deliver_est:,.0f}**")
+                        st.markdown(f"***{_MM_REMOTE_NOTE}***")
                     else:
                         st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
                         if _cust_ship_fee > 0:
@@ -1830,8 +1840,10 @@ def render(tab1, products, customers, customer_map):
                                                  f"✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg",
                                                  ""]
                                 if _no_ship_info:
-                                    _c_msg_lines.append(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
-                                    _c_msg_lines.append(f"🚚📦 จัดส่ง: +{_ship_add:,.0f} = ฿{_deliver_est:,.0f}")
+                                    _c_msg_lines.append(f"💵 สินค้า (ဆိုင်မှာ လာယူပါ): ฿{_c_total_amt:,.0f}")
+                                    _c_msg_lines.append(f"🚚📦 จัดส่ง (စံပို့ဆောင်မှု): +{_ship_add:,.0f} = ฿{_deliver_est:,.0f}")
+                                    _c_msg_lines.append("")
+                                    _c_msg_lines.append(_MM_REMOTE_NOTE)
                                 else:
                                     _c_msg_lines.append(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
                                     if _cust_ship_fee > 0:
