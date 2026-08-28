@@ -1689,17 +1689,29 @@ def render(tab1, products, customers, customer_map):
                     _c_cod_fee   = calc_logic.cod_fee(_c_total_amt + _cust_ship_fee) if _cr["is_cod"] else 0
                     _c_grand     = _c_total_amt + _cust_ship_fee + _c_cod_fee
 
+                    # ลูกค้ายังไม่บอกว่ารับหน้าร้านหรือจัดส่ง (ไม่ติ๊ก 📦 จัดส่ง, ไม่มี SH-
+                    # และไม่ใช่ COD) → โชว์ราคาทั้ง 2 แบบให้เลือกเองในคราวเดียว แทนที่จะถาม
+                    # กลับไปกลับมา (ลูกค้าหลายคนเป็นแรงงานพม่า อ่านไทยไม่คล่อง คุยหลายรอบยาก)
+                    _no_ship_info = (not _cr["ship_zip"]) and _cr["manual_ship"] == -1 and not _cr["is_cod"]
+                    _pickup_est   = _c_total_amt
+                    _deliver_est  = _c_total_amt + calc_shipping(_c_total_w, "")
+
                     # ─── ส่วนลูกค้า (copy / ส่ง LINE) ────────────────────────
-                    st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
-                    if _cust_ship_fee > 0:
-                        st.markdown(f"🚚 ค่าส่ง: ฿{int(_cust_ship_fee):,}")
-                    if _c_cod_fee > 0:
-                        st.markdown(f"➕ COD 3.21%: ฿{int(_c_cod_fee):,}")
-                    _parts_raw = [str(int(_c_total_amt))]
-                    if _cust_ship_fee > 0: _parts_raw.append(str(int(_cust_ship_fee)))
-                    if _c_cod_fee > 0:     _parts_raw.append(str(int(_c_cod_fee)))
-                    st.markdown(f"{' + '.join(_parts_raw)} = {_c_grand:,.0f}")
-                    st.markdown(f"**💰 ยอดโอนสุทธิ: ฿{_c_grand:,.0f}**")
+                    if _no_ship_info:
+                        st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
+                        st.markdown(f"**🏪 รับหน้าร้าน: ฿{_pickup_est:,.0f}**")
+                        st.markdown(f"**🚚 จัดส่ง (ปกติ): ฿{_deliver_est:,.0f}** _(พื้นที่ห่างไกล/เกาะ เพิ่ม 50 บาท)_")
+                    else:
+                        st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
+                        if _cust_ship_fee > 0:
+                            st.markdown(f"🚚 ค่าส่ง: ฿{int(_cust_ship_fee):,}")
+                        if _c_cod_fee > 0:
+                            st.markdown(f"➕ COD 3.21%: ฿{int(_c_cod_fee):,}")
+                        _parts_raw = [str(int(_c_total_amt))]
+                        if _cust_ship_fee > 0: _parts_raw.append(str(int(_cust_ship_fee)))
+                        if _c_cod_fee > 0:     _parts_raw.append(str(int(_c_cod_fee)))
+                        st.markdown(f"{' + '.join(_parts_raw)} = {_c_grand:,.0f}")
+                        st.markdown(f"**💰 ยอดโอนสุทธิ: ฿{_c_grand:,.0f}**")
 
                     # ─── ส่วนเจ้าของ (ราคาจริง + ตารางขนส่ง) ─────────────────
                     st.divider()
@@ -1817,18 +1829,23 @@ def render(tab1, products, customers, customer_map):
                                 _c_msg_lines += _c_lines
                                 _c_msg_lines += ["",
                                                  f"✨ {_c_total_pv:,.0f} PV | ⚖️ {_c_weight_kg:.2f} kg",
-                                                 "",
-                                                 f"💵 สินค้า: ฿{_c_total_amt:,.0f}"]
-                                if _cust_ship_fee > 0:
-                                    _c_msg_lines.append(f"🚚 ค่าส่ง: ฿{_cust_ship_fee:,.0f}")
-                                if _c_cod_fee > 0:
-                                    _c_msg_lines.append(f"➕ COD: ฿{_c_cod_fee:,.0f}")
-                                _parts = [str(int(_c_total_amt))]
-                                if _cust_ship_fee > 0: _parts.append(str(int(_cust_ship_fee)))
-                                if _c_cod_fee  > 0: _parts.append(str(int(_c_cod_fee)))
-                                _formula = " + ".join(_parts)
-                                _c_msg_lines.append(f"\n{_formula} = {int(_c_grand):,}")
-                                _c_msg_lines.append(f"💰 ยอดโอนสุทธิ: ฿{int(_c_grand):,}")
+                                                 ""]
+                                if _no_ship_info:
+                                    _c_msg_lines.append(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
+                                    _c_msg_lines.append(f"🏪 รับหน้าร้าน: ฿{_pickup_est:,.0f}")
+                                    _c_msg_lines.append(f"🚚 จัดส่ง (ปกติ): ฿{_deliver_est:,.0f} (พื้นที่ห่างไกล/เกาะ เพิ่ม 50 บาท)")
+                                else:
+                                    _c_msg_lines.append(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
+                                    if _cust_ship_fee > 0:
+                                        _c_msg_lines.append(f"🚚 ค่าส่ง: ฿{_cust_ship_fee:,.0f}")
+                                    if _c_cod_fee > 0:
+                                        _c_msg_lines.append(f"➕ COD: ฿{_c_cod_fee:,.0f}")
+                                    _parts = [str(int(_c_total_amt))]
+                                    if _cust_ship_fee > 0: _parts.append(str(int(_cust_ship_fee)))
+                                    if _c_cod_fee  > 0: _parts.append(str(int(_c_cod_fee)))
+                                    _formula = " + ".join(_parts)
+                                    _c_msg_lines.append(f"\n{_formula} = {int(_c_grand):,}")
+                                    _c_msg_lines.append(f"💰 ยอดโอนสุทธิ: ฿{int(_c_grand):,}")
                                 _c_res = line_api.push_text(_c_luid, "\n".join(_c_msg_lines), group_id=_c_gid)
                                 if _c_res["ok"]:
                                     st.success(f"✅ ส่ง LINE ให้ {_calc_cust_sel} แล้ว")
