@@ -1833,8 +1833,7 @@ def render(tab1, products, customers, customer_map):
         elif _sub_active == "📮 ส่ง Manual":
             st.subheader("📦 แบ่งกล่อง + ปริ้นใบปะหน้า — Inter Express")
             st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ (ใส่รหัสไปรษณีย์แบบ SH-kgXXXXX "
-                       "ในข้อความเดียวกัน) — หรือกดคำนวณไว้แล้วที่ tab 🔢 คำนวณยอด ก็ใช้ต่อได้เลย "
-                       "คิดค่าส่งเฉพาะ Inter Express (ขนส่ง manual ที่ไม่ผ่าน iShip) "
+                       "ในข้อความเดียวกัน) — คิดค่าส่งเฉพาะ Inter Express (ขนส่ง manual ที่ไม่ผ่าน iShip) "
                        "**พิมพ์บรรทัดเดียว** = ให้ระบบจัดใส่กล่องและคำนวณน้ำหนักให้เองอัตโนมัติ "
                        "**พิมพ์แยกหลายบรรทัด** = แต่ละบรรทัดคือ 1 กล่องตามที่พิมพ์เป๊ะๆ (ไม่จัดใหม่)")
 
@@ -1853,24 +1852,24 @@ def render(tab1, products, customers, customer_map):
                     if not _mbx_text.strip():
                         st.warning("กรุณากรอกรหัสสินค้าก่อน")
                     else:
-                        st.session_state["_calc_result"] = calc_logic.parse_calc_order(_mbx_text, products)
+                        st.session_state["_mbx_result"] = calc_logic.parse_calc_order(_mbx_text, products)
                         st.session_state["_mbx_lines"] = [
                             _l.strip() for _l in _mbx_text.splitlines() if _l.strip()
                         ]
                 if st.button("🗑️ ล้าง", key="_mbx_clear_btn", width="stretch"):
-                    st.session_state.pop("_calc_result", None)
+                    st.session_state.pop("_mbx_result", None)
                     st.session_state.pop("_mbx_lines", None)
                     st.session_state["_mbx_ver"] = _mbx_ver + 1
                     st.rerun()
 
-            _bx_cr = st.session_state.get("_calc_result")
+            _bx_cr = st.session_state.get("_mbx_result")
             if _bx_cr and _bx_cr.get("errors"):
                 for _mbx_e in _bx_cr["errors"]:
                     st.error(f"⚠️ {_mbx_e}")
             st.divider()
 
             if not _bx_cr or not _bx_cr.get("items"):
-                st.info("พิมพ์รหัสสินค้าแล้วกดคำนวณด้านบน หรือกดคำนวณไว้แล้วที่ tab 🔢 คำนวณยอด")
+                st.info("พิมพ์รหัสสินค้าแล้วกดคำนวณด้านบน")
             else:
                 _bx_prod_kg  = sum(int(_ci["product"].get("weight_grams",0))*int(_ci["qty"]) for _ci in _bx_cr["items"]) / 1000
                 _bx_postcode = _bx_cr.get("ship_zip", "")
@@ -1878,16 +1877,15 @@ def render(tab1, products, customers, customer_map):
                             + (f"  |  📮 **{_bx_postcode}**" if _bx_postcode else ""))
 
                 if not _bx_postcode:
-                    st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ใน tab คำนวณยอด เพื่อวางแผนกล่อง+เทียบค่าส่ง")
+                    st.caption("ใส่รหัสไปรษณีย์ (SH-kgXXXXX) ในข้อความด้านบน เพื่อวางแผนกล่อง+เทียบค่าส่ง")
                 else:
                     # หน้านี้ผูกกับ Inter Express โดยเฉพาะ (manual — ไม่ผ่าน iShip)
                     # ไม่ต้องเทียบกับขนส่งอื่นเหมือน tab คำนวณยอด
 
                     # พิมพ์แยกหลายบรรทัด = ผู้ใช้กำหนดเองว่าแต่ละบรรทัดคือ 1 กล่อง
                     # (ไม่ให้ระบบจัดกล่องใหม่) — เช็คน้ำหนักรวมจาก _mbx_lines เทียบกับ
-                    # _bx_cr ปัจจุบันก่อนเชื่อ กัน _mbx_lines ค้างจากการคำนวณครั้งก่อน
-                    # (เช่นไปคำนวณคำสั่งอื่นที่ tab คำนวณยอดแทน แล้วย้อนมาโดยไม่กด
-                    # คำนวณซ้ำที่นี่)
+                    # _bx_cr ปัจจุบันก่อนเชื่อ กัน _mbx_lines ค้างจากการคำนวณครั้งก่อนหน้า
+                    # ในแท็บนี้เอง (พิมพ์ข้อความใหม่แล้วยังไม่กดคำนวณซ้ำ)
                     _mbx_lines = st.session_state.get("_mbx_lines") or []
                     _manual_line_crs = [calc_logic.parse_calc_order(_l, products) for _l in _mbx_lines]
                     _manual_check_kg = sum(
