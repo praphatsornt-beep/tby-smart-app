@@ -1695,15 +1695,11 @@ def render(tab1, products, customers, customer_map):
                     _no_ship_info = (not _cr["ship_zip"]) and _cr["manual_ship"] == -1 and not _cr["is_cod"]
                     _deliver_est  = _c_total_amt + calc_shipping(_c_total_w, "")
                     _ship_add     = _deliver_est - _c_total_amt
-                    _remote_est   = _deliver_est + 50
 
                     # ─── ส่วนลูกค้า (copy / ส่ง LINE) ────────────────────────
                     if _no_ship_info:
                         st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
-                        st.markdown(
-                            f"**🚚📦 จัดส่ง: +{_ship_add:,.0f} = ฿{_deliver_est:,.0f}** "
-                            f"_(🏔️🏝️ ห่างไกล/เกาะ +50 = ฿{_remote_est:,.0f})_"
-                        )
+                        st.markdown(f"**🚚📦 จัดส่ง: +{_ship_add:,.0f} = ฿{_deliver_est:,.0f}**")
                     else:
                         st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
                         if _cust_ship_fee > 0:
@@ -1835,8 +1831,7 @@ def render(tab1, products, customers, customer_map):
                                                  ""]
                                 if _no_ship_info:
                                     _c_msg_lines.append(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
-                                    _c_msg_lines.append(f"🚚📦 จัดส่ง: +{_ship_add:,.0f} = ฿{_deliver_est:,.0f} "
-                                                         f"(🏔️🏝️ ห่างไกล/เกาะ +50 = ฿{_remote_est:,.0f})")
+                                    _c_msg_lines.append(f"🚚📦 จัดส่ง: +{_ship_add:,.0f} = ฿{_deliver_est:,.0f}")
                                 else:
                                     _c_msg_lines.append(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
                                     if _cust_ship_fee > 0:
