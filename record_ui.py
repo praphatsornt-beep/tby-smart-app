@@ -1693,14 +1693,17 @@ def render(tab1, products, customers, customer_map):
                     # และไม่ใช่ COD) → โชว์ราคาทั้ง 2 แบบให้เลือกเองในคราวเดียว แทนที่จะถาม
                     # กลับไปกลับมา (ลูกค้าหลายคนเป็นแรงงานพม่า อ่านไทยไม่คล่อง คุยหลายรอบยาก)
                     _no_ship_info = (not _cr["ship_zip"]) and _cr["manual_ship"] == -1 and not _cr["is_cod"]
-                    _pickup_est   = _c_total_amt
                     _deliver_est  = _c_total_amt + calc_shipping(_c_total_w, "")
+                    _ship_add     = _deliver_est - _c_total_amt
+                    _remote_est   = _deliver_est + 50
 
                     # ─── ส่วนลูกค้า (copy / ส่ง LINE) ────────────────────────
                     if _no_ship_info:
                         st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
-                        st.markdown(f"**🏪 รับหน้าร้าน: ฿{_pickup_est:,.0f}**")
-                        st.markdown(f"**🚚 จัดส่ง (ปกติ): ฿{_deliver_est:,.0f}** _(พื้นที่ห่างไกล/เกาะ เพิ่ม 50 บาท)_")
+                        st.markdown(
+                            f"**🚚📦 จัดส่ง: +{_ship_add:,.0f} = ฿{_deliver_est:,.0f}** "
+                            f"_(🏔️🏝️ ห่างไกล/เกาะ +50 = ฿{_remote_est:,.0f})_"
+                        )
                     else:
                         st.markdown(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
                         if _cust_ship_fee > 0:
@@ -1832,8 +1835,8 @@ def render(tab1, products, customers, customer_map):
                                                  ""]
                                 if _no_ship_info:
                                     _c_msg_lines.append(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
-                                    _c_msg_lines.append(f"🏪 รับหน้าร้าน: ฿{_pickup_est:,.0f}")
-                                    _c_msg_lines.append(f"🚚 จัดส่ง (ปกติ): ฿{_deliver_est:,.0f} (พื้นที่ห่างไกล/เกาะ เพิ่ม 50 บาท)")
+                                    _c_msg_lines.append(f"🚚📦 จัดส่ง: +{_ship_add:,.0f} = ฿{_deliver_est:,.0f} "
+                                                         f"(🏔️🏝️ ห่างไกล/เกาะ +50 = ฿{_remote_est:,.0f})")
                                 else:
                                     _c_msg_lines.append(f"💵 สินค้า: ฿{_c_total_amt:,.0f}")
                                     if _cust_ship_fee > 0:
