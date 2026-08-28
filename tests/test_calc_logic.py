@@ -75,6 +75,28 @@ class TestParseCalcOrder(unittest.TestCase):
         r = calc_logic.parse_calc_order("TF2581-1 SH-KG12170", PRODUCTS)
         self.assertEqual(r["ship_zip"], "12170")
 
+    def test_customer_typo_double_dot(self):
+        # ลูกค้าพิมพ์จริง: "TU..2315.2" — จุดคู่คั่นหน้าเลข, จุดเดี่ยวคั่นจำนวน
+        r = calc_logic.parse_calc_order("TF..2581.2", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["items"][0]["qty"], 2)
+
+    def test_customer_typo_single_dot(self):
+        # ลูกค้าพิมพ์จริง: "TU.3601.1" — จุดเดี่ยวคั่นทั้งสองฝั่ง
+        r = calc_logic.parse_calc_order("TF.2581.1", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["items"][0]["qty"], 1)
+
+    def test_phone_number_line_not_mistaken_for_code(self):
+        # เบอร์โทรลูกค้าที่แปะมาด้วย (ไม่มีตัวอักษรนำหน้า) ต้องไม่ถูกตีความเป็นรหัสสินค้า
+        r = calc_logic.parse_calc_order("0944382708\nTU..2315.2\nTU.3601.1", PRODUCTS)
+        self.assertEqual(r["items"], [])  # TU2315/TU3601 ไม่มีในระบบทดสอบ → error ทั้งคู่
+        self.assertEqual(len(r["errors"]), 2)
+        self.assertIn("TU2315", r["errors"][0])
+        self.assertIn("TU3601", r["errors"][1])
+
 
 class TestParsePlanTargets(unittest.TestCase):
     def test_basic(self):
