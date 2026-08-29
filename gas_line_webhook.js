@@ -21,6 +21,14 @@ var SUPABASE_KEY = _scriptProps.getProperty('SUPABASE_KEY');
 // (กันลูกค้าพิมพ์โดนคำสั่งโดยไม่ตั้งใจ — ถ้าไม่มี # ในลิสต์นี้ จะไม่ทำงานเลย)
 var STAFF_TAGS = ['milk', 'max'];
 
+// โน้ตพื้นที่ห่างไกล/เกาะ (ตอนคำนวณออเดอร์แต่ยังไม่รู้วิธีส่ง) — ภาษาพม่าล้วน เพราะ
+// ลูกค้าส่วนใหญ่เป็นแรงงานพม่า ไม่บอกราคาที่แน่นอน (ค่าธรรมเนียมจริงแตกต่างกันตามโซน
+// 30/50/60 บาท) แค่แจ้งว่ามีค่าเพิ่มแล้วจะแจ้งราคาจริงทีหลัง — พอร์ตมาจาก
+// record_ui.py's _MM_REMOTE_NOTE ให้ทั้งสองฝั่งใช้ข้อความเดียวกัน
+var MM_REMOTE_NOTE =
+  'ကျွန်းများ သို့မဟုတ် တောင်တန်းဒေသများအတွက် ပို့ဆောင်ခ 50 ဘတ် ' +
+  'ထပ်မံပေးဆောင်ရမည် (ကျွန်ုပ်တို့ အမြန်ဆုံး အကြောင်းကြားပါမည်)။';
+
 // ─── Supabase REST helpers ────────────────────────────────────────────────────
 
 function _sbReadHdrs() {
@@ -453,18 +461,31 @@ function doPost(e) {
   var finalPay = totalPrice + shipFinal + codFee;
 
   summaryText += '✨ ' + totalPV.toLocaleString() + ' PV | ⚖️ ' + totalWeightKg.toFixed(2) + ' kg\n\n';
-  summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး: ฿' : '💵 สินค้า: ฿') + totalPrice.toLocaleString() + '\n';
-  if (hasShipping) summaryText += (lang === 'mm' ? '🚚 ပို့ခ: ฿' : '🚚 ค่าส่ง: ฿') + shipFinal.toLocaleString() + feeNote + '\n';
-  if (isCOD) summaryText += '➕ COD: ฿' + codFee.toLocaleString() + '\n';
 
-  var calcFormula = totalPrice.toString();
-  if (shipFinal > 0) calcFormula += ' + ' + shipFinal;
-  if (codFee > 0) calcFormula += ' + ' + codFee;
-  summaryText += '\n' + calcFormula + ' = ' + finalPay.toLocaleString() + '\n';
-  summaryText += '💰 ' + (isCOD ? (lang === 'mm' ? 'ပစ္စည်းရောက်ငွေချေ: ' : 'ยอดปลายทาง: ') : (lang === 'mm' ? 'စုစုပေါင်းကျသင့်ငွေ: ' : 'ยอดโอนสุทธิ: ')) + '฿' + finalPay.toLocaleString() + '\n';
+  if (!hasShipping && !isCOD) {
+    // ลูกค้ายังไม่บอกว่ารับหน้าร้านหรือจัดส่ง (ไม่มี SH/ไม่ใช่ COD) — โชว์ราคาทั้ง 2
+    // แบบในข้อความเดียว แทนที่จะบอกแค่ "ยังไม่รวมค่าจัดส่ง" เฉยๆ (พอร์ตจาก
+    // record_ui.py's คำนวณยอด Streamlit ให้บอทกับแอปตอบลูกค้าตรงกัน) shipBase คือ
+    // ค่าส่งประมาณตามน้ำหนักล้วน ไม่รวมค่าพื้นที่พิเศษ (ยังไม่รู้รหัสไปรษณีย์จริง)
+    var shipBaseEstimate = 39 + (totalWeightKg > 5 ? Math.ceil(totalWeightKg - 5) * 10 : 0);
+    var deliverEst = totalPrice + shipBaseEstimate;
+    summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး (ဆိုင်မှာ လာယူပါ): ฿' : '💵 สินค้า (ဆိုင်မှာ လာယူပါ): ฿') + totalPrice.toLocaleString() + '\n';
+    summaryText += (lang === 'mm' ? '🚚📦 ပို့ဆောင်မှု (စံပို့ဆောင်မှု): +' : '🚚📦 จัดส่ง (စံပို့ဆောင်မှု): +') + shipBaseEstimate + ' = ฿' + deliverEst.toLocaleString() + '\n';
+    summaryText += '\n' + MM_REMOTE_NOTE;
+  } else {
+    summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး: ฿' : '💵 สินค้า: ฿') + totalPrice.toLocaleString() + '\n';
+    if (hasShipping) summaryText += (lang === 'mm' ? '🚚 ပို့ခ: ฿' : '🚚 ค่าส่ง: ฿') + shipFinal.toLocaleString() + feeNote + '\n';
+    if (isCOD) summaryText += '➕ COD: ฿' + codFee.toLocaleString() + '\n';
 
-  if (!hasShipping) summaryText += '\nပို့ဆောင်ခ သီးသန့်ဖြစ်သည်။\nราคานี้ยังไม่รวมค่าจัดส่ง';
-  else if (!isCOD && lang !== 'none') summaryText += '\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
+    var calcFormula = totalPrice.toString();
+    if (shipFinal > 0) calcFormula += ' + ' + shipFinal;
+    if (codFee > 0) calcFormula += ' + ' + codFee;
+    summaryText += '\n' + calcFormula + ' = ' + finalPay.toLocaleString() + '\n';
+    summaryText += '💰 ' + (isCOD ? (lang === 'mm' ? 'ပစ္စည်းရောက်ငွေချေ: ' : 'ยอดปลายทาง: ') : (lang === 'mm' ? 'စုစုပေါင်းကျသင့်ငွေ: ' : 'ยอดโอนสุทธิ: ')) + '฿' + finalPay.toLocaleString() + '\n';
+
+    if (!hasShipping) summaryText += '\nပို့ဆောင်ခ သီးသန့်ဖြစ်သည်။\nราคานี้ยังไม่รวมค่าจัดส่ง';
+    else if (!isCOD && lang !== 'none') summaryText += '\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
+  }
 
   sendReply(replyToken, summaryText + translatedNote);
   } catch (err) {
