@@ -308,15 +308,17 @@ function doPost(e) {
   // ลูกค้าพิมพ์รหัสสินค้าเองมักไม่ตรงรูปแบบ CODE-QTY มาตรฐาน — เจอจริงเช่น "ty -2010=1"
   // (เว้นวรรค+ขีดนำหน้าเลข), "tf--2581=1" (ขีดคู่ + ใช้ = คั่นจำนวนแทน -), "tu..2315.2"/
   // "tu.3601.1" (จุดแทนขีด ทั้งคั่นหน้าเลขและคั่นจำนวน บางทีจุดคู่), "tf2581 2" (เว้นวรรค
-  // ล้วนๆ ไม่มีสัญลักษณ์เลย ทั้งหน้าเลขและหน้าจำนวน) — normalize เป็น "ty2010-1"/
-  // "tf2581-1"/"tu2315-2"/"tu3601-1"/"tf2581-2" ก่อน tokenize เสมอ เพราะรหัสสินค้าจริง
-  // เป็น LETTERS+4DIGITS ล้วน ไม่มีขีด/จุด/เว้นวรรคคั่นเอง (พอร์ตมาจาก
-  // calc_logic._normalize_customer_codes ในแอป Streamlit ให้ทั้งสองฝั่งอ่านรหัสแบบ
-  // เดียวกัน) เลข 4 หลักเป๊ะกันชนกับรหัสไปรษณีย์ 5 หลักใน SH-kgXXXXX และเบอร์โทร
-  // ลูกค้า (ไม่มีตัวอักษรนำหน้า) โดยไม่ตั้งใจ — ตัวคั่นก่อนจำนวนยอมรับทั้ง .-= อย่างน้อย
-  // 1 ตัว หรือเว้นวรรคล้วนๆ ก็ได้
-  userMsg = userMsg.replace(/([a-z]{1,4})\s*[-.]{0,2}\s*(\d{4})(?:\s*[-.=]{1,2}\s*|\s+)(\d+(?:\.\d+)?)/g,
-    function (_, prefix, num, qty) { return prefix + num + '-' + qty; });
+  // ล้วนๆ ไม่มีสัญลักษณ์เลย ทั้งหน้าเลขและหน้าจำนวน), "t f 2581 . 1" (เว้นวรรคแทรกกลาง
+  // ตัวอักษรนำหน้าด้วย — เจอจริง 2026-08-29 เดิม parse เพี้ยนเป็น "F2581" ที่ไม่มีในระบบ
+  // แล้วบอทเงียบไม่ตอบอะไรเลย) — normalize เป็น "ty2010-1"/"tf2581-1"/"tu2315-2"/
+  // "tu3601-1"/"tf2581-2" ก่อน tokenize เสมอ เพราะรหัสสินค้าจริงเป็น LETTERS+4DIGITS
+  // ล้วน ไม่มีขีด/จุด/เว้นวรรคคั่นเอง (พอร์ตมาจาก calc_logic._normalize_customer_codes
+  // ในแอป Streamlit ให้ทั้งสองฝั่งอ่านรหัสแบบเดียวกัน) เลข 4 หลักเป๊ะกันชนกับรหัส
+  // ไปรษณีย์ 5 หลักใน SH-kgXXXXX และเบอร์โทรลูกค้า (ไม่มีตัวอักษรนำหน้า) โดยไม่ตั้งใจ —
+  // ตัวคั่นก่อนจำนวนยอมรับทั้ง .-= อย่างน้อย 1 ตัว หรือเว้นวรรคล้วนๆ ก็ได้ ตัวอักษรนำหน้า
+  // เว้นวรรคคั่นแต่ละตัวได้เช่นกัน (สูงสุด 4 ตัว) แล้วเอาช่องว่างออกก่อนต่อกลับเป็นรหัส
+  userMsg = userMsg.replace(/([a-z](?:\s?[a-z]){0,3})\s*[-.]{0,2}\s*(\d{4})(?:\s*[-.=]{1,2}\s*|\s+)(\d+(?:\.\d+)?)/g,
+    function (_, prefix, num, qty) { return prefix.replace(/\s/g, '') + num + '-' + qty; });
 
   var pData = _getProducts();
   var tokens = userMsg.split(/[\s\n]+/);
@@ -350,10 +352,12 @@ function doPost(e) {
     }
   }
 
-  var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '';
+  var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '', notFoundCodes = [];
   Object.keys(orderMap).forEach(function(code) {
+    var found = false;
     for (var i = 0; i < pData.length; i++) {
       if (pData[i][0].toString().toUpperCase() == code) {
+        found = true;
         var qty = orderMap[code], pPrice = pData[i][3], pPV = pData[i][4], pW = pData[i][5];
         totalPrice += pPrice * qty; totalPV += pPV * qty; productWeight += pW * qty;
         if (lang === 'th')
@@ -366,10 +370,25 @@ function doPost(e) {
         break;
       }
     }
+    if (!found) notFoundCodes.push(code);
   });
 
   if (detailText === '' && translatedNote !== '') { sendReply(replyToken, '🇲🇲 Message:\n' + rawMsg + translatedNote); return; }
-  else if (detailText === '') return;
+  else if (detailText === '') {
+    // ลูกค้าพิมพ์รหัสสินค้าชัดเจน (มี "-" ในข้อความ ผ่าน normalize มาแล้ว) แต่หา
+    // สินค้าไม่เจอสักตัว — ต้องตอบกลับด้วย ไม่ใช่เงียบเฉยๆ (เจอจริง 2026-08-29: พิมพ์
+    // "t f 2581 . 1" แล้วบอทไม่ตอบอะไรเลย ลูกค้างงว่าระบบพังหรือเปล่า) แต่ถ้าไม่มีการ
+    // พิมพ์รหัสแบบ CODE-QTY เลย (แชทคุยเล่นทั่วไป) ยังเงียบเหมือนเดิม กันบอทไปตอบ
+    // ข้อความที่ไม่เกี่ยวกับการสั่งของ
+    if (Object.keys(orderMap).length > 0 || notFoundCodes.length > 0) {
+      var nfList = notFoundCodes.join(', ');
+      var nfMsg = lang === 'mm'
+        ? ('❌ ကုန်ပစ္စည်းကုဒ် "' + nfList + '" ကို ရှာမတွေ့ပါ။ ကုဒ်ကို ပြန်စစ်ပေးပါ')
+        : ('❌ ไม่พบรหัสสินค้า "' + nfList + '" กรุณาตรวจสอบรหัสอีกครั้งค่ะ');
+      sendReply(replyToken, nfMsg);
+    }
+    return;
+  }
 
   var totalWeightKg = productWeight + 0.5;
   var summaryHeader = lang === 'th' ? '📜 สรุปยอดคำสั่งซื้อ\n\n' : (lang === 'mm' ? '📜 အော်ဒါအကျဉ်းချုပ်\n\n' : '📝 รายการสินค้า\n\n');

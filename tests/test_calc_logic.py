@@ -111,6 +111,14 @@ class TestParseCalcOrder(unittest.TestCase):
         self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
         self.assertEqual(r["items"][0]["qty"], 2)
 
+    def test_customer_typo_space_within_prefix(self):
+        # "t f 2581 . 1" — เว้นวรรคแทรกกลางตัวอักษรนำหน้าด้วย (เจอจริง 2026-08-29)
+        # เดิม parse เพี้ยนเป็น "F2581" (ตัด T ทิ้ง) ไม่มีในระบบ → บอทเงียบไม่ตอบเลย
+        r = calc_logic.parse_calc_order("t f 2581 . 1", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["items"][0]["qty"], 1)
+
 
 class TestParsePlanTargets(unittest.TestCase):
     def test_basic(self):
