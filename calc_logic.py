@@ -68,6 +68,12 @@ def parse_calc_order(text: str, products: list) -> dict:
                     manual_ship = float(val)
                 except Exception:
                     errors.append(f"ค่าส่งไม่ถูกต้อง: {token}")
+        elif not any(c.isalpha() for c in code):
+            # รหัสสินค้าจริงเป็น LETTERS+4DIGITS เสมอ (ไม่มีตัวอักษรเลยไม่ใช่รหัสสินค้าแน่ๆ)
+            # — token แบบนี้เจอจริงตอนลูกค้า/พนักงานพิมพ์เลขคำนวณเอง เช่น "3900-5.5=21450"
+            # (ราคา-จำนวน=ยอดรวม) ซึ่งบังเอิญมีขีดคั่นเหมือนรูปแบบ CODE-QTY พอดี ข้ามเงียบๆ
+            # แทนที่จะ error "ไม่พบรหัส 3900" หรือ "จำนวนไม่ถูกต้อง" ให้งงเปล่าๆ
+            pass
         else:
             try:
                 qty = float(val)

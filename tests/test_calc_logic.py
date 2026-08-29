@@ -119,6 +119,20 @@ class TestParseCalcOrder(unittest.TestCase):
         self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
         self.assertEqual(r["items"][0]["qty"], 1)
 
+    def test_pure_numeric_dash_token_ignored(self):
+        # "3900-5.5=21450" — ลูกค้า/พนักงานพิมพ์เลขคำนวณเอง (ราคา-จำนวน=ยอดรวม) เจอจริง
+        # 2026-08-29 บังเอิญมีขีดคั่นเหมือน CODE-QTY พอดี แต่ "3900" ไม่มีตัวอักษรเลย
+        # ไม่ใช่รหัสสินค้าแน่ๆ (รหัสจริงเป็น LETTERS+4DIGITS เสมอ) ต้องข้ามเงียบๆ ไม่ error
+        r = calc_logic.parse_calc_order("3900-5.5=21450", PRODUCTS)
+        self.assertEqual(r["items"], [])
+        self.assertEqual(r["errors"], [])
+
+    def test_pure_numeric_dash_token_mixed_with_real_code(self):
+        r = calc_logic.parse_calc_order("TF2581-2 3900-5.5=21450", PRODUCTS)
+        self.assertEqual(len(r["items"]), 1)
+        self.assertEqual(r["items"][0]["product"]["id"], "TF2581")
+        self.assertEqual(r["errors"], [])
+
 
 class TestParsePlanTargets(unittest.TestCase):
     def test_basic(self):
