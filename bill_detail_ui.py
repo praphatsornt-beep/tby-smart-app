@@ -1309,11 +1309,13 @@ def render(products, customers):
                                 # บอกว่าฝั่งไหนถือว่าเป็น 0 แทนไปเช็ค column exists
                                 _mc_recv = 0 if _recv_disabled else int(_combo_edit["รับจริง"].sum())
                                 _mc_pay  = 0.0 if _pay_disabled else float(_combo_edit["จ่ายจริง"].sum())
-                                _ms1, _ms2 = st.columns(2)
+                                _ms1, _ms2, _ms3 = st.columns(3)
                                 if _mc_recv > 0:
                                     _ms1.metric("รับของรวม", f"{_mc_recv} ชิ้น")
                                 if _mc_pay > 0.01:
                                     _ms2.metric("ยอดจ่ายรวม", f"{_mc_pay:,.0f} ฿")
+                                if _allow_open_here and _unbilled_pv > 0:
+                                    _ms3.metric("⭐ PV รายการที่เลือก", f"{_unbilled_pv:,.0f}")
 
                                 if st.button("💾 บันทึกทั้งหมด", type="primary",
                                              width="stretch", key=f"multi_all_{customer_name}") \
