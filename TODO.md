@@ -27,6 +27,6 @@
 ## ⏳ รอ Deploy
 
 - [x] ~~`gas_line_webhook.js` — มีการเปลี่ยนแปลงหลายอย่างในไฟล์ local (คู่มือ, จ่ายบางส่วน, เก่าเมนู, เบิกจ่าย+จ่ายบางส่วน, ปุ่มยกเลิก, tourist_island fix ฯลฯ)~~ — copy ไป Apps Script editor + deploy แล้ว
-- [ ] `gas_line_webhook.js` — แก้ `SH-kg รหัสไปรษณีย์` ให้รองรับเว้นวรรค (commit `ee90e22`) — ยังไม่ deploy
-- [ ] `gas_line_webhook.js` — normalize รหัสสินค้าที่ลูกค้าพิมพ์เพี้ยนก่อน tokenize (เช่น "ty -2010=1", "tf--2581=1", "t f 2581 . 1" เว้นวรรคแทรกกลางตัวอักษรด้วย) ให้ตรงกับ calc_logic.py + ตอบกลับเมื่อพิมพ์รหัสแบบ CODE-QTY ชัดเจนแต่หาสินค้าไม่เจอ (เดิมเงียบไม่ตอบเลย — เจอจริง 2026-08-29) — ยังไม่ deploy
-- [ ] `gas_line_webhook.js` — ตรวจพบ 2026-08-29 ว่าเวอร์ชันที่ deploy อยู่จริง **เก่ากว่า** local มาก ขาดฟีเจอร์บันทึกยอดการเงินผ่าน LINE ทั้งชุด (`#milk ads/bv/scb/po ...`, `check today`) ไปด้วย — แนะนำผู้ใช้ให้ copy ทั้งไฟล์ local ไปแทนที่ทั้งหมดใน Apps Script editor แล้ว deploy เป็น New version รอบเดียวจบ แทนที่จะแก้ทีละจุด
+- [x] ~~`gas_line_webhook.js` — แก้ `SH-kg รหัสไปรษณีย์` ให้รองรับเว้นวรรค (commit `ee90e22`)~~ — copy ทั้งไฟล์ไป Apps Script editor + deploy เป็น New version แล้ว 2026-08-29
+- [x] ~~`gas_line_webhook.js` — normalize รหัสสินค้าที่ลูกค้าพิมพ์เพี้ยนก่อน tokenize (`ty -2010=1`, `tf--2581=1`, `t f 2581 . 1` เว้นวรรคแทรกกลางตัวอักษรด้วย) ให้ตรงกับ calc_logic.py + ตอบกลับเมื่อพิมพ์รหัสแบบ CODE-QTY ชัดเจนแต่หาสินค้าไม่เจอ (เดิมเงียบไม่ตอบเลย)~~ — deploy แล้ว 2026-08-29
+- [x] ~~`gas_line_webhook.js` — เวอร์ชันที่ deploy อยู่จริงเคยเก่ากว่า local มาก ขาดฟีเจอร์บันทึกยอดการเงินผ่าน LINE ทั้งชุด (`#milk ads/bv/scb/po ...`, `check today`)~~ — copy ทั้งไฟล์ local ทับหมดแล้ว deploy เป็น New version รอบเดียวจบ 2026-08-29 ตอนนี้ local กับ live ตรงกันแล้ว
