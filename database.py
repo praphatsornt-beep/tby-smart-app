@@ -56,8 +56,7 @@ def get_customer_by_phone(phone: str) -> dict | None:
 
 @st.cache_data(ttl=120)
 def _all_customer_addresses() -> list[dict]:
-    return (get_supabase().table("customer_addresses")
-            .select("*, customers(name)").order("created_at", desc=True).execute().data)
+    return get_supabase().table("customer_addresses").select("*, customers(name)").order("phone").execute().data
 
 
 def get_customer_addresses(customer_id: str = None) -> list[dict]:
@@ -68,20 +67,20 @@ def get_customer_addresses(customer_id: str = None) -> list[dict]:
 
 
 def get_address_by_phone(phone: str) -> dict | None:
-    # ลูกค้าคนละคนอาจใช้เบอร์ผู้รับเดียวกันได้ (เช่น อยู่บ้านเดียวกัน) — เบอร์เดียวกัน
-    # จึงแมตช์ได้หลายแถว ณ ที่นี้เอาแถวล่าสุด (created_at desc) เพื่อ autofill
     rows = (get_supabase().table("customer_addresses")
-            .select("*, customers(name)").eq("phone", phone.strip())
-            .order("created_at", desc=True).limit(1).execute().data)
+            .select("*, customers(name)").eq("phone", phone.strip()).execute().data)
     return rows[0] if rows else None
 
 
 def upsert_customer_address(data: dict) -> None:
     db = get_supabase()
-    # ลบแถวเดิมที่มี id เดียวกันก่อนเสมอ (กรณีแก้ไขที่อยู่เดิม) — insert-or-replace ด้วย id
-    # เท่านั้น ห้าม dedupe ด้วยเบอร์โทรอีก (เคยลบที่อยู่ของลูกค้าคนอื่นทิ้งเงียบๆ ถ้าใช้เบอร์
-    # ผู้รับเดียวกัน เช่น อยู่บ้านเดียวกัน — ที่อยู่เปลี่ยนของคนหนึ่ง ไม่ควรลบที่อยู่อีกคน)
+    # ลบแถวเดิมที่มี id เดียวกันก่อนเสมอ (กรณีแก้ไขที่อยู่เดิม) — ถ้าใช้แค่ eq("phone", ...)
+    # แล้ว phone ว่าง แถวเดิมจะไม่ถูกลบ ทำให้ insert ชนกับ primary key เดิม
     _retry(lambda: db.table("customer_addresses").delete().eq("id", data["id"]).execute())
+    if data.get("phone"):
+        # ตั้งใจลบทุกแถวที่เบอร์นี้ทิ้งก่อน insert เสมอ (ยืนยันจากผู้ใช้ 2026-09-01) — เบอร์
+        # เดียวกัน = ที่อยู่ล่าสุดของเบอร์นั้นเท่านั้นที่ถูกต้อง ไม่เก็บที่อยู่เก่าซ้ำไว้
+        _retry(lambda: db.table("customer_addresses").delete().eq("phone", data["phone"].strip()).execute())
     _retry(lambda: db.table("customer_addresses").insert(data).execute())
     _all_customer_addresses.clear()
 
