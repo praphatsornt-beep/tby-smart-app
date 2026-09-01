@@ -465,7 +465,9 @@ def _quick_add_customer(key_prefix: str):
 
 
 def _warn_duplicate_phone(phone: str, current_cid: str):
-    """ถ้าเบอร์นี้มีที่อยู่ของลูกค้าคนอื่นอยู่แล้ว ให้เตือน (บันทึกที่อยู่จะลบของเดิมทิ้ง)"""
+    """ถ้าเบอร์นี้มีที่อยู่ของลูกค้าคนอื่นอยู่แล้ว ให้เตือน (เผื่อพิมพ์เบอร์ผิดคน) — บันทึก
+    จะเพิ่มเป็นที่อยู่ใหม่แยกต่างหาก ไม่ลบของเดิม (2 ลูกค้าอาจใช้เบอร์ผู้รับเดียวกันได้จริง
+    เช่น อยู่บ้านเดียวกัน)"""
     phone = (phone or "").strip()
     if len(phone) != 10:
         return
@@ -477,7 +479,7 @@ def _warn_duplicate_phone(phone: str, current_cid: str):
     if addr and addr.get("customer_id") and addr.get("customer_id") != current_cid:
         other_name = (addr.get("customers") or {}).get("name", "")
         other_addr = f"{addr.get('address_line','')} {addr.get('district','')} {addr.get('amphure','')} {addr.get('province','')}".strip()
-        st.warning(f"⚠️ เบอร์นี้มีที่อยู่ของคุณ{other_name} อยู่แล้ว ({other_addr}) — ถ้าบันทึกที่อยู่นี้ จะลบที่อยู่เดิมของคุณ{other_name}")
+        st.info(f"ℹ️ เบอร์นี้มีที่อยู่ของคุณ{other_name} อยู่แล้ว ({other_addr}) — ถ้าใช่เบอร์เดียวกันจริง (เช่น อยู่บ้านเดียวกัน) บันทึกได้เลย จะเพิ่มเป็นที่อยู่ใหม่โดยไม่ลบของเดิม")
 
 
 def calc_shipping(weight_grams: float, postcode: str = "") -> float:
