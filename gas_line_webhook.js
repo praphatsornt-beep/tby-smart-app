@@ -366,12 +366,10 @@ function doPost(e) {
     }
   }
 
-  var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '', notFoundCodes = [];
+  var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '';
   Object.keys(orderMap).forEach(function(code) {
-    var found = false;
     for (var i = 0; i < pData.length; i++) {
       if (pData[i][0].toString().toUpperCase() == code) {
-        found = true;
         var qty = orderMap[code], pPrice = pData[i][3], pPV = pData[i][4], pW = pData[i][5];
         totalPrice += pPrice * qty; totalPV += pPV * qty; productWeight += pW * qty;
         if (lang === 'th')
@@ -384,23 +382,12 @@ function doPost(e) {
         break;
       }
     }
-    if (!found) notFoundCodes.push(code);
   });
 
   if (detailText === '' && translatedNote !== '') { sendReply(replyToken, '🇲🇲 Message:\n' + rawMsg + translatedNote); return; }
   else if (detailText === '') {
-    // ลูกค้าพิมพ์รหัสสินค้าชัดเจน (มี "-" ในข้อความ ผ่าน normalize มาแล้ว) แต่หา
-    // สินค้าไม่เจอสักตัว — ต้องตอบกลับด้วย ไม่ใช่เงียบเฉยๆ (เจอจริง 2026-08-29: พิมพ์
-    // "t f 2581 . 1" แล้วบอทไม่ตอบอะไรเลย ลูกค้างงว่าระบบพังหรือเปล่า) แต่ถ้าไม่มีการ
-    // พิมพ์รหัสแบบ CODE-QTY เลย (แชทคุยเล่นทั่วไป) ยังเงียบเหมือนเดิม กันบอทไปตอบ
-    // ข้อความที่ไม่เกี่ยวกับการสั่งของ
-    if (Object.keys(orderMap).length > 0 || notFoundCodes.length > 0) {
-      var nfList = notFoundCodes.join(', ');
-      var nfMsg = lang === 'mm'
-        ? ('❌ ကုန်ပစ္စည်းကုဒ် "' + nfList + '" ကို ရှာမတွေ့ပါ။ ကုဒ်ကို ပြန်စစ်ပေးပါ')
-        : ('❌ ไม่พบรหัสสินค้า "' + nfList + '" กรุณาตรวจสอบรหัสอีกครั้งค่ะ');
-      sendReply(replyToken, nfMsg);
-    }
+    // หารหัสสินค้าไม่เจอสักตัว (หรือไม่มีการพิมพ์รหัสแบบ CODE-QTY เลย) — ไม่ต้องตอบกลับ
+    // อะไรเลย (ยืนยันจากผู้ใช้ 2026-09-01 ให้เงียบเสมอ แม้พิมพ์รหัสชัดเจนแต่หาไม่เจอ)
     return;
   }
 
