@@ -278,21 +278,19 @@ def render(tab1, products, customers, customer_map):
                     st.session_state["_prev_pay"] = _cur_pay
                 _delivery_opts = ["ส่งพัสดุ", "ฝากของ", "รับแล้ว"]
 
-                # ── รายการสินค้า: เพิ่มสินค้า+สถานะ | ตะกร้า | สรุปยอด ──────────────
-                with st.container(key="sale_status_cart_summary_row"):
-                    _status_col, _cart_col, _summary_col = st.columns([1.05, 1.85, 1.0], gap="small")
+                # ── สถานะรายการ: แถวเต็มความกว้างของตัวเอง ─────────────────────
+                with st.container(key="sale_status_panel", border=True):
+                    st.markdown("**สถานะรายการ**")
+                    with st.container(key="sale_status_subrow"):
+                        _sc1, _sc2, _sc3 = st.columns(3)
+                    m_delivery = _sc1.radio("การรับของ", _delivery_opts, key="m_delivery", index=None)
+                    m_pay  = _sc2.radio("การจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
+                    m_bill = _sc3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], key="m_bill", index=None)
+                    m_bill_no = st.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
 
-                with _status_col:
-                    with st.container(key="sale_status_panel", border=True):
-                        st.markdown("**สถานะรายการ**")
-                        with st.container(key="sale_status_subrow"):
-                            _sc1, _sc2 = st.columns(2)
-                        m_delivery = _sc1.radio("การรับของ", _delivery_opts, key="m_delivery", index=None)
-                        m_pay  = _sc2.radio("การจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
-                        st.divider()
-                        with st.container(key="sale_status_bill_row"):
-                            m_bill = st.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], horizontal=True, key="m_bill", index=None)
-                            m_bill_no = st.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
+                # ── เพิ่มสินค้า+ตะกร้า | สรุปยอด ─────────────────────────────
+                with st.container(key="sale_cart_summary_row"):
+                    _cart_col, _summary_col = st.columns([1.85, 1.0], gap="small")
 
                 with _cart_col:
                     _qtext_ver = st.session_state.get("_qtext_ver", 0)

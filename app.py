@@ -767,11 +767,6 @@ div[data-baseweb="popover"]:has(ul[data-testid="stSelectboxVirtualDropdown"]) [d
     font-size: 0.95rem !important;
     white-space: nowrap !important;
 }
-[class*="st-key-sale_status_bill_row"] [data-testid="stRadio"] > div[role="radiogroup"] {
-    flex-direction: row !important;
-    gap: 24px !important;
-}
-
 /* ── Bordered containers (st.container(border=True)) — flat card ──
    NOTE: this Streamlit version (1.56) no longer wraps bordered containers
    in a separate `stVerticalBlockBorderWrapper` div (confirmed via DOM
@@ -893,41 +888,32 @@ label,
     line-height: 1.5 !important;
 }
 
-/* ── Responsive: stack บันทึกขาย status|cart|summary row below ~1100px ──
-   Below this width the 3-way split gets too narrow to read comfortably —
-   stack full-width instead, which also puts ยอดสรุป (summary) as its own
-   full-width box at the bottom. Raised from an earlier, too-eager 1400px
-   now that the inner สถานะรับของ|สถานะจ่าย split (below) protects itself
-   via a container query instead of depending on this same breakpoint. */
+/* ── Responsive: stack บันทึกขาย เพิ่มสินค้า|สรุปยอด row below ~1100px ──
+   สถานะรายการ ย้ายไปเป็นแถวเต็มความกว้างของตัวเองแล้ว (ดู sale_status_panel/
+   sale_status_subrow ด้านล่าง) เหลือแค่ 2 คอลัมน์นี้ — cart_col ได้สัดส่วนกว้างขึ้น
+   กว่าเดิม (1.85/2.85 ≈ 65% แทน 1.85/3.9 ≈ 47% ของหน้าตอนไม่ตัด) breakpoint นี้ยังไม่ได้
+   ปรับตามพื้นที่ที่กว้างขึ้น เผื่อลดลงได้อีกถ้า Playwright screenshot ยืนยันว่าไม่จำเป็น
+   ต้องเข้มขนาดเดิม */
 @media (max-width: 1100px) {
-    [class*="st-key-sale_status_cart_summary_row"] [data-testid="stHorizontalBlock"] {
+    [class*="st-key-sale_cart_summary_row"] [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
     }
-    [class*="st-key-sale_status_cart_summary_row"] [data-testid="stColumn"] {
+    [class*="st-key-sale_cart_summary_row"] [data-testid="stColumn"] {
         width: 100% !important;
         flex: 1 1 100% !important;
         min-width: 100% !important;
     }
 }
 
-/* ── สถานะรับของ|สถานะจ่าย sub-columns: stack based on their OWN rendered
-   width (container query), not viewport width — this way they self-protect
-   whether the outer row above has stacked yet or not, at any window size. */
-[class*="st-key-sale_status_cart_summary_row"] [data-testid="stColumn"]:first-child {
-    container-type: inline-size;
-}
-/* Streamlit เองยังบังคับ flex: 1 1 100%/width: 100%/min-width ต่อคอลัมน์นี้อยู่ดี
-   (พบว่าเกิดแม้ _status_col เองกว้างเกิน 700px แล้ว — ไม่ได้ขึ้นกับ container query
-   threshold 200px ด้านล่างเลย ต้อง override ทั้ง flex/width ไม่ใช่แค่ min-width
-   เพราะ flex-basis: 100% เดิมทำให้ 2 คอลัมน์ขอพื้นที่ 200% รวมกัน เกินแถวเสมอ ต้อง wrap
-   แม้ min-width จะเล็กพอแล้วก็ตาม) ให้ flexbox ตัดสินใจเองว่าจะพอวางแถวเดียวกันไหม —
-   ค่อยให้ @container ด้านล่างบังคับซ้อนเต็มจริงๆ เฉพาะตอน _status_col แคบเกิน 200px */
+/* ── การรับของ|การจ่าย|สถานะบิล sub-columns: สถานะรายการ ตอนนี้เป็นแถวเต็มความกว้าง
+   ของหน้าเอง (ไม่ได้ถูกบีบเป็นคอลัมน์แคบเหมือนก่อน) จึงมีพื้นที่จริงมากกว่าเดิมมาก —
+   ผ่อน min-width เบาๆ พอ (ตาม pattern เดียวกับ hist_edit_top_row/hist_edit_status_row
+   ใน history_all_ui.py ที่ได้ผลแล้ว) แทนการบังคับ fixed-% แบบเดิมที่ต้องใช้ตอนคอลัมน์
+   ยังแคบ 27% — มี fallback stack เต็มความกว้างตอนจอแคบจริงๆ (มือถือ) ด้วย */
 [class*="st-key-sale_status_subrow"] [data-testid="stColumn"] {
-    width: 47% !important;
-    flex: 0 1 47% !important;
     min-width: 140px !important;
 }
-@container (max-width: 200px) {
+@media (max-width: 560px) {
     [class*="st-key-sale_status_subrow"] [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
     }
