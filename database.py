@@ -1527,6 +1527,52 @@ def get_ecommerce_order_profit_summary(
 
 
 @st.cache_data(ttl=120)
+def get_ecommerce_combined_summary(start_date: str, end_date: str, warn_pct: float = 0.0) -> dict:
+    """รวมกำไร/ขาดทุน/PV ข้ามทุกแพลตฟอร์ม (Shopee/Lazada/TikTok ทุกร้าน) ในช่วงเวลาเดียว —
+    ฟังก์ชัน get_ecommerce_* อื่นๆ กรองทีละ platform เดียวเสมอ อันนี้ใช้ตอบคำถามภาพรวม
+    "ทั้งหมดขาดทุนหรือเปล่า / PV รวมเท่าไหร่" โดยไม่ต้องสลับแพลตฟอร์มเอง คืน
+    {total_profit, total_loss, net, total_pv, pending_qty (รวมทุกแพลตฟอร์ม),
+    loss_orders_df (ออเดอร์ขาดทุนจริง กำไร<0 ทุกแพลตฟอร์มรวมกัน มีคอลัมน์ "แพลตฟอร์ม" เพิ่ม
+    เรียงขาดทุนมากสุดขึ้นก่อน)}"""
+    platforms = sorted({s["platform"] for s in get_ecommerce_shops()})
+    total_profit = 0.0
+    total_loss = 0.0
+    total_pv = 0.0
+    total_pending_qty = 0
+    loss_frames = []
+    for platform in platforms:
+        summary = get_ecommerce_order_profit_summary(start_date, end_date, platform=platform)
+        total_profit += summary["total_profit"]
+        total_loss += summary["total_loss"]
+
+        margin_df, pending_qty = get_ecommerce_product_margin_df(start_date, end_date, platform=platform)
+        total_pending_qty += pending_qty
+        if not margin_df.empty:
+            total_pv += float(margin_df["PV"].sum())
+
+        anomaly_df = get_ecommerce_order_anomaly_df(start_date, end_date, platform=platform, warn_pct=warn_pct)
+        if not anomaly_df.empty:
+            loss_df = anomaly_df[anomaly_df["กำไร"] < 0].copy()
+            if not loss_df.empty:
+                loss_df.insert(0, "แพลตฟอร์ม", ecom_calc.PLATFORM_LABELS.get(platform, platform))
+                loss_frames.append(loss_df)
+
+    loss_orders_df = pd.concat(loss_frames, ignore_index=True) if loss_frames else pd.DataFrame()
+    if not loss_orders_df.empty:
+        loss_orders_df.sort_values("กำไร", ascending=True, inplace=True)
+        loss_orders_df.reset_index(drop=True, inplace=True)
+
+    return {
+        "total_profit": round(total_profit, 2),
+        "total_loss": round(total_loss, 2),
+        "net": round(total_profit + total_loss, 2),
+        "total_pv": round(total_pv, 2),
+        "pending_qty": total_pending_qty,
+        "loss_orders_df": loss_orders_df,
+    }
+
+
+@st.cache_data(ttl=120)
 def get_ecommerce_monthly_summary(platform: str = "shopee", shop_name: str = None) -> pd.DataFrame:
     """สรุปยอดขาย/กำไร E-commerce รายเดือน (ตาม sale_date) — กำไร/ขาดทุนใช้สูตรเดียวกับ
     get_ecommerce_order_profit_summary (รายออเดอร์ ไม่ใช่ net รายสินค้า) จึงบวกข้ามเดือน

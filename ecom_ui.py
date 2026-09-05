@@ -661,9 +661,41 @@ def _render_platform_totals_banner(date_from: str, date_to: str):
             """, unsafe_allow_html=True)
 
 
+def _render_combined_summary(date_from: str, date_to: str):
+    """ภาพรวมกำไร/ขาดทุน/PV รวมทุกแพลตฟอร์ม (Shopee/Lazada/TikTok ทุกร้าน) ในช่วงเวลาเดียว —
+    ตอบคำถาม "ทั้งหมดขาดทุนหรือเปล่า / มีคะแนนรวมเท่าไหร่" โดยไม่ต้องสลับแพลตฟอร์มเอง
+    (radio ด้านล่างยังกรองทีละแพลตฟอร์มเหมือนเดิมสำหรับดูรายละเอียด)"""
+    summary = db.get_ecommerce_combined_summary(date_from, date_to)
+    if not summary["total_profit"] and not summary["total_loss"] and not summary["total_pv"]:
+        return
+
+    st.markdown("**ภาพรวมทุกช่องทางรวมกัน**")
+    _cols = st.columns(4)
+    with _cols[0]: _metric_card("กำไรรวม (ทุกช่องทาง)", f"฿{summary['total_profit']:,.0f}", _PROFIT_GREEN)
+    with _cols[1]: _metric_card("ขาดทุนรวม (ทุกช่องทาง)", f"฿{summary['total_loss']:,.0f}", _LOSS_RED)
+    with _cols[2]: _metric_card("สุทธิ", f"฿{summary['net']:,.0f}", _PROFIT_GREEN if summary["net"] >= 0 else _LOSS_RED)
+    with _cols[3]: _metric_card("คะแนนรวม (PV)", f"{summary['total_pv']:,.0f} PV")
+
+    if summary["pending_qty"]:
+        st.caption(f"ℹ️ มี {summary['pending_qty']:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน — ยังไม่รวมในตัวเลขข้างบน")
+
+    _loss_df = summary["loss_orders_df"]
+    if not _loss_df.empty:
+        st.warning(f"⚠️ พบ {len(_loss_df)} ออเดอร์ที่ขาดทุนจริง (กำไร < 0) เมื่อรวมทุกช่องทาง")
+        st.dataframe(
+            _loss_df.style.format({"ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}", "กำไร": "{:,.2f}"}),
+            width="stretch", hide_index=True,
+        )
+    else:
+        st.success("✅ ไม่พบออเดอร์ที่ขาดทุนจริงในช่วงนี้ (ทุกช่องทาง)")
+
+
 def _render_sales_profit():
     margin_from, margin_to, (mc3,) = _date_range_inputs("ecom_margin", n_cols=3)
     margin_warn_pct = mc3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_margin_warn_pct")
+
+    _render_combined_summary(str(margin_from), str(margin_to))
+    st.divider()
 
     _render_platform_totals_banner(str(margin_from), str(margin_to))
     st.divider()
