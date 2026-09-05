@@ -1974,6 +1974,12 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
         return {"synced_orders": 0, "sales_rows": 0, "unmatched": []}
     aff_rows = _retry(lambda: get_supabase().table("tiktok_affiliate_orders").select("*")
                        .eq("shop_name", shop_name).execute()).data
+    # เช็คสินค้าที่ map ไว้แล้ว (จากรอบ sync ก่อนหน้า) ใส่ product_id ให้เลยตอน insert —
+    # เดิมฟังก์ชันนี้ hardcode "product_id": None เสมอ ต่อให้ SKU เคย map แล้วก็ตาม
+    # ทำให้แถวใหม่ทุกครั้งที่ sync ไม่ถูกนับกำไร/PV เลยจนกว่าจะมีคนไป "Map สินค้า" ซ้ำ
+    # อีกรอบ — แต่ SKU ที่ map แล้วจะไม่โผล่ในรายการที่ต้อง map อีก เลยไม่มีทางกดซ้ำได้
+    # เจอตอนช่วยผู้ใช้เช็คกำไร TikTok จริง 2026-09-05 (20 SKU map ไว้แล้วแต่กำไรออกมา 0)
+    prod_map = get_ecommerce_product_map()
     aff_by_order: dict[str, list[dict]] = defaultdict(list)
     sku_name_lookup: dict[str, str] = {}
     for r in aff_rows:
@@ -1993,7 +1999,8 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
             for a in _aff:
                 sales_rows.append({
                     "id": str(uuid.uuid4()), "platform": "tiktok", "shop_name": shop_name,
-                    "order_sn": oid, "sale_date": _sale_date, "product_id": None,
+                    "order_sn": oid, "sale_date": _sale_date,
+                    "product_id": prod_map.get(("tiktok", a["sku_id"]), {}).get("product_id"),
                     "item_id_platform": a["sku_id"], "item_name": a.get("item_name") or a["sku_id"],
                     "qty": a.get("qty") or 1, "item_price": a.get("payment_amount") or 0,
                     "order_status": a.get("order_status"), "net_amount": 0,
@@ -2016,7 +2023,8 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
             _item_name = sku_name_lookup.get(_sku) or f"TikTok SKU {_sku}"
             sales_rows.append({
                 "id": str(uuid.uuid4()), "platform": "tiktok", "shop_name": shop_name,
-                "order_sn": oid, "sale_date": _sale_date, "product_id": None,
+                "order_sn": oid, "sale_date": _sale_date,
+                "product_id": prod_map.get(("tiktok", _sku), {}).get("product_id"),
                 "item_id_platform": _sku, "item_name": _item_name,
                 "qty": _qty, "item_price": inc.get("gross_revenue") or 0,
                 "order_status": inc.get("transaction_type"), "net_amount": 0,
