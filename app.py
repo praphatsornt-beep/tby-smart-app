@@ -763,6 +763,14 @@ div[data-baseweb="popover"]:has(ul[data-testid="stSelectboxVirtualDropdown"]) [d
 [class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:nth-of-type(2):has(input:checked) {
     background-color: var(--tby-green) !important;
 }
+/* "รับแล้ว" (การรับของ ตัวที่ 3) และ "เปิดบิลแล้ว" (สถานะบิล ตัวที่ 2) — พื้นเขียว
+   ตามที่ผู้ใช้ขอ 2026-09-05 (แทนสีส้ม default) */
+[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การรับของ"] label:nth-of-type(3):has(input:checked) {
+    background-color: var(--tby-green) !important;
+}
+[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="สถานะบิล"] label:nth-of-type(2):has(input:checked) {
+    background-color: var(--tby-green) !important;
+}
 /* ── Bordered containers (st.container(border=True)) — flat card ──
    NOTE: this Streamlit version (1.56) no longer wraps bordered containers
    in a separate `stVerticalBlockBorderWrapper` div (confirmed via DOM
@@ -884,22 +892,13 @@ label,
     line-height: 1.5 !important;
 }
 
-/* ── Responsive: stack บันทึกขาย เพิ่มสินค้า|สรุปยอด row below ~1100px ──
-   สถานะรายการ ย้ายไปเป็นแถวเต็มความกว้างของตัวเองแล้ว (ดู sale_status_panel/
-   sale_status_subrow ด้านล่าง) เหลือแค่ 2 คอลัมน์นี้ — cart_col ได้สัดส่วนกว้างขึ้น
-   กว่าเดิม (1.85/2.85 ≈ 65% แทน 1.85/3.9 ≈ 47% ของหน้าตอนไม่ตัด) breakpoint นี้ยังไม่ได้
-   ปรับตามพื้นที่ที่กว้างขึ้น เผื่อลดลงได้อีกถ้า Playwright screenshot ยืนยันว่าไม่จำเป็น
-   ต้องเข้มขนาดเดิม */
-@media (max-width: 1100px) {
-    [class*="st-key-sale_cart_summary_row"] [data-testid="stHorizontalBlock"] {
-        flex-wrap: wrap !important;
-    }
-    [class*="st-key-sale_cart_summary_row"] [data-testid="stColumn"] {
-        width: 100% !important;
-        flex: 1 1 100% !important;
-        min-width: 100% !important;
-    }
-}
+/* ── บันทึกขาย เพิ่มสินค้า|สรุปยอด row: ให้พฤติกรรมตรงกับ ส่งของ (_ship_cart_col/
+   _ship_summary_col ใช้สัดส่วน [1.9, 1.0] แบบเดียวกันโดยไม่มี CSS override ใด ๆ เลย
+   และไม่ล้มเต็มความกว้างจนกว่าจอจะแคบจริง ๆ) — เดิมมี @media(max-width:1100px) บังคับ
+   ล้มเต็มความกว้างทันที ทำให้ที่ ~1100px บันทึกขาย ล้มไปแล้วแต่ ส่งของ ยังอยู่บรรทัดเดียว
+   (พบจาก screenshot เทียบสองแท็บที่ 1100px 2026-09-05) ตอนนี้สัดส่วนคอลัมน์เกือบเท่ากัน
+   (1.85/2.85 ≈ 65% เท่ากับ 1.9/2.9 ≈ 65.5%) จึงตัด breakpoint นี้ทิ้ง ให้พึ่ง Streamlit
+   ธรรมชาติเหมือน ส่งของ ทุกประการแทน */
 
 /* ── การรับของ|การจ่าย|สถานะบิล sub-columns: สถานะรายการ ตอนนี้เป็นแถวเต็มความกว้าง
    ของหน้าเอง (ไม่ได้ถูกบีบเป็นคอลัมน์แคบเหมือนก่อน) จึงมีพื้นที่จริงมากกว่าเดิมมาก —
