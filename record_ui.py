@@ -295,61 +295,62 @@ def render(tab1, products, customers, customer_map):
                 with _cart_col:
                     _qtext_ver = st.session_state.get("_qtext_ver", 0)
                     _qtext_key = f"q_text_{_qtext_ver}"
-                    with st.container(border=True):
-                        st.markdown("**เพิ่มสินค้า**")
-                        q_text = st.text_input(
-                            "รหัสสินค้า",
-                            placeholder="พิมพ์รหัสสินค้า เช่น tf2581-3 หรือ tf2581 3 (3 ชิ้น) — Enter เพื่อเพิ่มเลย",
-                            key=_qtext_key, label_visibility="collapsed",
-                        )
-                        _q_submit = st.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", width="stretch")
-                        if _q_submit or q_text.strip():
-                            _qf, _qu = _parse_quick_order(q_text or "", products)
-                            if _qf:
-                                _cart_add_items(_cart_key, _qf)
-                                st.session_state["_qtext_ver"] = _qtext_ver + 1
-                                st.session_state["_qtext_refocus"] = True
-                                st.rerun()
-                            elif _qu:
-                                # ไม่เจอ/ไม่ชัดเจน — ไม่ rerun เพื่อให้ error ค้างให้เห็น
-                                # (ไม่ bump version ด้วย เพื่อให้ข้อความเดิมยังอยู่ให้แก้ไขต่อได้)
-                                st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_qu)}")
+                    _add_box = st.container(border=True)
+                    _add_box.markdown("**เพิ่มสินค้า**")
+                    _qc1, _qc2 = _add_box.columns([4, 1])
+                    q_text = _qc1.text_input(
+                        "รหัสสินค้า",
+                        placeholder="พิมพ์รหัสสินค้า เช่น tf2581-3 หรือ tf2581 3 (3 ชิ้น) — Enter เพื่อเพิ่มเลย",
+                        key=_qtext_key, label_visibility="collapsed",
+                    )
+                    _q_submit = _qc2.button("📋 เพิ่ม", key=f"q_to_cart_{_qtext_ver}", type="primary", width="stretch")
+                    if _q_submit or q_text.strip():
+                        _qf, _qu = _parse_quick_order(q_text or "", products)
+                        if _qf:
+                            _cart_add_items(_cart_key, _qf)
+                            st.session_state["_qtext_ver"] = _qtext_ver + 1
+                            st.session_state["_qtext_refocus"] = True
+                            st.rerun()
+                        elif _qu:
+                            # ไม่เจอ/ไม่ชัดเจน — ไม่ rerun เพื่อให้ error ค้างให้เห็น
+                            # (ไม่ bump version ด้วย เพื่อให้ข้อความเดิมยังอยู่ให้แก้ไขต่อได้)
+                            st.error(f"❌ ไม่พบ/ไม่ชัดเจน: {', '.join(_qu)}")
 
-                        # กด Enter แล้วเคอร์เซอร์หลุดโฟกัส (รีรันสร้าง input ใหม่ทุกครั้ง
-                        # เพราะ key เป็น version-suffixed) — โฟกัสกลับให้อัตโนมัติ ไม่ต้องเอา
-                        # เมาส์มาคลิกซ้ำเพื่อพิมพ์รหัสถัดไปต่อได้เลย — ต้องเช็ค flag ก่อนว่า
-                        # rerun รอบนี้เกิดจากการเพิ่มสินค้าจริงๆ ไม่งั้น script แย่งโฟกัสไป 2
-                        # วินาทีทุกครั้งที่หน้ารีรัน (เช่น คลิก selectbox อื่น) ทำให้ต้องคลิก
-                        # ซ้ำหลายทีกว่าเคอร์เซอร์จะไปอยู่ในช่องที่ตั้งใจจะคลิกจริง
-                        if st.session_state.pop("_qtext_refocus", False):
-                            st.iframe(
-                                """
-                                <script>
-                                (function() {
-                                    try { window.parent.focus(); } catch (e) {}
-                                    var tries = 0;
-                                    function tryFocus() {
-                                        tries++;
-                                        try {
-                                            var doc = window.parent.document;
-                                            var inputs = doc.querySelectorAll('input[placeholder*="พิมพ์รหัสสินค้า"]');
-                                            var input = null;
-                                            for (var i = inputs.length - 1; i >= 0; i--) {
-                                                if (inputs[i].offsetParent !== null) { input = inputs[i]; break; }
-                                            }
-                                            if (input && doc.activeElement !== input) {
-                                                input.focus({preventScroll: true});
-                                                input.click();
-                                            }
-                                        } catch (e) {}
-                                        if (tries < 20) { setTimeout(tryFocus, 100); }
-                                    }
-                                    requestAnimationFrame(tryFocus);
-                                })();
-                                </script>
-                                """,
-                                height=1,
-                            )
+                    # กด Enter แล้วเคอร์เซอร์หลุดโฟกัส (รีรันสร้าง input ใหม่ทุกครั้ง
+                    # เพราะ key เป็น version-suffixed) — โฟกัสกลับให้อัตโนมัติ ไม่ต้องเอา
+                    # เมาส์มาคลิกซ้ำเพื่อพิมพ์รหัสถัดไปต่อได้เลย — ต้องเช็ค flag ก่อนว่า
+                    # rerun รอบนี้เกิดจากการเพิ่มสินค้าจริงๆ ไม่งั้น script แย่งโฟกัสไป 2
+                    # วินาทีทุกครั้งที่หน้ารีรัน (เช่น คลิก selectbox อื่น) ทำให้ต้องคลิก
+                    # ซ้ำหลายทีกว่าเคอร์เซอร์จะไปอยู่ในช่องที่ตั้งใจจะคลิกจริง
+                    if st.session_state.pop("_qtext_refocus", False):
+                        st.iframe(
+                            """
+                            <script>
+                            (function() {
+                                try { window.parent.focus(); } catch (e) {}
+                                var tries = 0;
+                                function tryFocus() {
+                                    tries++;
+                                    try {
+                                        var doc = window.parent.document;
+                                        var inputs = doc.querySelectorAll('input[placeholder*="พิมพ์รหัสสินค้า"]');
+                                        var input = null;
+                                        for (var i = inputs.length - 1; i >= 0; i--) {
+                                            if (inputs[i].offsetParent !== null) { input = inputs[i]; break; }
+                                        }
+                                        if (input && doc.activeElement !== input) {
+                                            input.focus({preventScroll: true});
+                                            input.click();
+                                        }
+                                    } catch (e) {}
+                                    if (tries < 20) { setTimeout(tryFocus, 100); }
+                                }
+                                requestAnimationFrame(tryFocus);
+                            })();
+                            </script>
+                            """,
+                            height=1,
+                        )
 
                     m_extra_weight_g = st.number_input(
                         "⚖️ น้ำหนักเพิ่มเติม (กก.) — ของอื่นที่ไม่ใช่สินค้าในระบบ",
