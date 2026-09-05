@@ -929,6 +929,12 @@ label,
 [class*="st-key-hist_edit_status_row"] [data-testid="stColumn"] {
     min-width: 100px !important;
 }
+
+/* ── คำนวณยอด: checkbox "📦 จัดส่ง" ตัดคำเป็น "📦 จัด" / "ส่ง" คนละบรรทัดตอนคอลัมน์
+   ถูกบีบแคบ (พบที่ ~700px) — กันไม่ให้ label ของ checkbox ขึ้นบรรทัดใหม่กลางคำ */
+[class*="st-key-calc_ship_row"] [data-testid="stCheckbox"] label p {
+    white-space: nowrap !important;
+}
 </style>
 """, unsafe_allow_html=True)
 

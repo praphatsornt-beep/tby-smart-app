@@ -1584,15 +1584,16 @@ def render(tab1, products, customers, customer_map):
                     placeholder="2500 2500 1000 (หรือลัด 2500*2 1000)",
                     help="แบ่งของที่สั่งเป็นหลายบิลย่อยให้ยอด PV แต่ละบิลใกล้เคียงตัวเลขที่ใส่ไว้ที่สุด",
                 )
-                _ccb1, _ccb2, _ccb3 = st.columns([1, 2, 1])
-                _calc_ship_chk = _ccb1.checkbox("📦 จัดส่ง", key=f"_calc_ship_chk_v{_calc_ver}")
-                _calc_zip = ""
-                if _calc_ship_chk:
-                    _calc_zip = _ccb2.text_input(
-                        "รหัสไปรษณีย์", key=f"_calc_zip_v{_calc_ver}", max_chars=5,
-                        placeholder="12170",
-                    )
-                _calc_cod_chk = _ccb3.checkbox("COD", key=f"_calc_cod_chk_v{_calc_ver}")
+                with st.container(key="calc_ship_row"):
+                    _ccb1, _ccb2, _ccb3 = st.columns([1.3, 1.9, 0.9])
+                    _calc_ship_chk = _ccb1.checkbox("📦 จัดส่ง", key=f"_calc_ship_chk_v{_calc_ver}")
+                    _calc_zip = ""
+                    if _calc_ship_chk:
+                        _calc_zip = _ccb2.text_input(
+                            "รหัสไปรษณีย์", key=f"_calc_zip_v{_calc_ver}", max_chars=5,
+                            placeholder="12170",
+                        )
+                    _calc_cod_chk = _ccb3.checkbox("COD", key=f"_calc_cod_chk_v{_calc_ver}")
             with _calc_col2:
                 _calc_cust_opts = ["— ไม่ระบุ —"] + sorted(_calc_cust_map.keys(), key=str.casefold)
                 _calc_cust_sel  = st.selectbox("ลูกค้า (ถ้าจะส่ง LINE)", _calc_cust_opts,
