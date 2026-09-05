@@ -32,7 +32,14 @@ def aggregate_product_margin(
     pending_since/pending_until: sale_date เก่าสุด/ล่าสุดในบรรดาที่ยังไม่ปิดยอด หรือ
     None ถ้าไม่มีค้าง — ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์ ใช้
     บอกผู้ใช้ว่าต้องไปโหลดรายงาน Income ของช่วงวันที่เท่าไหร่มาอัปโหลดเพิ่ม ไม่ใช่แค่
-    จำนวนชิ้นเฉยๆ) ตัวคูณ units_per_pack ใช้กับ SKU ที่ map เป็นแพ็ครวม"""
+    จำนวนชิ้นเฉยๆ) ตัวคูณ units_per_pack ใช้กับ SKU ที่ map เป็นแพ็ครวม
+
+    แถวที่ถูกคืนสินค้าเต็มจำนวน (net_qty <= 0 หลังหัก returned_qty) ไม่เอามารวมกำไร/
+    ขาดทุนต่อสินค้าเลย — ไม่ใช่การขาดทุนของสินค้าที่ขายได้จริง แต่เป็นค่าปรับ/ยอดหักคืน
+    ของ Lazada/Shopee ต่อออเดอร์นั้นเอง ถ้ารวมเข้าไปจะเอา net_amount ติดลบของแถวคืนสินค้า
+    (ไม่มี qty ที่ขายจับคู่ด้วยเลย) ไปหารเฉลี่ยกับสินค้าชิ้นอื่นที่ขายได้จริงในสินค้าเดียวกัน
+    ทำให้กำไร/ชิ้นของสินค้านั้นดูแย่เกินจริง (ยอดขาดทุนจริงยังเห็นได้ที่ระดับออเดอร์ใน
+    order_anomaly_rows ตามปกติ — ไม่ได้ถูกซ่อนไปเฉยๆ)"""
     agg: dict[str, dict] = {}
     pending_qty = 0.0
     pending_since = None
@@ -50,6 +57,8 @@ def aggregate_product_margin(
                 pending_since = _sd
             if _sd and (pending_until is None or _sd > pending_until):
                 pending_until = _sd
+            continue
+        if net_qty <= 0:
             continue
         a = agg.setdefault(pid, {"qty": 0.0, "net": 0.0, "gross": 0.0})
         a["qty"] += net_qty

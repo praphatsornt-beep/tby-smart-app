@@ -88,6 +88,21 @@ class TestAggregateProductMargin(unittest.TestCase):
         agg, _, _, _ = ecom_calc.aggregate_product_margin(sales, {"D"}, {}, "shopee")
         self.assertEqual(agg["P1"]["qty"], 7.0)
 
+    def test_fully_returned_line_excluded_from_margin(self):
+        # คืนสินค้าเต็มจำนวน (net_qty = 0) พร้อมค่าปรับติดลบจาก Lazada — ไม่ควรถูกรวม
+        # เข้าไปในกำไร/ขาดทุนของสินค้าเลย (ไม่มี qty ที่ขายจับคู่ด้วย)
+        sales = [
+            {"order_sn": "F1", "product_id": "P1", "item_id_platform": "SKU1",
+             "qty": 2, "returned_qty": 2, "net_amount": -74.46, "item_price": 476,
+             "order_status": "สินค้าถูกคืน"},
+            {"order_sn": "F2", "product_id": "P1", "item_id_platform": "SKU1",
+             "qty": 1, "returned_qty": 0, "net_amount": 175.04, "item_price": 242,
+             "order_status": "ยืนยันแล้ว"},
+        ]
+        agg, pending, _, _ = ecom_calc.aggregate_product_margin(sales, {"F1", "F2"}, {}, "lazada")
+        self.assertEqual(pending, 0)
+        self.assertEqual(agg["P1"], {"qty": 1.0, "net": 175.04, "gross": 242.0})
+
     def test_units_per_pack_multiplier_applied(self):
         sales = [{
             "order_sn": "E", "product_id": "P1", "item_id_platform": "SKU-PACK",
