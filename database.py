@@ -22,6 +22,29 @@ def _retry(fn, attempts: int = 2, delay: float = 0.5):
             else:
                 raise
 
+
+def _fetch_all(build_query, page_size: int = 1000) -> list[dict]:
+    """ดึงข้อมูลทุกแถวแบบแบ่งหน้า — Supabase/PostgREST จำกัดผลลัพธ์แต่ละ request ไว้ที่
+    1,000 แถวเป็นค่าเริ่มต้นเสมอ (ไม่ error ใดๆ เลย ตัดข้อมูลทิ้งเงียบๆ) พบจริง
+    2026-09-06: ร้าน ts_shop56 (Shopee) มี ecommerce_sales เกิน 1,800 แถว ทำให้ query
+    ไหนก็ตามที่ไม่กรอง shop_name (เช่น "รวมทุกร้าน") ได้ข้อมูลแค่ 1,000 แถวแรกเงียบๆ
+    กระทบตัวเลขกำไร/ขาดทุน/PV รวมของทุกฟังก์ชันที่ query แบบไม่กรอง shop_name มาตลอด
+    (ต่างจาก .in_() ที่ CLAUDE.md เตือนเรื่อง URL length ไว้แล้ว — อันนี้เป็นข้อจำกัดคนละ
+    จุด เกิดแม้ query ไม่มี .in_() เลย)
+
+    build_query: ฟังก์ชันไม่รับ argument คืน query builder ใหม่ทุกครั้ง (ยังไม่เรียก
+    .execute()) ต้องเป็นฟังก์ชัน ไม่ใช่ builder สำเร็จรูป เพราะ builder เดิมเรียกซ้ำไม่ได้
+    หลัง .execute() ไปแล้วครั้งหนึ่ง"""
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        page = _retry(lambda _o=offset: build_query().range(_o, _o + page_size - 1).execute()).data
+        rows.extend(page)
+        if len(page) < page_size:
+            break
+        offset += page_size
+    return rows
+
 load_dotenv()
 
 
@@ -1235,10 +1258,10 @@ def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
     Income เสมอ (เงินโอนช้ากว่าวันสั่งซื้อ) ถ้า Income มีช่วงวันที่ Order.all ไม่ครอบคลุม
     (ก่อนหรือหลังช่วงของ Order.all) แปลว่ามีออเดอร์ที่ยืนยันยอดโอนแล้วแต่ไม่มีรายละเอียด
     สินค้า — สัญญาณว่าอัปโหลด Order.all ไม่ครบ ควรอัปโหลดเพิ่ม"""
-    sales = _retry(lambda: get_supabase().table("ecommerce_sales").select("shop_name,sale_date")
-                    .eq("platform", platform).execute()).data
-    incomes = _retry(lambda: get_supabase().table("ecommerce_order_income").select("shop_name,transfer_date")
-                      .eq("platform", platform).execute()).data
+    sales = _fetch_all(lambda: get_supabase().table("ecommerce_sales").select("shop_name,sale_date")
+                        .eq("platform", platform).order("id"))
+    incomes = _fetch_all(lambda: get_supabase().table("ecommerce_order_income").select("shop_name,transfer_date")
+                          .eq("platform", platform).order("order_sn"))
 
     by_shop_sales: dict[str, list[str]] = {}
     for r in sales:
@@ -1283,9 +1306,9 @@ def get_ecommerce_unmatched_income_orders_df(platform: str = "shopee") -> pd.Dat
     ยังไม่ครอบคลุมออเดอร์นี้ หรือหลุดหายตอนอัปโหลด) — เช็คทีละออเดอร์จริง แม่นยำกว่า
     get_ecommerce_import_coverage_df ที่เทียบแค่ช่วง min/max วันที่รวม เพราะ transfer_date
     อาจตกอยู่ในช่วงที่ Order.all "ดูเหมือน" ครอบคลุมแล้ว แต่ออเดอร์เฉพาะนั้นกลับหายไปจริงๆ"""
-    incomes = _retry(lambda: get_supabase().table("ecommerce_order_income").select(
+    incomes = _fetch_all(lambda: get_supabase().table("ecommerce_order_income").select(
         "order_sn,shop_name,transfer_date,net_amount"
-    ).eq("platform", platform).execute()).data
+    ).eq("platform", platform).order("order_sn"))
     if not incomes:
         return pd.DataFrame()
     income_sns = [r["order_sn"] for r in incomes]
@@ -1388,8 +1411,8 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
     เดียวกัน — แถวสุดท้ายรับเศษปัดเหลือ (หลักการเดียวกับแบ่งจ่ายบางส่วนใน
     บันทึกขาย) เรียกซ้ำได้ปลอดภัย (คำนวณใหม่ทับของเดิมทุกครั้ง)"""
     db = get_supabase()
-    incomes = _retry(lambda: db.table("ecommerce_order_income").select("order_sn,net_amount")
-                      .eq("platform", platform).execute()).data
+    incomes = _fetch_all(lambda: db.table("ecommerce_order_income").select("order_sn,net_amount")
+                          .eq("platform", platform).order("order_sn"))
     if not incomes:
         return 0
     income_map = {r["order_sn"]: float(r["net_amount"]) for r in incomes}
@@ -1438,7 +1461,7 @@ def get_ecommerce_product_margin_df(
     _income_q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", platform)
     if shop_name:
         _income_q = _income_q.eq("shop_name", shop_name)
-    settled_sns = ecom_calc.settled_order_sns(_retry(lambda: _income_q.execute()).data)
+    settled_sns = ecom_calc.settled_order_sns(_fetch_all(lambda: _income_q.order("order_sn")))
 
     _sales_q = get_supabase().table("ecommerce_sales").select(
         "order_sn,product_id,item_id_platform,qty,returned_qty,net_amount,item_price,order_status,sale_date"
@@ -1446,7 +1469,7 @@ def get_ecommerce_product_margin_df(
      .not_.is_("product_id", "null")
     if shop_name:
         _sales_q = _sales_q.eq("shop_name", shop_name)
-    sales = _retry(lambda: _sales_q.execute()).data
+    sales = _fetch_all(lambda: _sales_q.order("id"))
     if not sales:
         return pd.DataFrame(), 0, None, None
 
@@ -1506,7 +1529,7 @@ def _ecommerce_order_costs(
         _income_q = _income_q.eq("shop_name", shop_name)
     incomes = {
         r["order_sn"]: (r["shop_name"], float(r.get("net_amount") or 0))
-        for r in _retry(lambda: _income_q.execute()).data
+        for r in _fetch_all(lambda: _income_q.order("order_sn"))
     }
     if not incomes:
         return incomes, {}
@@ -1516,7 +1539,7 @@ def _ecommerce_order_costs(
     ).eq("platform", platform).gte("sale_date", start_date).lte("sale_date", end_date)
     if shop_name:
         _sales_q = _sales_q.eq("shop_name", shop_name)
-    sales = _retry(lambda: _sales_q.execute()).data
+    sales = _fetch_all(lambda: _sales_q.order("id"))
     if not sales:
         return incomes, {}
 
@@ -1637,7 +1660,7 @@ def get_ecommerce_monthly_summary(platform: str = "shopee", shop_name: str = Non
     _q = get_supabase().table("ecommerce_sales").select("sale_date,item_price").eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _retry(lambda: _q.execute()).data
+    rows = _fetch_all(lambda: _q.order("id"))
     if not rows:
         return pd.DataFrame()
 
@@ -1670,8 +1693,8 @@ def get_ecommerce_platform_totals_df(start_date: str, end_date: str) -> pd.DataF
     """ยอดขาย/จำนวนชิ้นรวม แยกตามแพลตฟอร์ม (Shopee/Lazada/TikTok พร้อมกันทุกร้าน) สำหรับ
     ช่วงวันที่ที่กำหนด (ตาม sale_date) — ต่างจากฟังก์ชัน ecommerce อื่นๆ ที่กรองทีละ platform
     เดียวเสมอ อันนี้ตั้งใจให้เห็นสัดส่วนเทียบกันข้าม platform คืน [{platform, ยอดขาย, จำนวนชิ้น}, ...]"""
-    rows = _retry(lambda: get_supabase().table("ecommerce_sales").select("platform,item_price,qty,returned_qty")
-                  .gte("sale_date", start_date).lte("sale_date", end_date).execute()).data
+    rows = _fetch_all(lambda: get_supabase().table("ecommerce_sales").select("platform,item_price,qty,returned_qty")
+                       .gte("sale_date", start_date).lte("sale_date", end_date).order("id"))
     if not rows:
         return pd.DataFrame()
 
@@ -1694,7 +1717,7 @@ def get_ecommerce_units_trend_df(platform: str = "shopee", shop_name: str = None
     _q = get_supabase().table("ecommerce_sales").select("sale_date,qty,returned_qty").eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _retry(lambda: _q.execute()).data
+    rows = _fetch_all(lambda: _q.order("id"))
     if not rows:
         return pd.DataFrame()
 
@@ -1726,7 +1749,7 @@ def get_ecommerce_shipping_overcharge_df(
     ).eq("platform", platform).gte("transfer_date", start_date).lte("transfer_date", end_date)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _retry(lambda: _q.execute()).data
+    rows = _fetch_all(lambda: _q.order("order_sn"))
     if not rows:
         return pd.DataFrame()
 
@@ -1758,11 +1781,11 @@ def get_ecommerce_shipping_overcharge_monthly_df(
     get_ecommerce_shipping_overcharge_df แต่ sum รายเดือนแทนคืนรายออเดอร์ ใช้ทำกราฟแท่งรายเดือน
     เรียงเดือนเก่า→ใหม่ shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
     _q = get_supabase().table("ecommerce_order_income").select(
-        "transfer_date,buyer_paid_shipping,shopee_subsidized_shipping,shipping_fee_charged"
+        "transfer_date,buyer_paid_shipping,shopee_subsidized_shipping,shipping_fee_charged,order_sn"
     ).eq("platform", platform).gte("transfer_date", start_date).lte("transfer_date", end_date)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _retry(lambda: _q.execute()).data
+    rows = _fetch_all(lambda: _q.order("order_sn"))
     if not rows:
         return pd.DataFrame()
 
@@ -1791,7 +1814,7 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = N
     ).eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _retry(lambda: _q.execute()).data
+    rows = _fetch_all(lambda: _q.order("order_sn"))
     problem = [
         r for r in rows
         if r.get("return_status") or r.get("order_status") == "ยกเลิกแล้ว" or float(r.get("returned_qty") or 0) > 0
@@ -1815,6 +1838,52 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = N
 
 
 @st.cache_data(ttl=120)
+def get_ecommerce_pending_income_df(platform: str = "shopee", shop_name: str = None) -> pd.DataFrame:
+    """รายการออเดอร์ (ไม่ใช่แค่ตัวเลขสรุปแบบ pending_qty ใน get_ecommerce_product_margin_df)
+    ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน — ใช้ไล่เช็คเป็นออเดอร์ๆ ว่าออเดอร์ไหน
+    กันแน่ที่ยังไม่ match ก่อนไปโหลดรายงาน Income มาอัปโหลดเพิ่ม เรียงวันที่เก่าสุดขึ้นก่อน
+    (เก่าสุด = ค้างนานสุด ควรตามให้ได้ก่อน) shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
+    _sales_q = get_supabase().table("ecommerce_sales").select(
+        "order_sn,shop_name,sale_date,item_name,product_id,qty,returned_qty,item_price,order_status,products(name)"
+    ).eq("platform", platform)
+    if shop_name:
+        _sales_q = _sales_q.eq("shop_name", shop_name)
+    sales = _fetch_all(lambda: _sales_q.order("id"))
+    if not sales:
+        return pd.DataFrame()
+
+    _income_q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", platform)
+    if shop_name:
+        _income_q = _income_q.eq("shop_name", shop_name)
+    settled_sns = ecom_calc.settled_order_sns(_fetch_all(lambda: _income_q.order("order_sn")))
+
+    rows = ecom_calc.pending_income_rows(sales, settled_sns)
+    df = pd.DataFrame(rows)
+    if not df.empty:
+        df.sort_values("วันที่สั่งซื้อ", ascending=True, inplace=True)
+    return df.reset_index(drop=True)
+
+
+@st.cache_data(ttl=120)
+def get_ecommerce_pending_income_df_all() -> pd.DataFrame:
+    """เหมือน get_ecommerce_pending_income_df แต่รวมทุกแพลตฟอร์ม/ทุกร้านไว้ตารางเดียว
+    (เพิ่มคอลัมน์ "แพลตฟอร์ม") ใช้ตอนผู้ใช้เลือกดู "ทั้งหมด" แทนการสลับดูทีละแพลตฟอร์ม"""
+    platforms = sorted({s["platform"] for s in get_ecommerce_shops()})
+    frames = []
+    for platform in platforms:
+        df = get_ecommerce_pending_income_df(platform=platform)
+        if not df.empty:
+            df = df.copy()
+            df.insert(0, "แพลตฟอร์ม", ecom_calc.PLATFORM_LABELS.get(platform, platform))
+            frames.append(df)
+    combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if not combined.empty:
+        combined.sort_values("วันที่สั่งซื้อ", ascending=True, inplace=True)
+        combined.reset_index(drop=True, inplace=True)
+    return combined
+
+
+@st.cache_data(ttl=120)
 def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None, shop_name: str = None) -> pd.DataFrame:
     """platform: กรองเฉพาะแพลตฟอร์มเดียว (None = รวมทุกแพลตฟอร์ม) shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
     _q = get_supabase().table("ecommerce_sales").select(
@@ -1824,7 +1893,8 @@ def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None,
         _q = _q.eq("platform", platform)
     if shop_name:
         _q = _q.eq("shop_name", shop_name)
-    rows = _retry(lambda: _q.order("sale_date", desc=True).execute()).data
+    _q = _q.order("sale_date", desc=True).order("id")
+    rows = _fetch_all(lambda: _q)
     if not rows:
         return pd.DataFrame()
 
@@ -1854,7 +1924,7 @@ def get_ecommerce_product_map() -> dict:
     """คืน dict {(platform, platform_item_id): {"product_id", "units_per_pack"}} —
     units_per_pack ใช้กับ SKU ที่เป็นแพ็ครวม (เช่น ยาสีฟัน 3 หลอด) ที่ 1 ออเดอร์
     จริงคือสินค้าเดี่ยวหลายชิ้น (ค่าเริ่มต้น 1 = ไม่ใช่แพ็ครวม)"""
-    rows = _retry(lambda: get_supabase().table("ecommerce_product_map").select("*").execute()).data
+    rows = _fetch_all(lambda: get_supabase().table("ecommerce_product_map").select("*").order("id"))
     return {(r["platform"], r["platform_item_id"]): {
         "product_id": r["product_id"], "units_per_pack": float(r.get("units_per_pack") or 1),
     } for r in rows}
@@ -1874,9 +1944,9 @@ def upsert_ecommerce_product_map(rows: list[dict]) -> None:
 
 @st.cache_data(ttl=120)
 def get_unmapped_ecommerce_items(platform: str = "shopee") -> list[dict]:
-    rows = _retry(lambda: get_supabase().table("ecommerce_sales").select(
-        "item_id_platform,shop_name,item_name"
-    ).eq("platform", platform).is_("product_id", "null").execute()).data
+    rows = _fetch_all(lambda: get_supabase().table("ecommerce_sales").select(
+        "id,item_id_platform,shop_name,item_name"
+    ).eq("platform", platform).is_("product_id", "null").order("id"))
     seen = set()
     result = []
     for r in rows:
@@ -1911,10 +1981,10 @@ def upsert_tiktok_affiliate_orders(rows: list[dict]) -> None:
 
 @st.cache_data(ttl=120)
 def get_tiktok_affiliate_orders_df(shop_name: str = None) -> pd.DataFrame:
-    q = get_supabase().table("tiktok_affiliate_orders").select("*")
+    q = get_supabase().table("tiktok_affiliate_orders").select("*").order("order_created_at", desc=True).order("id")
     if shop_name:
         q = q.eq("shop_name", shop_name)
-    data = _retry(lambda: q.order("order_created_at", desc=True).execute()).data
+    data = _fetch_all(lambda: q)
     return pd.DataFrame(data)
 
 
@@ -1946,10 +2016,10 @@ def upsert_tiktok_order_income(rows: list[dict]) -> None:
 
 @st.cache_data(ttl=120)
 def get_tiktok_order_income_df(shop_name: str = None) -> pd.DataFrame:
-    q = get_supabase().table("tiktok_order_income").select("*")
+    q = get_supabase().table("tiktok_order_income").select("*").order("order_created_at", desc=True).order("id")
     if shop_name:
         q = q.eq("shop_name", shop_name)
-    data = _retry(lambda: q.order("order_created_at", desc=True).execute()).data
+    data = _fetch_all(lambda: q)
     return pd.DataFrame(data)
 
 
@@ -1967,7 +2037,7 @@ def get_tiktok_pending_sync_count(shop_name: str = None) -> int:
     q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", "tiktok")
     if shop_name:
         q = q.eq("shop_name", shop_name)
-    synced_ids = {r["order_sn"] for r in _retry(lambda: q.execute()).data}
+    synced_ids = {r["order_sn"] for r in _fetch_all(lambda: q.order("order_sn"))}
     return len(all_ids - synced_ids)
 
 
@@ -1979,17 +2049,17 @@ def get_tiktok_unmatched_organic_orders(shop_name: str = None) -> pd.DataFrame:
     ที่นับรวมทุกออเดอร์ที่ยังไม่ sync (แค่ยังไม่ได้กดปุ่ม) — อันนี้กดปุ่ม sync ไปก็ไม่หาย
     เพราะ parse ไม่ผ่านจริงๆ ใช้แสดงในแท็บ '⚠️ ตรวจสอบปัญหา' ให้ผู้ใช้เห็นว่าต้องเช็ค
     ไฟล์ต้นทางเอง ไม่ใช่แค่กดซิงค์ซ้ำ"""
-    q = get_supabase().table("tiktok_order_income").select("order_id,product_summary,net_settlement,order_created_at")
+    q = get_supabase().table("tiktok_order_income").select("id,order_id,product_summary,net_settlement,order_created_at")
     if shop_name:
         q = q.eq("shop_name", shop_name)
-    income_rows = _retry(lambda: q.execute()).data
+    income_rows = _fetch_all(lambda: q.order("id"))
     if not income_rows:
         return pd.DataFrame()
 
-    aq = get_supabase().table("tiktok_affiliate_orders").select("order_id")
+    aq = get_supabase().table("tiktok_affiliate_orders").select("id,order_id")
     if shop_name:
         aq = aq.eq("shop_name", shop_name)
-    aff_order_ids = {r["order_id"] for r in _retry(lambda: aq.execute()).data}
+    aff_order_ids = {r["order_id"] for r in _fetch_all(lambda: aq.order("id"))}
 
     rows = [{
         "วันที่": r.get("order_created_at"), "เลขออเดอร์": r["order_id"],
@@ -2011,12 +2081,12 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
     ออเดอร์ตามที่มีในตาราง affiliate อยู่แล้ว (ถูกต้อง) แต่ถ้าออเดอร์นั้นไม่มีข้อมูล
     affiliate เลย (organic + หลายสินค้า) จะจับได้แค่ SKU แรกจาก product_summary — เคส
     นี้ยังไม่เจอจริงในข้อมูลที่มี (ดู tests/ไม่ครอบ เป็น edge case ที่รู้ตัวไว้)"""
-    income_rows = _retry(lambda: get_supabase().table("tiktok_order_income").select("*")
-                          .eq("shop_name", shop_name).execute()).data
+    income_rows = _fetch_all(lambda: get_supabase().table("tiktok_order_income").select("*")
+                              .eq("shop_name", shop_name).order("id"))
     if not income_rows:
         return {"synced_orders": 0, "sales_rows": 0, "unmatched": []}
-    aff_rows = _retry(lambda: get_supabase().table("tiktok_affiliate_orders").select("*")
-                       .eq("shop_name", shop_name).execute()).data
+    aff_rows = _fetch_all(lambda: get_supabase().table("tiktok_affiliate_orders").select("*")
+                           .eq("shop_name", shop_name).order("id"))
     # เช็คสินค้าที่ map ไว้แล้ว (จากรอบ sync ก่อนหน้า) ใส่ product_id ให้เลยตอน insert —
     # เดิมฟังก์ชันนี้ hardcode "product_id": None เสมอ ต่อให้ SKU เคย map แล้วก็ตาม
     # ทำให้แถวใหม่ทุกครั้งที่ sync ไม่ถูกนับกำไร/PV เลยจนกว่าจะมีคนไป "Map สินค้า" ซ้ำ
@@ -2116,16 +2186,16 @@ def reconcile_tiktok_cancelled_orders(status_map: dict[str, str], shop_name: str
         return {"affiliate_fixed": 0, "income_fixed": 0}
 
     db = get_supabase()
-    aff_rows = _retry(lambda: db.table("tiktok_affiliate_orders").select("order_id,sku_id,order_status")
-                       .eq("shop_name", shop_name).execute()).data
+    aff_rows = _fetch_all(lambda: db.table("tiktok_affiliate_orders").select("order_id,sku_id,order_status")
+                           .eq("shop_name", shop_name).order("order_id"))
     to_fix_aff = [r for r in aff_rows if r["order_id"] in cancelled_ids and r["order_status"] != "ยกเลิกแล้ว"]
     for r in to_fix_aff:
         _retry(lambda _r=r: db.table("tiktok_affiliate_orders").update({"order_status": "ยกเลิกแล้ว"})
                .eq("order_id", _r["order_id"]).eq("sku_id", _r["sku_id"]).execute())
 
     aff_order_ids = {r["order_id"] for r in aff_rows}
-    income_rows = _retry(lambda: db.table("tiktok_order_income").select("order_id,transaction_type")
-                          .eq("shop_name", shop_name).execute()).data
+    income_rows = _fetch_all(lambda: db.table("tiktok_order_income").select("order_id,transaction_type")
+                              .eq("shop_name", shop_name).order("order_id"))
     to_fix_inc = [r for r in income_rows if r["order_id"] in cancelled_ids and r["order_id"] not in aff_order_ids
                   and r["transaction_type"] != "ยกเลิกแล้ว"]
     for r in to_fix_inc:

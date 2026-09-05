@@ -15,6 +15,29 @@ def settled_order_sns(income_rows: list[dict]) -> set[str]:
     return {r["order_sn"] for r in income_rows}
 
 
+def pending_income_rows(sales_rows: list[dict], settled_sns: set[str]) -> list[dict]:
+    """แถวออเดอร์ (ไม่ใช่แค่ตัวเลขสรุป) ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน —
+    ไม่รวมออเดอร์ที่ยกเลิกแล้ว (จะไม่มี Income มาให้รอเลย ไม่ใช่ "ยังไม่มา") ใช้ไล่เช็ค
+    เป็นออเดอร์ๆ ว่าออเดอร์ไหนกันแน่ที่ยังไม่ match ต่างจาก pending_qty/pending_since ใน
+    aggregate_product_margin ที่เป็นแค่ตัวเลขสรุปรวม"""
+    rows = []
+    for r in sales_rows:
+        if r.get("order_status") == "ยกเลิกแล้ว" or r["order_sn"] in settled_sns:
+            continue
+        pid = r.get("product_id")
+        qty = float(r.get("qty") or 0) - float(r.get("returned_qty") or 0)
+        rows.append({
+            "วันที่สั่งซื้อ": r.get("sale_date"),
+            "ร้าน": r.get("shop_name"),
+            "เลขออเดอร์": r["order_sn"],
+            "สินค้า": (r.get("products") or {}).get("name") or r.get("item_name") or pid or "ยังไม่ map",
+            "จำนวน": qty,
+            "ยอด": float(r.get("item_price") or 0),
+            "สถานะออเดอร์": r.get("order_status") or "-",
+        })
+    return rows
+
+
 def shipping_overcharge_extra(row: dict) -> float:
     """ส่วนต่างค่าส่งที่ Shopee หักจากร้านเกินกว่าที่ประเมินไว้ล่วงหน้า —
     estimated = ค่าส่งที่ผู้ซื้อจ่าย + Shopee ออกให้ (ประเมินตอนสั่งซื้อ)

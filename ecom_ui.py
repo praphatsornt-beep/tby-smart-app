@@ -1034,6 +1034,35 @@ def _render_issues():
     _sel_shop = st.selectbox("ร้าน", _shop_opts, key=f"ecom_issues_shop_filter_{_platform}")
     _shop_filter = None if _sel_shop == "ทั้งหมด" else _sel_shop
 
+    # ── ออเดอร์ที่ยังไม่มี Income มา match ────────────────────────────────
+    st.subheader("ออเดอร์ที่ยังไม่มี Income มา match")
+    st.caption("รายการออเดอร์ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน — ยังไม่ถือว่าขาดทุน/กำไร (ไม่รวมออเดอร์ที่ยกเลิกแล้ว) เรียงเก่าสุดขึ้นก่อน ค้างนานสุดควรตามให้ได้ก่อน")
+    _pending_scope_opts = ["🌐 ทั้งหมด (ทุกช่องทาง)"] + [f"{_PLATFORMS.get(s['platform'], s['platform'])} — {s['shop_name']}" for s in _shops]
+    _pending_scope_map = {opt: (s["platform"], s["shop_name"]) for opt, s in zip(_pending_scope_opts[1:], _shops)}
+    _sel_pending_scope = st.selectbox("ช่องทาง", _pending_scope_opts, key="ecom_pending_income_scope")
+    _pending_platform, _pending_shop = _pending_scope_map.get(_sel_pending_scope, (None, None))
+    if _pending_platform is None:
+        pending_income_df = db.get_ecommerce_pending_income_df_all()
+    else:
+        pending_income_df = db.get_ecommerce_pending_income_df(platform=_pending_platform, shop_name=_pending_shop)
+    if pending_income_df.empty:
+        st.success("✅ ไม่มีออเดอร์ที่ค้าง Income")
+    else:
+        st.warning(f"⚠️ มี {len(pending_income_df)} ออเดอร์ที่ยังไม่มี Income มา match")
+        st.dataframe(
+            pending_income_df.style.format({"ยอด": "{:,.2f}"}),
+            width="stretch", hide_index=True,
+        )
+        st.download_button(
+            "⬇ Export Excel",
+            _to_excel_bytes(pending_income_df, "รอ Income"),
+            file_name=f"ecom_pending_income_{date.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="ecom_pending_income_export",
+        )
+
+    st.divider()
+
     # ── ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) — หรือดูทุกออเดอร์ก็ได้ ──────
     st.subheader("ออเดอร์ที่กำไรผิดปกติ")
     st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")

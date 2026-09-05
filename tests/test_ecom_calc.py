@@ -12,6 +12,35 @@ class TestSettledOrderSns(unittest.TestCase):
         self.assertEqual(ecom_calc.settled_order_sns([]), set())
 
 
+class TestPendingIncomeRows(unittest.TestCase):
+    def test_settled_order_excluded(self):
+        sales = [{"order_sn": "A", "sale_date": "2026-03-01", "shop_name": "s1",
+                  "item_price": 100, "qty": 1, "order_status": "สำเร็จ"}]
+        self.assertEqual(ecom_calc.pending_income_rows(sales, {"A"}), [])
+
+    def test_cancelled_order_excluded_even_if_unsettled(self):
+        sales = [{"order_sn": "B", "sale_date": "2026-03-01", "shop_name": "s1",
+                  "item_price": 100, "qty": 1, "order_status": "ยกเลิกแล้ว"}]
+        self.assertEqual(ecom_calc.pending_income_rows(sales, set()), [])
+
+    def test_unsettled_uncancelled_order_included(self):
+        sales = [{"order_sn": "C", "sale_date": "2026-03-01", "shop_name": "s1",
+                  "item_price": 100, "qty": 2, "returned_qty": 1, "order_status": "สำเร็จ",
+                  "product_id": "P1", "products": {"name": "สินค้า A"}}]
+        rows = ecom_calc.pending_income_rows(sales, set())
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["เลขออเดอร์"], "C")
+        self.assertEqual(rows[0]["สินค้า"], "สินค้า A")
+        self.assertEqual(rows[0]["จำนวน"], 1.0)
+
+    def test_falls_back_to_item_name_when_unmapped(self):
+        sales = [{"order_sn": "D", "sale_date": "2026-03-01", "shop_name": "s1",
+                  "item_price": 100, "qty": 1, "order_status": "สำเร็จ",
+                  "product_id": None, "item_name": "SKU-XYZ"}]
+        rows = ecom_calc.pending_income_rows(sales, set())
+        self.assertEqual(rows[0]["สินค้า"], "SKU-XYZ")
+
+
 class TestShippingOverchargeExtra(unittest.TestCase):
     def test_overcharged(self):
         row = {"buyer_paid_shipping": 30, "shopee_subsidized_shipping": 10, "shipping_fee_charged": 55}
