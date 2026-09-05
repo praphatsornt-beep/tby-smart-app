@@ -926,6 +926,17 @@ label,
         min-width: 100% !important;
     }
 }
+
+/* ── ประวัติทั้งหมด → แก้ไขรายการ: ลูกค้า/สินค้า/จำนวน และ สถานะบิล/สถานะจ่าย/
+   สถานะของ ใหญ่เกินไปตอนย่อจอ — Streamlit เองบังคับแต่ละคอลัมน์เป็น
+   min-width: calc(100% - ...) ทันทีที่จอแคบกว่า ~640px (ไม่ใช่ media query ของ
+   ไฟล์นี้) ทำให้ 3 ช่องซ้อนเต็มความกว้างทีละแถว ผ่อน min-width ตรงนี้ให้เล็กลงพอ
+   ให้ flexbox คำนวณเองว่าจะอยู่แถวเดียวกันได้ไหม — ถ้าจอแคบจริงๆ จนไม่พอ ก็จะ wrap
+   ลงบรรทัดใหม่เองตามธรรมชาติของ flex-wrap (ไม่ต้องกำหนด breakpoint เพิ่มเอง) */
+[class*="st-key-hist_edit_top_row"] [data-testid="stColumn"],
+[class*="st-key-hist_edit_status_row"] [data-testid="stColumn"] {
+    min-width: 100px !important;
+}
 </style>
 """, unsafe_allow_html=True)
 

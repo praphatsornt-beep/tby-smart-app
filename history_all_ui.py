@@ -330,13 +330,14 @@ def render(customers):
             cur_receipt_idx = 0 if et["initial_qty_received"] > 0 else 1
 
             with st.form("edit_transaction"):
-                ec1, ec2, ec3 = st.columns([2, 2, 1])
-                with ec1:
-                    e_customer = st.selectbox("ลูกค้า", cust_names, index=cur_cust_idx)
-                with ec2:
-                    e_product = st.selectbox("สินค้า", prod_names, index=cur_prod_idx)
-                with ec3:
-                    e_qty = st.number_input("จำนวน", min_value=1, value=int(et["qty"]), step=1)
+                with st.container(key="hist_edit_top_row"):
+                    ec1, ec2, ec3 = st.columns([2, 2, 1])
+                    with ec1:
+                        e_customer = st.selectbox("ลูกค้า", cust_names, index=cur_cust_idx)
+                    with ec2:
+                        e_product = st.selectbox("สินค้า", prod_names, index=cur_prod_idx)
+                    with ec3:
+                        e_qty = st.number_input("จำนวน", min_value=1, value=int(et["qty"]), step=1)
 
                 e_sel_prod = product_map_e[e_product]
                 e_total = float(e_sel_prod["price"]) * e_qty
@@ -347,13 +348,14 @@ def render(customers):
                 em2.metric("ยอดรวม", f"{e_total:,.0f} บาท")
                 em3.metric("PV รวม", f"{e_total_pts:.0f}")
 
-                es1, es2, es3 = st.columns(3)
-                with es1:
-                    e_bill = st.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=cur_bill_idx, horizontal=True)
-                with es2:
-                    e_pay = st.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"], index=cur_pay_idx, horizontal=True)
-                with es3:
-                    e_receipt = st.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"], index=cur_receipt_idx, horizontal=True)
+                with st.container(key="hist_edit_status_row"):
+                    es1, es2, es3 = st.columns(3)
+                    with es1:
+                        e_bill = st.radio("สถานะบิล", ["เปิดบิลแล้ว", "ยังไม่เปิดบิล"], index=cur_bill_idx, horizontal=True)
+                    with es2:
+                        e_pay = st.radio("สถานะจ่าย", ["จ่ายแล้ว", "ค้างจ่าย"], index=cur_pay_idx, horizontal=True)
+                    with es3:
+                        e_receipt = st.radio("สถานะของ", ["รับของแล้ว", "ฝากของ"], index=cur_receipt_idx, horizontal=True)
 
                 ed1, ed2 = st.columns([3, 1])
                 with ed1:
