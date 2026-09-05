@@ -23,6 +23,7 @@ import shopee_import
 import lazada_import
 import tiktok_affiliate_import
 import tiktok_income_import
+from ui_helpers import _to_excel_bytes
 
 
 _ECOM_TABS = ["📥 นำเข้าข้อมูล", "💰 ยอดขาย/กำไร", "🎯 TikTok Affiliate", "⚠️ ตรวจสอบปัญหา", "⚙️ ตั้งค่า"]
@@ -969,21 +970,39 @@ def _render_issues():
     _sel_shop = st.selectbox("ร้าน", _shop_opts, key=f"ecom_issues_shop_filter_{_platform}")
     _shop_filter = None if _sel_shop == "ทั้งหมด" else _sel_shop
 
-    # ── ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) ───────────────────────
+    # ── ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) — หรือดูทุกออเดอร์ก็ได้ ──────
     st.subheader("ออเดอร์ที่กำไรผิดปกติ")
     st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")
     anomaly_from, anomaly_to, (ac3,) = _date_range_inputs("ecom_anomaly", n_cols=3)
     anomaly_warn_pct = ac3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
-    anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), platform=_platform, warn_pct=anomaly_warn_pct, shop_name=_shop_filter)
+    _show_all_orders = st.checkbox(
+        "แสดงทุกออเดอร์ (ไม่ใช่แค่ที่ผิดปกติ) — เทียบราย ออเดอร์/สินค้า/ยอดที่ได้รับ/กำไร-ขาดทุน ทีละแถว",
+        key="ecom_anomaly_show_all",
+    )
+    # ตั้ง warn_pct สูงพ้นช่วงจริง (margin % ไม่มีทางถึง) เพื่อให้ order_anomaly_rows
+    # ไม่กรองออเดอร์ไหนออกเลย — ใช้ query เดิมซ้ำ ไม่ต้องเขียนฟังก์ชันใหม่
+    _query_warn_pct = 1_000_000 if _show_all_orders else anomaly_warn_pct
+    anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), platform=_platform, warn_pct=_query_warn_pct, shop_name=_shop_filter)
     if anomaly_df.empty:
-        st.success("✅ ไม่พบออเดอร์ที่กำไรผิดปกติในช่วงนี้")
+        st.success("✅ ไม่มีออเดอร์ในช่วงนี้" if _show_all_orders else "✅ ไม่พบออเดอร์ที่กำไรผิดปกติในช่วงนี้")
     else:
-        st.warning(f"⚠️ พบ {len(anomaly_df)} ออเดอร์ที่กำไรผิดปกติ")
+        if _show_all_orders:
+            _n_loss = (anomaly_df["กำไร"] < 0).sum()
+            st.info(f"ทั้งหมด {len(anomaly_df)} ออเดอร์ — ขาดทุน {_n_loss} · กำไร {len(anomaly_df) - _n_loss}")
+        else:
+            st.warning(f"⚠️ พบ {len(anomaly_df)} ออเดอร์ที่กำไรผิดปกติ")
         st.dataframe(
             anomaly_df.style.format({
                 "ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}", "กำไร": "{:,.2f}",
             }),
             width="stretch", hide_index=True,
+        )
+        st.download_button(
+            "⬇ Export Excel",
+            _to_excel_bytes(anomaly_df, "ออเดอร์"),
+            file_name=f"ecom_{_platform}_order_profit_{date.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="ecom_anomaly_export",
         )
 
     st.divider()
