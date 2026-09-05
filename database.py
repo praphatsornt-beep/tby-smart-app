@@ -2054,6 +2054,45 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
     }
 
 
+def reconcile_tiktok_cancelled_orders(status_map: dict[str, str], shop_name: str) -> dict:
+    """แก้ order_status ให้ตรงกับความจริงสำหรับออเดอร์ที่ "ยกเลิกแล้ว" จริง — status_map
+    มาจาก tiktok_order_status_import.parse_order_statuses() (ไฟล์ "ทั้งหมด คำสั่งซื้อ")
+    ซึ่งเป็นแหล่งเดียวที่บอกสถานะยกเลิกตรงๆ ("ยกเลิกแล้ว" เป๊ะ) ต่างจาก order_status ใน
+    tiktok_affiliate_orders/tiktok_order_income.transaction_type ที่ใช้คำศัพท์อื่น
+    ("ไม่มีสิทธิ์"/"ชำระแล้ว") ไม่เคยตรงกับ "ยกเลิกแล้ว" ที่ ecom_calc.aggregate_order_costs
+    เช็คอยู่เลย ทำให้ออเดอร์ที่ยกเลิกจริง (พัสดุ COD ตีกลับ) ไม่เคยถูกตัดออกจากต้นทุน
+
+    แก้แค่ 2 จุดที่จำเป็น (ไม่แตะ schema ใหม่เลย): (1) tiktok_affiliate_orders.order_status
+    สำหรับออเดอร์ที่มีข้อมูลนายหน้า (2) tiktok_order_income.transaction_type สำหรับ
+    ออเดอร์ organic (ไม่มีข้อมูลนายหน้า) — ทั้งสองจุดนี้คือ field ที่ sync_tiktok_to_ecommerce()
+    ใช้กำหนด order_status ของ sales_rows อยู่แล้ว แก้ตรงนี้แล้วเรียก sync ซ้ำ ผลจะไหลลง
+    ไป ecommerce_sales.order_status ถูกต้องเอง — ต้องรันซ้ำทุกครั้งที่อัปโหลดไฟล์
+    affiliate_orders ใหม่ทับ (upsert จะดึงค่า order_status เดิมจากไฟล์นั้นกลับมาทับอีก)"""
+    cancelled_ids = {oid for oid, status in status_map.items() if status == "ยกเลิกแล้ว"}
+    if not cancelled_ids:
+        return {"affiliate_fixed": 0, "income_fixed": 0}
+
+    db = get_supabase()
+    aff_rows = _retry(lambda: db.table("tiktok_affiliate_orders").select("order_id,sku_id,order_status")
+                       .eq("shop_name", shop_name).execute()).data
+    to_fix_aff = [r for r in aff_rows if r["order_id"] in cancelled_ids and r["order_status"] != "ยกเลิกแล้ว"]
+    for r in to_fix_aff:
+        _retry(lambda _r=r: db.table("tiktok_affiliate_orders").update({"order_status": "ยกเลิกแล้ว"})
+               .eq("order_id", _r["order_id"]).eq("sku_id", _r["sku_id"]).execute())
+
+    aff_order_ids = {r["order_id"] for r in aff_rows}
+    income_rows = _retry(lambda: db.table("tiktok_order_income").select("order_id,transaction_type")
+                          .eq("shop_name", shop_name).execute()).data
+    to_fix_inc = [r for r in income_rows if r["order_id"] in cancelled_ids and r["order_id"] not in aff_order_ids
+                  and r["transaction_type"] != "ยกเลิกแล้ว"]
+    for r in to_fix_inc:
+        _retry(lambda _r=r: db.table("tiktok_order_income").update({"transaction_type": "ยกเลิกแล้ว"})
+               .eq("order_id", _r["order_id"]).execute())
+
+    _clear_ecommerce_caches()
+    return {"affiliate_fixed": len(to_fix_aff), "income_fixed": len(to_fix_inc)}
+
+
 # ─── Shipments ────────────────────────────────────────────────────────────────
 
 def create_shipment(data: dict) -> None:

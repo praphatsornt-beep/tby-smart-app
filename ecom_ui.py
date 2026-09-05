@@ -23,6 +23,7 @@ import shopee_import
 import lazada_import
 import tiktok_affiliate_import
 import tiktok_income_import
+import tiktok_order_status_import
 from ui_helpers import _to_excel_bytes
 
 
@@ -391,6 +392,35 @@ def _render_tiktok_upload(shop_names: list[str]):
                     _msg += f" · ⚠️ {len(_sync_result['unmatched'])} ออเดอร์แกะสินค้าไม่ได้ (ดูที่แท็บ '⚠️ ตรวจสอบปัญหา')"
                 _set_flash("_ecom_tiktok_income_import_msg", "success", _msg)
             st.session_state["_ecom_tiktok_income_file_ver"] = _ti_ver + 1
+        st.rerun()
+
+    st.divider()
+
+    st.markdown("**🚫 สถานะยกเลิก/คืนพัสดุ**")
+    st.caption(
+        "รายงาน \"คำสั่งซื้อ > ทั้งหมด > Export ทุกคอลัมน์\" (ชีต \"OrderSKUList\") — ใช้แค่ "
+        "ตรวจว่าออเดอร์ไหนถูกยกเลิกจริง (พัสดุ COD ที่ลูกค้าปฏิเสธ/ถูกตีกลับ ฯลฯ) เพราะไฟล์ "
+        "ค่าคอมนายหน้า/ยอดขายสุทธิด้านบนไม่มีคำว่า \"ยกเลิกแล้ว\" ตรงๆ เลย ทำให้ออเดอร์ที่ยกเลิก "
+        "จริงเคยถูกนับเป็นขาดทุนเต็มต้นทุนมาตลอด (พบ 2026-09-05) — อัปโหลดไฟล์นี้ทุกครั้งหลัง "
+        "อัปเดตค่าคอมนายหน้า/ยอดขายสุทธิด้านบน เพื่อแก้ยอดขาดทุนให้ตรงจริง"
+    )
+    _ts_ver = st.session_state.get("_ecom_tiktok_status_file_ver", 0)
+    _show_flash("_ecom_tiktok_status_import_msg")
+    _ts_file = st.file_uploader("ไฟล์ทั้งหมด คำสั่งซื้อ...xlsx", type=["xlsx"], key=f"ecom_tiktok_status_file_{_ts_ver}")
+    if _ts_file and st.button("นำเข้าสถานะยกเลิก TikTok", key="ecom_import_tiktok_status", type="primary"):
+        with st.spinner("กำลังอ่านไฟล์..."):
+            _status_map = tiktok_order_status_import.parse_order_statuses(_ts_file)
+            if not _status_map:
+                _set_flash("_ecom_tiktok_status_import_msg", "warning", "⚠️ ไม่พบข้อมูลในไฟล์ (เช็คว่าเลือกชีต \"ทุกคอลัมน์\" ตอน Export)")
+            else:
+                _fix_result = db.reconcile_tiktok_cancelled_orders(_status_map, _tt_shop)
+                _n_cancelled = sum(1 for s in _status_map.values() if s == "ยกเลิกแล้ว")
+                _msg = f"✅ พบ {_n_cancelled} ออเดอร์ที่ยกเลิกแล้วในไฟล์ · แก้สถานะ {_fix_result['affiliate_fixed'] + _fix_result['income_fixed']} รายการในระบบ"
+                _sync_result = db.sync_tiktok_to_ecommerce(_tt_shop)
+                if _sync_result["sales_rows"]:
+                    _msg += f" · ซิงค์กำไรใหม่แล้ว {_sync_result['synced_orders']} ออเดอร์"
+                _set_flash("_ecom_tiktok_status_import_msg", "success", _msg)
+            st.session_state["_ecom_tiktok_status_file_ver"] = _ts_ver + 1
         st.rerun()
 
     _ti_df = db.get_tiktok_order_income_df(_tt_shop)
