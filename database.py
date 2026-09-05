@@ -1461,6 +1461,33 @@ def get_ecommerce_product_margin_df(
 
 
 @st.cache_data(ttl=120)
+def get_ecommerce_product_margin_df_all(start_date: str, end_date: str) -> tuple[pd.DataFrame, int, str | None]:
+    """เหมือน get_ecommerce_product_margin_df แต่รวมทุกแพลตฟอร์ม/ทุกร้านไว้ตารางเดียว
+    (เพิ่มคอลัมน์ "แพลตฟอร์ม" — สินค้าเดียวกันที่ขายหลายแพลตฟอร์มจะมีหลายแถว แถวละ
+    แพลตฟอร์ม เหมือนกับ loss_products_df ของ get_ecommerce_combined_summary) ใช้ตอน
+    ผู้ใช้เลือกดู "ทั้งหมด (ทุกช่องทาง)" แทนการสลับดูทีละแพลตฟอร์ม pending_qty/
+    pending_since รวมข้ามแพลตฟอร์มเหมือนกัน"""
+    platforms = sorted({s["platform"] for s in get_ecommerce_shops()})
+    frames = []
+    total_pending = 0
+    pending_since = None
+    for platform in platforms:
+        df, pending, since = get_ecommerce_product_margin_df(start_date, end_date, platform=platform)
+        total_pending += pending
+        if since and (pending_since is None or since < pending_since):
+            pending_since = since
+        if not df.empty:
+            df = df.rename(columns={f"ขายผ่าน {ecom_calc.PLATFORM_LABELS.get(platform, platform)} (ชิ้น)": "ขาย (ชิ้น)"})
+            df.insert(0, "แพลตฟอร์ม", ecom_calc.PLATFORM_LABELS.get(platform, platform))
+            frames.append(df)
+    combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if not combined.empty:
+        combined.sort_values("กำไรรวม", ascending=True, inplace=True)
+        combined.reset_index(drop=True, inplace=True)
+    return combined, total_pending, pending_since
+
+
+@st.cache_data(ttl=120)
 def _ecommerce_order_costs(
     start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
 ) -> tuple[dict, dict]:

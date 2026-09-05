@@ -757,49 +757,52 @@ def _render_sales_profit():
     _render_platform_totals_banner(str(margin_from), str(margin_to))
     st.divider()
 
+    # ช่องทาง: ตัวกรองเดียว "ทั้งหมด" + รายร้าน (ไม่ใช่แท็บแยกแพลตฟอร์มเหมือนเดิม — เดิม
+    # ต้องสลับแพลตฟอร์มทีละอันเพื่อดู ทำให้ต้องเห็นสรุป/การ์ดขาดทุนซ้ำกับด้านบนสุดของหน้า
+    # ทุกครั้ง เลือก "ทั้งหมด" แล้วดูตารางเดียวรวมทุกช่องทางแทน ไม่ต้องเทียบเคียงข้างกัน)
     _shops = db.get_ecommerce_shops()
-    _plat_opts = sorted({s["platform"] for s in _shops}, key=list(_PLATFORMS.keys()).index) if _shops else list(_PLATFORMS.keys())
-    _platform = st.radio(
-        "แพลตฟอร์ม", _plat_opts, format_func=lambda p: _PLATFORMS.get(p, p),
-        horizontal=True, key="ecom_profit_platform",
-    )
+    _scope_opts = ["🌐 ทั้งหมด (ทุกช่องทาง)"] + [f"{_PLATFORMS.get(s['platform'], s['platform'])} — {s['shop_name']}" for s in _shops]
+    _scope_map = {opt: (s["platform"], s["shop_name"]) for opt, s in zip(_scope_opts[1:], _shops)}
+    _sel_scope = st.selectbox("ช่องทาง", _scope_opts, key="ecom_profit_scope")
+    _platform, _shop_filter = _scope_map.get(_sel_scope, (None, None))
 
-    _unmapped_n = len(db.get_unmapped_ecommerce_items(_platform))
-    if _unmapped_n:
-        st.warning(f"⚠️ มี {_unmapped_n} รายการสินค้าที่ยังไม่ได้ map — ยอดขาย/กำไรของรายการนี้ยังไม่ถูกนับ ไปที่แท็บ '⚙️ ตั้งค่า' เพื่อ map สินค้า")
+    if _platform is not None:
+        _unmapped_n = len(db.get_unmapped_ecommerce_items(_platform))
+        if _unmapped_n:
+            st.warning(f"⚠️ มี {_unmapped_n} รายการสินค้าที่ยังไม่ได้ map — ยอดขาย/กำไรของรายการนี้ยังไม่ถูกนับ ไปที่แท็บ '⚙️ ตั้งค่า' เพื่อ map สินค้า")
 
-    if _platform == "tiktok":
-        _tt_pending = db.get_tiktok_pending_sync_count()
-        if _tt_pending:
-            st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ TikTok ค้างซิงค์ — ตัวเลขด้านล่างยังไม่รวมออเดอร์เหล่านี้ (ไปกดซิงค์ที่แท็บ '📥 นำเข้าข้อมูล')")
-
-    _shop_opts = ["ทั้งหมด"] + [s["shop_name"] for s in _shops if s["platform"] == _platform]
-    _sel_shop = st.selectbox("ร้าน", _shop_opts, key=f"ecom_profit_shop_filter_{_platform}")
-    _shop_filter = None if _sel_shop == "ทั้งหมด" else _sel_shop
+        if _platform == "tiktok":
+            _tt_pending = db.get_tiktok_pending_sync_count()
+            if _tt_pending:
+                st.warning(f"⚠️ มี {_tt_pending} ออเดอร์ TikTok ค้างซิงค์ — ตัวเลขด้านล่างยังไม่รวมออเดอร์เหล่านี้ (ไปกดซิงค์ที่แท็บ '📥 นำเข้าข้อมูล')")
 
     # "ค่าส่งเกิน" มีเฉพาะ Shopee (แพลตฟอร์มเดียวที่ไฟล์ export มีข้อมูลค่าส่ง) — ไม่ใส่ตัวเลือก
-    # นี้เลยตอนเลือกแพลตฟอร์มอื่น กันไม่ให้กดแล้วเจอหน้าว่างเปล่า (คีย์ pills ผูกกับ platform
-    # ด้วย กันปัญหาค่าที่เลือกไว้ค้างเป็นตัวเลือกที่หายไปตอนสลับแพลตฟอร์ม)
+    # นี้ตอนเลือก "ทั้งหมด"/แพลตฟอร์มอื่น กันไม่ให้กดแล้วเจอหน้าว่างเปล่า
     _view_opts = ["💰 กำไรต่อสินค้า", "📦 จำนวนที่ขาย"]
     if _platform == "shopee":
         _view_opts.append("🚚 ค่าส่งเกิน")
-    _view = _pills(_view_opts, f"ecom_profit_view_{_platform}")
+    _view = _pills(_view_opts, f"ecom_profit_view_{_platform or 'all'}")
 
     st.divider()
 
     if _view == "🚚 ค่าส่งเกิน":
         _render_ecom_shipping_view(_platform, _shop_filter)
     else:
-        margin_df, pending_qty, pending_since = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), platform=_platform, shop_name=_shop_filter)
-        if pending_qty:
+        if _platform is None:
+            margin_df, pending_qty, pending_since = db.get_ecommerce_product_margin_df_all(str(margin_from), str(margin_to))
+        else:
+            margin_df, pending_qty, pending_since = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), platform=_platform, shop_name=_shop_filter)
+            # db.get_ecommerce_product_margin_df() ตั้งชื่อคอลัมน์ตามแพลตฟอร์มจริง
+            # (เช่น "ขายผ่าน Lazada (ชิ้น)") — เปลี่ยนเป็นชื่อกลางให้ใช้ร่วมกันทุก view
+            margin_df = margin_df.rename(columns={f"ขายผ่าน {_PLATFORMS.get(_platform, _platform)} (ชิ้น)": "ขาย (ชิ้น)"})
+        # เลือก "ทั้งหมด" ข้อความค้างโอนซ้ำกับ _render_combined_summary ด้านบนสุดของหน้าแล้ว
+        # (ตัวเลขเดียวกัน) — โชว์แค่ตอนดูเฉพาะช่องทางเดียวเพื่อไม่ให้ซ้ำ
+        if pending_qty and _platform is not None:
             _since_txt = f" (ค้างมาตั้งแต่ {pd.to_datetime(pending_since).strftime('%d/%m/%Y')})" if pending_since else ""
             st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน{_since_txt} — ยังไม่รวมในตารางด้านล่าง (ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์ — อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
         if margin_df.empty:
             st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (แท็บ '⚙️ ตั้งค่า' → Map สินค้า)")
         else:
-            # db.get_ecommerce_product_margin_df() ตั้งชื่อคอลัมน์ตามแพลตฟอร์มจริง
-            # (เช่น "ขายผ่าน Lazada (ชิ้น)") — เปลี่ยนเป็นชื่อกลางให้ใช้ร่วมกันทุก view
-            margin_df = margin_df.rename(columns={f"ขายผ่าน {_PLATFORMS.get(_platform, _platform)} (ชิ้น)": "ขาย (ชิ้น)"})
             if _view == "💰 กำไรต่อสินค้า":
                 _render_ecom_profit_view(margin_df, margin_warn_pct, _platform, margin_from, margin_to, _shop_filter)
             else:
@@ -826,26 +829,32 @@ def _render_sales_profit():
 
 
 def _render_ecom_profit_view(margin_df, margin_warn_pct, platform, date_from, date_to, shop_filter):
-    st.caption(f"กำไร = ยอดเงินที่ {_PLATFORMS.get(platform, platform)} โอนเข้าจริง (หลังหักค่าธรรมเนียม/ค่าส่ง/ภาษีแล้ว) − ต้นทุน × จำนวนที่ขาย")
+    _all_channels = platform is None
+    if _all_channels:
+        # "ทั้งหมด" ไม่โชว์การ์ดสรุป/สินค้าที่ต้องรีบแก้ซ้ำอีกรอบ — ตัวเลขเดียวกันเป๊ะกับ
+        # การ์ด "ภาพรวมทุกช่องทางรวมกัน" ด้านบนสุดของหน้าแล้ว ข้ามไปที่ตารางรายละเอียดเลย
+        st.caption("กำไร = ยอดเงินที่แต่ละแพลตฟอร์มโอนเข้าจริง (หลังหักค่าธรรมเนียม/ค่าส่ง/ภาษีแล้ว) − ต้นทุน × จำนวนที่ขาย — ดูตัวเลขสรุปรวมทุกช่องทางได้จากการ์ดด้านบนสุดของหน้า")
+    else:
+        st.caption(f"กำไร = ยอดเงินที่ {_PLATFORMS.get(platform, platform)} โอนเข้าจริง (หลังหักค่าธรรมเนียม/ค่าส่ง/ภาษีแล้ว) − ต้นทุน × จำนวนที่ขาย")
 
-    _profit_summary = db.get_ecommerce_order_profit_summary(str(date_from), str(date_to), platform=platform, shop_name=shop_filter)
-    _total_profit = _profit_summary["total_profit"]
-    _total_loss   = _profit_summary["total_loss"]
-    _net_total    = _profit_summary["net"]
-    _total_qty    = margin_df["ขาย (ชิ้น)"].sum()
-    _total_pv     = margin_df["PV"].sum()
+        _profit_summary = db.get_ecommerce_order_profit_summary(str(date_from), str(date_to), platform=platform, shop_name=shop_filter)
+        _total_profit = _profit_summary["total_profit"]
+        _total_loss   = _profit_summary["total_loss"]
+        _net_total    = _profit_summary["net"]
+        _total_qty    = margin_df["ขาย (ชิ้น)"].sum()
+        _total_pv     = margin_df["PV"].sum()
 
-    _cols = st.columns(5)
-    with _cols[0]: _metric_card("กำไรรวม", f"฿{_total_profit:,.0f}", _PROFIT_GREEN)
-    with _cols[1]: _metric_card("ขาดทุนรวม", f"฿{_total_loss:,.0f}", _LOSS_RED)
-    with _cols[2]: _metric_card("สุทธิ", f"฿{_net_total:,.0f}", _PROFIT_GREEN if _net_total >= 0 else _LOSS_RED)
-    with _cols[3]: _metric_card("ขายรวม", f"{_total_qty:,.0f} ชิ้น")
-    with _cols[4]: _metric_card("PV รวม", f"{_total_pv:,.0f}")
-    st.caption(
-        "กำไรรวม/ขาดทุนรวม จัดเป็นรายออเดอร์ (บวกกันตรงๆ ข้ามช่วงเวลาได้) — ต่างจากตาราง "
-        "ด้านล่างที่สรุปสุทธิรายสินค้าตลอดทั้งช่วง สินค้าที่กำไรเดือนหนึ่งแต่ขาดทุนอีกเดือน "
-        "อาจทำให้ผลรวมในตารางไม่เท่ากับเอาแต่ละเดือนมาบวกกันตรงๆ"
-    )
+        _cols = st.columns(5)
+        with _cols[0]: _metric_card("กำไรรวม", f"฿{_total_profit:,.0f}", _PROFIT_GREEN)
+        with _cols[1]: _metric_card("ขาดทุนรวม", f"฿{_total_loss:,.0f}", _LOSS_RED)
+        with _cols[2]: _metric_card("สุทธิ", f"฿{_net_total:,.0f}", _PROFIT_GREEN if _net_total >= 0 else _LOSS_RED)
+        with _cols[3]: _metric_card("ขายรวม", f"{_total_qty:,.0f} ชิ้น")
+        with _cols[4]: _metric_card("PV รวม", f"{_total_pv:,.0f}")
+        st.caption(
+            "กำไรรวม/ขาดทุนรวม จัดเป็นรายออเดอร์ (บวกกันตรงๆ ข้ามช่วงเวลาได้) — ต่างจากตาราง "
+            "ด้านล่างที่สรุปสุทธิรายสินค้าตลอดทั้งช่วง สินค้าที่กำไรเดือนหนึ่งแต่ขาดทุนอีกเดือน "
+            "อาจทำให้ผลรวมในตารางไม่เท่ากับเอาแต่ละเดือนมาบวกกันตรงๆ"
+        )
 
     def _flag(row):
         if row["กำไรรวม"] < 0:
@@ -856,23 +865,24 @@ def _render_ecom_profit_view(margin_df, margin_warn_pct, platform, date_from, da
     margin_df = margin_df.copy()
     margin_df.insert(0, "สถานะ", margin_df.apply(_flag, axis=1))
 
-    _loss_df = margin_df[margin_df["สถานะ"] == "🔴 ขาดทุน"]
-    if not _loss_df.empty:
-        st.markdown("**⚠️ สินค้าที่ต้องรีบแก้**")
-        _pc = st.columns(min(len(_loss_df), 3))
-        for _i, (_, _r) in enumerate(_loss_df.iterrows()):
-            with _pc[_i % len(_pc)]:
-                _breakeven = _r.get("ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)") or 0
-                st.markdown(f"""
-                <div style="background:var(--tby-badge-bad-bg);border:1px solid {_LOSS_RED};border-radius:12px;padding:16px 18px;margin-bottom:10px">
-                  <div style="display:flex;justify-content:space-between;gap:10px">
-                    <span style="font:700 15px 'Sarabun',sans-serif">{_r['ชื่อสินค้า']}</span>
-                    <span style="font:500 12px monospace;color:var(--tby-muted)">{_r['รหัสสินค้า']}</span>
-                  </div>
-                  <div style="margin-top:8px"><span style="font:700 26px 'Prompt',sans-serif;color:{_LOSS_RED}">฿{_r['กำไร/ชิ้น']:,.1f}</span> <span style="font:600 13px 'Sarabun',sans-serif;color:var(--tby-muted)">/ ชิ้น</span></div>
-                  <div style="font:500 12.5px 'Sarabun',sans-serif;color:var(--tby-muted);margin-top:6px">ขาย {_r['ขาย (ชิ้น)']:,.0f} ชิ้น · ขาดทุนรวม ฿{abs(_r['กำไรรวม']):,.0f} · คุ้มทุนที่ ฿{_breakeven:,.1f}</div>
-                </div>
-                """, unsafe_allow_html=True)
+    if not _all_channels:
+        _loss_df = margin_df[margin_df["สถานะ"] == "🔴 ขาดทุน"]
+        if not _loss_df.empty:
+            st.markdown("**⚠️ สินค้าที่ต้องรีบแก้**")
+            _pc = st.columns(min(len(_loss_df), 3))
+            for _i, (_, _r) in enumerate(_loss_df.iterrows()):
+                with _pc[_i % len(_pc)]:
+                    _breakeven = _r.get("ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)") or 0
+                    st.markdown(f"""
+                    <div style="background:var(--tby-badge-bad-bg);border:1px solid {_LOSS_RED};border-radius:12px;padding:16px 18px;margin-bottom:10px">
+                      <div style="display:flex;justify-content:space-between;gap:10px">
+                        <span style="font:700 15px 'Sarabun',sans-serif">{_r['ชื่อสินค้า']}</span>
+                        <span style="font:500 12px monospace;color:var(--tby-muted)">{_r['รหัสสินค้า']}</span>
+                      </div>
+                      <div style="margin-top:8px"><span style="font:700 26px 'Prompt',sans-serif;color:{_LOSS_RED}">฿{_r['กำไร/ชิ้น']:,.1f}</span> <span style="font:600 13px 'Sarabun',sans-serif;color:var(--tby-muted)">/ ชิ้น</span></div>
+                      <div style="font:500 12.5px 'Sarabun',sans-serif;color:var(--tby-muted);margin-top:6px">ขาย {_r['ขาย (ชิ้น)']:,.0f} ชิ้น · ขาดทุนรวม ฿{abs(_r['กำไรรวม']):,.0f} · คุ้มทุนที่ ฿{_breakeven:,.1f}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
     _seg_opts = [f"ทั้งหมด ({len(margin_df)})", f"🔴 ขาดทุน ({(margin_df['สถานะ'] == '🔴 ขาดทุน').sum()})",
                  f"🟡 กำไรต่ำ ({(margin_df['สถานะ'] == '🟡 กำไรต่ำ').sum()})", f"✅ ปกติ ({(margin_df['สถานะ'] == '✅ ปกติ').sum()})"]
@@ -897,22 +907,25 @@ def _render_ecom_profit_view(margin_df, margin_warn_pct, platform, date_from, da
     if _n_loss:
         st.warning(f"⚠️ มี {_n_loss} สินค้าที่ขาดทุนในช่วงนี้ — คอลัมน์ \"ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)\" คือราคาขายจริงเฉลี่ยหลังหักโค้ดส่วนลด/โปรโมชัน (ไม่ใช่ราคาที่ตั้งในหน้าสินค้า) ที่ต้องได้อย่างน้อยเท่านี้ถึงจะไม่ขาดทุน — ถ้ามักมีโค้ดส่วนลดมาหักอีก ราคาหน้าสินค้าอาจต้องตั้งสูงกว่านี้")
 
-    with st.expander("📅 สรุปยอดขาย/กำไรรายเดือน"):
-        monthly_df = db.get_ecommerce_monthly_summary(platform=platform, shop_name=shop_filter)
-        if monthly_df.empty:
-            st.info("ยังไม่มีข้อมูล")
-        else:
-            _max_net = float(monthly_df["สุทธิ"].abs().max() or 1)
-            st.dataframe(
-                monthly_df, width="stretch", hide_index=True,
-                column_config={
-                    "ยอดขาย": st.column_config.NumberColumn(format="%.2f ฿"),
-                    "กำไรรวม": st.column_config.NumberColumn(format="%.2f ฿"),
-                    "ขาดทุนรวม": st.column_config.NumberColumn(format="%.2f ฿"),
-                    "สุทธิ": st.column_config.ProgressColumn(format="%.0f ฿", min_value=0.0, max_value=_max_net),
-                },
-            )
-            st.caption("กำไร/ขาดทุนคำนวณแบบรายออเดอร์ต่อเดือน (สูตรเดียวกับตัวเลขสรุปด้านบน) — เดือนที่ยังไม่มีรายงาน Income มายืนยันครบ ตัวเลขกำไรของเดือนนั้นอาจยังไม่นิ่ง")
+    if _all_channels:
+        st.caption("ℹ️ เลือกช่องทางใดช่องทางหนึ่งด้านบน เพื่อดูสรุปยอดขาย/กำไรรายเดือนของช่องทางนั้น")
+    else:
+        with st.expander("📅 สรุปยอดขาย/กำไรรายเดือน"):
+            monthly_df = db.get_ecommerce_monthly_summary(platform=platform, shop_name=shop_filter)
+            if monthly_df.empty:
+                st.info("ยังไม่มีข้อมูล")
+            else:
+                _max_net = float(monthly_df["สุทธิ"].abs().max() or 1)
+                st.dataframe(
+                    monthly_df, width="stretch", hide_index=True,
+                    column_config={
+                        "ยอดขาย": st.column_config.NumberColumn(format="%.2f ฿"),
+                        "กำไรรวม": st.column_config.NumberColumn(format="%.2f ฿"),
+                        "ขาดทุนรวม": st.column_config.NumberColumn(format="%.2f ฿"),
+                        "สุทธิ": st.column_config.ProgressColumn(format="%.0f ฿", min_value=0.0, max_value=_max_net),
+                    },
+                )
+                st.caption("กำไร/ขาดทุนคำนวณแบบรายออเดอร์ต่อเดือน (สูตรเดียวกับตัวเลขสรุปด้านบน) — เดือนที่ยังไม่มีรายงาน Income มายืนยันครบ ตัวเลขกำไรของเดือนนั้นอาจยังไม่นิ่ง")
 
 
 def _render_ecom_units_view(margin_df, platform, date_from, date_to, shop_filter):
@@ -926,7 +939,10 @@ def _render_ecom_units_view(margin_df, platform, date_from, date_to, shop_filter
     with _cols[2]: _metric_card("ขายดีสุด", _best["ชื่อสินค้า"], sub=f"{_best['ขาย (ชิ้น)']:,.0f} ชิ้น")
 
     st.markdown("**จำนวนที่ขาย ต่อสินค้า (เรียงมาก→น้อย)**")
-    _units_df = margin_df[["ชื่อสินค้า", "รหัสสินค้า", "ขาย (ชิ้น)"]].sort_values("ขาย (ชิ้น)", ascending=False)
+    _unit_cols = ["ชื่อสินค้า", "รหัสสินค้า", "ขาย (ชิ้น)"]
+    if "แพลตฟอร์ม" in margin_df.columns:
+        _unit_cols.insert(0, "แพลตฟอร์ม")
+    _units_df = margin_df[_unit_cols].sort_values("ขาย (ชิ้น)", ascending=False)
     st.dataframe(
         _units_df, width="stretch", hide_index=True,
         column_config={
@@ -934,12 +950,15 @@ def _render_ecom_units_view(margin_df, platform, date_from, date_to, shop_filter
         },
     )
 
-    st.markdown("**แนวโน้มจำนวนที่ขาย (6 เดือนล่าสุด)**")
-    _trend_df = db.get_ecommerce_units_trend_df(platform=platform, shop_name=shop_filter, months=6)
-    if _trend_df.empty:
-        st.info("ยังไม่มีข้อมูล")
+    if platform is None:
+        st.caption("ℹ️ เลือกช่องทางใดช่องทางหนึ่งด้านบน เพื่อดูแนวโน้มจำนวนขายย้อนหลัง 6 เดือนของช่องทางนั้น")
     else:
-        st.dataframe(_trend_df, width="stretch", hide_index=True)
+        st.markdown("**แนวโน้มจำนวนที่ขาย (6 เดือนล่าสุด)**")
+        _trend_df = db.get_ecommerce_units_trend_df(platform=platform, shop_name=shop_filter, months=6)
+        if _trend_df.empty:
+            st.info("ยังไม่มีข้อมูล")
+        else:
+            st.dataframe(_trend_df, width="stretch", hide_index=True)
 
 
 def _render_ecom_shipping_view(platform, shop_filter):
