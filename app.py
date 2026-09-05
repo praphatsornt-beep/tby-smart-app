@@ -745,21 +745,23 @@ div[data-baseweb="popover"]:has(ul[data-testid="stSelectboxVirtualDropdown"]) [d
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:not(:has(input:checked)):hover [data-testid="stMarkdownContainer"] p {
     color: #111827 !important;
 }
-/* สถานะถูกเลือก: พื้นขาว + เงา + สีส้มธีมเดียวกับระบบ (ค่า default) */
+/* สถานะถูกเลือก: พื้นสีส้มธีมเดียวกับระบบ (ค่า default) + ตัวหนังสือขาว — เปลี่ยนจาก
+   พื้นขาว+ตัวหนังสือสี เป็นพื้นเติมสีเต็ม+ตัวหนังสือขาวแทน ตามที่ผู้ใช้ขอ 2026-09-05 */
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) {
-    background-color: #ffffff !important;
+    background-color: var(--tby-accent) !important;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) [data-testid="stMarkdownContainer"] p {
-    color: var(--tby-accent) !important;
+    color: #ffffff !important;
     font-weight: 600 !important;
 }
-/* เน้นสีเฉพาะกลุ่ม "การจ่าย": ค้างจ่าย(แดง, ตัวแรก) / จ่ายแล้ว(เขียว, ตัวสอง) */
-[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:nth-of-type(1):has(input:checked) [data-testid="stMarkdownContainer"] p {
-    color: #dc2626 !important;
+/* เน้นสีเฉพาะกลุ่ม "การจ่าย": ค้างจ่าย(พื้นแดง, ตัวแรก) / จ่ายแล้ว(พื้นเขียว, ตัวสอง) —
+   ตัวหนังสือยังขาวเหมือนกันทุกกลุ่ม (สืบทอดจาก rule ด้านบน) แค่เปลี่ยนสีพื้น */
+[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:nth-of-type(1):has(input:checked) {
+    background-color: #dc2626 !important;
 }
-[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:nth-of-type(2):has(input:checked) [data-testid="stMarkdownContainer"] p {
-    color: var(--tby-green) !important;
+[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:nth-of-type(2):has(input:checked) {
+    background-color: var(--tby-green) !important;
 }
 /* ── Bordered containers (st.container(border=True)) — flat card ──
    NOTE: this Streamlit version (1.56) no longer wraps bordered containers
