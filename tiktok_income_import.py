@@ -33,6 +33,19 @@ def parse_product_summary(text: str | None) -> tuple[str, int] | None:
     return m.group(1), int(m.group(2))
 
 
+def _get_any(row, *names):
+    """ลองหลายชื่อคอลัมน์ตามลำดับ — TikTok เปลี่ยนชื่อคอลัมน์ export บางตัวไปโดยไม่แจ้ง
+    (พบ 2026-09-05: 'จำนวนเงินที่ชำระทั้งหมด' → 'ยอดการชำระเงินทั้งหมด', 'รายได้รวม' →
+    'รายได้ทั้งหมด' — ยืนยันจากไฟล์จริงว่าเป็นฟิลด์เดียวกัน ค่าตรงกันเป๊ะกับสูตร
+    net_settlement = gross_revenue + total_fees เดิม) กันพังเงียบๆ ถ้าเจอชื่อเปลี่ยนอีก
+    ในอนาคต ลองชื่อเก่าก่อนแล้วค่อย fallback ชื่อใหม่ (หรือกลับกัน) แทนที่จะ .get() ชื่อเดียว
+    แล้วได้ 0 ทุกแถวแบบไม่มีสัญญาณเตือน"""
+    for name in names:
+        if name in row and pd.notna(row[name]):
+            return row[name]
+    return None
+
+
 def parse_income_report(file, shop_name: str) -> list[dict]:
     """อ่านชีต 'รายละเอียดคำสั่งซื้อ' คืน list[dict] ส่งเข้า
     db.upsert_tiktok_order_income() ตรงๆ ได้เลย"""
@@ -51,8 +64,8 @@ def parse_income_report(file, shop_name: str) -> list[dict]:
             "order_created_at": _parse_date(r.get("เวลาที่สร้างคำสั่งซื้อ")),
             "order_paid_at": _parse_date(r.get("เวลาที่ชำระคำสั่งซื้อ")),
             "currency": _str_or_none(r.get("สกุลเงิน")),
-            "net_settlement": _num_or_zero(r.get("จำนวนเงินที่ชำระทั้งหมด")),
-            "gross_revenue": _num_or_zero(r.get("รายได้รวม")),
+            "net_settlement": _num_or_zero(_get_any(r, "จำนวนเงินที่ชำระทั้งหมด", "ยอดการชำระเงินทั้งหมด")),
+            "gross_revenue": _num_or_zero(_get_any(r, "รายได้รวม", "รายได้ทั้งหมด")),
             "product_subtotal_after_disc": _num_or_zero(r.get("ยอดรวมค่าสินค้าหลังหักส่วนลดจากผู้ขาย")),
             "total_fees": _num_or_zero(r.get("ค่าธรรมเนียมทั้งหมด")),
             "tiktok_commission": _num_or_zero(r.get("ค่าคอมมิชชั่น TikTok Shop")),
