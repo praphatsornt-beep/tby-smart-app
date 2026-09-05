@@ -26,12 +26,16 @@ def shipping_overcharge_extra(row: dict) -> float:
 
 def aggregate_product_margin(
     sales_rows: list[dict], settled_sns: set[str], prod_map: dict, platform: str,
-) -> tuple[dict[str, dict], float]:
+) -> tuple[dict[str, dict], float, str | None]:
     """รวมยอดขาย/ยอดเงินที่ได้รับจริงต่อสินค้า (เฉพาะออเดอร์ที่ปิดยอดแล้ว) — คืน
-    (agg: {product_id: {qty, net, gross}}, pending_qty: จำนวนชิ้นที่ยังไม่ปิดยอด)
-    ตัวคูณ units_per_pack ใช้กับ SKU ที่ map เป็นแพ็ครวม"""
+    (agg: {product_id: {qty, net, gross}}, pending_qty: จำนวนชิ้นที่ยังไม่ปิดยอด,
+    pending_since: sale_date เก่าสุดในบรรดาที่ยังไม่ปิดยอด หรือ None ถ้าไม่มีค้าง —
+    ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์ ใช้บอกผู้ใช้ว่าที่ค้าง
+    อยู่ ค้างมาตั้งแต่เมื่อไหร่ ไม่ใช่แค่จำนวนชิ้นเฉยๆ) ตัวคูณ units_per_pack ใช้กับ SKU
+    ที่ map เป็นแพ็ครวม"""
     agg: dict[str, dict] = {}
     pending_qty = 0.0
+    pending_since = None
     for r in sales_rows:
         if r.get("order_status") == "ยกเลิกแล้ว":
             continue
@@ -40,12 +44,15 @@ def aggregate_product_margin(
         net_qty = (float(r["qty"] or 0) - float(r.get("returned_qty") or 0)) * mult
         if r["order_sn"] not in settled_sns:
             pending_qty += net_qty
+            _sd = r.get("sale_date")
+            if _sd and (pending_since is None or _sd < pending_since):
+                pending_since = _sd
             continue
         a = agg.setdefault(pid, {"qty": 0.0, "net": 0.0, "gross": 0.0})
         a["qty"] += net_qty
         a["net"] += float(r.get("net_amount") or 0)
         a["gross"] += float(r.get("item_price") or 0)
-    return agg, pending_qty
+    return agg, pending_qty, pending_since
 
 
 def product_margin_rows(agg: dict[str, dict], products: dict[str, dict], platform: str) -> list[dict]:

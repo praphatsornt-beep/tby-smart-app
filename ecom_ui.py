@@ -708,7 +708,9 @@ def _render_combined_summary(date_from: str, date_to: str):
     with _cols[3]: _metric_card("คะแนนรวม (PV)", f"{summary['total_pv']:,.0f} PV")
 
     if summary["pending_qty"]:
-        st.caption(f"ℹ️ มี {summary['pending_qty']:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน — ยังไม่รวมในตัวเลขข้างบน")
+        _since = summary.get("pending_since")
+        _since_txt = f" (ค้างมาตั้งแต่ {pd.to_datetime(_since).strftime('%d/%m/%Y')})" if _since else ""
+        st.caption(f"ℹ️ มี {summary['pending_qty']:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน{_since_txt} — ยังไม่รวมในตัวเลขข้างบน (ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์)")
 
     _loss_products = summary["loss_products_df"]
     _loss_orders = summary["loss_orders_df"]
@@ -788,9 +790,10 @@ def _render_sales_profit():
     if _view == "🚚 ค่าส่งเกิน":
         _render_ecom_shipping_view(_platform, _shop_filter)
     else:
-        margin_df, pending_qty = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), platform=_platform, shop_name=_shop_filter)
+        margin_df, pending_qty, pending_since = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), platform=_platform, shop_name=_shop_filter)
         if pending_qty:
-            st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน — ยังไม่รวมในตารางด้านล่าง (อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
+            _since_txt = f" (ค้างมาตั้งแต่ {pd.to_datetime(pending_since).strftime('%d/%m/%Y')})" if pending_since else ""
+            st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน{_since_txt} — ยังไม่รวมในตารางด้านล่าง (ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์ — อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
         if margin_df.empty:
             st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (แท็บ '⚙️ ตั้งค่า' → Map สินค้า)")
         else:

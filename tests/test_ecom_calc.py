@@ -36,19 +36,33 @@ class TestAggregateProductMargin(unittest.TestCase):
             "qty": 2, "returned_qty": 0, "net_amount": 100, "item_price": 120,
             "order_status": "สำเร็จ",
         }]
-        agg, pending = ecom_calc.aggregate_product_margin(sales, {"A"}, {}, "shopee")
+        agg, pending, pending_since = ecom_calc.aggregate_product_margin(sales, {"A"}, {}, "shopee")
         self.assertEqual(pending, 0)
+        self.assertIsNone(pending_since)
         self.assertEqual(agg["P1"], {"qty": 2.0, "net": 100.0, "gross": 120.0})
 
     def test_unsettled_order_goes_to_pending(self):
         sales = [{
             "order_sn": "B", "product_id": "P1", "item_id_platform": "SKU1",
             "qty": 3, "returned_qty": 0, "net_amount": 0, "item_price": 0,
-            "order_status": "สำเร็จ",
+            "order_status": "สำเร็จ", "sale_date": "2026-03-01",
         }]
-        agg, pending = ecom_calc.aggregate_product_margin(sales, set(), {}, "shopee")
+        agg, pending, pending_since = ecom_calc.aggregate_product_margin(sales, set(), {}, "shopee")
         self.assertEqual(agg, {})
         self.assertEqual(pending, 3)
+        self.assertEqual(pending_since, "2026-03-01")
+
+    def test_pending_since_picks_earliest_date(self):
+        sales = [
+            {"order_sn": "B1", "product_id": "P1", "item_id_platform": "SKU1",
+             "qty": 1, "returned_qty": 0, "net_amount": 0, "item_price": 0,
+             "order_status": "สำเร็จ", "sale_date": "2026-05-01"},
+            {"order_sn": "B2", "product_id": "P1", "item_id_platform": "SKU1",
+             "qty": 1, "returned_qty": 0, "net_amount": 0, "item_price": 0,
+             "order_status": "สำเร็จ", "sale_date": "2026-03-01"},
+        ]
+        _, _, pending_since = ecom_calc.aggregate_product_margin(sales, set(), {}, "shopee")
+        self.assertEqual(pending_since, "2026-03-01")
 
     def test_cancelled_order_excluded_entirely(self):
         sales = [{
@@ -56,9 +70,10 @@ class TestAggregateProductMargin(unittest.TestCase):
             "qty": 5, "returned_qty": 0, "net_amount": 0, "item_price": 0,
             "order_status": "ยกเลิกแล้ว",
         }]
-        agg, pending = ecom_calc.aggregate_product_margin(sales, {"C"}, {}, "shopee")
+        agg, pending, pending_since = ecom_calc.aggregate_product_margin(sales, {"C"}, {}, "shopee")
         self.assertEqual(agg, {})
         self.assertEqual(pending, 0)
+        self.assertIsNone(pending_since)
 
     def test_returned_qty_reduces_net_qty(self):
         sales = [{
@@ -66,7 +81,7 @@ class TestAggregateProductMargin(unittest.TestCase):
             "qty": 10, "returned_qty": 3, "net_amount": 50, "item_price": 60,
             "order_status": "สำเร็จ",
         }]
-        agg, _ = ecom_calc.aggregate_product_margin(sales, {"D"}, {}, "shopee")
+        agg, _, _ = ecom_calc.aggregate_product_margin(sales, {"D"}, {}, "shopee")
         self.assertEqual(agg["P1"]["qty"], 7.0)
 
     def test_units_per_pack_multiplier_applied(self):
@@ -76,7 +91,7 @@ class TestAggregateProductMargin(unittest.TestCase):
             "order_status": "สำเร็จ",
         }]
         prod_map = {("shopee", "SKU-PACK"): {"product_id": "P1", "units_per_pack": 3}}
-        agg, _ = ecom_calc.aggregate_product_margin(sales, {"E"}, prod_map, "shopee")
+        agg, _, _ = ecom_calc.aggregate_product_margin(sales, {"E"}, prod_map, "shopee")
         self.assertEqual(agg["P1"]["qty"], 6.0)  # 2 * 3
 
 
