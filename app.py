@@ -916,6 +916,17 @@ label,
 [class*="st-key-sale_status_cart_summary_row"] [data-testid="stColumn"]:first-child {
     container-type: inline-size;
 }
+/* Streamlit เองยังบังคับ flex: 1 1 100%/width: 100%/min-width ต่อคอลัมน์นี้อยู่ดี
+   (พบว่าเกิดแม้ _status_col เองกว้างเกิน 700px แล้ว — ไม่ได้ขึ้นกับ container query
+   threshold 200px ด้านล่างเลย ต้อง override ทั้ง flex/width ไม่ใช่แค่ min-width
+   เพราะ flex-basis: 100% เดิมทำให้ 2 คอลัมน์ขอพื้นที่ 200% รวมกัน เกินแถวเสมอ ต้อง wrap
+   แม้ min-width จะเล็กพอแล้วก็ตาม) ให้ flexbox ตัดสินใจเองว่าจะพอวางแถวเดียวกันไหม —
+   ค่อยให้ @container ด้านล่างบังคับซ้อนเต็มจริงๆ เฉพาะตอน _status_col แคบเกิน 200px */
+[class*="st-key-sale_status_subrow"] [data-testid="stColumn"] {
+    width: 47% !important;
+    flex: 0 1 47% !important;
+    min-width: 140px !important;
+}
 @container (max-width: 200px) {
     [class*="st-key-sale_status_subrow"] [data-testid="stHorizontalBlock"] {
         flex-wrap: wrap !important;
