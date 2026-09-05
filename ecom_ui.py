@@ -39,6 +39,19 @@ def _pills(options: list[str], key: str) -> str:
         return st.radio(" ", options, horizontal=True, key=key, label_visibility="collapsed")
 
 
+def _pending_income_range_txt(since: str | None, until: str | None) -> str:
+    """แปลง sale_date เก่าสุด/ล่าสุดของออเดอร์ที่ยังไม่มี Income เป็นข้อความบอกผู้ใช้ว่า
+    ต้องไปโหลดรายงาน Income ของช่วงวันที่เท่าไหร่มาอัปโหลดเพิ่ม (ไม่ใช่แค่ "ค้างมาตั้งแต่"
+    เฉยๆ ซึ่งไม่บอกขอบเขตบน ทำให้ไม่รู้ว่าต้องโหลดถึงวันไหน)"""
+    if not since:
+        return ""
+    _since_str = pd.to_datetime(since).strftime("%d/%m/%Y")
+    if until and until != since:
+        _until_str = pd.to_datetime(until).strftime("%d/%m/%Y")
+        return f" — ต้องการรายงาน Income ของออเดอร์วันที่ {_since_str} ถึง {_until_str}"
+    return f" — ต้องการรายงาน Income ของออเดอร์วันที่ {_since_str}"
+
+
 def _set_flash(key: str, kind: str, msg: str):
     """เก็บข้อความ success/warning ไว้ใน session_state ให้โผล่หลัง st.rerun() รอบถัดไป
     (ปุ่มที่กด rerun ทันทีจะ render ข้อความไม่ทันถ้าเรียก st.success/st.warning ตรงๆ ก่อน rerun)."""
@@ -708,9 +721,8 @@ def _render_combined_summary(date_from: str, date_to: str):
     with _cols[3]: _metric_card("คะแนนรวม (PV)", f"{summary['total_pv']:,.0f} PV")
 
     if summary["pending_qty"]:
-        _since = summary.get("pending_since")
-        _since_txt = f" (ค้างมาตั้งแต่ {pd.to_datetime(_since).strftime('%d/%m/%Y')})" if _since else ""
-        st.caption(f"ℹ️ มี {summary['pending_qty']:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน{_since_txt} — ยังไม่รวมในตัวเลขข้างบน (ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์)")
+        _range_txt = _pending_income_range_txt(summary.get("pending_since"), summary.get("pending_until"))
+        st.caption(f"ℹ️ มี {summary['pending_qty']:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน{_range_txt} — ยังไม่รวมในตัวเลขข้างบน (ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์)")
 
     _loss_products = summary["loss_products_df"]
     _loss_orders = summary["loss_orders_df"]
@@ -789,17 +801,17 @@ def _render_sales_profit():
         _render_ecom_shipping_view(_platform, _shop_filter)
     else:
         if _platform is None:
-            margin_df, pending_qty, pending_since = db.get_ecommerce_product_margin_df_all(str(margin_from), str(margin_to))
+            margin_df, pending_qty, pending_since, pending_until = db.get_ecommerce_product_margin_df_all(str(margin_from), str(margin_to))
         else:
-            margin_df, pending_qty, pending_since = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), platform=_platform, shop_name=_shop_filter)
+            margin_df, pending_qty, pending_since, pending_until = db.get_ecommerce_product_margin_df(str(margin_from), str(margin_to), platform=_platform, shop_name=_shop_filter)
             # db.get_ecommerce_product_margin_df() ตั้งชื่อคอลัมน์ตามแพลตฟอร์มจริง
             # (เช่น "ขายผ่าน Lazada (ชิ้น)") — เปลี่ยนเป็นชื่อกลางให้ใช้ร่วมกันทุก view
             margin_df = margin_df.rename(columns={f"ขายผ่าน {_PLATFORMS.get(_platform, _platform)} (ชิ้น)": "ขาย (ชิ้น)"})
         # เลือก "ทั้งหมด" ข้อความค้างโอนซ้ำกับ _render_combined_summary ด้านบนสุดของหน้าแล้ว
         # (ตัวเลขเดียวกัน) — โชว์แค่ตอนดูเฉพาะช่องทางเดียวเพื่อไม่ให้ซ้ำ
         if pending_qty and _platform is not None:
-            _since_txt = f" (ค้างมาตั้งแต่ {pd.to_datetime(pending_since).strftime('%d/%m/%Y')})" if pending_since else ""
-            st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน{_since_txt} — ยังไม่รวมในตารางด้านล่าง (ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์ — อัปโหลดรายงาน Income ของช่วงที่ครอบคลุมออเดอร์เหล่านี้เพิ่มเพื่อให้เห็นครบ)")
+            _range_txt = _pending_income_range_txt(pending_since, pending_until)
+            st.info(f"ℹ️ มี {pending_qty:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงานยอดโอน (Income) มายืนยัน{_range_txt} — ยังไม่รวมในตารางด้านล่าง (ปกติออเดอร์จะส่งมาก่อน แล้ว Income จะตามมาทีหลังหลายอาทิตย์)")
         if margin_df.empty:
             st.info("ยังไม่มีข้อมูล หรือยังไม่ได้ map สินค้า (แท็บ '⚙️ ตั้งค่า' → Map สินค้า)")
         else:

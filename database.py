@@ -1422,7 +1422,7 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
 @st.cache_data(ttl=120)
 def get_ecommerce_product_margin_df(
     start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
-) -> tuple[pd.DataFrame, int, str | None]:
+) -> tuple[pd.DataFrame, int, str | None, str | None]:
     """สรุปต่อสินค้า (เฉพาะที่ map แล้ว): จำนวนขายผ่าน Shopee, ยอดเงินที่ได้รับจริง
     (เฉลี่ยจาก allocate_ecommerce_order_income), กำไร — เรียงขาดทุนมากสุดขึ้นก่อน
     (ไม่รวมสต็อกคงเหลือ/เงินจมในสต็อก เพราะเป็นสต็อกรวมทั้งร้าน ไม่ใช่เฉพาะที่ขาย
@@ -1432,7 +1432,8 @@ def get_ecommerce_product_margin_df(
     ยังไม่ได้อัปโหลด Income มา จะถูกหักต้นทุนเต็มแต่ได้ยอดรับ=0 ทำให้กำไรผิดเพี้ยน
     เป็นลบหลอกๆ ทั้งที่จริงยังไม่ได้เงินแค่นั้นเอง — ปกติออเดอร์จะส่งมาก่อน แล้ว Income
     จะตามมาทีหลังหลายอาทิตย์) — คืน (df, จำนวนชิ้นที่ยังรอยืนยันยอดเงิน ไม่รวมอยู่ใน df,
-    sale_date เก่าสุดของออเดอร์ที่ยังค้าง หรือ None ถ้าไม่มีค้าง) ตัวคูณ units_per_pack
+    sale_date เก่าสุด/ล่าสุดของออเดอร์ที่ยังค้าง หรือ None ถ้าไม่มีค้าง — บอกผู้ใช้ว่า
+    ต้องไปโหลดรายงาน Income ของช่วงวันที่เท่าไหร่มาอัปโหลดเพิ่ม) ตัวคูณ units_per_pack
     ใช้กับ SKU ที่ map เป็นแพ็ครวม shop_name: ระบุเพื่อกรองดูเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
     _income_q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", platform)
     if shop_name:
@@ -1447,35 +1448,38 @@ def get_ecommerce_product_margin_df(
         _sales_q = _sales_q.eq("shop_name", shop_name)
     sales = _retry(lambda: _sales_q.execute()).data
     if not sales:
-        return pd.DataFrame(), 0, None
+        return pd.DataFrame(), 0, None, None
 
     products = {p["id"]: p for p in get_products()}
     prod_map = get_ecommerce_product_map()
 
-    agg, pending_qty, pending_since = ecom_calc.aggregate_product_margin(sales, settled_sns, prod_map, platform)
+    agg, pending_qty, pending_since, pending_until = ecom_calc.aggregate_product_margin(sales, settled_sns, prod_map, platform)
     rows = ecom_calc.product_margin_rows(agg, products, platform)
     df = pd.DataFrame(rows)
     if not df.empty:
         df.sort_values("กำไรรวม", ascending=True, inplace=True)
-    return df.reset_index(drop=True), int(pending_qty), pending_since
+    return df.reset_index(drop=True), int(pending_qty), pending_since, pending_until
 
 
 @st.cache_data(ttl=120)
-def get_ecommerce_product_margin_df_all(start_date: str, end_date: str) -> tuple[pd.DataFrame, int, str | None]:
+def get_ecommerce_product_margin_df_all(start_date: str, end_date: str) -> tuple[pd.DataFrame, int, str | None, str | None]:
     """เหมือน get_ecommerce_product_margin_df แต่รวมทุกแพลตฟอร์ม/ทุกร้านไว้ตารางเดียว
     (เพิ่มคอลัมน์ "แพลตฟอร์ม" — สินค้าเดียวกันที่ขายหลายแพลตฟอร์มจะมีหลายแถว แถวละ
     แพลตฟอร์ม เหมือนกับ loss_products_df ของ get_ecommerce_combined_summary) ใช้ตอน
     ผู้ใช้เลือกดู "ทั้งหมด (ทุกช่องทาง)" แทนการสลับดูทีละแพลตฟอร์ม pending_qty/
-    pending_since รวมข้ามแพลตฟอร์มเหมือนกัน"""
+    pending_since/pending_until รวมข้ามแพลตฟอร์มเหมือนกัน"""
     platforms = sorted({s["platform"] for s in get_ecommerce_shops()})
     frames = []
     total_pending = 0
     pending_since = None
+    pending_until = None
     for platform in platforms:
-        df, pending, since = get_ecommerce_product_margin_df(start_date, end_date, platform=platform)
+        df, pending, since, until = get_ecommerce_product_margin_df(start_date, end_date, platform=platform)
         total_pending += pending
         if since and (pending_since is None or since < pending_since):
             pending_since = since
+        if until and (pending_until is None or until > pending_until):
+            pending_until = until
         if not df.empty:
             df = df.rename(columns={f"ขายผ่าน {ecom_calc.PLATFORM_LABELS.get(platform, platform)} (ชิ้น)": "ขาย (ชิ้น)"})
             df.insert(0, "แพลตฟอร์ม", ecom_calc.PLATFORM_LABELS.get(platform, platform))
@@ -1484,7 +1488,7 @@ def get_ecommerce_product_margin_df_all(start_date: str, end_date: str) -> tuple
     if not combined.empty:
         combined.sort_values("กำไรรวม", ascending=True, inplace=True)
         combined.reset_index(drop=True, inplace=True)
-    return combined, total_pending, pending_since
+    return combined, total_pending, pending_since, pending_until
 
 
 @st.cache_data(ttl=120)
@@ -1560,8 +1564,9 @@ def get_ecommerce_combined_summary(start_date: str, end_date: str, warn_pct: flo
     ฟังก์ชัน get_ecommerce_* อื่นๆ กรองทีละ platform เดียวเสมอ อันนี้ใช้ตอบคำถามภาพรวม
     "ทั้งหมดขาดทุนหรือเปล่า / PV รวมเท่าไหร่" โดยไม่ต้องสลับแพลตฟอร์มเอง คืน
     {total_profit, total_loss, net, total_pv, pending_qty (รวมทุกแพลตฟอร์ม),
-    pending_since (sale_date เก่าสุดของออเดอร์ที่ยังไม่มี Income มายืนยัน ข้ามทุกแพลตฟอร์ม
-    หรือ None ถ้าไม่มีค้าง),
+    pending_since/pending_until (sale_date เก่าสุด/ล่าสุดของออเดอร์ที่ยังไม่มี Income
+    มายืนยัน ข้ามทุกแพลตฟอร์ม หรือ None ถ้าไม่มีค้าง — บอกผู้ใช้ว่าต้องไปโหลดรายงาน
+    Income ของช่วงวันที่เท่าไหร่มาอัปโหลดเพิ่ม),
     loss_products_df (สินค้าที่ net ขาดทุนตลอดช่วง รวมทุกแพลตฟอร์ม — การ์ดสรุปแบบเดียวกับ
     "สินค้าที่ต้องรีบแก้" ในมุมมองรายแพลตฟอร์ม แต่ข้ามแพลตฟอร์ม — เรียงขาดทุนมากสุดขึ้นก่อน),
     loss_orders_df (ออเดอร์ขาดทุนจริง กำไร<0 ทุกแพลตฟอร์มรวมกัน มีคอลัมน์ "แพลตฟอร์ม" เพิ่ม
@@ -1572,6 +1577,7 @@ def get_ecommerce_combined_summary(start_date: str, end_date: str, warn_pct: flo
     total_pv = 0.0
     total_pending_qty = 0
     pending_since = None
+    pending_until = None
     loss_order_frames = []
     loss_product_frames = []
     for platform in platforms:
@@ -1579,10 +1585,12 @@ def get_ecommerce_combined_summary(start_date: str, end_date: str, warn_pct: flo
         total_profit += summary["total_profit"]
         total_loss += summary["total_loss"]
 
-        margin_df, pending_qty, _platform_pending_since = get_ecommerce_product_margin_df(start_date, end_date, platform=platform)
+        margin_df, pending_qty, _platform_pending_since, _platform_pending_until = get_ecommerce_product_margin_df(start_date, end_date, platform=platform)
         total_pending_qty += pending_qty
         if _platform_pending_since and (pending_since is None or _platform_pending_since < pending_since):
             pending_since = _platform_pending_since
+        if _platform_pending_until and (pending_until is None or _platform_pending_until > pending_until):
+            pending_until = _platform_pending_until
         if not margin_df.empty:
             total_pv += float(margin_df["PV"].sum())
             loss_products = margin_df[margin_df["กำไรรวม"] < 0].copy()
@@ -1615,6 +1623,7 @@ def get_ecommerce_combined_summary(start_date: str, end_date: str, warn_pct: flo
         "total_pv": round(total_pv, 2),
         "pending_qty": total_pending_qty,
         "pending_since": pending_since,
+        "pending_until": pending_until,
         "loss_products_df": loss_products_df,
         "loss_orders_df": loss_orders_df,
     }
