@@ -674,98 +674,92 @@ div[data-baseweb="popover"]:has(ul[data-testid="stSelectboxVirtualDropdown"]) [d
     font-weight: 600 !important;
 }
 
-/* ── บันทึกขาย status panel (สถานะรายการ) — plain native radio circles,
-   flat white card. Note: this container (key= combined with border=True)
-   renders as a plain stVerticalBlock with a native border, NOT the usual
-   stVerticalBlockBorderWrapper our other bordered-card CSS targets — so
-   the shared white-card rule doesn't reach it and needs its own explicit
-   background here. ── */
+/* ── บันทึกขาย status panel (สถานะรายการ) — segmented-control pill style
+   (ดีไซน์จากผู้ใช้ 2026-09-05, แทนที่ปุ่ม radio วงกลมแบบเดิมทั้ง 3 กลุ่ม: การรับของ/
+   การจ่าย/สถานะบิล) ปรับ selector ให้ตรงกับ DOM จริงของ Streamlit (ตรวจด้วย
+   Playwright แล้ว: div[role="radiogroup"] มี <label> ลูกตรงเรียงตามลำดับ options
+   เป๊ะ ไม่มี wrapper แทรก, แต่ละ label = [div ring][input radio][div ข้อความ]) —
+   ใช้สีจากตัวแปรธีมเดิมของแอป (--tby-accent ส้ม, --tby-green เขียว) แทนค่าสีที่
+   ผู้ใช้ส่งมาตรงๆ เพื่อให้เข้ากับส่วนอื่นของแอป, ไม่ใช้ฟอนต์ Kanit ตามดีไซน์เพราะแอปนี้
+   โหลดฟอนต์ Prompt ไว้ทั้งระบบอยู่แล้ว (Kanit ไม่ได้ import ไว้ จะ fallback เฉยๆ)
+   ── คำเตือน: การไล่สีค้างจ่าย(แดง)/จ่ายแล้ว(เขียว) อิงตำแหน่ง label:nth-of-type()
+   ตามลำดับ options ใน record_ui.py ["ค้างจ่าย","จ่ายแล้ว","COD","จ่ายบางส่วน"] —
+   ถ้าสลับลำดับ options ตรงนั้น ต้องแก้เลขที่นี่ตามด้วย ── */
 [class*="st-key-sale_status_panel"] {
     background: #ffffff !important;
-    border-radius: 20px !important;
-    border-color: var(--tby-border) !important;
+    border-radius: 12px !important;
+    padding: 16px 20px !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    border: none !important;
+}
+/* หัวข้อ "สถานะรายการ" */
+[class*="st-key-sale_status_panel"] [data-testid="stMarkdownContainer"] p {
+    font-weight: 600 !important;
+    font-size: 16px !important;
+    color: #1f2937 !important;
+    margin-bottom: 4px !important;
+}
+/* label ของแต่ละกลุ่ม (การรับของ/การจ่าย/สถานะบิล) */
+[class*="st-key-sale_status_panel"] [data-testid="stWidgetLabel"] p {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: #4b5563 !important;
 }
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] {
     background: transparent !important;
     border: none !important;
-    border-radius: 0 !important;
     padding: 0 !important;
 }
+/* กรอบราง segmented control */
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] > div[role="radiogroup"] {
     display: flex !important;
-    flex-direction: column !important;
-    gap: 4px !important;
-    background: transparent !important;
+    flex-direction: row !important;
+    background-color: #f3f4f6 !important;
+    border-radius: 8px !important;
+    padding: 3px !important;
+    gap: 2px !important;
     border: none !important;
-    padding: 6px 0 0 !important;
 }
-/* Native radio circle was rendering as one solid blob (ring + dot both
-   filled the same orange with no visible gap) — force a real two-tone
-   ring+dot: fixed-size outer ring, smaller centered inner dot. Target by
-   DOM position (not BaseWeb's atomic class names, which aren't stable). */
+/* ซ่อนวงกลม radio เดิมทั้งวง (ปุ่มแคปซูลไม่มีวงกลมแล้ว) */
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label > div:first-child {
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
-    width: 16px !important;
-    height: 16px !important;
-    min-width: 16px !important;
-    flex: 0 0 auto !important;
-    border-radius: 50% !important;
-    box-sizing: border-box !important;
+    display: none !important;
 }
-/* Dot hidden by default (plain hollow circle when NOT selected) — only
-   shown once a status is actually picked, so it's unambiguous at a glance
-   which one (if any) is selected. */
-[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label > div:first-child > div {
-    width: 6px !important;
-    height: 6px !important;
-    border-radius: 50% !important;
-    background-color: transparent !important;
-}
-/* Two accent colors per status category, matching reference: orange for
-   การรับของ (receiving), green for การจ่าย/สถานะบิล (payment/bill) — the
-   theme's primaryColor (orange) is the default, so only the green groups
-   need an explicit override. */
-[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:has(input:checked) > div:first-child,
-[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="สถานะบิล"] label:has(input:checked) > div:first-child {
-    background-color: var(--tby-green) !important;
-}
-[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) > div:first-child > div {
-    background-color: #ffffff !important;
-}
+/* ปุ่มแคปซูล */
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label {
+    flex: 1 1 0 !important;
+    justify-content: center !important;
+    text-align: center !important;
+    padding: 6px 8px !important;
+    border-radius: 6px !important;
     background: transparent !important;
-    border: none !important;
-    border-radius: 0 !important;
-    padding: 2px 0 !important;
-    flex: 0 0 auto !important;
-    justify-content: flex-start !important;
-    gap: 8px;
+    cursor: pointer !important;
+    transition: all 0.15s ease-in-out !important;
 }
-[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:not(:has(input:checked)):hover {
-    background: transparent !important;
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label [data-testid="stMarkdownContainer"] p {
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    color: #4b5563 !important;
+    white-space: nowrap !important;
+    margin: 0 !important;
 }
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:not(:has(input:checked)):hover [data-testid="stMarkdownContainer"] p {
+    color: #111827 !important;
+}
+/* สถานะถูกเลือก: พื้นขาว + เงา + สีส้มธีมเดียวกับระบบ (ค่า default) */
 [class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) {
-    background: transparent !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08) !important;
 }
-[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) p,
-[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) div {
-    color: var(--tby-text) !important;
+[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label:has(input:checked) [data-testid="stMarkdownContainer"] p {
+    color: var(--tby-accent) !important;
     font-weight: 600 !important;
 }
-/* tighter type scale for this panel — headers, widget labels
-   ("การรับ / สถานะของ" etc.), and radio option text all one notch down
-   from the global default, but not as small as a first pass made them */
-[class*="st-key-sale_status_panel"] [data-testid="stMarkdownContainer"] p {
-    font-size: 0.98rem !important;
+/* เน้นสีเฉพาะกลุ่ม "การจ่าย": ค้างจ่าย(แดง, ตัวแรก) / จ่ายแล้ว(เขียว, ตัวสอง) */
+[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:nth-of-type(1):has(input:checked) [data-testid="stMarkdownContainer"] p {
+    color: #dc2626 !important;
 }
-[class*="st-key-sale_status_panel"] [data-testid="stWidgetLabel"] p {
-    font-size: 0.9rem !important;
-}
-[class*="st-key-sale_status_panel"] [data-testid="stRadio"] label p {
-    font-size: 0.95rem !important;
-    white-space: nowrap !important;
+[class*="st-key-sale_status_panel"] [role="radiogroup"][aria-label="การจ่าย"] label:nth-of-type(2):has(input:checked) [data-testid="stMarkdownContainer"] p {
+    color: var(--tby-green) !important;
 }
 /* ── Bordered containers (st.container(border=True)) — flat card ──
    NOTE: this Streamlit version (1.56) no longer wraps bordered containers
