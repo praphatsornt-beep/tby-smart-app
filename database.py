@@ -1532,14 +1532,17 @@ def get_ecommerce_combined_summary(start_date: str, end_date: str, warn_pct: flo
     ฟังก์ชัน get_ecommerce_* อื่นๆ กรองทีละ platform เดียวเสมอ อันนี้ใช้ตอบคำถามภาพรวม
     "ทั้งหมดขาดทุนหรือเปล่า / PV รวมเท่าไหร่" โดยไม่ต้องสลับแพลตฟอร์มเอง คืน
     {total_profit, total_loss, net, total_pv, pending_qty (รวมทุกแพลตฟอร์ม),
+    loss_products_df (สินค้าที่ net ขาดทุนตลอดช่วง รวมทุกแพลตฟอร์ม — การ์ดสรุปแบบเดียวกับ
+    "สินค้าที่ต้องรีบแก้" ในมุมมองรายแพลตฟอร์ม แต่ข้ามแพลตฟอร์ม — เรียงขาดทุนมากสุดขึ้นก่อน),
     loss_orders_df (ออเดอร์ขาดทุนจริง กำไร<0 ทุกแพลตฟอร์มรวมกัน มีคอลัมน์ "แพลตฟอร์ม" เพิ่ม
-    เรียงขาดทุนมากสุดขึ้นก่อน)}"""
+    เรียงขาดทุนมากสุดขึ้นก่อน — ไว้ไล่ดูรายละเอียดเป็นออเดอร์ๆ)}"""
     platforms = sorted({s["platform"] for s in get_ecommerce_shops()})
     total_profit = 0.0
     total_loss = 0.0
     total_pv = 0.0
     total_pending_qty = 0
-    loss_frames = []
+    loss_order_frames = []
+    loss_product_frames = []
     for platform in platforms:
         summary = get_ecommerce_order_profit_summary(start_date, end_date, platform=platform)
         total_profit += summary["total_profit"]
@@ -1549,18 +1552,28 @@ def get_ecommerce_combined_summary(start_date: str, end_date: str, warn_pct: flo
         total_pending_qty += pending_qty
         if not margin_df.empty:
             total_pv += float(margin_df["PV"].sum())
+            loss_products = margin_df[margin_df["กำไรรวม"] < 0].copy()
+            if not loss_products.empty:
+                loss_products.rename(columns={f"ขายผ่าน {ecom_calc.PLATFORM_LABELS.get(platform, platform)} (ชิ้น)": "ขาย (ชิ้น)"}, inplace=True)
+                loss_products.insert(0, "แพลตฟอร์ม", ecom_calc.PLATFORM_LABELS.get(platform, platform))
+                loss_product_frames.append(loss_products)
 
         anomaly_df = get_ecommerce_order_anomaly_df(start_date, end_date, platform=platform, warn_pct=warn_pct)
         if not anomaly_df.empty:
             loss_df = anomaly_df[anomaly_df["กำไร"] < 0].copy()
             if not loss_df.empty:
                 loss_df.insert(0, "แพลตฟอร์ม", ecom_calc.PLATFORM_LABELS.get(platform, platform))
-                loss_frames.append(loss_df)
+                loss_order_frames.append(loss_df)
 
-    loss_orders_df = pd.concat(loss_frames, ignore_index=True) if loss_frames else pd.DataFrame()
+    loss_orders_df = pd.concat(loss_order_frames, ignore_index=True) if loss_order_frames else pd.DataFrame()
     if not loss_orders_df.empty:
         loss_orders_df.sort_values("กำไร", ascending=True, inplace=True)
         loss_orders_df.reset_index(drop=True, inplace=True)
+
+    loss_products_df = pd.concat(loss_product_frames, ignore_index=True) if loss_product_frames else pd.DataFrame()
+    if not loss_products_df.empty:
+        loss_products_df.sort_values("กำไรรวม", ascending=True, inplace=True)
+        loss_products_df.reset_index(drop=True, inplace=True)
 
     return {
         "total_profit": round(total_profit, 2),
@@ -1568,6 +1581,7 @@ def get_ecommerce_combined_summary(start_date: str, end_date: str, warn_pct: flo
         "net": round(total_profit + total_loss, 2),
         "total_pv": round(total_pv, 2),
         "pending_qty": total_pending_qty,
+        "loss_products_df": loss_products_df,
         "loss_orders_df": loss_orders_df,
     }
 

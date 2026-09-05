@@ -679,15 +679,39 @@ def _render_combined_summary(date_from: str, date_to: str):
     if summary["pending_qty"]:
         st.caption(f"ℹ️ มี {summary['pending_qty']:,} ชิ้น ที่ขายแล้วแต่ยังไม่มีรายงาน Income มายืนยัน — ยังไม่รวมในตัวเลขข้างบน")
 
-    _loss_df = summary["loss_orders_df"]
-    if not _loss_df.empty:
-        st.warning(f"⚠️ พบ {len(_loss_df)} ออเดอร์ที่ขาดทุนจริง (กำไร < 0) เมื่อรวมทุกช่องทาง")
-        st.dataframe(
-            _loss_df.style.format({"ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}", "กำไร": "{:,.2f}"}),
-            width="stretch", hide_index=True,
-        )
-    else:
-        st.success("✅ ไม่พบออเดอร์ที่ขาดทุนจริงในช่วงนี้ (ทุกช่องทาง)")
+    _loss_products = summary["loss_products_df"]
+    _loss_orders = summary["loss_orders_df"]
+
+    if _loss_products.empty and _loss_orders.empty:
+        st.success("✅ ไม่พบสินค้า/ออเดอร์ที่ขาดทุนในช่วงนี้ (ทุกช่องทาง)")
+        return
+
+    # การ์ดใหญ่ต่อสินค้า อ่านง่ายกว่าตารางดิบ — ดูปุ๊บรู้เลยว่าสินค้าไหนขาดทุน
+    # ขาดทุนเท่าไหร่/ชิ้น ต้องขายเท่าไหร่ถึงคุ้มทุน โดยไม่ต้องไล่เลขออเดอร์ทีละแถว
+    if not _loss_products.empty:
+        st.markdown("**⚠️ สินค้าที่ขาดทุนสะสม (รวมทุกช่องทาง)**")
+        _pc = st.columns(min(len(_loss_products), 3))
+        for _i, (_, _r) in enumerate(_loss_products.iterrows()):
+            with _pc[_i % len(_pc)]:
+                _breakeven = _r.get("ราคาขายสุทธิที่ควรได้ต่อชิ้น (คุ้มทุน)") or 0
+                st.markdown(f"""
+                <div style="background:var(--tby-badge-bad-bg);border:1px solid {_LOSS_RED};border-radius:12px;padding:16px 18px;margin-bottom:10px">
+                  <div style="display:flex;justify-content:space-between;gap:10px">
+                    <span style="font:700 15px 'Sarabun',sans-serif">{_r['ชื่อสินค้า']}</span>
+                    <span style="font:600 11px 'Sarabun',sans-serif;color:var(--tby-muted)">{_r['แพลตฟอร์ม']}</span>
+                  </div>
+                  <div style="margin-top:8px"><span style="font:700 26px 'Prompt',sans-serif;color:{_LOSS_RED}">฿{_r['กำไร/ชิ้น']:,.1f}</span> <span style="font:600 13px 'Sarabun',sans-serif;color:var(--tby-muted)">/ ชิ้น</span></div>
+                  <div style="font:500 12.5px 'Sarabun',sans-serif;color:var(--tby-muted);margin-top:6px">ขาย {_r['ขาย (ชิ้น)']:,.0f} ชิ้น · ขาดทุนรวม ฿{abs(_r['กำไรรวม']):,.0f} · คุ้มทุนที่ ฿{_breakeven:,.1f}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    if not _loss_orders.empty:
+        with st.expander(f"ดูรายละเอียดทุกออเดอร์ที่ขาดทุน ({len(_loss_orders)} ออเดอร์)"):
+            st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้าด้านบน) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน")
+            st.dataframe(
+                _loss_orders.style.format({"ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}", "กำไร": "{:,.2f}"}),
+                width="stretch", hide_index=True,
+            )
 
 
 def _render_sales_profit():
