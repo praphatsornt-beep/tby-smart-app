@@ -1108,6 +1108,36 @@ def _render_issues():
     else:
         st.dataframe(problem_df, width="stretch", hide_index=True)
 
+    if _platform == "shopee":
+        st.divider()
+        # ── ออเดอร์ตีกลับ (แกะจากอีเมลแจ้งเตือน Shopee — เชื่อม API ตรงไม่ได้) ──
+        st.subheader("ออเดอร์ตีกลับ (จากอีเมลแจ้งเตือน Shopee)")
+        st.caption(
+            "แกะจากอีเมล info@mail.shopee.co.th ที่แจ้งพัสดุจัดส่งไม่สำเร็จ/กำลังส่งคืนร้าน — "
+            "เชื่อม Shopee API ตรงไม่ได้ (ไม่ใช่ Managed/Mall Seller) อีเมลคือทางเดียวที่รู้ตอนนี้ "
+            "(Lazada/TikTok ไม่มีอีเมลแจ้งเตือนอัตโนมัติแบบนี้ ยืนยันแล้ว 2026-09-19) "
+            "\"แจ้งกี่ครั้ง\" มากแปลว่ายังส่งคืนร้านไม่สำเร็จนานแล้ว ควรตามขนส่งเป็นพิเศษ"
+        )
+        return_email_df = db.get_ecommerce_return_emails_df(platform="shopee")
+        if _shop_filter:
+            return_email_df = return_email_df[return_email_df["ร้าน"] == _shop_filter].reset_index(drop=True)
+        if return_email_df.empty:
+            st.success("✅ ไม่พบอีเมลแจ้งพัสดุตีกลับ")
+        else:
+            st.warning(f"⚠️ พบ {len(return_email_df)} ออเดอร์ตีกลับจากอีเมล")
+            st.dataframe(
+                return_email_df.drop(columns=["เจอครั้งแรก"]),
+                width="stretch", hide_index=True,
+                column_config={"เจอล่าสุด": st.column_config.DatetimeColumn(format="D/MM/YYYY HH:mm")},
+            )
+            st.download_button(
+                "⬇ Export Excel",
+                _to_excel_bytes(return_email_df, "ตีกลับ"),
+                file_name=f"ecom_shopee_return_emails_{date.today().strftime('%Y%m%d')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                key="ecom_return_email_export",
+            )
+
     if _platform == "tiktok":
         st.divider()
         # ── TikTok organic ที่แกะสินค้าจาก product_summary ไม่ได้ ─────────

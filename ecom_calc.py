@@ -5,8 +5,37 @@ tests/test_ecom_calc.py) — database.py เหลือแค่ fetch ข้�
 
 ย้ายแบบ byte-for-byte จากของเดิมทุกจุด (ไม่ปรับสูตร) ยืนยันตัวเลขจริงตรงเป๊ะกับ
 ก่อนย้ายแล้ว (ดู commit message)"""
+import re
 
 PLATFORM_LABELS = {"shopee": "Shopee", "lazada": "Lazada", "tiktok": "TikTok"}
+
+# ยืนยันจากอีเมลจริงของ Shopee (info@mail.shopee.co.th) 2026-09-19 — ทั้ง 2 แบบหัวเรื่อง
+# ("พัสดุกำลังทำการจัดส่งไปยังผู้ขาย..." / "...ไม่สามารถจัดส่งคืนร้านค้าได้สำเร็จ...") มี
+# บล็อกข้อมูลรูปแบบเดียวกันเป๊ะในเนื้อหา: "หมายเลขคำสั่งซื้อ : X บริษัทขนส่ง : Y
+# หมายเลขติดตามพัสดุ : Z" — findall เผื่อบางฉบับมีมากกว่า 1 ออเดอร์ต่ออีเมล (Lazada/TikTok
+# ไม่มีอีเมลแจ้งตีคืนอัตโนมัติแบบนี้เลย ยืนยันแล้ว — ฟังก์ชันนี้จึงรองรับเฉพาะฟอร์แมต Shopee)
+#
+# หมายเหตุ: ตัวอีเมลบางฉบับมีข้อความ "(แจ้งครั้งที่ N)" กำกับ แต่ไม่ใช่ทุกฉบับ — ออเดอร์
+# เดียวกันมักถูกส่งอีเมลแจ้งซ้ำหลายวันติดกันโดยไม่มีเลขกำกับเลยก็ได้ (ยืนยันจากอีเมลจริง)
+# จึงไม่ใช้ตัวเลขนี้นับจำนวนครั้ง — ปล่อยให้ database.upsert_ecommerce_return_email() นับเอง
+# จากจำนวนครั้งที่ถูกเรียก (นับ 1 ทุกครั้งที่เจออีเมลใหม่ ไม่สนใจเลขในเนื้อหา)
+_SHOPEE_RETURN_ORDER_RE = re.compile(
+    r"หมายเลขคำสั่งซื้อ\s*[:：]\s*(\S+).*?"
+    r"บริษัทขนส่ง\s*[:：]\s*(.+?)\s*หมายเลขติดตามพัสดุ\s*[:：]\s*(\S+)",
+    re.DOTALL,
+)
+
+
+def parse_shopee_return_emails(subject: str, body: str) -> list[dict]:
+    """แกะออเดอร์ที่ตีกลับ/จัดส่งคืนร้านไม่สำเร็จ จากอีเมลแจ้งเตือนของ Shopee — คืน list
+    ของ {order_sn, carrier_name, tracking_no} (ปกติมีแค่ 1 รายการต่ออีเมล แต่เผื่อกรณี
+    อีเมลเดียวรวมหลายออเดอร์) คืน [] ถ้าไม่ใช่อีเมลแจ้งตีคืน/parse ไม่ได้"""
+    text = " ".join(body.split())  # ยุบ whitespace/newline ให้ regex ข้าม tag/ลิงก์คั่นกลางได้
+    matches = _SHOPEE_RETURN_ORDER_RE.findall(text)
+    return [
+        {"order_sn": order_sn.strip(), "carrier_name": carrier.strip(), "tracking_no": tracking.strip()}
+        for order_sn, carrier, tracking in matches
+    ]
 
 
 def settled_order_sns(income_rows: list[dict]) -> set[str]:

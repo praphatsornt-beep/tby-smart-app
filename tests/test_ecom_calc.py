@@ -41,6 +41,42 @@ class TestPendingIncomeRows(unittest.TestCase):
         self.assertEqual(rows[0]["สินค้า"], "SKU-XYZ")
 
 
+class TestParseShopeeReturnEmails(unittest.TestCase):
+    """ยืนยันด้วยข้อความจากอีเมลจริงของ Shopee (info@mail.shopee.co.th) 2026-09-19"""
+
+    def test_first_notice_extracts_order_carrier_tracking(self):
+        subject = "[แจ้งเตือน] พัสดุกำลังทำการจัดส่งไปยังผู้ขาย กรุณารอการติดต่อจากบริษัทขนส่ง"
+        body = (
+            "เรียนผู้ขาย มุ่ย, อีเมลนี้มีการแจ้งการจัดส่งไม่สำเร็จหลายคำสั่งซื้อ "
+            "โปรดตรวจสอบรายละเอียดด้านล่าง เนื่องจากบริษัทขนส่งไม่สามารถจัดส่งสินค้าแก่ผู้ซื้อได้สำเร็จ "
+            "รายละเอียดคำสั่งซื้อที่จัดส่งไม่สำเร็จ ดังนี้ หมายเลขคำสั่งซื้อ : 260909K1U1F0KP "
+            "บริษัทขนส่ง : SPX Express หมายเลขติดตามพัสดุ : TH260595364725I หากสินค้าของผู้ขายอยู่ในขั้นตอนนี้"
+        )
+        result = ecom_calc.parse_shopee_return_emails(subject, body)
+        self.assertEqual(result, [{
+            "order_sn": "260909K1U1F0KP", "carrier_name": "SPX Express", "tracking_no": "TH260595364725I",
+        }])
+
+    def test_repeat_notice_same_fields(self):
+        subject = "[แจ้งเตือน] พัสดุของคุณไม่สามารถจัดส่งคืนร้านค้าได้สำเร็จ กรุณาตรวจสอบเพื่อรับสินค้าคืน"
+        body = (
+            "เรียนผู้ขาย มุ่ย, (แจ้งครั้งที่ 2) บริษัทขนส่งพยายามจัดส่งสินค้าคืนผู้ขายตามที่อยู่ที่ระบุไว้ในระบบ "
+            "รายละเอียดคำสั่งซื้อที่จัดส่งไม่สำเร็จ ดังนี้ หมายเลขคำสั่งซื้อ : 260909K1U1F0KP "
+            "บริษัทขนส่ง : SPX Express หมายเลขติดตามพัสดุ : TH260595364725I ทั้งนี้"
+        )
+        result = ecom_calc.parse_shopee_return_emails(subject, body)
+        self.assertEqual(result[0]["order_sn"], "260909K1U1F0KP")
+
+    def test_unrelated_email_returns_empty(self):
+        result = ecom_calc.parse_shopee_return_emails(
+            "ถึงเวลาจัดส่งสินค้าหมายเลข #2609167MX3DSEW แล้ว!", "เรียน คุณ ts_shop56 คำสั่งซื้อพร้อมส่งแล้ว",
+        )
+        self.assertEqual(result, [])
+
+    def test_no_order_block_returns_empty(self):
+        self.assertEqual(ecom_calc.parse_shopee_return_emails("อะไรสักอย่าง", "ไม่มีเลขคำสั่งซื้อในนี้เลย"), [])
+
+
 class TestShippingOverchargeExtra(unittest.TestCase):
     def test_overcharged(self):
         row = {"buyer_paid_shipping": 30, "shopee_subsidized_shipping": 10, "shipping_fee_charged": 55}

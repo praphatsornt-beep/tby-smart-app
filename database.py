@@ -1212,7 +1212,7 @@ def _clear_ecommerce_caches() -> None:
         get_ecommerce_problem_orders_df, get_ecommerce_sales_df, get_ecommerce_product_map,
         get_unmapped_ecommerce_items, get_tiktok_pending_sync_count,
         get_tiktok_unmatched_organic_orders, get_tiktok_affiliate_orders_df,
-        get_tiktok_order_income_df,
+        get_tiktok_order_income_df, get_ecommerce_return_emails_df,
     ):
         _fn.clear()
 
@@ -1835,6 +1835,78 @@ def get_ecommerce_problem_orders_df(platform: str = "shopee", shop_name: str = N
         "เลขพัสดุ": "" if r.get("order_status") == "ยกเลิกแล้ว" else (r.get("tracking_no") or ""),
         "ขนส่ง": "" if r.get("order_status") == "ยกเลิกแล้ว" else (r.get("carrier_name") or ""),
     } for r in problem]).sort_values("วันที่", ascending=False).reset_index(drop=True)
+
+
+def upsert_ecommerce_return_email(
+    order_sn: str, carrier_name: str, tracking_no: str, notice_subject: str, platform: str = "shopee",
+) -> None:
+    """บันทึก/อัปเดตออเดอร์ตีกลับที่แกะได้จากอีเมล Shopee (ดู ecom_calc.parse_shopee_return_emails)
+    — upsert คีย์ (platform, order_sn) เอง (ไม่ใช้ .upsert() ตรงๆ) เพราะต้องคง first_seen_at
+    เดิมไว้ (ไม่ทับด้วยเวลาปัจจุบันทุกครั้งที่เจอซ้ำ) notice_count +1 ทุกครั้งที่ถูกเรียกซ้ำ
+    สำหรับ order_sn เดิม (นับ "จำนวนอีเมลที่เจอ" ตรงๆ ไม่ได้อ่านเลข "แจ้งครั้งที่ N" จาก
+    เนื้อหาอีเมล เพราะ Shopee ไม่ใส่เลขนี้มาทุกฉบับ — ดู docstring ecom_calc — ต้องเรียก
+    ฟังก์ชันนี้แค่ครั้งเดียวต่ออีเมล 1 ฉบับเท่านั้น ไม่งั้นนับซ้ำเกินจริง)"""
+    from datetime import datetime, timezone
+    db = get_supabase()
+    existing = _retry(lambda: db.table("ecommerce_return_emails").select("id,notice_count")
+                       .eq("platform", platform).eq("order_sn", order_sn).execute()).data
+    now = datetime.now(timezone.utc).isoformat()
+    if existing:
+        row = existing[0]
+        _retry(lambda: db.table("ecommerce_return_emails").update({
+            "carrier_name": carrier_name,
+            "tracking_no": tracking_no,
+            "notice_subject": notice_subject,
+            "notice_count": (row.get("notice_count") or 1) + 1,
+            "last_seen_at": now,
+        }).eq("id", row["id"]).execute())
+    else:
+        _retry(lambda: db.table("ecommerce_return_emails").insert({
+            "platform": platform, "order_sn": order_sn, "carrier_name": carrier_name,
+            "tracking_no": tracking_no, "notice_subject": notice_subject,
+            "notice_count": 1, "first_seen_at": now, "last_seen_at": now,
+        }).execute())
+    _clear_ecommerce_caches()
+
+
+@st.cache_data(ttl=120)
+def get_ecommerce_return_emails_df(platform: str = "shopee") -> pd.DataFrame:
+    """ออเดอร์ตีกลับที่แกะได้จากอีเมล Shopee (ตาราง ecommerce_return_emails) join กับ
+    ecommerce_sales ด้วย order_sn เพื่อโชว์ร้าน/สินค้าจริงประกอบ — ถ้ายังไม่เจอใน
+    ecommerce_sales (เช่นไฟล์ยอดขายยังไม่ได้อัปโหลด) ยังโชว์แถวนั้นได้ แค่ไม่มีชื่อสินค้า"""
+    emails = _fetch_all(
+        lambda: get_supabase().table("ecommerce_return_emails").select("*").eq("platform", platform).order("id")
+    )
+    if not emails:
+        return pd.DataFrame()
+
+    order_sns = list({r["order_sn"] for r in emails})
+    sales_by_order: dict[str, dict] = {}
+    db = get_supabase()
+    for i in range(0, len(order_sns), 50):
+        chunk = order_sns[i:i + 50]
+        rows = _retry(lambda _c=chunk: db.table("ecommerce_sales").select(
+            "order_sn,shop_name,product_id,item_name,products(name)"
+        ).eq("platform", platform).in_("order_sn", _c).execute()).data
+        for r in rows:
+            sales_by_order.setdefault(r["order_sn"], r)  # แถวแรกพอ (แค่ต้องการร้าน/สินค้าคร่าวๆ)
+
+    out = []
+    for r in emails:
+        sale = sales_by_order.get(r["order_sn"])
+        product_name = ((sale or {}).get("products") or {}).get("name") or (sale or {}).get("item_name") or "-"
+        out.append({
+            "เลขออเดอร์": r["order_sn"],
+            "ร้าน": (sale or {}).get("shop_name") or "-",
+            "สินค้า": product_name,
+            "ขนส่ง": r.get("carrier_name") or "",
+            "เลขพัสดุ": r.get("tracking_no") or "",
+            "สถานะล่าสุด": r.get("notice_subject") or "",
+            "แจ้งกี่ครั้ง": r.get("notice_count") or 1,
+            "เจอครั้งแรก": r.get("first_seen_at"),
+            "เจอล่าสุด": r.get("last_seen_at"),
+        })
+    return pd.DataFrame(out).sort_values("เจอล่าสุด", ascending=False).reset_index(drop=True)
 
 
 @st.cache_data(ttl=120)
