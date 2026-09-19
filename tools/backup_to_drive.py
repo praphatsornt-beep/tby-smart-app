@@ -20,6 +20,15 @@ Secrets and variables > Actions)
 ไม่ import database.py ตั้งใจ — สคริปต์นี้เรียก Supabase ตรงผ่าน supabase-py เอง เพื่อไม่ต้อง
 ลาก streamlit/pyarrow/numpy (dependency ของแอปหลัก) มาลงใน GitHub Actions runner ทุกวัน
 ติดตั้งด้วย tools/requirements-backup.txt (เบากว่า requirements.txt หลักมาก)
+
+หมายเหตุ 2026-09-20: GDRIVE_REFRESH_TOKEN จะหมดอายุทุก 7 วันถ้า OAuth app ใน Google Cloud
+Console ยังอยู่สถานะ "Testing" (ยังไม่ Publish) — ลอง publish แล้วติดปัญหา "Authorized
+domains" เพราะโดเมนแอปจริงคือ tby-smart.streamlit.app ซึ่งเป็น subdomain ของ streamlit.app
+(โดเมนของ Streamlit เอง ไม่ใช่ของร้าน) Google ไม่ให้ authorize โดเมนที่ไม่ได้เป็นเจ้าของ
+จริง — ถ้ายังหาทางแก้ไม่ได้ ให้ปล่อยเป็น Testing ต่อไป แล้วรับมือด้วยการแจ้งเตือนแทน
+(ดู _notify_failure ด้านล่าง — ส่ง LINE หา STAFF_LINE_USER_ID ทันทีที่ backup ล้มเหลว
+ไม่ต้องรอเจอเองใน GitHub Actions) ถ้า token หมดอายุอีก ต้องรัน
+tools/gdrive_get_refresh_token.py ใหม่แล้วอัปเดต GitHub Secret ด้วยมือทุกครั้ง
 """
 import os
 import sys
@@ -52,7 +61,29 @@ _TABLES = [
 _DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true"
 _DRIVE_FILES_URL  = "https://www.googleapis.com/drive/v3/files"
 _TOKEN_URL        = "https://oauth2.googleapis.com/token"
+_LINE_PUSH_URL    = "https://api.line.me/v2/bot/message/push"
 _RETAIN_COUNT     = 30  # เก็บ backup ล่าสุด 30 ไฟล์ (~1 เดือนถ้ารันวันละครั้ง) ลบเก่ากว่านั้นทิ้งกัน Drive เต็ม
+
+
+def _notify_failure(err: Exception) -> None:
+    """แจ้ง LINE ทันทีที่ backup ล้มเหลว (เช่น GDRIVE_REFRESH_TOKEN หมดอายุ) — กันเหตุการณ์
+    2026-09 ที่พังเงียบๆ ไป 3 วันกว่าจะมีคนสังเกตเห็นใน GitHub Actions เอง"""
+    token = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
+    user_id = os.environ.get("STAFF_LINE_USER_ID", "")
+    if not token or not user_id:
+        return
+    text = (
+        "⚠️ Backup Supabase → Google Drive ล้มเหลว\n"
+        f"{type(err).__name__}: {err}\n"
+        "เช็ค GitHub Actions → Daily Supabase Backup to Google Drive\n"
+        "(สาเหตุที่พบบ่อย: GDRIVE_REFRESH_TOKEN หมดอายุ ต้องขอใหม่ผ่าน "
+        "tools/gdrive_get_refresh_token.py แล้วอัปเดต GitHub Secret)"
+    )
+    try:
+        httpx.post(_LINE_PUSH_URL, json={"to": user_id, "messages": [{"type": "text", "text": text}]},
+                   headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"}, timeout=10)
+    except Exception:
+        pass  # การแจ้งเตือนพังไม่ควรบัง exception เดิม ปล่อยให้ GitHub Actions ขึ้นแดงตามปกติ
 
 
 def _get_access_token() -> str:
@@ -141,4 +172,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        _notify_failure(e)
+        raise

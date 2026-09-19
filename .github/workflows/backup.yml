@@ -26,4 +26,6 @@ jobs:
           GDRIVE_CLIENT_SECRET: ${{ secrets.GDRIVE_CLIENT_SECRET }}
           GDRIVE_REFRESH_TOKEN: ${{ secrets.GDRIVE_REFRESH_TOKEN }}
           GDRIVE_FOLDER_ID:     ${{ secrets.GDRIVE_FOLDER_ID }}
+          LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
+          STAFF_LINE_USER_ID:        ${{ secrets.STAFF_LINE_USER_ID }}
         run: python tools/backup_to_drive.py
