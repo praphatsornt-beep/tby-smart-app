@@ -149,12 +149,30 @@ def _is_bank_statement(subject: str, sender: str, body: str) -> bool:
 
 # ── IMAP fetch ────────────────────────────────────────────────────────────────
 
+# บางอีเมล (เจอจริงจากบัญชี ts_shop56) ประกาศ charset เป็นชื่อที่ Python ไม่รู้จักตรงๆ
+# เช่น "windows-874" (ชื่อที่ Windows/เมลไคลเอนต์บางตัวใช้เรียก codec ไทย — Python เรียก
+# "cp874") ถ้าไม่ normalize ก่อน .decode() จะได้ LookupError ทำให้อีเมลทั้งฉบับ (และเดิม
+# ทั้งบัญชี เพราะ error หลุดออกไปทำให้ fetch_account() ล้มทั้งลูป) หายไปเงียบๆ
+_CHARSET_ALIASES = {"windows-874": "cp874"}
+
+
+def _normalize_charset(enc: str | None) -> str:
+    enc = (enc or "utf-8").lower()
+    return _CHARSET_ALIASES.get(enc, enc)
+
+
 def _decode(raw: str) -> str:
     if not raw:
         return ""
     out = ""
     for text, enc in decode_header(raw):
-        out += text.decode(enc or "utf-8", errors="replace") if isinstance(text, bytes) else text
+        if not isinstance(text, bytes):
+            out += text
+            continue
+        try:
+            out += text.decode(_normalize_charset(enc), errors="replace")
+        except LookupError:
+            out += text.decode("utf-8", errors="replace")
     return out
 
 
@@ -163,12 +181,12 @@ def _get_body(msg: email.message.Message) -> str:
         for part in msg.walk():
             if part.get_content_type() == "text/plain" and not part.get("Content-Disposition"):
                 try:
-                    return part.get_payload(decode=True).decode(part.get_content_charset() or "utf-8", errors="replace")
+                    return part.get_payload(decode=True).decode(_normalize_charset(part.get_content_charset()), errors="replace")
                 except Exception:
                     continue
         return ""
     try:
-        return msg.get_payload(decode=True).decode(msg.get_content_charset() or "utf-8", errors="replace")
+        return msg.get_payload(decode=True).decode(_normalize_charset(msg.get_content_charset()), errors="replace")
     except Exception:
         return ""
 
@@ -190,12 +208,17 @@ def fetch_account(account: dict) -> list[dict]:
             status, msg_data = conn.fetch(num, "(RFC822)")
             if status != "OK" or not msg_data or not msg_data[0]:
                 continue
-            msg = email.message_from_bytes(msg_data[0][1])
-            found.append({
-                "subject": _decode(msg.get("Subject", "")),
-                "sender": _decode(msg.get("From", "")),
-                "body": _get_body(msg),
-            })
+            try:
+                msg = email.message_from_bytes(msg_data[0][1])
+                found.append({
+                    "subject": _decode(msg.get("Subject", "")),
+                    "sender": _decode(msg.get("From", "")),
+                    "body": _get_body(msg),
+                })
+            except Exception as e:
+                # อีเมล 1 ฉบับพังไม่ควรทำให้ทั้งบัญชีเสียหมด (เจอจริง: charset แปลกใน
+                # Subject header ทำให้ LookupError หลุดออกมาที่นี่ ก่อนแก้ _decode())
+                print(f"⚠️ [{label}] ข้ามอีเมล 1 ฉบับที่ parse ไม่ได้: {e}")
         conn.logout()
         print(f"✅ [{label}] เช็คแล้ว {len(found)} ฉบับ (24 ชม.ที่ผ่านมา)")
     except Exception as e:
