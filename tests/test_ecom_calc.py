@@ -193,6 +193,31 @@ class TestParseShopeeOrderNoticeEmail(unittest.TestCase):
     def test_unrelated_email_returns_none(self):
         self.assertIsNone(ecom_calc.parse_shopee_order_notice_email("แจ้งเตือนอย่างอื่น", "เนื้อหาอะไรก็ได้"))
 
+    def test_transfer_order_compact_template_empty_variant_line(self):
+        """ยืนยันด้วยอีเมลจริง #260920GPANG1SF (2026-09-20, ts_shop56) — เทมเพลตสั้นของอีเมล
+        "ถึงเวลาจัดส่งสินค้า...แล้ว!" มีบรรทัด "ตัวเลือกสินค้า:" อยู่เสมอแม้ไม่มี variant จริง
+        (ค่าว่างเปล่า) ก่อนแก้ (.+?) เป็น (.*?) ข้อความ "ตัวเลือกสินค้า:" ไปติดท้ายชื่อสินค้า
+        (regression test)"""
+        subject = "ถึงเวลาจัดส่งสินค้าหมายเลข #260920GPANG1SF แล้ว!"
+        body = (
+            "เรียน คุณ ts_shop56, คำสั่งซื้อหมายเลข #260920GPANG1SF ได้รับการยืนยันการชำระเงินเรียบร้อยแล้ว. "
+            "กรุณาจัดส่งสินค้าไปยังผู้ซื้อ pcherdchan รายละเอียดคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: | #260920GPANG1SF |\n"
+            "| วันที่สั่งซื้อ: | 20 ก.ย. 2026 10:22:17 |\n"
+            "| 1. กาแฟโสม ซูเลียน กาแฟคอลลาเจน (บรรจุ 18 ซอง) กาแฟโสมผสมคอลลาเจน คอฟฟี่พลัส ของแท้ |\n"
+            "| ตัวเลือกสินค้า: | |\n| จำนวน: | 1 |\n| ราคา: | ฿253 |\n"
+            "| ยอดรวมค่าสินค้า: | ฿253 |\n| ค่าจัดส่งสินค้า: | ฿0 |"
+        )
+        result = ecom_calc.parse_shopee_order_notice_email(subject, body)
+        self.assertEqual(result["order_type"], "transfer")
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(
+            result["items"][0]["name"],
+            "กาแฟโสม ซูเลียน กาแฟคอลลาเจน (บรรจุ 18 ซอง) กาแฟโสมผสมคอลลาเจน คอฟฟี่พลัส ของแท้",
+        )
+        self.assertIsNone(result["items"][0]["variant"])
+        self.assertEqual(result["items"][0]["qty"], 1)
+        self.assertEqual(result["items"][0]["price"], 253.0)
+
 
 class TestShippingOverchargeExtra(unittest.TestCase):
     def test_overcharged(self):
