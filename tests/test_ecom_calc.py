@@ -255,6 +255,43 @@ class TestParseShopeeOrderNoticeEmail(unittest.TestCase):
         self.assertEqual(result["items"][0]["qty"], 1)
         self.assertEqual(result["items"][0]["price"], 253.0)
 
+    def test_multi_item_order_first_item_empty_variant_no_second_item_swallowed(self):
+        """ยืนยันด้วยอีเมลจริง #260920H92E7K5E (2026-09-20, ts_shop56) — ออเดอร์ 2 สินค้า
+        ที่สินค้าตัวแรกมีบรรทัด "ตัวเลือกสินค้า:" ว่างเปล่า (เหมือนเคสข้างบน) แต่ตามด้วย
+        สินค้าตัวที่ 2 ที่มี variant จริง ก่อนแก้ \\s+ เป็น \\s* หลัง (.*?): \\s* (greedy) หลัง
+        ":" ของตัวเลือกสินค้าตัวแรกกินช่องว่างเดียวที่มีไปหมดแล้ว ทำให้ไม่เหลือช่องว่างให้
+        \\s+ บังคับ (.*?) เลย บังคับให้ backtrack ขยายข้าม จำนวน/ราคา ของสินค้าตัวแรกเอง ไป
+        จนถึง "ตัวเลือกสินค้า:" ของสินค้าตัวที่ 2 — ผลคือสินค้าตัวแรกได้ qty/price ของตัวที่ 2
+        ไปแทน (ยืนยันจาก DB จริงก่อนแก้: ได้ items แค่ 1 แถว price=242 ซึ่งเป็นราคาสินค้าตัวที่
+        2 ไม่ใช่ตัวแรกที่ควรเป็น 378) และสินค้าตัวที่ 2 หายไปจาก items ทั้งแถว"""
+        subject = "ถึงเวลาจัดส่งสินค้าหมายเลข #260920H92E7K5E แล้ว!"
+        body = (
+            "เรียน คุณ ts_shop56, คำสั่งซื้อหมายเลข #260920H92E7K5E ได้รับการยืนยันการชำระเงินเรียบร้อยแล้ว. "
+            "รายละเอียดคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: | #260920H92E7K5E |\n"
+            "| วันที่สั่งซื้อ: | 20 ก.ย. 2026 15:57:41 |\n"
+            "| 1. บำรุงผมโสม แอลทิน่า ผลิตภัณฑ์บำรุงเส้นผม ผสมเลมอน ซูเลียน Zhulian |\n"
+            "| ตัวเลือกสินค้า: | |\n| จำนวน: | 1 |\n| ราคา: | ฿378 |\n"
+            "| 2. แอลทิน่า แชมพูสระผม/ครีมนวดผม ผสมเลมอนโสมและวิตามินอี ซูเลียน zhulian |\n"
+            "| ตัวเลือกสินค้า: | ครีมนวดผม |\n| จำนวน: | 1 |\n| ราคา: | ฿242 |\n"
+            "| ยอดรวมค่าสินค้า: | ฿620 |\n| ค่าจัดส่งสินค้า: | ฿0 |"
+        )
+        result = ecom_calc.parse_shopee_order_notice_email(subject, body)
+        self.assertEqual(len(result["items"]), 2)
+        self.assertEqual(
+            result["items"][0]["name"],
+            "บำรุงผมโสม แอลทิน่า ผลิตภัณฑ์บำรุงเส้นผม ผสมเลมอน ซูเลียน Zhulian",
+        )
+        self.assertIsNone(result["items"][0]["variant"])
+        self.assertEqual(result["items"][0]["qty"], 1)
+        self.assertEqual(result["items"][0]["price"], 378.0)
+        self.assertEqual(
+            result["items"][1]["name"],
+            "แอลทิน่า แชมพูสระผม/ครีมนวดผม ผสมเลมอนโสมและวิตามินอี ซูเลียน zhulian",
+        )
+        self.assertEqual(result["items"][1]["variant"], "ครีมนวดผม")
+        self.assertEqual(result["items"][1]["qty"], 1)
+        self.assertEqual(result["items"][1]["price"], 242.0)
+
 
 class TestShippingOverchargeExtra(unittest.TestCase):
     def test_overcharged(self):

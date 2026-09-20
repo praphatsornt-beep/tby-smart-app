@@ -1959,6 +1959,16 @@ def mark_ecommerce_return_received(order_sns: list[str], platform: str = "shopee
     return n
 
 
+def notice_item_map_key(name: str, variant: str | None) -> str:
+    """คีย์รวมชื่อสินค้า+ตัวเลือกสินค้า (variant) จากอีเมลแจ้งออเดอร์ ใช้เป็น
+    platform_item_id ตอน map เข้า ecommerce_product_map (namespace "shopee_notice")
+    — ต้องรวม variant เพราะโพสต์เดียวกันบางโพสต์มีตัวเลือกในตัว (เช่น "แชมพูสระผม/
+    ครีมนวดผม", "ผิวธรรมดา/ผิวแห้ง") ที่จริงคือคนละสินค้ากันเลย ใช้ฟังก์ชันเดียวกันนี้
+    ทั้งตอนอ่าน (get_ecommerce_order_notices_df) และตอนเขียน (ecom_ui.py mapping UI)
+    กันคีย์เพี้ยนไม่ตรงกัน"""
+    return f"{name} :: {variant}" if variant else name
+
+
 @st.cache_data(ttl=120)
 def get_ecommerce_order_notices_df(
     platform: str = "shopee", date_from=None, date_to=None,
@@ -1983,10 +1993,13 @@ def get_ecommerce_order_notices_df(
     # จริงจากไฟล์ Shopee export ที่ใช้ map ecommerce_sales) โดยใช้ตัวข้อความเต็มนี้เองเป็นคีย์
     # แทน platform_item_id เพราะอีเมลไม่มี SKU id ให้ — ต้อง map มือครั้งแรกที่ 🛒 E-commerce →
     # ⚙️ ตั้งค่า/นำเข้าข้อมูล → "Map ชื่อสินค้าจากอีเมล → รหัสสินค้า" แล้วจำไว้ใช้ได้ทุกครั้งถัดไป
+    # คีย์ต้องรวม variant ด้วย (ไม่ใช่แค่ name) — โพสต์เดียวกันบาง SKU มีตัวเลือกในตัว
+    # (เช่น "แชมพูสระผม/ครีมนวดผม", "ผิวธรรมดา/ผิวแห้ง") ที่จริงคือคนละสินค้ากันเลย ถ้า map
+    # แค่ตาม name จะปนกันเป็นรหัสเดียว — ยืนยันจากผู้ใช้ 2026-09-20 (พบตอน map จริง 3 รายการ)
     _notice_prod_map = get_ecommerce_product_map()
 
     shop_stats: dict[str, dict] = {}
-    product_stats: dict[tuple[str, str], dict] = {}
+    product_stats: dict[tuple[str, str, str], dict] = {}
     for r in rows:
         shop = r.get("shop_name") or "-"
         s = shop_stats.setdefault(shop, {"ร้าน": shop, "ออเดอร์ยืนยันแล้ว": 0, "COD": 0, "โอนแล้ว": 0, "ยกเลิก": 0, "ยอดรวม": 0.0})
@@ -2001,12 +2014,16 @@ def get_ecommerce_order_notices_df(
             s["โอนแล้ว"] += 1
         for it in (r.get("items") or []):
             name = it.get("name") or "-"
-            key = (shop, name)
-            _code = (_notice_prod_map.get(("shopee_notice", name)) or {}).get("product_id") or "-"
+            variant = it.get("variant") or ""
+            key = (shop, name, variant)
+            _map_entry = _notice_prod_map.get(("shopee_notice", notice_item_map_key(name, variant)))
+            _code = (_map_entry or {}).get("product_id") or "-"
+            _pack = float((_map_entry or {}).get("units_per_pack") or 1)
             p = product_stats.setdefault(key, {
-                "ร้าน": shop, "รหัสสินค้า": _code, "สินค้า": name, "จำนวนรวม": 0, "จำนวนออเดอร์": 0,
+                "ร้าน": shop, "รหัสสินค้า": _code, "สินค้า": name, "ตัวเลือก": variant or "-",
+                "จำนวนรวม": 0.0, "จำนวนออเดอร์": 0,
             })
-            p["จำนวนรวม"] += int(it.get("qty") or 0)
+            p["จำนวนรวม"] += int(it.get("qty") or 0) * _pack
             p["จำนวนออเดอร์"] += 1
 
     shop_df = pd.DataFrame(shop_stats.values()).sort_values("ออเดอร์ยืนยันแล้ว", ascending=False).reset_index(drop=True)
@@ -2025,13 +2042,21 @@ def get_unmapped_order_notice_item_names(platform: str = "shopee", limit_days: i
         .eq("platform", platform).gte("first_seen_at", cutoff)
     )
     mapped = {k[1] for k in get_ecommerce_product_map() if k[0] == "shopee_notice"}
-    seen: dict[str, int] = {}
+    seen: dict[tuple[str, str], int] = {}
     for r in rows:
         for it in (r.get("items") or []):
             name = it.get("name")
-            if name and name not in mapped:
-                seen[name] = seen.get(name, 0) + int(it.get("qty") or 0)
-    return [{"item_name": k, "total_qty": v} for k, v in sorted(seen.items(), key=lambda kv: -kv[1])]
+            variant = it.get("variant") or ""
+            if not name:
+                continue
+            if notice_item_map_key(name, variant) in mapped:
+                continue
+            key = (name, variant)
+            seen[key] = seen.get(key, 0) + int(it.get("qty") or 0)
+    return [
+        {"item_name": name, "variant": variant, "total_qty": qty}
+        for (name, variant), qty in sorted(seen.items(), key=lambda kv: -kv[1])
+    ]
 
 
 @st.cache_data(ttl=120)

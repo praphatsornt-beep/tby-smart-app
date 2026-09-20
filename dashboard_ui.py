@@ -119,8 +119,8 @@ def render():
         if _product_order_df.empty:
             st.caption("ยังไม่มีสินค้าที่ต้องส่ง")
         else:
-            _ship_products = (_product_order_df[["รหัสสินค้า", "สินค้า", "จำนวนรวม"]]
-                               .groupby(["รหัสสินค้า", "สินค้า"], as_index=False).sum()
+            _ship_products = (_product_order_df[["รหัสสินค้า", "สินค้า", "ตัวเลือก", "จำนวนรวม"]]
+                               .groupby(["รหัสสินค้า", "สินค้า", "ตัวเลือก"], as_index=False).sum()
                                .sort_values("จำนวนรวม", ascending=False))
             st.dataframe(
                 _ship_products, width="stretch", hide_index=True,
@@ -128,6 +128,7 @@ def render():
                 column_config={
                     "รหัสสินค้า": st.column_config.TextColumn(width="small"),
                     "สินค้า": st.column_config.TextColumn(width="large"),
+                    "ตัวเลือก": st.column_config.TextColumn(width="small"),
                     "จำนวนรวม": st.column_config.NumberColumn(width="small"),
                 },
             )

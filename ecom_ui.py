@@ -234,27 +234,34 @@ def _render_config():
         st.subheader("Map ชื่อสินค้าจากอีเมล → รหัสสินค้า")
         st.caption(
             "ชื่อสินค้าที่แกะได้จากอีเมลแจ้งออเดอร์ Shopee เป็นข้อความยาวจากหน้าประกาศขาย "
-            "(คนละที่มากับ SKU ในไฟล์ Order.all ด้านบน) — map ครั้งเดียวต่อชื่อ แล้วจะโชว์เป็น "
-            "รหัสสินค้าในตาราง \"สินค้าที่ต้องเตรียมส่งวันนี้\" ที่หน้าแรกและตารางด้านล่างให้เอง"
+            "(คนละที่มากับ SKU ในไฟล์ Order.all ด้านบน) — map ครั้งเดียวต่อชื่อ+ตัวเลือกสินค้า แล้วจะโชว์เป็น "
+            "รหัสสินค้าในตาราง \"สินค้าที่ต้องเตรียมส่งวันนี้\" ที่หน้าแรกและตารางด้านล่างให้เอง "
+            "โพสต์เดียวกันที่มีตัวเลือกในตัว (เช่น สระผม/ครีมนวด, ผิวธรรมดา/ผิวแห้ง) จะแยกให้ map "
+            "เป็นคนละรหัสสินค้าได้ ไม่รวมกันเป็นรหัสเดียว"
         )
         _notice_unmapped = db.get_unmapped_order_notice_item_names("shopee")
         if _notice_unmapped:
-            st.warning(f"มี {len(_notice_unmapped)} ชื่อสินค้าจากอีเมลที่ยังไม่ได้ map")
+            st.warning(f"มี {len(_notice_unmapped)} รายการ (ชื่อ+ตัวเลือก) ที่ยังไม่ได้ map")
             _all_products = db.get_products()
             _prod_opts = {"— ยังไม่ map —": None} | {p["name"]: p["id"] for p in _all_products}
             _notice_map_rows = []
             for i, row in enumerate(_notice_unmapped):
-                nc1, nc2 = st.columns([3, 2])
-                nc1.write(f"**{row['item_name']}**\n\nรวม {row['total_qty']} ชิ้น (60 วันล่าสุด)")
+                nc1, nc2, nc3 = st.columns([3, 2, 1])
+                _variant_line = f"\n\nตัวเลือก: **{row['variant']}**" if row["variant"] else ""
+                nc1.write(f"**{row['item_name']}**{_variant_line}\n\nรวม {row['total_qty']} ชิ้น (60 วันล่าสุด)")
                 sel = nc2.selectbox("สินค้าในระบบ", list(_prod_opts.keys()), key=f"notice_map_{i}")
+                pack = nc3.number_input(
+                    "1 หน่วยที่ขาย = กี่หน่วยสต็อก", min_value=1, value=1, step=1, key=f"notice_map_pack_{i}",
+                    help="เช่น ยาสีฟันแพค 3 หลอด ใส่ 3, ปกติ (1 ต่อ 1) ใส่ 1",
+                )
                 if _prod_opts[sel]:
                     _notice_map_rows.append({
                         "id": str(uuid.uuid4()),
                         "platform": "shopee_notice",
-                        "platform_item_id": row["item_name"],
+                        "platform_item_id": db.notice_item_map_key(row["item_name"], row["variant"]),
                         "product_id": _prod_opts[sel],
                         "platform_product_name": row["item_name"],
-                        "units_per_pack": 1,
+                        "units_per_pack": pack,
                     })
             if _notice_map_rows and st.button("💾 บันทึก Mapping", type="primary", key="ecom_notice_map_save"):
                 db.upsert_ecommerce_product_map(_notice_map_rows)
