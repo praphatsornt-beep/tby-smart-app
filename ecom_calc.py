@@ -324,9 +324,19 @@ def order_profit_summary(incomes: dict[str, tuple[str, float]], by_order: dict[s
     }
 
 
-def order_anomaly_rows(incomes: dict[str, tuple[str, float]], by_order: dict[str, dict], warn_pct: float) -> list[dict]:
+def order_anomaly_rows(
+    incomes: dict[str, tuple[str, float]], by_order: dict[str, dict], warn_pct: float,
+    shipping_extra: dict[str, float] | None = None,
+) -> list[dict]:
     """หาออเดอร์ที่กำไรติดลบ/ต่ำกว่า warn_pct ของยอดโอน — คืนแถวพร้อมเลขที่ออเดอร์
-    ข้ามออเดอร์ที่ unmapped/ไม่มีสินค้าเลย (คำนวณต้นทุนไม่ครบ ไม่ควร flag ว่าผิดปกติ)"""
+    ข้ามออเดอร์ที่ unmapped/ไม่มีสินค้าเลย (คำนวณต้นทุนไม่ครบ ไม่ควร flag ว่าผิดปกติ)
+
+    shipping_extra (optional, Shopee-only — ดู shipping_overcharge_extra): {order_sn:
+    ส่วนต่างค่าส่งที่โดนหักเกินกว่าที่ประเมินไว้ล่วงหน้า} ใส่มาเพื่อโชว์คอลัมน์
+    "ค่าส่งเกิน" ในตารางเดียวกัน — ช่วยไล่ดูว่าออเดอร์ที่ขาดทุนแต่ละรายการ ขาดทุนเพราะ
+    ค่าส่งถูกหักเกินหรือเปล่า (เอาไปเคลมกับ Shopee ได้) ไม่ต้องเปิดตาราง "ค่าส่งเกิน"
+    แยกแล้วไล่จับคู่เลขออเดอร์เอง ไม่ส่งมา/ไม่มีข้อมูล = 0.0 (ไม่ได้แปลว่าไม่เกิน แค่ไม่รู้
+    เช่นแพลตฟอร์มอื่นที่ไม่มีข้อมูลค่าส่งในไฟล์ export เลย)"""
     rows = []
     for sn, o in by_order.items():
         if o["unmapped"] or not o["items"]:
@@ -336,6 +346,7 @@ def order_anomaly_rows(incomes: dict[str, tuple[str, float]], by_order: dict[str
         margin_pct = (profit / net * 100) if net else 0
         if profit >= 0 and margin_pct >= warn_pct:
             continue
+        extra = round((shipping_extra or {}).get(sn, 0.0), 2)
         rows.append({
             "สถานะ": "🔴 ขาดทุน" if profit < 0 else "🟡 กำไรต่ำ",
             "เลขออเดอร์": sn,
@@ -345,5 +356,6 @@ def order_anomaly_rows(incomes: dict[str, tuple[str, float]], by_order: dict[str
             "ต้นทุนรวม": round(o["cost"], 2),
             "ยอดเงินที่ได้รับจริง": round(net, 2),
             "กำไร": round(profit, 2),
+            "ค่าส่งเกิน": extra,
         })
     return rows

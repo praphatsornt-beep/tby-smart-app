@@ -486,6 +486,7 @@ class TestOrderAnomalyRows(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["สถานะ"], "🔴 ขาดทุน")
         self.assertEqual(rows[0]["กำไร"], -30.0)
+        self.assertEqual(rows[0]["ค่าส่งเกิน"], 0.0)
 
     def test_flags_low_margin_order(self):
         incomes = {"A": ("shop1", 100.0)}
@@ -506,6 +507,22 @@ class TestOrderAnomalyRows(unittest.TestCase):
         by_order = {"A": {"cost": 999.0, "unmapped": True, "items": [], "sale_date": "2026-01-01"}}
         rows = ecom_calc.order_anomaly_rows(incomes, by_order, warn_pct=10)
         self.assertEqual(rows, [])
+
+    def test_shipping_extra_surfaced_on_loss_order(self):
+        # ออเดอร์ขาดทุน -30 ทั้งก้อนมาจากค่าส่งที่โดนหักเกิน 30 บาท — ไว้ให้ผู้ใช้รู้ว่า
+        # ควรไปเคลมค่าส่งกับ Shopee แทนที่จะคิดว่าตั้งราคาสินค้าต่ำไป
+        incomes = {"A": ("shop1", 50.0)}
+        by_order = {"A": {"cost": 80.0, "unmapped": False, "items": ["x"], "sale_date": "2026-01-01"}}
+        rows = ecom_calc.order_anomaly_rows(incomes, by_order, warn_pct=10, shipping_extra={"A": 30.0})
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["ค่าส่งเกิน"], 30.0)
+
+    def test_shipping_extra_missing_order_defaults_zero(self):
+        incomes = {"A": ("shop1", 50.0)}
+        by_order = {"A": {"cost": 80.0, "unmapped": False, "items": ["x"], "sale_date": "2026-01-01"}}
+        # order "A" ไม่อยู่ใน shipping_extra เลย (เช่นแพลตฟอร์มที่ไม่มีข้อมูลค่าส่ง) -> 0.0
+        rows = ecom_calc.order_anomaly_rows(incomes, by_order, warn_pct=10, shipping_extra={"B": 99.0})
+        self.assertEqual(rows[0]["ค่าส่งเกิน"], 0.0)
 
 
 if __name__ == "__main__":

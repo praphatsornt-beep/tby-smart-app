@@ -1217,7 +1217,7 @@ def _clear_ecommerce_caches() -> None:
     for _fn in (
         get_ecommerce_shops, get_ecommerce_import_coverage_df,
         get_ecommerce_unmatched_income_orders_df, get_ecommerce_product_margin_df,
-        _ecommerce_order_costs, get_ecommerce_order_anomaly_df,
+        _ecommerce_order_costs, get_ecommerce_order_anomaly_df, get_ecommerce_order_anomaly_df_all,
         get_ecommerce_order_profit_summary, get_ecommerce_monthly_summary,
         get_ecommerce_platform_totals_df, get_ecommerce_units_trend_df,
         get_ecommerce_shipping_overcharge_df, get_ecommerce_shipping_overcharge_monthly_df,
@@ -1549,22 +1549,31 @@ def get_ecommerce_product_margin_df_all(start_date: str, end_date: str) -> tuple
 @st.cache_data(ttl=120)
 def _ecommerce_order_costs(
     start_date: str, end_date: str, platform: str = "shopee", shop_name: str = None,
-) -> tuple[dict, dict]:
-    """เตรียมข้อมูลรายออเดอร์ (ยอดโอนสุทธิ + ต้นทุนรวม) ใช้ร่วมกันโดย
-    get_ecommerce_order_anomaly_df และ get_ecommerce_order_profit_summary — นับเฉพาะ
-    ออเดอร์ที่มี Income ยืนยันแล้วและทุก SKU ในออเดอร์ map ครบแล้ว (ถ้ามี SKU ไหนยังไม่
-    map จะ flag unmapped ไว้เพราะคำนวณต้นทุนไม่ครบ) shop_name: กรองเฉพาะร้านเดียว
-    (None = รวมทุกร้าน)"""
+) -> tuple[dict, dict, dict]:
+    """เตรียมข้อมูลรายออเดอร์ (ยอดโอนสุทธิ + ต้นทุนรวม + ส่วนต่างค่าส่งที่โดนหักเกิน) ใช้
+    ร่วมกันโดย get_ecommerce_order_anomaly_df และ get_ecommerce_order_profit_summary —
+    นับเฉพาะออเดอร์ที่มี Income ยืนยันแล้วและทุก SKU ในออเดอร์ map ครบแล้ว (ถ้ามี SKU ไหน
+    ยังไม่ map จะ flag unmapped ไว้เพราะคำนวณต้นทุนไม่ครบ) shop_name: กรองเฉพาะร้านเดียว
+    (None = รวมทุกร้าน). คืน (incomes, by_order, shipping_extra) — shipping_extra คือ
+    {order_sn: ส่วนต่างค่าส่งที่หักเกิน} จาก ecom_calc.shipping_overcharge_extra ต่อยอด
+    ecommerce_order_income เดียวกับ get_ecommerce_shipping_overcharge_df (Shopee-only —
+    แพลตฟอร์มอื่นไม่มีคอลัมน์ค่าส่งในไฟล์ export เลย ค่าจะออกมา 0 เสมอ ไม่ใช่ error)"""
     _income_q = get_supabase().table("ecommerce_order_income") \
-        .select("order_sn,shop_name,net_amount").eq("platform", platform)
+        .select("order_sn,shop_name,net_amount,buyer_paid_shipping,shopee_subsidized_shipping,shipping_fee_charged") \
+        .eq("platform", platform)
     if shop_name:
         _income_q = _income_q.eq("shop_name", shop_name)
+    _income_rows = _fetch_all(lambda: _income_q.order("order_sn"))
     incomes = {
         r["order_sn"]: (r["shop_name"], float(r.get("net_amount") or 0))
-        for r in _fetch_all(lambda: _income_q.order("order_sn"))
+        for r in _income_rows
+    }
+    shipping_extra = {
+        r["order_sn"]: ecom_calc.shipping_overcharge_extra(r)
+        for r in _income_rows
     }
     if not incomes:
-        return incomes, {}
+        return incomes, {}, shipping_extra
 
     _sales_q = get_supabase().table("ecommerce_sales").select(
         "order_sn,product_id,item_id_platform,item_name,qty,returned_qty,order_status,sale_date"
@@ -1573,30 +1582,52 @@ def _ecommerce_order_costs(
         _sales_q = _sales_q.eq("shop_name", shop_name)
     sales = _fetch_all(lambda: _sales_q.order("id"))
     if not sales:
-        return incomes, {}
+        return incomes, {}, shipping_extra
 
     products = {p["id"]: p for p in get_products()}
     prod_map = get_ecommerce_product_map()
 
     by_order = ecom_calc.aggregate_order_costs(sales, incomes, prod_map, products, platform)
-    return incomes, by_order
+    return incomes, by_order, shipping_extra
 
 
 @st.cache_data(ttl=120)
 def get_ecommerce_order_anomaly_df(
     start_date: str, end_date: str, platform: str = "shopee", warn_pct: float = 10.0, shop_name: str = None,
 ) -> pd.DataFrame:
-    """หาออเดอร์ (ไม่ใช่สินค้ารวม) ที่กำไรติดลบ/ต่ำผิดปกติ พร้อมเลขที่ออเดอร์
+    """หาออเดอร์ (ไม่ใช่สินค้ารวม) ที่กำไรติดลบ/ต่ำผิดปกติ พร้อมเลขที่ออเดอร์ + คอลัมน์
+    "ค่าส่งเกิน" (Shopee-only) ไว้เช็คว่าขาดทุนเพราะค่าส่งถูกหักเกินหรือเปล่า
     shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
-    incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform, shop_name)
+    incomes, by_order, shipping_extra = _ecommerce_order_costs(start_date, end_date, platform, shop_name)
     if not incomes or not by_order:
         return pd.DataFrame()
 
-    rows = ecom_calc.order_anomaly_rows(incomes, by_order, warn_pct)
+    rows = ecom_calc.order_anomaly_rows(incomes, by_order, warn_pct, shipping_extra=shipping_extra)
     df = pd.DataFrame(rows)
     if not df.empty:
         df.sort_values("กำไร", ascending=True, inplace=True)
     return df.reset_index(drop=True)
+
+
+@st.cache_data(ttl=120)
+def get_ecommerce_order_anomaly_df_all(start_date: str, end_date: str, warn_pct: float = 10.0) -> pd.DataFrame:
+    """เหมือน get_ecommerce_order_anomaly_df แต่รวมทุกแพลตฟอร์ม/ทุกร้านไว้ตารางเดียว
+    (เพิ่มคอลัมน์ "แพลตฟอร์ม") ใช้ตอนผู้ใช้เลือกดู "ทั้งหมด (ทุกช่องทาง)" แทนการสลับดูทีละ
+    แพลตฟอร์ม+ร้าน — ตามแพทเทิร์นเดียวกับ get_ecommerce_product_margin_df_all/
+    get_ecommerce_pending_income_df_all เรียงขาดทุนมากสุดขึ้นก่อนข้ามแพลตฟอร์ม"""
+    platforms = sorted({s["platform"] for s in get_ecommerce_shops()})
+    frames = []
+    for platform in platforms:
+        df = get_ecommerce_order_anomaly_df(start_date, end_date, platform=platform, warn_pct=warn_pct)
+        if not df.empty:
+            df = df.copy()
+            df.insert(0, "แพลตฟอร์ม", ecom_calc.PLATFORM_LABELS.get(platform, platform))
+            frames.append(df)
+    combined = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    if not combined.empty:
+        combined.sort_values("กำไร", ascending=True, inplace=True)
+        combined.reset_index(drop=True, inplace=True)
+    return combined
 
 
 @st.cache_data(ttl=120)
@@ -1609,7 +1640,7 @@ def get_ecommerce_order_profit_summary(
     เดียวเสมอ ไม่ถูกแบ่งข้ามช่วง ต่างจากสินค้าที่กำไรเดือนหนึ่งแต่ขาดทุนอีกเดือนซึ่งพอ net รวม
     ทั้งช่วงแล้วตัวเลขจะไม่เท่ากับเอาแต่ละเดือนมาบวกกัน shop_name: กรองเฉพาะร้านเดียว
     (None = รวมทุกร้าน)"""
-    incomes, by_order = _ecommerce_order_costs(start_date, end_date, platform, shop_name)
+    incomes, by_order, _shipping_extra = _ecommerce_order_costs(start_date, end_date, platform, shop_name)
     return ecom_calc.order_profit_summary(incomes, by_order)
 
 

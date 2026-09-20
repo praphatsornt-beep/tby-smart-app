@@ -1108,6 +1108,15 @@ def _render_issues():
     # ── ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) — หรือดูทุกออเดอร์ก็ได้ ──────
     st.subheader("ออเดอร์ที่กำไรผิดปกติ")
     st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")
+    # มี scope selector ของตัวเอง แยกจากแพลตฟอร์ม/ร้านที่เลือกไว้บนสุดของหน้า — ค่า default
+    # "ทั้งหมด" ให้เห็นทุกร้านทุกแพลตฟอร์มในตารางเดียว (คอลัมน์ "แพลตฟอร์ม"+"ร้าน" มีอยู่แล้ว
+    # ในแถวต่อออเดอร์) ไม่ต้องสลับทีละร้านเพื่อไล่หาออเดอร์ขาดทุน ตามแพทเทิร์นเดียวกับ
+    # scope selector ของ "ออเดอร์ที่ยังไม่มี Income มา match" ด้านบน
+    _anomaly_scope_opts = ["🌐 ทั้งหมด (ทุกช่องทาง)"] + [f"{_PLATFORMS.get(s['platform'], s['platform'])} — {s['shop_name']}" for s in _shops]
+    _anomaly_scope_map = {opt: (s["platform"], s["shop_name"]) for opt, s in zip(_anomaly_scope_opts[1:], _shops)}
+    _sel_anomaly_scope = st.selectbox("ช่องทาง", _anomaly_scope_opts, key="ecom_anomaly_scope")
+    _anomaly_platform, _anomaly_shop = _anomaly_scope_map.get(_sel_anomaly_scope, (None, None))
+
     anomaly_from, anomaly_to, (ac3,) = _date_range_inputs("ecom_anomaly", n_cols=3)
     anomaly_warn_pct = ac3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
     _show_all_orders = st.checkbox(
@@ -1117,7 +1126,10 @@ def _render_issues():
     # ตั้ง warn_pct สูงพ้นช่วงจริง (margin % ไม่มีทางถึง) เพื่อให้ order_anomaly_rows
     # ไม่กรองออเดอร์ไหนออกเลย — ใช้ query เดิมซ้ำ ไม่ต้องเขียนฟังก์ชันใหม่
     _query_warn_pct = 1_000_000 if _show_all_orders else anomaly_warn_pct
-    anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), platform=_platform, warn_pct=_query_warn_pct, shop_name=_shop_filter)
+    if _anomaly_platform is None:
+        anomaly_df = db.get_ecommerce_order_anomaly_df_all(str(anomaly_from), str(anomaly_to), warn_pct=_query_warn_pct)
+    else:
+        anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), platform=_anomaly_platform, warn_pct=_query_warn_pct, shop_name=_anomaly_shop)
     if anomaly_df.empty:
         st.success("✅ ไม่มีออเดอร์ในช่วงนี้" if _show_all_orders else "✅ ไม่พบออเดอร์ที่กำไรผิดปกติในช่วงนี้")
     else:
@@ -1126,16 +1138,32 @@ def _render_issues():
             st.info(f"ทั้งหมด {len(anomaly_df)} ออเดอร์ — ขาดทุน {_n_loss} · กำไร {len(anomaly_df) - _n_loss}")
         else:
             st.warning(f"⚠️ พบ {len(anomaly_df)} ออเดอร์ที่กำไรผิดปกติ")
+        # "ค่าส่งเกิน" มีค่าจริงเฉพาะ Shopee (แพลตฟอร์มอื่นจะเป็น 0 เสมอ) แต่คอลัมน์มีอยู่ใน
+        # ทุกแถวเหมือนกัน เช็ค > 0 ตรงๆ ได้เลยไม่ต้องสนใจว่าแถวนั้นเป็นแพลตฟอร์มไหน
+        _n_ship = int((anomaly_df["ค่าส่งเกิน"] > 0).sum())
+        if _n_ship:
+            st.info(
+                f"🚚 ในจำนวนนี้ {_n_ship} ออเดอร์ถูกหักค่าส่งเกินกว่าที่ประเมินไว้ตอนสั่งซื้อ (Shopee) "
+                "(ดูคอลัมน์ \"ค่าส่งเกิน\") — ถ้าค่านี้ใกล้เคียงหรือมากกว่ายอดขาดทุน แปลว่า "
+                "สาเหตุหลักคือค่าส่งเกิน ไม่ใช่ราคาสินค้าต่ำไป เอาเลขออเดอร์ไปเคลมกับ Shopee ได้"
+            )
         st.dataframe(
             anomaly_df.style.format({
                 "ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}", "กำไร": "{:,.2f}",
+                "ค่าส่งเกิน": "{:,.2f}",
             }),
             width="stretch", hide_index=True,
+            column_config={
+                "ค่าส่งเกิน": st.column_config.NumberColumn(
+                    format="%.2f ฿",
+                    help="ส่วนต่างค่าส่งที่ Shopee หักจากร้านจริง เทียบกับค่าส่งที่ประเมินไว้ตอนสั่งซื้อ (ผู้ซื้อจ่าย + Shopee ออกให้) — มีค่าเฉพาะ Shopee, 0 = ไม่เกิน/ไม่มีข้อมูล",
+                ),
+            },
         )
         st.download_button(
             "⬇ Export Excel",
             _to_excel_bytes(anomaly_df, "ออเดอร์"),
-            file_name=f"ecom_{_platform}_order_profit_{date.today().strftime('%Y%m%d')}.xlsx",
+            file_name=f"ecom_{_anomaly_platform or 'all'}_order_profit_{date.today().strftime('%Y%m%d')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="ecom_anomaly_export",
         )
