@@ -525,5 +525,57 @@ class TestOrderAnomalyRows(unittest.TestCase):
         self.assertEqual(rows[0]["ค่าส่งเกิน"], 0.0)
 
 
+class ClassifyAnomalyOrdersTests(unittest.TestCase):
+    @staticmethod
+    def _row(sn, net, profit, extra=0.0, shop="s1", plat="Shopee"):
+        return {"แพลตฟอร์ม": plat, "ร้าน": shop, "เลขออเดอร์": sn, "ยอดเงินที่ได้รับจริง": net,
+                "กำไร": profit, "ค่าส่งเกิน": extra}
+
+    def test_shipping_cause_when_claim_erases_loss(self):
+        rows = ecom_calc.classify_anomaly_orders([self._row("A", 100, -20, extra=30)], warn_pct=10)
+        # เคลมคืน 30 -> กำไร +10 = 10% ของ 100 พอดี ผ่านเกณฑ์ -> สาเหตุคือค่าส่งเกิน
+        self.assertEqual(rows[0]["สาเหตุ"], ecom_calc.CAUSE_SHIPPING)
+        self.assertTrue(rows[0]["ผิดปกติ"])
+
+    def test_price_cause_when_claim_not_enough(self):
+        rows = ecom_calc.classify_anomaly_orders([self._row("A", 100, -50, extra=30)], warn_pct=10)
+        self.assertEqual(rows[0]["สาเหตุ"], ecom_calc.CAUSE_PRICE)
+        self.assertTrue(rows[0]["มีค่าส่งเกิน"])
+
+    def test_ok_order_not_flagged_but_keeps_extra_flag(self):
+        rows = ecom_calc.classify_anomaly_orders([self._row("A", 100, 40, extra=20)], warn_pct=10)
+        self.assertFalse(rows[0]["ผิดปกติ"])
+        self.assertEqual(rows[0]["สาเหตุ"], ecom_calc.CAUSE_OK)
+        self.assertTrue(rows[0]["มีค่าส่งเกิน"])
+
+    def test_tiny_extra_ignored_and_low_profit_status(self):
+        rows = ecom_calc.classify_anomaly_orders([self._row("A", 100, 5, extra=0.3)], warn_pct=10)
+        self.assertEqual(rows[0]["สถานะ"], "🟡 กำไรต่ำ")
+        self.assertFalse(rows[0]["มีค่าส่งเกิน"])
+        self.assertEqual(rows[0]["สาเหตุ"], ecom_calc.CAUSE_PRICE)
+
+    def test_zero_net_does_not_crash(self):
+        rows = ecom_calc.classify_anomaly_orders([self._row("A", 0, -10)], warn_pct=10)
+        self.assertEqual(rows[0]["สถานะ"], "🔴 ขาดทุน")
+
+    def test_summary_totals_and_by_shop_order(self):
+        rows = ecom_calc.classify_anomaly_orders([
+            self._row("A", 100, -20, extra=30, shop="s1"),
+            self._row("B", 100, -50, shop="s2", plat="Lazada"),
+            self._row("C", 200, 80, shop="s2", plat="Lazada"),
+        ], warn_pct=10)
+        sm = ecom_calc.summarize_anomaly_orders(rows)
+        self.assertEqual(sm["orders"], 3)
+        self.assertEqual(sm["revenue"], 400)
+        self.assertEqual(sm["total_profit"], 80)
+        self.assertEqual(sm["loss_total"], 70)
+        self.assertEqual(sm["profit"], 10)
+        self.assertEqual(sm["n_ship"], 1)
+        self.assertEqual(sm["ship_total"], 30)
+        self.assertEqual(sm["n_ship_cause"], 1)
+        self.assertEqual(sm["price_loss"], 50)
+        self.assertEqual([s["ร้าน"] for s in sm["by_shop"]], ["s2", "s1"])  # ขาดทุนมากสุดก่อน
+
+
 if __name__ == "__main__":
     unittest.main()

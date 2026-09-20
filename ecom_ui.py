@@ -12,6 +12,7 @@ lazada_import.py) — "Income Overview" (การเงิน > ใบแจ้
 แต่ไม่มีข้อมูลค่าจัดส่งเลย (ฟีเจอร์ "ตรวจสอบค่าส่งเกิน" จึงใช้ได้เฉพาะ Shopee)
 `database.py` ทุกฟังก์ชัน E-commerce มีพารามิเตอร์ platform อยู่แล้วรองรับหลาย
 แพลตฟอร์มโดยไม่ต้องแก้ schema — ไฟล์นี้แค่ต้อง thread platform ผ่าน UI ให้ครบ"""
+import html
 import uuid
 
 import streamlit as st
@@ -19,6 +20,7 @@ import pandas as pd
 from datetime import date
 
 import database as db
+import ecom_calc
 import shopee_import
 import lazada_import
 import tiktok_affiliate_import
@@ -1065,6 +1067,236 @@ def _render_ecom_shipping_view(platform, shop_filter):
     )
 
 
+# ── ออเดอร์ที่กำไรผิดปกติ (แท็บ ⚠️ ตรวจสอบปัญหา) ───────────────────────────────
+# ดึงทุกออเดอร์เสมอ (warn_pct สูงพ้นช่วงจริง) แล้วแยกออเดอร์ผิดปกติ/สาเหตุใน Python
+# (ecom_calc.classify_anomaly_orders) — การ์ดสรุปจะนับกำไร/ขาดทุนรวมของทุกออเดอร์ได้ครบ
+# ส่วน checkbox "แสดงทุกออเดอร์" มีผลแค่กับตารางดิบด้านล่างสุด
+_ANOMALY_ALL_WARN_PCT = 1_000_000
+_PLATFORM_KEY_BY_LABEL = {v: k for k, v in _PLATFORMS.items()}
+_AMBER = "#b7791f"
+
+
+def _cause_card(title: str, big: str, sub: str, accent: str, bg: str, hint: str = ""):
+    st.markdown(f"""
+    <div style="background:{bg};border:1px solid {accent};border-radius:12px;padding:16px 18px;margin-bottom:10px;min-height:128px">
+      <div style="font:700 14px 'Sarabun',sans-serif;color:{accent}">{title}</div>
+      <div style="font:700 28px 'Prompt',sans-serif;margin-top:6px;color:{accent}">{big}</div>
+      <div style="font:600 12.5px 'Sarabun',sans-serif;margin-top:4px;color:var(--tby-text)">{sub}</div>
+      <div style="font:500 12px 'Sarabun',sans-serif;margin-top:6px;color:var(--tby-muted)">{hint}</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _shop_anomaly_card(s: dict):
+    _bg, _fg = _PLATFORM_BRAND.get(_PLATFORM_KEY_BY_LABEL.get(s["แพลตฟอร์ม"], ""), ("var(--tby-muted)", "#fff"))
+    _net_color = _PROFIT_GREEN if s["profit"] >= 0 else _LOSS_RED
+    _loss_color = _LOSS_RED if s["loss_total"] > 0 else "var(--tby-muted)"
+    _ship_line = (
+        f"<span style=\"color:{_AMBER}\">🚚 ค่าส่งเกิน ฿{s['ship_total']:,.0f} ({s['n_ship']} ออเดอร์)</span>"
+        if s["n_ship"] else "<span style=\"color:var(--tby-muted)\">🚚 ไม่มีค่าส่งเกิน</span>"
+    )
+    st.markdown(f"""
+    <div style="background:#fff;border:1px solid var(--tby-border);border-radius:11px;overflow:hidden;margin-bottom:10px">
+      <div style="background:{_bg};color:{_fg};padding:7px 14px;font:700 13px 'Sarabun',sans-serif;display:flex;justify-content:space-between;gap:8px">
+        <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{html.escape(str(s['ร้าน']))}</span><span style="opacity:.85">{html.escape(str(s['แพลตฟอร์ม']))}</span>
+      </div>
+      <div style="padding:12px 14px">
+        <div style="font:600 12px 'Sarabun',sans-serif;color:var(--tby-muted)">ขาดทุน {s['n_loss']:,} จาก {s['orders']:,} ออเดอร์</div>
+        <div style="font:700 24px 'Prompt',sans-serif;color:{_loss_color}">฿{s['loss_total']:,.0f}</div>
+        <div style="font:600 12px 'Sarabun',sans-serif;margin-top:4px">ยอดที่ได้รับ ฿{s['revenue']:,.0f} · สุทธิ <span style="color:{_net_color}">฿{s['profit']:,.0f}</span></div>
+        <div style="font:600 12px 'Sarabun',sans-serif;margin-top:3px">{_ship_line}</div>
+      </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+def _anomaly_row_bg(row) -> str:
+    # แถวขาดทุน = แดงอ่อน, กำไรต่ำ = เหลืองอ่อน, ค่าส่งเกินที่เป็นสาเหตุ = ส้มอ่อน
+    if row.get("สาเหตุ") == ecom_calc.CAUSE_SHIPPING:
+        return "background-color: #fdf1dc"
+    if row.get("กำไร", 0) < 0:
+        return "background-color: #f9e4e2"
+    if row.get("ผิดปกติ"):
+        return "background-color: #fdf6d8"
+    return ""
+
+
+def _anomaly_table(df: pd.DataFrame, cols: list[str], key: str, max_h: int = 380):
+    _full = df.reset_index(drop=True)
+    _view = _full[cols]
+    _bgs = [_anomaly_row_bg(r) for r in _full.to_dict("records")]   # สีต่อแถวจากข้อมูลเต็ม แต่โชว์เฉพาะคอลัมน์ที่เลือก
+    _fmt = {c: "{:,.2f}" for c in ("ต้นทุนรวม", "ยอดเงินที่ได้รับจริง", "กำไร", "ค่าส่งเกิน") if c in cols}
+    _style = _view.style.apply(lambda r: [_bgs[r.name]] * len(r), axis=1).format(_fmt)
+    st.dataframe(
+        _style, width="stretch", hide_index=True, key=key,
+        height=min(38 + 35 * len(_view), max_h),
+        column_config={
+            "ค่าส่งเกิน": st.column_config.NumberColumn(
+                format="%.2f ฿",
+                help="ส่วนต่างค่าส่งที่ Shopee หักจากร้านจริง เทียบกับค่าส่งที่ประเมินไว้ตอนสั่งซื้อ (ผู้ซื้อจ่าย + Shopee ออกให้) — มีค่าเฉพาะ Shopee, 0 = ไม่เกิน/ไม่มีข้อมูล",
+            ),
+        },
+    )
+
+
+def _render_order_anomalies(_shops: list[dict]):
+    st.subheader("ออเดอร์ที่กำไรผิดปกติ")
+    st.caption("ดูปุ๊บรู้เลยว่าต้องทำอะไร — 🚚 ค่าส่งเกิน = ไปเคลมกับแพลตฟอร์ม · 💸 ราคาต่ำ/ต้นทุนสูง = ต้องปรับราคา/ต้นทุน")
+    # มี scope selector ของตัวเอง แยกจากแพลตฟอร์ม/ร้านที่เลือกไว้บนสุดของหน้า — ค่า default
+    # "ทั้งหมด" ให้เห็นทุกร้านทุกแพลตฟอร์มพร้อมกัน ตามแพทเทิร์นเดียวกับ scope selector ของ
+    # "ออเดอร์ที่ยังไม่มี Income มา match" ด้านบน
+    _scope_opts = ["🌐 ทั้งหมด (ทุกช่องทาง)"] + [f"{_PLATFORMS.get(s['platform'], s['platform'])} — {s['shop_name']}" for s in _shops]
+    _scope_map = {opt: (s["platform"], s["shop_name"]) for opt, s in zip(_scope_opts[1:], _shops)}
+    _sel_scope = st.selectbox("ช่องทาง", _scope_opts, key="ecom_anomaly_scope")
+    _platform, _shop = _scope_map.get(_sel_scope, (None, None))
+
+    _from, _to, (_wc,) = _date_range_inputs("ecom_anomaly", n_cols=3)
+    _warn_pct = _wc.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
+
+    if _platform is None:
+        _df = db.get_ecommerce_order_anomaly_df_all(str(_from), str(_to), warn_pct=_ANOMALY_ALL_WARN_PCT)
+    else:
+        _df = db.get_ecommerce_order_anomaly_df(str(_from), str(_to), platform=_platform, warn_pct=_ANOMALY_ALL_WARN_PCT, shop_name=_shop)
+    if _df.empty:
+        st.success("✅ ไม่มีออเดอร์ที่ปิดยอดแล้วในช่วงนี้")
+        return
+    if "แพลตฟอร์ม" not in _df.columns:
+        _df = _df.copy()
+        _df.insert(0, "แพลตฟอร์ม", _PLATFORMS.get(_platform, _platform))
+
+    _rows = ecom_calc.classify_anomaly_orders(_df.to_dict("records"), _warn_pct)
+    _all = pd.DataFrame(_rows)
+    _sm = ecom_calc.summarize_anomaly_orders(_rows)
+
+    # ── 1) ตัวเลขใหญ่: ยอดขาย/กำไร/ขาดทุน/สุทธิ ────────────────────────────
+    _c = st.columns(4)
+    with _c[0]: _metric_card("ยอดที่ได้รับจริงรวม", f"฿{_sm['revenue']:,.0f}", sub=f"{_sm['orders']:,} ออเดอร์")
+    with _c[1]: _metric_card("กำไรรวม", f"฿{_sm['total_profit']:,.0f}", _PROFIT_GREEN, sub="เฉพาะออเดอร์ที่ได้กำไร")
+    with _c[2]: _metric_card("ขาดทุนรวม", f"฿{_sm['loss_total']:,.0f}", _LOSS_RED, sub=f"{_sm['n_loss']:,} ออเดอร์ที่ขาดทุน", sub_color=_LOSS_RED)
+    with _c[3]: _metric_card("สุทธิ", f"฿{_sm['profit']:,.0f}", _PROFIT_GREEN if _sm["profit"] >= 0 else _LOSS_RED, sub="กำไร − ขาดทุน")
+
+    # ── 2) แยกสาเหตุ: ค่าส่งเกิน vs ราคาต่ำ ────────────────────────────────
+    _c1, _c2 = st.columns(2)
+    with _c1:
+        _cause_card(
+            "🚚 ค่าส่งเกิน — ไปเคลมได้", f"฿{_sm['ship_total']:,.0f}",
+            f"{_sm['n_ship']:,} ออเดอร์ถูกหักค่าส่งเกินกว่าที่ประเมินไว้",
+            _AMBER, "#fdf1dc",
+            f"ในนี้ {_sm['n_ship_cause']:,} ออเดอร์เคลมแล้วหายขาดทุน/กำไรต่ำ · เฉพาะ Shopee (แพลตฟอร์มอื่นไม่มีข้อมูลค่าส่ง)",
+        )
+    with _c2:
+        _cause_card(
+            "💸 ราคาต่ำ/ต้นทุนสูง — ต้องปรับราคา", f"฿{_sm['price_loss']:,.0f}",
+            f"{_sm['n_price_flagged']:,} ออเดอร์ผิดปกติ ที่เคลมค่าส่งแล้วก็ยังไม่หาย",
+            _LOSS_RED, "var(--tby-badge-bad-bg)",
+            "ตัวเลข = ยอดขาดทุนรวมของออเดอร์กลุ่มนี้",
+        )
+    st.caption("ℹ️ นับเฉพาะออเดอร์ที่มีรายงาน Income มายืนยันแล้วและ map สินค้าครบ — ออเดอร์ที่ยังรอ Income ดูได้ที่ด้านบน")
+
+    # ── 3) สรุปรายร้าน (เรียงร้านที่ขาดทุนมากสุดก่อน) ───────────────────────
+    st.markdown("**แยกตามร้าน**")
+    _shop_cards = _sm["by_shop"]
+    for _i in range(0, len(_shop_cards), 3):
+        _cols = st.columns(3)
+        for _col, _s in zip(_cols, _shop_cards[_i:_i + 3]):
+            with _col:
+                _shop_anomaly_card(_s)
+
+    # ── 4) ทำอะไรต่อ: 2 กลุ่ม ────────────────────────────────────────────
+    _ship_df = _all[_all["มีค่าส่งเกิน"]].sort_values("ค่าส่งเกิน", ascending=False)
+    _price_df = _all[_all["สาเหตุ"] == ecom_calc.CAUSE_PRICE].sort_values("กำไร", ascending=True)
+    _tab_ship, _tab_price = st.tabs([
+        f"🚚 ค่าส่งเกิน — ไปเคลม ({len(_ship_df):,})",
+        f"💸 ราคาต่ำ/ต้นทุนสูง — ปรับราคา ({len(_price_df):,})",
+    ])
+
+    with _tab_ship:
+        if _ship_df.empty:
+            st.success("✅ ไม่พบออเดอร์ที่ถูกหักค่าส่งเกินในช่วงนี้")
+        else:
+            st.info(
+                f"👉 **ต้องทำ:** คัดลอกเลขออเดอร์ของแต่ละร้านด้านล่างไปยื่นเคลมค่าส่งกับ Shopee — "
+                f"คาดว่าได้คืนรวม **฿{_ship_df['ค่าส่งเกิน'].sum():,.0f}** "
+                f"(แถวสีส้ม = ออเดอร์ที่ค่าส่งเกินคือสาเหตุที่ทำให้ขาดทุน/กำไรต่ำ)"
+            )
+            _ship_df = _ship_df.copy()
+            # หมายเหตุ: ห้ามใช้ .assign(ชื่อไทย=...) — Python ทำ NFKC กับชื่อ keyword ทำให้ "ำ" กลายเป็น "ํา"
+            _ship_df["ผลต่อกำไร"] = _ship_df["สาเหตุ"].map(
+                lambda c: "เป็นสาเหตุที่ขาดทุน" if c == ecom_calc.CAUSE_SHIPPING else "-"
+            )
+            _groups = _ship_df.groupby(["แพลตฟอร์ม", "ร้าน"], sort=False)
+            _order = sorted(_groups, key=lambda g: -g[1]["ค่าส่งเกิน"].sum())
+            for _n, ((_pl, _sh), _g) in enumerate(_order):
+                with st.expander(f"{_sh} ({_pl}) · {len(_g):,} ออเดอร์ · เคลมได้ ฿{_g['ค่าส่งเกิน'].sum():,.0f}", expanded=(_n == 0)):
+                    st.caption("คัดลอกเลขออเดอร์ (กดไอคอนมุมขวาบนของกล่อง)")
+                    st.code("\n".join(_g["เลขออเดอร์"].astype(str)), language=None, height=110)
+                    _anomaly_table(
+                        _g, ["เลขออเดอร์", "วันที่สั่งซื้อ", "สินค้า", "ค่าส่งเกิน", "กำไร", "ผลต่อกำไร"],
+                        key=f"ecom_anomaly_ship_tbl_{_n}",
+                    )
+
+    with _tab_price:
+        if _price_df.empty:
+            st.success("✅ ไม่พบออเดอร์ที่ขาดทุนเพราะราคาต่ำ/ต้นทุนสูงในช่วงนี้")
+        else:
+            st.info(
+                "👉 **ต้องทำ:** เช็คราคาขาย/ต้นทุนของสินค้าที่ขาดทุนบ่อยด้านล่าง แล้วปรับราคาหรือหยุดโปรโมชัน "
+                "(แถวแดง = ขาดทุน, เหลือง = กำไรต่ำกว่าเกณฑ์)"
+            )
+            _prod = (
+                _price_df.assign(_loss=_price_df["กำไร"].clip(upper=0).abs())
+                .groupby("สินค้า").agg(ออเดอร์=("เลขออเดอร์", "count"), ขาดทุนรวม=("_loss", "sum"))
+                .sort_values("ขาดทุนรวม", ascending=False).head(6).reset_index()
+            )
+            _prod = _prod[_prod["ขาดทุนรวม"] > 0]
+            if not _prod.empty:
+                st.markdown("**สินค้าที่ทำให้ขาดทุนมากสุด**")
+                _pcols = st.columns(3)
+                for _i, _r in _prod.reset_index(drop=True).iterrows():
+                    with _pcols[_i % 3]:
+                        st.markdown(f"""
+                        <div style="background:var(--tby-badge-bad-bg);border:1px solid {_LOSS_RED};border-radius:12px;padding:14px 16px;margin-bottom:10px">
+                          <div style="font:700 14px 'Sarabun',sans-serif">{html.escape(str(_r['สินค้า']))}</div>
+                          <div style="margin-top:6px"><span style="font:700 24px 'Prompt',sans-serif;color:{_LOSS_RED}">฿{_r['ขาดทุนรวม']:,.0f}</span></div>
+                          <div style="font:500 12.5px 'Sarabun',sans-serif;color:var(--tby-muted);margin-top:4px">{int(_r['ออเดอร์']):,} ออเดอร์ · เฉลี่ยขาดทุน ฿{_r['ขาดทุนรวม'] / _r['ออเดอร์']:,.0f}/ออเดอร์</div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            _groups = _price_df.groupby(["แพลตฟอร์ม", "ร้าน"], sort=False)
+            _order = sorted(_groups, key=lambda g: g[1]["กำไร"].clip(upper=0).sum())
+            for _n, ((_pl, _sh), _g) in enumerate(_order):
+                _gl = _g["กำไร"].clip(upper=0).abs().sum()
+                with st.expander(f"{_sh} ({_pl}) · {len(_g):,} ออเดอร์ · ขาดทุน ฿{_gl:,.0f}", expanded=(_n == 0)):
+                    _anomaly_table(
+                        _g, ["สถานะ", "เลขออเดอร์", "วันที่สั่งซื้อ", "สินค้า", "ต้นทุนรวม", "ยอดเงินที่ได้รับจริง", "กำไร", "ค่าส่งเกิน"],
+                        key=f"ecom_anomaly_price_tbl_{_n}",
+                    )
+
+    # ── 5) ตารางดิบ (ไว้ Export / ดูละเอียด) ─────────────────────────────────
+    with st.expander("📄 ตารางดิบ — ดูละเอียด / Export Excel"):
+        _show_all_orders = st.checkbox(
+            "แสดงทุกออเดอร์ (ไม่ใช่แค่ที่ผิดปกติ) — เทียบราย ออเดอร์/สินค้า/ยอดที่ได้รับ/กำไร-ขาดทุน ทีละแถว",
+            key="ecom_anomaly_show_all",
+        )
+        _raw = _all if _show_all_orders else _all[_all["ผิดปกติ"]]
+        _raw = _raw.sort_values("กำไร", ascending=True)
+        if _show_all_orders:
+            st.info(f"ทั้งหมด {len(_raw):,} ออเดอร์ — ขาดทุน {int((_raw['กำไร'] < 0).sum()):,} · กำไร {int((_raw['กำไร'] >= 0).sum()):,}")
+        else:
+            st.warning(f"⚠️ พบ {len(_raw):,} ออเดอร์ที่กำไรผิดปกติ")
+        _raw_cols = ["แพลตฟอร์ม", "สถานะ", "สาเหตุ", "เลขออเดอร์", "วันที่สั่งซื้อ", "ร้าน", "สินค้า",
+                     "ต้นทุนรวม", "ยอดเงินที่ได้รับจริง", "กำไร", "ค่าส่งเกิน"]
+        _raw_view = _raw[_raw_cols].reset_index(drop=True)
+        _raw_style = _raw_view.style.format({c: "{:,.2f}" for c in ("ต้นทุนรวม", "ยอดเงินที่ได้รับจริง", "กำไร", "ค่าส่งเกิน")})
+        st.dataframe(_raw_style, width="stretch", hide_index=True, height=420)
+        st.download_button(
+            "⬇ Export Excel",
+            _to_excel_bytes(_raw_view, "ออเดอร์"),
+            file_name=f"ecom_{_platform or 'all'}_order_profit_{date.today().strftime('%Y%m%d')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="ecom_anomaly_export",
+        )
+
+
 def _render_issues():
     _shops = db.get_ecommerce_shops()
     _plat_opts = sorted({s["platform"] for s in _shops}, key=list(_PLATFORMS.keys()).index) if _shops else list(_PLATFORMS.keys())
@@ -1105,68 +1337,8 @@ def _render_issues():
 
     st.divider()
 
-    # ── ออเดอร์ที่กำไรผิดปกติ (พร้อมเลขที่ออเดอร์) — หรือดูทุกออเดอร์ก็ได้ ──────
-    st.subheader("ออเดอร์ที่กำไรผิดปกติ")
-    st.caption("รายออเดอร์ (ไม่ใช่สรุปรวมสินค้า) — ใช้ไล่เช็คว่าออเดอร์ไหนกันแน่ที่ขาดทุน/กำไรต่ำ")
-    # มี scope selector ของตัวเอง แยกจากแพลตฟอร์ม/ร้านที่เลือกไว้บนสุดของหน้า — ค่า default
-    # "ทั้งหมด" ให้เห็นทุกร้านทุกแพลตฟอร์มในตารางเดียว (คอลัมน์ "แพลตฟอร์ม"+"ร้าน" มีอยู่แล้ว
-    # ในแถวต่อออเดอร์) ไม่ต้องสลับทีละร้านเพื่อไล่หาออเดอร์ขาดทุน ตามแพทเทิร์นเดียวกับ
-    # scope selector ของ "ออเดอร์ที่ยังไม่มี Income มา match" ด้านบน
-    _anomaly_scope_opts = ["🌐 ทั้งหมด (ทุกช่องทาง)"] + [f"{_PLATFORMS.get(s['platform'], s['platform'])} — {s['shop_name']}" for s in _shops]
-    _anomaly_scope_map = {opt: (s["platform"], s["shop_name"]) for opt, s in zip(_anomaly_scope_opts[1:], _shops)}
-    _sel_anomaly_scope = st.selectbox("ช่องทาง", _anomaly_scope_opts, key="ecom_anomaly_scope")
-    _anomaly_platform, _anomaly_shop = _anomaly_scope_map.get(_sel_anomaly_scope, (None, None))
-
-    anomaly_from, anomaly_to, (ac3,) = _date_range_inputs("ecom_anomaly", n_cols=3)
-    anomaly_warn_pct = ac3.number_input("เตือนถ้ากำไร < กี่ % ของยอดโอน", min_value=0, max_value=100, value=10, key="ecom_anomaly_warn_pct")
-    _show_all_orders = st.checkbox(
-        "แสดงทุกออเดอร์ (ไม่ใช่แค่ที่ผิดปกติ) — เทียบราย ออเดอร์/สินค้า/ยอดที่ได้รับ/กำไร-ขาดทุน ทีละแถว",
-        key="ecom_anomaly_show_all",
-    )
-    # ตั้ง warn_pct สูงพ้นช่วงจริง (margin % ไม่มีทางถึง) เพื่อให้ order_anomaly_rows
-    # ไม่กรองออเดอร์ไหนออกเลย — ใช้ query เดิมซ้ำ ไม่ต้องเขียนฟังก์ชันใหม่
-    _query_warn_pct = 1_000_000 if _show_all_orders else anomaly_warn_pct
-    if _anomaly_platform is None:
-        anomaly_df = db.get_ecommerce_order_anomaly_df_all(str(anomaly_from), str(anomaly_to), warn_pct=_query_warn_pct)
-    else:
-        anomaly_df = db.get_ecommerce_order_anomaly_df(str(anomaly_from), str(anomaly_to), platform=_anomaly_platform, warn_pct=_query_warn_pct, shop_name=_anomaly_shop)
-    if anomaly_df.empty:
-        st.success("✅ ไม่มีออเดอร์ในช่วงนี้" if _show_all_orders else "✅ ไม่พบออเดอร์ที่กำไรผิดปกติในช่วงนี้")
-    else:
-        if _show_all_orders:
-            _n_loss = (anomaly_df["กำไร"] < 0).sum()
-            st.info(f"ทั้งหมด {len(anomaly_df)} ออเดอร์ — ขาดทุน {_n_loss} · กำไร {len(anomaly_df) - _n_loss}")
-        else:
-            st.warning(f"⚠️ พบ {len(anomaly_df)} ออเดอร์ที่กำไรผิดปกติ")
-        # "ค่าส่งเกิน" มีค่าจริงเฉพาะ Shopee (แพลตฟอร์มอื่นจะเป็น 0 เสมอ) แต่คอลัมน์มีอยู่ใน
-        # ทุกแถวเหมือนกัน เช็ค > 0 ตรงๆ ได้เลยไม่ต้องสนใจว่าแถวนั้นเป็นแพลตฟอร์มไหน
-        _n_ship = int((anomaly_df["ค่าส่งเกิน"] > 0).sum())
-        if _n_ship:
-            st.info(
-                f"🚚 ในจำนวนนี้ {_n_ship} ออเดอร์ถูกหักค่าส่งเกินกว่าที่ประเมินไว้ตอนสั่งซื้อ (Shopee) "
-                "(ดูคอลัมน์ \"ค่าส่งเกิน\") — ถ้าค่านี้ใกล้เคียงหรือมากกว่ายอดขาดทุน แปลว่า "
-                "สาเหตุหลักคือค่าส่งเกิน ไม่ใช่ราคาสินค้าต่ำไป เอาเลขออเดอร์ไปเคลมกับ Shopee ได้"
-            )
-        st.dataframe(
-            anomaly_df.style.format({
-                "ต้นทุนรวม": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}", "กำไร": "{:,.2f}",
-                "ค่าส่งเกิน": "{:,.2f}",
-            }),
-            width="stretch", hide_index=True,
-            column_config={
-                "ค่าส่งเกิน": st.column_config.NumberColumn(
-                    format="%.2f ฿",
-                    help="ส่วนต่างค่าส่งที่ Shopee หักจากร้านจริง เทียบกับค่าส่งที่ประเมินไว้ตอนสั่งซื้อ (ผู้ซื้อจ่าย + Shopee ออกให้) — มีค่าเฉพาะ Shopee, 0 = ไม่เกิน/ไม่มีข้อมูล",
-                ),
-            },
-        )
-        st.download_button(
-            "⬇ Export Excel",
-            _to_excel_bytes(anomaly_df, "ออเดอร์"),
-            file_name=f"ecom_{_anomaly_platform or 'all'}_order_profit_{date.today().strftime('%Y%m%d')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="ecom_anomaly_export",
-        )
+    # ── ออเดอร์ที่กำไรผิดปกติ — การ์ดสรุป + แยกกลุ่มตามสาเหตุ (ดู _render_order_anomalies) ──
+    _render_order_anomalies(_shops)
 
     st.divider()
 

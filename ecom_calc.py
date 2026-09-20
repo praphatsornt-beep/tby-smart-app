@@ -359,3 +359,89 @@ def order_anomaly_rows(
             "ค่าส่งเกิน": extra,
         })
     return rows
+
+
+# ── จัดกลุ่มออเดอร์ที่กำไรผิดปกติ ตาม "สาเหตุ/สิ่งที่ต้องทำต่อ" (ใช้กับหน้า ⚠️ ตรวจสอบปัญหา) ──
+# ค่าส่งเกินที่ต่ำกว่านี้ถือว่าเป็นเศษทศนิยม/ไม่คุ้มเคลม — ไม่นับเป็น "โดนหักค่าส่งเกิน"
+SHIPPING_EXTRA_MIN = 0.5
+
+CAUSE_SHIPPING = "🚚 ค่าส่งเกิน"
+CAUSE_PRICE = "💸 ราคาต่ำ/ต้นทุนสูง"
+CAUSE_OK = "✅ ปกติ"
+
+
+def classify_anomaly_orders(rows: list[dict], warn_pct: float) -> list[dict]:
+    """ใส่ "สถานะ"/"สาเหตุ"/"ผิดปกติ" ให้ทุกแถวของ order_anomaly_rows (เรียกโดยส่ง warn_pct
+    สูงพ้นช่วงจริงเพื่อให้ได้ทุกออเดอร์มาก่อน แล้วค่อยแยกว่าออเดอร์ไหนผิดปกติที่นี่ — ทำให้ยอด
+    รวม/กำไรรวมในการ์ดสรุปนับครบทุกออเดอร์ ไม่ใช่แค่ที่ถูก flag)
+
+    ผิดปกติ = กำไร < 0 หรือ กำไร/ยอดที่ได้รับ < warn_pct % (กติกาเดียวกับ order_anomaly_rows)
+    สาเหตุของออเดอร์ที่ผิดปกติ:
+    - "ค่าส่งเกิน": ถูกหักค่าส่งเกิน และถ้าเคลมคืนแล้วออเดอร์นี้จะไม่ผิดปกติอีก (กำไรหลังบวก
+      ค่าส่งเกินกลับ >= 0 และ >= warn_pct %) — ไปเคลมกับแพลตฟอร์มได้ ไม่ต้องแก้ราคา
+    - "ราคาต่ำ/ต้นทุนสูง": ที่เหลือทั้งหมด (แม้จะมีค่าส่งเกินร่วมด้วย เคลมแล้วก็ยังผิดปกติอยู่
+      ต้องปรับราคา/ต้นทุนเป็นหลัก)
+    คืน list ใหม่ (ไม่แก้ของเดิม) — คอลัมน์ "ค่าส่งเกิน" ต้องมีอยู่แล้ว (0 ถ้าไม่มีข้อมูล)"""
+    out = []
+    for r in rows:
+        net = float(r.get("ยอดเงินที่ได้รับจริง") or 0)
+        profit = float(r.get("กำไร") or 0)
+        extra = float(r.get("ค่าส่งเกิน") or 0)
+        margin = (profit / net * 100) if net else 0.0
+        flagged = not (profit >= 0 and margin >= warn_pct)
+        if not flagged:
+            cause, status = CAUSE_OK, "🟢 ปกติ"
+        else:
+            status = "🔴 ขาดทุน" if profit < 0 else "🟡 กำไรต่ำ"
+            after = profit + extra
+            after_margin = (after / net * 100) if net else 0.0
+            if extra > SHIPPING_EXTRA_MIN and after >= 0 and after_margin >= warn_pct:
+                cause = CAUSE_SHIPPING
+            else:
+                cause = CAUSE_PRICE
+        out.append({**r, "สถานะ": status, "สาเหตุ": cause, "ผิดปกติ": flagged,
+                    "มีค่าส่งเกิน": extra > SHIPPING_EXTRA_MIN})
+    return out
+
+
+def summarize_anomaly_orders(rows: list[dict]) -> dict:
+    """สรุปตัวเลขสำหรับการ์ดด้านบนหน้า จาก rows ที่ผ่าน classify_anomaly_orders แล้ว
+    (ทุกออเดอร์ ไม่ใช่เฉพาะที่ผิดปกติ) — คืน dict รวม + by_shop (list เรียงขาดทุนมากสุดก่อน)
+    total_profit = ผลรวมกำไรของออเดอร์ที่กำไร>0, total_loss = ผลรวม |กำไร| ของออเดอร์ที่ขาดทุน
+    (เป็นบวกทั้งคู่ เหมือนการ์ดใน _render_combined_summary)"""
+    def _new():
+        return {"orders": 0, "revenue": 0.0, "profit": 0.0, "n_loss": 0, "loss_total": 0.0,
+                "n_ship": 0, "ship_total": 0.0, "n_ship_cause": 0, "n_price": 0, "price_loss": 0.0}
+
+    total = _new()
+    total.update({"total_profit": 0.0, "n_price_flagged": 0})
+    shops: dict[tuple[str, str], dict] = {}
+    for r in rows:
+        key = (r.get("แพลตฟอร์ม", ""), r.get("ร้าน", ""))
+        s = shops.setdefault(key, _new())
+        profit = float(r.get("กำไร") or 0)
+        extra = float(r.get("ค่าส่งเกิน") or 0) if r.get("มีค่าส่งเกิน") else 0.0
+        for agg in (total, s):
+            agg["orders"] += 1
+            agg["revenue"] += float(r.get("ยอดเงินที่ได้รับจริง") or 0)
+            agg["profit"] += profit
+            if profit < 0:
+                agg["n_loss"] += 1
+                agg["loss_total"] += -profit
+            if r.get("มีค่าส่งเกิน"):
+                agg["n_ship"] += 1
+                agg["ship_total"] += extra
+            if r.get("สาเหตุ") == CAUSE_SHIPPING:
+                agg["n_ship_cause"] += 1
+            if r.get("สาเหตุ") == CAUSE_PRICE:
+                agg["n_price"] += 1
+                if profit < 0:
+                    agg["price_loss"] += -profit
+        if profit > 0:
+            total["total_profit"] += profit
+        if r.get("สาเหตุ") == CAUSE_PRICE:
+            total["n_price_flagged"] += 1
+    by_shop = [{"แพลตฟอร์ม": k[0], "ร้าน": k[1], **v} for k, v in shops.items()]
+    by_shop.sort(key=lambda d: (-d["loss_total"], d["ร้าน"]))
+    total["by_shop"] = by_shop
+    return total
