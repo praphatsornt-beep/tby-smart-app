@@ -102,13 +102,18 @@ def render():
     except Exception:
         _shop_order_df, _product_order_df = pd.DataFrame(), pd.DataFrame()
 
-    _oc1, _oc2 = st.columns([3, 2])
+    _oc1, _oc2 = st.columns([2, 3])
     with _oc1:
         st.markdown("**📦 สรุปออเดอร์วันนี้ต่อร้าน (Shopee จากอีเมล)**")
         if _shop_order_df.empty:
             st.caption("ยังไม่มีออเดอร์เข้ามาวันนี้")
         else:
-            st.dataframe(_shop_order_df, width="stretch", hide_index=True)
+            _shop_col_config = {
+                c: st.column_config.NumberColumn(width="small")
+                for c in _shop_order_df.columns if c != "ร้าน"
+            }
+            st.dataframe(_shop_order_df, width="stretch", hide_index=True,
+                         column_config=_shop_col_config)
     with _oc2:
         st.markdown("**🛍️ สินค้าที่ต้องเตรียมส่งวันนี้**")
         if _product_order_df.empty:
@@ -117,12 +122,20 @@ def render():
             _ship_products = (_product_order_df[["สินค้า", "จำนวนรวม"]]
                                .groupby("สินค้า", as_index=False).sum()
                                .sort_values("จำนวนรวม", ascending=False))
-            st.dataframe(_ship_products, width="stretch", hide_index=True,
-                         height=min(35 * len(_ship_products) + 38, 250))
+            st.dataframe(
+                _ship_products, width="stretch", hide_index=True,
+                height=min(35 * len(_ship_products) + 38, 250),
+                column_config={
+                    "สินค้า": st.column_config.TextColumn(width="large"),
+                    "จำนวนรวม": st.column_config.NumberColumn(width="small"),
+                },
+            )
 
     # ── ออเดอร์ตีกลับ (Shopee จากอีเมล) — ยืนยันรับของคืนจริง ───────────────
     st.divider()
     st.markdown("**↩️ ออเดอร์ตีกลับ (Shopee) — ยังไม่ได้รับคืน**")
+    st.caption("ร้าน/สินค้าขึ้น \"-\" = ยังไม่ได้อัปโหลดไฟล์ยอดขาย Shopee ของช่วงนั้น (ไม่ใช่ error) "
+               "อัปโหลดไฟล์ที่ 🛒 E-commerce → ⚙️ ตั้งค่า/นำเข้าข้อมูล แล้วข้อมูลจะขึ้นเอง")
     try:
         _ret_df = db.get_ecommerce_return_emails_df(platform="shopee")
     except Exception:
