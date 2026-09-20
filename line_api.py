@@ -89,9 +89,11 @@ def push_partial_receipt(line_user_id: str, product_name: str,
                          qty_received: float, amount_paid: float,
                          remaining_qty: float, remaining_amount: float,
                          product_code: str = "", group_id: str = "",
-                         items: list = None) -> dict:
+                         items: list = None, unbilled_qty: int = 0) -> dict:
     """แจ้งลูกค้าเมื่อรับของ/จ่ายเงินบางส่วน
     items: [{"product_name", "product_code", "qty_received"}] สำหรับหลายรายการ
+    remaining_qty/remaining_amount: ยอดค้างรับ/ค้างจ่ายรวมทั้งลูกค้า (ไม่ใช่แค่รายการนี้)
+    unbilled_qty: ค้างคีย์บิล (ยังไม่เปิดบิล) รวมทั้งลูกค้า — แสดงเป็นบรรทัดเพิ่มถ้า > 0
     """
     _today = date.today().strftime("%d.%m.%Y")
     lines = [f"รายการวันนี้ {_today} 📦"]
@@ -116,7 +118,9 @@ def push_partial_receipt(line_user_id: str, product_name: str,
         lines.append(f"📦 ค้างรับ: {int(remaining_qty)} ชิ้น")
     if remaining_amount > 0.01:
         lines.append(f"💰 ค้างจ่าย: {remaining_amount:,.0f} บาท")
-    if remaining_qty <= 0 and remaining_amount <= 0.01:
+    if unbilled_qty > 0:
+        lines.append(f"🧾 ค้างคีย์บิล (ยังไม่เปิดบิล): {int(unbilled_qty)} ชิ้น")
+    if remaining_qty <= 0 and remaining_amount <= 0.01 and unbilled_qty <= 0:
         lines.append("✅ รับครบ จ่ายครบแล้วค่ะ")
     return _push(line_user_id, "\n".join(lines), group_id)
 

@@ -631,17 +631,36 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
                         st.rerun()
 
 
-def _build_bill_opened_message(customer_name: str, items: list) -> str:
+def _outstanding_summary_lines(owed: float, pending: int, unbilled_qty: int) -> list:
+    """สร้างส่วน "ยอดค้างรวม" (ค้างจ่าย/ค้างรับ/ค้างคีย์บิล) แนบท้ายข้อความ LINE ตอน
+    รับของ/จ่ายเงิน/เปิดบิล — เป็นยอดรวมทั้งลูกค้า ไม่ใช่แค่รายการที่เพิ่งทำรายการนี้ ให้
+    ลูกค้าเห็นภาพรวมค้างทั้งหมดในข้อความเดียวกันเลย ไม่ต้องกดแจ้งยอดค้างแยกอีกที"""
+    lines = []
+    if owed > 0.01 or pending > 0 or unbilled_qty > 0:
+        lines.append("")
+        lines.append("📋 ยอดค้างรวมของคุณตอนนี้:")
+        if owed > 0.01:
+            lines.append(f"💰 ค้างจ่าย: {owed:,.0f} บาท")
+        if pending > 0:
+            lines.append(f"📦 ค้างรับ: {pending} ชิ้น")
+        if unbilled_qty > 0:
+            lines.append(f"🧾 ค้างคีย์บิล (ยังไม่เปิดบิล): {unbilled_qty} ชิ้น")
+    return lines
+
+
+def _build_bill_opened_message(customer_name: str, items: list, owed: float = 0, pending: int = 0, unbilled_qty: int = 0) -> str:
     """สร้างข้อความ LINE แจ้งลูกค้าว่าเปิดบิลแล้ว (ใช้ตอนเปิดบิลอย่างเดียว ไม่มีการจ่าย/
     รับของร่วมด้วย — ถ้ามีจ่าย/รับของด้วยใช้ line_api.push_partial_receipt แทน)
     items: [{"code","name","qty","total"}] — ใส่รหัสสินค้าเสมอถ้ามี เพราะลูกค้าบางคน
-    ไม่ใช่คนไทย รหัสสินค้าอ่าน/เทียบง่ายกว่าชื่อภาษาไทย"""
+    ไม่ใช่คนไทย รหัสสินค้าอ่าน/เทียบง่ายกว่าชื่อภาษาไทย
+    owed/pending/unbilled_qty: ยอดค้างรวมทั้งลูกค้า (หลังเปิดบิลนี้แล้ว) แนบท้ายข้อความ"""
     lines = ["📄 เปิดบิลแล้วค่ะ", f"คุณ {customer_name}", ""]
     for it in items:
         _code = it.get("code", "")
         _lbl = f"[{_code}] {it['name']}" if _code else it["name"]
         lines.append(f"• {_lbl} ×{int(it['qty'])} = {it['total']:,.0f}฿")
     lines += ["", f"💰 รวม: {sum(it['total'] for it in items):,.0f} บาท"]
+    lines += _outstanding_summary_lines(owed, pending, unbilled_qty)
     return "\n".join(lines)
 
 
@@ -748,6 +767,11 @@ def render(products, customers):
                     _is_cod = grp["สถานะจ่าย"] == "COD"
                     owed     = grp.loc[~_is_cod, "ค้างจ่าย"].sum()
                     pending = int(grp["ค้างรับ"].sum())
+                    # ค้างคีย์บิล (ยังไม่เปิดบิล) รวมทั้งลูกค้า — ใช้แนบท้ายข้อความ LINE
+                    # ตอนรับของ/จ่ายเงิน/เปิดบิล ให้ลูกค้าเห็นภาพรวมค้างทั้งหมด ไม่ใช่แค่
+                    # รายการที่เพิ่งทำ (คำนวณจาก _all_txn_cache สดทุกครั้งที่ปุ่มแจ้ง LINE
+                    # render ใหม่หลัง rerun ไม่ใช่ตอน stage เพราะตอน stage ค่ายังเก่าอยู่)
+                    _unbilled_qty = int(_all_txn_cache[_all_txn_cache["ลูกค้า"] == customer_name]["ยังไม่เปิด"].sum())
                     txn_ids = grp["id"].tolist()
                     _luid   = _cust_line_map.get(customer_name, "")
                     _gid    = _cust_gid_map.get(customer_name, "")
@@ -966,11 +990,16 @@ def render(products, customers):
                                         note=new_bill_no.strip() or None, date=str(new_bill_date))
                                     if (_luid or _gid) and line_api.is_configured():
                                         _ob_total = float(txn["price_per_unit"]) * qty_to_open
-                                        _ob_msg = _build_bill_opened_message(customer_name, [{
-                                            "code": sel_row.get("รหัส", ""), "name": txn["product_name"],
-                                            "qty": qty_to_open, "total": _ob_total,
-                                        }])
-                                        line_api.push_text(_luid, _ob_msg, _gid)
+                                        # stage ไว้ก่อน ไม่ส่งอัตโนมัติ — ให้พนักงานกดยืนยันเอง
+                                        # (เดิมส่งอัตโนมัติทุกครั้งที่เปิดบิล กินโควต้า LINE OA
+                                        # โดยไม่จำเป็น) ปุ่มยืนยันอยู่ใกล้ "แจ้งยอดค้าง" ด้านล่าง
+                                        st.session_state["_bill_opened_line"] = {
+                                            "customer_name": customer_name, "line_user_id": _luid, "group_id": _gid,
+                                            "items": [{
+                                                "code": sel_row.get("รหัส", ""), "name": txn["product_name"],
+                                                "qty": qty_to_open, "total": _ob_total,
+                                            }],
+                                        }
                                     st.success(f"✅ เปิดบิลแล้ว {qty_to_open} ชิ้น")
                                     st.rerun()
                             else:
@@ -1206,8 +1235,11 @@ def render(products, customers):
                                             })
                                     st.success(f"✅ เปิดบิลแล้ว {_ob_opened_n} รายการ")
                                     if (_luid or _gid) and line_api.is_configured() and _ob_notify_items:
-                                        _ob_msg = _build_bill_opened_message(customer_name, _ob_notify_items)
-                                        line_api.push_text(_luid, _ob_msg, _gid)
+                                        # stage ไว้ก่อน ไม่ส่งอัตโนมัติ (เหตุผลเดียวกับด้านบน)
+                                        st.session_state["_bill_opened_line"] = {
+                                            "customer_name": customer_name, "line_user_id": _luid,
+                                            "group_id": _gid, "items": _ob_notify_items,
+                                        }
                                     for tid in txn_ids:
                                         st.session_state[f"chk_{tid}"] = False
                                     st.rerun()
@@ -1417,8 +1449,11 @@ def render(products, customers):
                                     elif (_luid or _gid) and line_api.is_configured() and _do_open_bill:
                                         # เปิดบิลอย่างเดียวในโหมดกำหนดเอง (ไม่มีจ่าย/รับของร่วม)
                                         # — ยังไม่มีใครแจ้งลูกค้าเลยถ้าไม่เข้าเงื่อนไขด้านบน
-                                        line_api.push_text(
-                                            _luid, _build_bill_opened_message(customer_name, _opened_items), _gid)
+                                        # stage ไว้ก่อน ไม่ส่งอัตโนมัติ (เหตุผลเดียวกับจุดอื่น)
+                                        st.session_state["_bill_opened_line"] = {
+                                            "customer_name": customer_name, "line_user_id": _luid,
+                                            "group_id": _gid, "items": _opened_items,
+                                        }
                                     _parts = []
                                     if _saved_r:
                                         _parts.append(f"รับของ {_saved_r} รายการ")
@@ -1538,19 +1573,46 @@ def render(products, customers):
                                 + (f" · จ่าย {_pr['amount_paid']:,.0f} ฿" if _pr.get("amount_paid", 0) > 0.01 else "")
                             )
                             if _pr_c2.button("📨 แจ้ง LINE", key=f"pr_line_{customer_name}", type="primary", width="stretch"):
+                                # ใช้ owed/pending/_unbilled_qty สดของรอบนี้ (หลัง rerun จาก
+                                # การบันทึกแล้ว) แทน remaining_qty/amount ที่ stage ไว้ตอนแรก
+                                # (ตัวนั้นคำนวณแค่รายการเดียว ไม่ใช่ยอดค้างรวมทั้งลูกค้าที่
+                                # ผู้ใช้อยากเห็นในข้อความ)
                                 _pr_res = line_api.push_partial_receipt(
                                     _pr["line_user_id"], _pr.get("product_name", ""),
                                     _pr.get("qty_received", 0), _pr["amount_paid"],
-                                    _pr["remaining_qty"], _pr["remaining_amount"],
+                                    pending, owed,
                                     product_code=_pr.get("product_code", ""),
                                     group_id=_pr.get("group_id", ""),
                                     items=_pr_items,
+                                    unbilled_qty=_unbilled_qty,
                                 )
                                 if _pr_res.get("ok"):
                                     st.success("✅ ส่ง LINE แล้ว")
                                     del st.session_state["_partial_recv_line"]
                                 else:
                                     st.error(f"❌ {_pr_res.get('error')}")
+                            st.divider()
+
+                        # ── ปุ่มแจ้ง LINE เปิดบิล (แทนที่การส่งอัตโนมัติเดิม — ให้พนักงาน
+                        # เลือกส่งเอง ลดจำนวนข้อความ LINE ที่ยิงออกไปแบบไม่จำเป็น) ──────
+                        _bol = st.session_state.get("_bill_opened_line")
+                        if _bol and _bol.get("customer_name") == customer_name:
+                            _bol_c1, _bol_c2 = st.columns([3, 1])
+                            _bol_summary = " + ".join(
+                                f"[{it['code']}] {it['name']}" if it.get("code") else it["name"]
+                                for it in _bol.get("items", [])
+                            )
+                            _bol_c1.info(f"📄 เปิดบิลแล้ว: {_bol_summary}")
+                            if _bol_c2.button("📨 แจ้ง LINE", key=f"bol_line_{customer_name}", type="primary", width="stretch"):
+                                _bol_msg = _build_bill_opened_message(
+                                    customer_name, _bol["items"], owed=owed, pending=pending, unbilled_qty=_unbilled_qty,
+                                )
+                                _bol_res = line_api.push_text(_bol["line_user_id"], _bol_msg, _bol.get("group_id", ""))
+                                if _bol_res.get("ok"):
+                                    st.success("✅ ส่ง LINE แล้ว")
+                                    del st.session_state["_bill_opened_line"]
+                                else:
+                                    st.error(f"❌ {_bol_res.get('error')}")
                             st.divider()
 
                         # ── LINE แจ้งยอดค้าง ─────────────────────────────────
