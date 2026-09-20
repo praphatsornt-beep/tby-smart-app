@@ -102,39 +102,45 @@ def render():
     except Exception:
         _shop_order_df, _product_order_df = pd.DataFrame(), pd.DataFrame()
 
-    _oc1, _oc2 = st.columns([2, 3])
-    with _oc1:
-        st.markdown("**📦 สรุปออเดอร์วันนี้ต่อร้าน (Shopee จากอีเมล)**")
-        if _shop_order_df.empty:
-            st.caption("ยังไม่มีออเดอร์เข้ามาวันนี้")
-        else:
-            _shop_col_config = {
-                c: st.column_config.NumberColumn(width="small")
-                for c in _shop_order_df.columns if c != "ร้าน"
-            }
-            st.dataframe(_shop_order_df, width="stretch", hide_index=True,
-                         column_config=_shop_col_config)
-    with _oc2:
-        st.markdown("**🛍️ สินค้าที่ต้องเตรียมส่งวันนี้**")
-        if _product_order_df.empty:
-            st.caption("ยังไม่มีสินค้าที่ต้องส่ง")
-        else:
-            _ship_products = (_product_order_df[["รหัสสินค้า", "สินค้า", "ตัวเลือก", "จำนวนรวม"]]
-                               .groupby(["รหัสสินค้า", "สินค้า", "ตัวเลือก"], as_index=False).sum()
-                               .sort_values("จำนวนรวม", ascending=False))
-            st.dataframe(
-                _ship_products, width="stretch", hide_index=True,
-                height=min(35 * len(_ship_products) + 38, 250),
-                column_config={
-                    "รหัสสินค้า": st.column_config.TextColumn(width="small"),
-                    "สินค้า": st.column_config.TextColumn(width="large"),
-                    "ตัวเลือก": st.column_config.TextColumn(width="small"),
-                    "จำนวนรวม": st.column_config.NumberColumn(width="small"),
-                },
-            )
-            if (_ship_products["รหัสสินค้า"] == "-").any():
-                st.caption("รหัสสินค้าขึ้น \"-\" = ยังไม่ได้ map ชื่อสินค้านี้ — ไปที่ 🛒 E-commerce → "
-                           "⚙️ ตั้งค่า/นำเข้าข้อมูล → \"Map ชื่อสินค้าจากอีเมล → รหัสสินค้า\"")
+    st.markdown("**📦 สรุปออเดอร์วันนี้ต่อร้าน (Shopee จากอีเมล)**")
+    if _shop_order_df.empty:
+        st.caption("ยังไม่มีออเดอร์เข้ามาวันนี้")
+    else:
+        _shop_col_config = {
+            c: st.column_config.NumberColumn(width="small")
+            for c in _shop_order_df.columns if c != "ร้าน"
+        }
+        st.dataframe(_shop_order_df, width="stretch", hide_index=True,
+                     column_config=_shop_col_config)
+
+    st.markdown("")
+    st.markdown("**🛍️ สินค้าที่ต้องเตรียมส่งวันนี้**")
+    if _product_order_df.empty:
+        st.caption("ยังไม่มีสินค้าที่ต้องส่ง")
+    else:
+        _ship_products = (_product_order_df[["รหัสสินค้า", "สินค้า", "ตัวเลือก", "จำนวนรวม"]]
+                           .groupby(["รหัสสินค้า", "สินค้า", "ตัวเลือก"], as_index=False).sum()
+                           .sort_values("จำนวนรวม", ascending=False))
+        # ซ่อนคอลัมน์ "ตัวเลือก" ถ้าไม่มีแถวไหนมีตัวเลือกจริงเลย (ส่วนใหญ่เป็นแบบนี้)
+        # กันตารางแคบเกินจำเป็น เหลือที่ให้คอลัมน์ "สินค้า" (ชื่อยาว) แทน
+        _show_variant_col = (_ship_products["ตัวเลือก"] != "-").any()
+        if not _show_variant_col:
+            _ship_products = _ship_products.drop(columns=["ตัวเลือก"])
+        _col_config = {
+            "รหัสสินค้า": st.column_config.TextColumn(width="small"),
+            "สินค้า": st.column_config.TextColumn(width="large"),
+            "จำนวนรวม": st.column_config.NumberColumn(width="small"),
+        }
+        if _show_variant_col:
+            _col_config["ตัวเลือก"] = st.column_config.TextColumn(width="small")
+        st.dataframe(
+            _ship_products, width="stretch", hide_index=True,
+            height=min(35 * len(_ship_products) + 38, 300),
+            column_config=_col_config,
+        )
+        if (_ship_products["รหัสสินค้า"] == "-").any():
+            st.caption("รหัสสินค้าขึ้น \"-\" = ยังไม่ได้ map ชื่อสินค้านี้ — ไปที่ 🛒 E-commerce → "
+                       "⚙️ ตั้งค่า/นำเข้าข้อมูล → \"Map ชื่อสินค้าจากอีเมล → รหัสสินค้า\"")
 
     # ── ออเดอร์ตีกลับ (Shopee จากอีเมล) — ยืนยันรับของคืนจริง ───────────────
     st.divider()
