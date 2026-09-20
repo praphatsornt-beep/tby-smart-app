@@ -77,6 +77,83 @@ class TestParseShopeeReturnEmails(unittest.TestCase):
         self.assertEqual(ecom_calc.parse_shopee_return_emails("อะไรสักอย่าง", "ไม่มีเลขคำสั่งซื้อในนี้เลย"), [])
 
 
+class TestParseShopeeOrderNoticeEmail(unittest.TestCase):
+    """ยืนยันด้วยข้อความจากอีเมลจริงของ Shopee (info@mail.shopee.co.th) 2026-09-20 —
+    คนละแบบกับอีเมลตีกลับ (TestParseShopeeReturnEmails) นี่คืออีเมลแจ้งออเดอร์ใหม่/ยกเลิก"""
+
+    def test_transfer_order_single_item(self):
+        subject = "ถึงเวลาจัดส่งสินค้าหมายเลข #260920FGENFKS8 แล้ว!"
+        body = (
+            "เรียน คุณ ts_shop56, คำสั่งซื้อหมายเลข #260920FGENFKS8 ได้รับการยืนยันการชำระเงินเรียบร้อยแล้ว. "
+            "กรุณาจัดส่งสินค้าไปยังผู้ซื้อ saifah_02 ลูกค้าควรได้รับสินค้าภายในวันที่25 ก.ย. 2026. "
+            "รายละเอียดคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: | #260920FGENFKS8 |\n"
+            "| วันที่สั่งซื้อ: | 19 ก.ย. 2026 23:04:28 |\n"
+            "| 1. แอลทิน่า แชมพูสระผม/ครีมนวดผม ผสมเลมอนโสมและวิตามินอี ซูเลียน zhulian |\n"
+            "| ตัวเลือกสินค้า: | แชมพูสระผม |\n| จำนวน: | 1 |\n| ราคา: | ฿238 |\n"
+            "| ยอดรวมค่าสินค้า: | ฿238 |\n| ค่าจัดส่งสินค้า: | ฿0 |\n| ยอดที่ต้องชำระทั้งหมด: | ฿238 |"
+        )
+        result = ecom_calc.parse_shopee_order_notice_email(subject, body)
+        self.assertEqual(result["order_sn"], "260920FGENFKS8")
+        self.assertEqual(result["shop_name"], "ts_shop56")
+        self.assertEqual(result["order_type"], "transfer")
+        self.assertEqual(result["status"], "ยืนยันแล้ว")
+        self.assertEqual(result["buyer_name"], "saifah_02")
+        self.assertEqual(result["total_amount"], 238.0)
+        self.assertEqual(result["shipping_fee"], 0.0)
+        self.assertEqual(result["items"], [{
+            "name": "แอลทิน่า แชมพูสระผม/ครีมนวดผม ผสมเลมอนโสมและวิตามินอี ซูเลียน zhulian",
+            "variant": "แชมพูสระผม", "qty": 1, "price": 238.0,
+        }])
+
+    def test_cod_order_no_variant(self):
+        subject = "คำสั่งซื้อชำระเงินปลายทาง #260920GMXWHBXG จากผู้ซื้อ chattikanimthanom ถูกยืนยันแล้ว"
+        body = (
+            "เรียน คุณ ts_shop56, คำสั่งซื้อขอชำระเงินปลายทางหมายเลข #260920GMXWHBXG ได้รับการยืนยันเรียบร้อยแล้ว "
+            "รายละเอียดคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: | #260920GMXWHBXG |\n"
+            "| วันที่สั่งซื้อ: | 20/09/2026 09:57:48 |\n"
+            "| 1. Xtra Wash เอ็กซ์ตร้า วอช ผงซักฟอกเข้มข้น 3.3 กิโลกรัม ผงซักฟอกซูเลียน แฟ้บซูเลียน |\n"
+            "| จำนวน: | 3 |\n| ราคา: | ฿668 |\n"
+            "| ยอดรวมค่าสินค้า: | ฿2,004 |\n| ค่าจัดส่งสินค้า: | ฿0 |"
+        )
+        result = ecom_calc.parse_shopee_order_notice_email(subject, body)
+        self.assertEqual(result["order_sn"], "260920GMXWHBXG")
+        self.assertEqual(result["order_type"], "cod")
+        self.assertEqual(result["buyer_name"], "chattikanimthanom")
+        self.assertEqual(result["total_amount"], 2004.0)
+        self.assertEqual(result["items"][0]["variant"], None)
+        self.assertEqual(result["items"][0]["qty"], 3)
+
+    def test_cancelled_order(self):
+        subject = "คำสั่งซื้อหมายเลข #260920GM8J810Q ถูกทำการยกเลิกโดย koxra"
+        body = "เรียน คุณ ts_shop56, คำสั่งซื้อหมายเลข #260920GM8J810Q ถูกยกเลิกโดยร้าน koxra"
+        result = ecom_calc.parse_shopee_order_notice_email(subject, body)
+        self.assertEqual(result["order_sn"], "260920GM8J810Q")
+        self.assertIsNone(result["order_type"])
+        self.assertEqual(result["status"], "ยกเลิก")
+        self.assertEqual(result["buyer_name"], "koxra")
+
+    def test_multi_item_order_synthetic(self):
+        """สมมติ 2 สินค้าในออเดอร์เดียว ยังไม่เคยเห็นตัวอย่างจริง (ดู CLAUDE.md) — แค่ยืนยันว่า
+        โครงสร้าง regex วนซ้ำได้ตามที่ออกแบบไว้"""
+        subject = "ถึงเวลาจัดส่งสินค้าหมายเลข #TEST123 แล้ว!"
+        body = (
+            "เรียน คุณ jipata5656, รายละเอียดคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: | #TEST123 |\n"
+            "| วันที่สั่งซื้อ: | 01/01/2026 00:00:00 |\n"
+            "| 1. สินค้า A |\n| จำนวน: | 2 |\n| ราคา: | ฿100 |\n"
+            "| 2. สินค้า B |\n| จำนวน: | 5 |\n| ราคา: | ฿50 |\n"
+            "| ยอดรวมค่าสินค้า: | ฿450 |"
+        )
+        result = ecom_calc.parse_shopee_order_notice_email(subject, body)
+        self.assertEqual(len(result["items"]), 2)
+        self.assertEqual(result["items"][0]["name"], "สินค้า A")
+        self.assertEqual(result["items"][0]["qty"], 2)
+        self.assertEqual(result["items"][1]["name"], "สินค้า B")
+        self.assertEqual(result["items"][1]["qty"], 5)
+
+    def test_unrelated_email_returns_none(self):
+        self.assertIsNone(ecom_calc.parse_shopee_order_notice_email("แจ้งเตือนอย่างอื่น", "เนื้อหาอะไรก็ได้"))
+
+
 class TestShippingOverchargeExtra(unittest.TestCase):
     def test_overcharged(self):
         row = {"buyer_paid_shipping": 30, "shopee_subsidized_shipping": 10, "shipping_fee_charged": 55}

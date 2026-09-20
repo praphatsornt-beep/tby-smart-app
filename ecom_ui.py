@@ -1138,6 +1138,29 @@ def _render_issues():
                 key="ecom_return_email_export",
             )
 
+        st.divider()
+        st.subheader("สรุปออเดอร์จากอีเมล (เรียลไทม์)")
+        st.caption(
+            "แกะจากอีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee (คนละแบบกับอีเมลตีกลับด้านบน) — "
+            "ไว้รู้ไวว่าวันนี้แต่ละร้านมีออเดอร์อะไรเข้ามาบ้าง ไม่ใช่ตัวเลขที่กระทบยอดกับ "
+            "Income แล้ว ถ้าตัวเลขนี้กับไฟล์ Income รายเดือนไม่ตรงกัน ให้ยึดไฟล์ที่อัปโหลดเป็นหลัก"
+        )
+        _oc1, _oc2 = st.columns(2)
+        _on_from = _oc1.date_input("จากวันที่", value=date.today(), key="ecom_order_notice_from")
+        _on_to = _oc2.date_input("ถึงวันที่", value=date.today(), key="ecom_order_notice_to")
+        _shop_order_df, _product_order_df = db.get_ecommerce_order_notices_df(
+            platform="shopee", date_from=_on_from, date_to=_on_to,
+        )
+        if _shop_filter:
+            _shop_order_df = _shop_order_df[_shop_order_df["ร้าน"] == _shop_filter].reset_index(drop=True)
+            _product_order_df = _product_order_df[_product_order_df["ร้าน"] == _shop_filter].reset_index(drop=True)
+        if _shop_order_df.empty:
+            st.info("ยังไม่มีออเดอร์จากอีเมลในช่วงนี้")
+        else:
+            st.dataframe(_shop_order_df, width="stretch", hide_index=True)
+            with st.expander("รายการสินค้า+จำนวนรวม"):
+                st.dataframe(_product_order_df, width="stretch", hide_index=True)
+
     if _platform == "tiktok":
         st.divider()
         # ── TikTok organic ที่แกะสินค้าจาก product_summary ไม่ได้ ─────────

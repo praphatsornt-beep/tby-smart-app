@@ -1213,6 +1213,7 @@ def _clear_ecommerce_caches() -> None:
         get_unmapped_ecommerce_items, get_tiktok_pending_sync_count,
         get_tiktok_unmatched_organic_orders, get_tiktok_affiliate_orders_df,
         get_tiktok_order_income_df, get_ecommerce_return_emails_df,
+        get_ecommerce_order_notices_df,
     ):
         _fn.clear()
 
@@ -1907,6 +1908,50 @@ def get_ecommerce_return_emails_df(platform: str = "shopee") -> pd.DataFrame:
             "เจอล่าสุด": r.get("last_seen_at"),
         })
     return pd.DataFrame(out).sort_values("เจอล่าสุด", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(ttl=120)
+def get_ecommerce_order_notices_df(
+    platform: str = "shopee", date_from=None, date_to=None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """สรุปออเดอร์ใหม่ที่แกะได้จากอีเมลแจ้งเตือนของ Shopee (ตาราง ecommerce_order_notices) —
+    คนละตารางกับ get_ecommerce_return_emails_df (อันนั้นคือพัสดุตีกลับ) กรองด้วย
+    first_seen_at (ไม่ใช้ order_date เพราะเป็นข้อความดิบจากอีเมล รูปแบบไม่คงที่ ระหว่าง
+    "19 ก.ย. 2026 23:04:28" กับ "20/09/2026 09:57:48" — ไม่ parse เป็นวันที่จริง)
+    คืน (ตารางสรุปต่อร้าน, ตารางสรุปต่อสินค้า) นับเฉพาะ status='ยืนยันแล้ว'"""
+    rows = _fetch_all(
+        lambda: get_supabase().table("ecommerce_order_notices").select("*").eq("platform", platform).order("id")
+    )
+    if date_from:
+        rows = [r for r in rows if (r.get("first_seen_at") or "")[:10] >= str(date_from)]
+    if date_to:
+        rows = [r for r in rows if (r.get("first_seen_at") or "")[:10] <= str(date_to)]
+    if not rows:
+        return pd.DataFrame(), pd.DataFrame()
+
+    shop_stats: dict[str, dict] = {}
+    product_stats: dict[tuple[str, str], dict] = {}
+    for r in rows:
+        shop = r.get("shop_name") or "-"
+        s = shop_stats.setdefault(shop, {"ร้าน": shop, "ออเดอร์ยืนยันแล้ว": 0, "COD": 0, "โอนแล้ว": 0, "ยกเลิก": 0, "ยอดรวม": 0.0})
+        if r.get("status") == "ยกเลิก":
+            s["ยกเลิก"] += 1
+            continue
+        s["ออเดอร์ยืนยันแล้ว"] += 1
+        s["ยอดรวม"] += float(r.get("total_amount") or 0)
+        if r.get("order_type") == "cod":
+            s["COD"] += 1
+        elif r.get("order_type") == "transfer":
+            s["โอนแล้ว"] += 1
+        for it in (r.get("items") or []):
+            key = (shop, it.get("name") or "-")
+            p = product_stats.setdefault(key, {"ร้าน": shop, "สินค้า": it.get("name") or "-", "จำนวนรวม": 0, "จำนวนออเดอร์": 0})
+            p["จำนวนรวม"] += int(it.get("qty") or 0)
+            p["จำนวนออเดอร์"] += 1
+
+    shop_df = pd.DataFrame(shop_stats.values()).sort_values("ออเดอร์ยืนยันแล้ว", ascending=False).reset_index(drop=True)
+    product_df = pd.DataFrame(product_stats.values()).sort_values("จำนวนรวม", ascending=False).reset_index(drop=True)
+    return shop_df, product_df
 
 
 @st.cache_data(ttl=120)

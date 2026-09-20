@@ -2,11 +2,15 @@
 รัน: uv run tools/email_daily_digest.py
 หรือ: python tools/email_daily_digest.py
 
-เช็คอีเมล 4 บัญชี (IMAP) หา 2 อย่าง แล้วสรุปส่งเข้า LINE ส่วนตัวเจ้าของร้านวันละครั้ง:
+เช็คอีเมล 4 บัญชี (IMAP) หา 3 อย่าง แล้วสรุปส่งเข้า LINE ส่วนตัวเจ้าของร้านวันละครั้ง:
   1. พัสดุ Shopee/Lazada/TikTok ที่มีปัญหา/ตีกลับ/ถูกตีคืน (เชื่อม API ทั้ง 3 แพลตฟอร์ม
      ไม่ได้ — Shopee ถูกปฏิเสธที่ Seller Identification เพราะไม่ใช่ Managed/Mall Seller,
      Lazada/TikTok ก็ไม่มี integration เหมือนกัน — อีเมลคือทางเดียวที่มีตอนนี้)
   2. อีเมลแจ้งยอดบัตรเครดิต/statement จากธนาคาร
+  3. อีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee — สรุปจำนวนออเดอร์+สินค้า/จำนวนต่อร้านแบบ
+     เรียลไทม์ (ดู `ecom_calc.parse_shopee_order_notice_email`) บันทึกลง Supabase ตาราง
+     `ecommerce_order_notices` ให้แอปโชว์ต่อที่ 🛒 E-commerce → ตรวจสอบปัญหา เหมือนกัน
+     (Lazada/TikTok ยังไม่เช็คว่ามีอีเมลแบบนี้หรือไม่ — ทำ Shopee ก่อน)
 
 **Shopee ยืนยันจากอีเมลจริงแล้ว** (2026-09-19, ดู `ecom_calc.parse_shopee_return_emails`)
 — แกะเลขคำสั่งซื้อ/บริษัทขนส่ง/เลขติดตามพัสดุได้ครบ บันทึกลง Supabase ตาราง
@@ -73,6 +77,27 @@ def _push_line_text(user_id: str, text: str) -> dict:
         return {"ok": r.status_code == 200, "error": None if r.status_code == 200 else r.text}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+def _upsert_ecommerce_order_notice(sb, order: dict, notice_subject: str, platform: str = "shopee") -> None:
+    """upsert คีย์ (platform, order_sn) ลง ecommerce_order_notices — ถ้าเจอออเดอร์เดิมมาอีก
+    (เช่นอีเมลยกเลิกที่มาทีหลังอีเมลยืนยัน) อัปเดตทับด้วยข้อมูลล่าสุด (status จะเปลี่ยนเป็น
+    'ยกเลิก' ตอนนั้น)"""
+    now = datetime.now(timezone.utc).isoformat()
+    existing = sb.table("ecommerce_order_notices").select("id") \
+        .eq("platform", platform).eq("order_sn", order["order_sn"]).execute().data
+    row = {
+        "platform": platform, "shop_name": order.get("shop_name"), "order_sn": order["order_sn"],
+        "order_type": order.get("order_type"), "status": order.get("status") or "ยืนยันแล้ว",
+        "buyer_name": order.get("buyer_name"), "order_date": order.get("order_date"),
+        "total_amount": order.get("total_amount"), "shipping_fee": order.get("shipping_fee"),
+        "items": order.get("items") or [], "notice_subject": notice_subject, "last_seen_at": now,
+    }
+    if existing:
+        sb.table("ecommerce_order_notices").update(row).eq("id", existing[0]["id"]).execute()
+    else:
+        row["first_seen_at"] = now
+        sb.table("ecommerce_order_notices").insert(row).execute()
 
 
 def _upsert_ecommerce_return_email(
@@ -240,6 +265,7 @@ def main():
     sb = _get_supabase()
     platform_lines: dict[str, list[str]] = {}
     bank_lines = []
+    order_notices: dict[str, tuple[dict, str]] = {}  # order_sn -> (parsed, notice_subject), เอาตัวหลังสุดในรอบนี้
     n_saved = 0
     for account in accounts:
         for mail in fetch_account(account):
@@ -258,12 +284,37 @@ def main():
                             platform="shopee",
                         )
                         n_saved += 1
-            elif _is_bank_statement(mail["subject"], mail["sender"], mail["body"]):
+                continue
+            if _is_bank_statement(mail["subject"], mail["sender"], mail["body"]):
                 bank_lines.append(f"• {mail['subject']}")
-    if n_saved:
-        print(f"💾 บันทึกออเดอร์ตีกลับ (Shopee) ลง Supabase แล้ว {n_saved} ออเดอร์")
+                continue
+            # เช็คอีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee (คนละแบบกับพัสดุตีกลับด้านบน) —
+            # เก็บล่าสุดต่อ order_sn ไว้ก่อน ค่อย upsert+สรุปทีเดียวหลัง loop เพราะถ้าออเดอร์
+            # เดียวกันถูกยกเลิกในรอบ 24 ชม.เดียวกัน ต้องไม่นับเข้าสรุปว่าเป็นออเดอร์ที่ยืนยันแล้ว
+            order = ecom_calc.parse_shopee_order_notice_email(mail["subject"], mail["body"])
+            if order:
+                order_notices[order["order_sn"]] = (order, mail["subject"])
 
-    if not platform_lines and not bank_lines:
+    shop_summary: dict[str, dict] = {}
+    for order, notice_subject in order_notices.values():
+        _upsert_ecommerce_order_notice(sb, order, notice_subject=notice_subject, platform="shopee")
+        n_saved += 1
+        shop = order.get("shop_name") or "?"
+        entry = shop_summary.setdefault(shop, {"cod": 0, "transfer": 0, "cancelled": 0, "items": {}})
+        if order["status"] == "ยกเลิก":
+            entry["cancelled"] += 1
+            continue
+        if order.get("order_type") == "cod":
+            entry["cod"] += 1
+        elif order.get("order_type") == "transfer":
+            entry["transfer"] += 1
+        for it in order.get("items") or []:
+            entry["items"][it["name"]] = entry["items"].get(it["name"], 0) + it["qty"]
+
+    if n_saved:
+        print(f"💾 บันทึกลง Supabase แล้ว {n_saved} รายการ (ตีกลับ+ออเดอร์ใหม่ รวมกัน)")
+
+    if not platform_lines and not bank_lines and not shop_summary:
         print("วันนี้ไม่มีอีเมลที่เข้าเกณฑ์ — ไม่ส่ง LINE")
         return
 
@@ -276,6 +327,16 @@ def main():
     if bank_lines:
         parts.append("\n💳 แจ้งยอดบัตรเครดิต:")
         parts += bank_lines
+    if shop_summary:
+        parts.append("\n📦 สรุปออเดอร์วันนี้ (Shopee จากอีเมล):")
+        for shop, s in shop_summary.items():
+            total_orders = s["cod"] + s["transfer"]
+            line = f"ร้าน {shop}: {total_orders} ออเดอร์ (COD {s['cod']} / โอนแล้ว {s['transfer']})"
+            if s["cancelled"]:
+                line += f" — ยกเลิก {s['cancelled']}"
+            parts.append(line)
+            for name, qty in s["items"].items():
+                parts.append(f"  • {name} x{qty}")
     text = "\n".join(parts)
 
     staff_line_id = os.environ.get("STAFF_LINE_USER_ID", "")

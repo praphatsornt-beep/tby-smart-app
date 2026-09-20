@@ -30,12 +30,111 @@ def parse_shopee_return_emails(subject: str, body: str) -> list[dict]:
     """แกะออเดอร์ที่ตีกลับ/จัดส่งคืนร้านไม่สำเร็จ จากอีเมลแจ้งเตือนของ Shopee — คืน list
     ของ {order_sn, carrier_name, tracking_no} (ปกติมีแค่ 1 รายการต่ออีเมล แต่เผื่อกรณี
     อีเมลเดียวรวมหลายออเดอร์) คืน [] ถ้าไม่ใช่อีเมลแจ้งตีคืน/parse ไม่ได้"""
-    text = " ".join(body.split())  # ยุบ whitespace/newline ให้ regex ข้าม tag/ลิงก์คั่นกลางได้
+    text = " ".join(body.split())  # ยุบ whitespace/newline ให้ regex ข้ามtag/ลิงก์คั่นกลางได้
     matches = _SHOPEE_RETURN_ORDER_RE.findall(text)
     return [
         {"order_sn": order_sn.strip(), "carrier_name": carrier.strip(), "tracking_no": tracking.strip()}
         for order_sn, carrier, tracking in matches
     ]
+
+
+# ยืนยันจากอีเมลจริงของ Shopee (info@mail.shopee.co.th) 2026-09-20 — 3 แบบหัวเรื่อง:
+#   1. "ถึงเวลาจัดส่งสินค้าหมายเลข #X แล้ว!"                      → ออเดอร์โอนปกติ ยืนยันแล้ว
+#   2. "คำสั่งซื้อชำระเงินปลายทาง #X จากผู้ซื้อ Y ถูกยืนยันแล้ว"     → ออเดอร์ COD ยืนยันแล้ว
+#   3. "คำสั่งซื้อหมายเลข #X ถูกทำการยกเลิกโดย Y"                   → ออเดอร์ถูกยกเลิก
+# ทุกแบบมีบล็อก "รายละเอียดคำสั่งซื้อ" โครงสร้างเดียวกัน (แปลงมาจาก HTML table เป็น
+# pipe-table ในเนื้อหา plaintext): "| N. ชื่อสินค้า | [ตัวเลือกสินค้า: | variant |] จำนวน: |
+# qty | ราคา: | ฿price |" ซ้ำได้หลายรายการต่อออเดอร์ (ยังไม่เคยเห็นตัวอย่างจริงที่มี 2+
+# รายการ — โครงสร้าง regex รองรับไว้เผื่อ แต่ยังไม่ยืนยัน) ปิดท้ายด้วย "ยอดรวมค่าสินค้า: |
+# ฿total |" / "ค่าจัดส่งสินค้า: | ฿fee |" — salutation "เรียน คุณ {shop},​" ในเนื้อหาบอกว่า
+# เป็นบัญชีร้านไหน (แม่นกว่าอนุมานจาก label บัญชีอีเมล)
+_ORDER_ITEM_RE = re.compile(
+    r"\d+\.\s*(.+?)\s+"
+    r"(?:ตัวเลือกสินค้า\s*:\s*(.+?)\s+)?"
+    r"จำนวน\s*:\s*(\d+)\s+"
+    r"ราคา\s*:\s*฿([\d,]+(?:\.\d+)?)",
+)
+_ORDER_SN_BODY_RE = re.compile(r"หมายเลขคำสั่งซื้อ\s*:\s*\|?\s*#(\w+)")
+_ORDER_SN_SUBJECT_RE = re.compile(r"#(\w+)")
+_ORDER_SHOP_RE = re.compile(r"เรียน\s*คุณ\s*(.+?)\s*,")
+_ORDER_BUYER_RES = [
+    re.compile(r"จากผู้ซื้อ\s+(\S+)"),
+    re.compile(r"ไปยังผู้ซื้อ\s+(\S+)"),
+    re.compile(r"ยกเลิกโดย\s+(\S+)"),
+]
+_ORDER_TOTAL_RE = re.compile(r"ยอดรวมค่าสินค้า\s*:\s*\|\s*฿([\d,]+(?:\.\d+)?)")
+_ORDER_SHIP_FEE_RE = re.compile(r"ค่าจัดส่งสินค้า\s*:\s*\|\s*฿([\d,]+(?:\.\d+)?)")
+_ORDER_DATE_RE = re.compile(r"วันที่สั่งซื้อ\s*:\s*\|?\s*(.+?)\s*\|")
+
+
+def _num(s: str | None) -> float | None:
+    return float(s.replace(",", "")) if s else None
+
+
+def parse_shopee_order_notice_email(subject: str, body: str) -> dict | None:
+    """แกะอีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee — คืน {order_sn, shop_name, order_type,
+    status, buyer_name, total_amount, shipping_fee, order_date,
+    items: [{name, variant, qty, price}]} หรือ None ถ้าหัวเรื่องไม่ตรงกับ 3 แบบที่รู้จัก
+    (ดูคอมเมนต์ด้านบน)"""
+    if "ถึงเวลาจัดส่งสินค้าหมายเลข" in subject:
+        order_type, status = "transfer", "ยืนยันแล้ว"
+    elif "คำสั่งซื้อชำระเงินปลายทาง" in subject and "ถูกยืนยันแล้ว" in subject:
+        order_type, status = "cod", "ยืนยันแล้ว"
+    elif "ถูกทำการยกเลิกโดย" in subject:
+        order_type, status = None, "ยกเลิก"
+    else:
+        return None
+
+    text = " ".join(body.split())
+
+    m = _ORDER_SN_BODY_RE.search(text) or _ORDER_SN_SUBJECT_RE.search(subject)
+    if not m:
+        return None
+    order_sn = m.group(1)
+
+    shop_m = _ORDER_SHOP_RE.search(text)
+    shop_name = shop_m.group(1).strip() if shop_m else None
+
+    buyer_name = None
+    for pat in _ORDER_BUYER_RES:
+        bm = pat.search(subject) or pat.search(text)
+        if bm:
+            buyer_name = bm.group(1)
+            break
+
+    total_m = _ORDER_TOTAL_RE.search(text)
+    ship_m = _ORDER_SHIP_FEE_RE.search(text)
+    date_m = _ORDER_DATE_RE.search(text)
+
+    # จำกัดช่วงค้นหารายการสินค้าไว้แค่ระหว่าง "วันที่สั่งซื้อ" ถึง "ยอดรวมค่าสินค้า" กัน
+    # จับเลข/จุดที่ไม่เกี่ยวในส่วนอื่นของอีเมลผิดเป็นรายการสินค้า — ตัด "|" ที่เป็นแค่เส้นแบ่ง
+    # ตาราง (แปลงจาก HTML) ออกก่อน เพราะบางทีมี "| |" คั่นระหว่างแถวทำให้ regex เดิมไม่ match
+    si = text.find("วันที่สั่งซื้อ")
+    ei = text.find("ยอดรวมค่าสินค้า")
+    item_section = text[si:ei] if si != -1 and ei != -1 and ei > si else text
+    item_section = " ".join(item_section.replace("|", " ").split())
+
+    items = [
+        {
+            "name": name.strip(),
+            "variant": variant.strip() if variant else None,
+            "qty": int(qty),
+            "price": _num(price),
+        }
+        for name, variant, qty, price in _ORDER_ITEM_RE.findall(item_section)
+    ]
+
+    return {
+        "order_sn": order_sn,
+        "shop_name": shop_name,
+        "order_type": order_type,
+        "status": status,
+        "buyer_name": buyer_name,
+        "total_amount": _num(total_m.group(1)) if total_m else None,
+        "shipping_fee": _num(ship_m.group(1)) if ship_m else None,
+        "order_date": date_m.group(1).strip() if date_m else None,
+        "items": items,
+    }
 
 
 def settled_order_sns(income_rows: list[dict]) -> set[str]:
