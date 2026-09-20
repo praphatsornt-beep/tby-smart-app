@@ -2,7 +2,7 @@ name: Daily Email Digest (Shopee ตีกลับ + บัตรเครด�
 
 on:
   schedule:
-    - cron: "0 0 * * *"   # 07:00 น. เวลาไทย (UTC+7) ทุกวัน
+    - cron: "30 2 * * *"   # 09:30 น. เวลาไทย (UTC+7) ทุกวัน
   workflow_dispatch: {}    # กดรันเองได้จาก tab Actions ของ repo
 
 jobs:
