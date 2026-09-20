@@ -133,8 +133,7 @@ class TestParseShopeeOrderNoticeEmail(unittest.TestCase):
         self.assertEqual(result["buyer_name"], "koxra")
 
     def test_multi_item_order_synthetic(self):
-        """สมมติ 2 สินค้าในออเดอร์เดียว ยังไม่เคยเห็นตัวอย่างจริง (ดู CLAUDE.md) — แค่ยืนยันว่า
-        โครงสร้าง regex วนซ้ำได้ตามที่ออกแบบไว้"""
+        """ยืนยันว่าโครงสร้าง regex วนซ้ำได้ตามที่ออกแบบไว้ (เคสง่าย ไม่มี URL รูปสินค้าคั่น)"""
         subject = "ถึงเวลาจัดส่งสินค้าหมายเลข #TEST123 แล้ว!"
         body = (
             "เรียน คุณ jipata5656, รายละเอียดคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: | #TEST123 |\n"
@@ -149,6 +148,47 @@ class TestParseShopeeOrderNoticeEmail(unittest.TestCase):
         self.assertEqual(result["items"][0]["qty"], 2)
         self.assertEqual(result["items"][1]["name"], "สินค้า B")
         self.assertEqual(result["items"][1]["qty"], 5)
+
+    def test_multi_item_order_real_email_with_image_links(self):
+        """ยืนยันด้วยอีเมลจริง #260920H0R7Y4S4 (2026-09-20, ts_shop56) — ออเดอร์แรกที่เจอจริง
+        ว่ามี 2 สินค้าในอีเมลเดียว แต่ละสินค้ามีลิงก์รูปภาพ [](url) คั่นก่อนหน้า — URL พวกนี้
+        เป็น query-string เข้ารหัสยาวที่มี "ตัวเลข.ตัวเลข" ปนอยู่ (เช่น "-i.262949.21589696184/")
+        ซึ่งก่อนแก้ ทำให้ _ORDER_ITEM_RE จับ URL ปนเข้าไปในชื่อสินค้า (regression test)"""
+        subject = "คำสั่งซื้อชำระเงินปลายทาง #260920H0R7Y4S4 จากผู้ซื้อ wanladaneramitkhonburi ถูกยืนยันแล้ว"
+        body = (
+            "เรียน คุณ ts_shop56, คำสั่งซื้อขอชำระเงินปลายทางหมายเลข #260920H0R7Y4S4 "
+            "ได้รับการยืนยันเรียบร้อยแล้ว รายละเอียดคำสั่งซื้อ | หมายเลขคำสั่งซื้อ: | #260920H0R7Y4S4 |\n"
+            "| วันที่สั่งซื้อ: | 20/09/2026 13:28:49 |\n"
+            "[](https://shopee.co.th/universal-link/%E0%B8%81%E0%B8%B2%E0%B9%81%E0%B8%9F-"
+            "i.262949.21589696184/?smtt=583.262957.7)\n"
+            "| 1. กาแฟโสม ซูเลียน กาแฟคอลลาเจน (บรรจุ 18 ซอง) กาแฟโสมผสมคอลลาเจน คอฟฟี่พลัส ของแท้ |\n"
+            "| จำนวน: | 1 |\n| ราคา: | ฿253 |\n"
+            "[](https://shopee.co.th/universal-link/%E0%B8%81%E0%B8%B2%E0%B9%81%E0%B8%9F-"
+            "i.262949.22970658454/?smtt=583.262957.7)\n"
+            "| 2. กาแฟซูเลียน ไวท์คอฟฟี่ 3 อิน 1 เลส ซูการ์ 15 ซอง น้ำตาลน้อย คอฟฟี่พลัส "
+            "White coffee plus 3 in 1 Less Sugar ของแท้ 100% |\n"
+            "| จำนวน: | 1 |\n| ราคา: | ฿222 |\n"
+            "| ยอดรวมค่าสินค้า: | ฿475 |\n| ค่าจัดส่งสินค้า: | ฿0 |\n| ยอดที่ต้องชำระทั้งหมด: | ฿475 |"
+        )
+        result = ecom_calc.parse_shopee_order_notice_email(subject, body)
+        self.assertEqual(result["order_sn"], "260920H0R7Y4S4")
+        self.assertEqual(result["shop_name"], "ts_shop56")
+        self.assertEqual(result["order_type"], "cod")
+        self.assertEqual(result["total_amount"], 475.0)
+        self.assertEqual(len(result["items"]), 2)
+        self.assertEqual(
+            result["items"][0]["name"],
+            "กาแฟโสม ซูเลียน กาแฟคอลลาเจน (บรรจุ 18 ซอง) กาแฟโสมผสมคอลลาเจน คอฟฟี่พลัส ของแท้",
+        )
+        self.assertEqual(result["items"][0]["qty"], 1)
+        self.assertEqual(result["items"][0]["price"], 253.0)
+        self.assertEqual(
+            result["items"][1]["name"],
+            "กาแฟซูเลียน ไวท์คอฟฟี่ 3 อิน 1 เลส ซูการ์ 15 ซอง น้ำตาลน้อย คอฟฟี่พลัส "
+            "White coffee plus 3 in 1 Less Sugar ของแท้ 100%",
+        )
+        self.assertEqual(result["items"][1]["qty"], 1)
+        self.assertEqual(result["items"][1]["price"], 222.0)
 
     def test_unrelated_email_returns_none(self):
         self.assertIsNone(ecom_calc.parse_shopee_order_notice_email("แจ้งเตือนอย่างอื่น", "เนื้อหาอะไรก็ได้"))

@@ -86,6 +86,11 @@ def parse_shopee_order_notice_email(subject: str, body: str) -> dict | None:
         return None
 
     text = " ".join(body.split())
+    # ตัด markdown link เปล่า "[](url)" ออกก่อน (รูปสินค้า/ปุ่มลิงก์ในอีเมล) — URL พวกนี้มัก
+    # เป็น query-string เข้ารหัสยาวๆ ที่มี "ตัวเลข.ตัวเลข" ปนอยู่ (เช่น "-i.262949.21589696184/")
+    # ซึ่งไปแมตช์ผิดเป็นจุดเริ่มรายการสินค้าใน _ORDER_ITEM_RE ได้ (ยืนยันจากอีเมลจริง 2 สินค้า
+    # ในออเดอร์เดียว #260920H0R7Y4S4 2026-09-20 — ชื่อสินค้าถูกดึงมาปนกับเศษ URL ก่อนแก้)
+    text = re.sub(r"\[[^\]]*\]\([^)]*\)", " ", text)
 
     m = _ORDER_SN_BODY_RE.search(text) or _ORDER_SN_SUBJECT_RE.search(subject)
     if not m:
