@@ -31,10 +31,12 @@ pyarrow มาด้วย — คุยกับ Supabase/LINE ตรงๆ ผ
 requirements-backup.txt ที่บอกว่าไม่อยากลากของหนักมาติดตั้งทุกรอบ cron รายวัน)
 """
 import os
+import re
 import sys
 import json
 import imaplib
 import email
+import html as html_mod
 from email.header import decode_header
 from datetime import datetime, timedelta, timezone
 
@@ -201,19 +203,50 @@ def _decode(raw: str) -> str:
     return out
 
 
+def _html_to_text(raw_html: str) -> str:
+    """แปลง HTML → ข้อความอ่านได้ ใส่ " | " คั่นตรงขอบเขต block/cell (br, tr, p, div, li, td)
+    ให้ได้ฟอร์แมตแบบเดียวกับที่ Gmail's own HTML→text converter สร้าง (ซึ่ง regex ทั้งหมด
+    ใน ecom_calc.py ถูกออกแบบ/ทดสอบมาให้ตรงกับรูปแบบนี้อยู่แล้ว — ดูคอมเมนต์ที่นั่น) —
+    ตั้งใจไม่เปลี่ยน regex ฝั่ง ecom_calc.py เลย เก็บ compatibility ไว้ที่จุดนี้จุดเดียว"""
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", raw_html)
+    text = re.sub(r"(?i)<(br|/tr|/p|/div|/li|/td)\s*/?>", " | ", text)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    return html_mod.unescape(text)
+
+
 def _get_body(msg: email.message.Message) -> str:
+    """คืนเนื้อหาอีเมลแบบอ่านได้ — ใช้ text/plain ถ้ามี ไม่งั้น fallback ไป text/html
+    (แปลงผ่าน _html_to_text) เพราะยืนยันจากอีเมลจริงของ Shopee (info@mail.shopee.co.th)
+    2026-09-20 ว่าเป็น multipart/alternative ที่มีแค่ text/html ล้วนๆ ไม่มี text/plain เลย —
+    ก่อนแก้จุดนี้ฟังก์ชันคืนค่าว่างเปล่าให้อีเมลพวกนี้ทุกฉบับเงียบๆ (ไม่ error ไม่มี log)
+    ทำให้ ecom_calc.parse_shopee_order_notice_email()/parse_shopee_return_emails() ได้
+    body="" เสมอในโปรดักชันจริง แม้จะทดสอบผ่านแล้วด้วย body ที่ดึงผ่าน Gmail API (ซึ่ง
+    Gmail แปลง HTML→text ให้เองอัตโนมัติ คนละเส้นทางกับ imaplib ที่ใช้ที่นี่ ไม่เจอปัญหานี้
+    ตอนทดสอบเพราะไม่ได้จำลอง fetch แบบ IMAP จริง)"""
     if msg.is_multipart():
+        html_part = None
         for part in msg.walk():
-            if part.get_content_type() == "text/plain" and not part.get("Content-Disposition"):
+            if part.get("Content-Disposition"):
+                continue
+            if part.get_content_type() == "text/plain":
                 try:
                     return part.get_payload(decode=True).decode(_normalize_charset(part.get_content_charset()), errors="replace")
                 except Exception:
                     continue
+            elif part.get_content_type() == "text/html" and html_part is None:
+                html_part = part
+        if html_part is not None:
+            try:
+                raw_html = html_part.get_payload(decode=True).decode(_normalize_charset(html_part.get_content_charset()), errors="replace")
+                return _html_to_text(raw_html)
+            except Exception:
+                return ""
         return ""
     try:
-        return msg.get_payload(decode=True).decode(_normalize_charset(msg.get_content_charset()), errors="replace")
+        payload = msg.get_payload(decode=True).decode(_normalize_charset(msg.get_content_charset()), errors="replace")
     except Exception:
         return ""
+    return _html_to_text(payload) if msg.get_content_type() == "text/html" else payload
 
 
 def fetch_account(account: dict) -> list[dict]:
