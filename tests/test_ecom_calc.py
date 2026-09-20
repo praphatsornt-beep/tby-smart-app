@@ -5,11 +5,25 @@ import ecom_calc
 
 class TestSettledOrderSns(unittest.TestCase):
     def test_basic(self):
-        rows = [{"order_sn": "A"}, {"order_sn": "B"}, {"order_sn": "A"}]
+        rows = [{"order_sn": "A", "net_amount": 100}, {"order_sn": "B", "net_amount": 50}, {"order_sn": "A", "net_amount": 100}]
         self.assertEqual(ecom_calc.settled_order_sns(rows), {"A", "B"})
 
     def test_empty(self):
         self.assertEqual(ecom_calc.settled_order_sns([]), set())
+
+    def test_zero_net_amount_not_settled(self):
+        # เคยเป็นบั๊ก: แถว Income ที่มี net_amount=0 (ยอดรับผิด/ยังไม่ถูกต้อง ไม่ใช่ปิดยอด
+        # ที่ 0 จริง) ต้องไม่ถือว่า "ปิดยอดแล้ว" ไม่งั้นออเดอร์นั้นขึ้นเป็นขาดทุนเต็มต้นทุนผิดๆ
+        rows = [{"order_sn": "A", "net_amount": 0}, {"order_sn": "B", "net_amount": 100}]
+        self.assertEqual(ecom_calc.settled_order_sns(rows), {"B"})
+
+    def test_negative_net_amount_not_settled(self):
+        rows = [{"order_sn": "A", "net_amount": -5}]
+        self.assertEqual(ecom_calc.settled_order_sns(rows), set())
+
+    def test_missing_net_amount_key_not_settled(self):
+        rows = [{"order_sn": "A"}]
+        self.assertEqual(ecom_calc.settled_order_sns(rows), set())
 
 
 class TestPendingIncomeRows(unittest.TestCase):

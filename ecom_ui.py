@@ -117,6 +117,23 @@ def _render_import():
     if _tt_pending_all:
         st.warning(f"⚠️ TikTok มี {_tt_pending_all} ออเดอร์ค้างซิงค์เข้าระบบกำไรสินค้า (ทุกร้านรวมกัน) — เลือกแพลตฟอร์ม TikTok ด้านล่างแล้วกดซิงค์")
 
+    # เดือนที่ขาดรายงานรายได้ต่อร้าน — เช็คก่อนอัปโหลดว่าร้านไหนต้องไปโหลดรายงานรายได้
+    # เดือนไหนมาเพิ่ม โดยไม่ต้องสลับไปเปิดแท็บ 🔍 ตรวจสอบปัญหา ดูทีละออเดอร์เอง (รวมทุก
+    # แพลตฟอร์ม — เกณฑ์ "ยังไม่มีรายได้" ตอนนี้นับ net_amount<=0 ว่ายังไม่ปิดยอดด้วย ไม่ใช่
+    # แค่ไม่มีแถว Income เลย ดู ecom_calc.settled_order_sns)
+    _missing_income_df = db.get_ecommerce_missing_income_months_df()
+    if not _missing_income_df.empty:
+        with st.expander(f"📅 เดือนที่ยังขาดรายงานรายได้ ({len(_missing_income_df)} ร้าน)", expanded=True):
+            st.caption(
+                "รายชื่อร้าน/เดือนที่มีออเดอร์ขายแล้วแต่ยังไม่มีรายงานรายได้ (Income) มายืนยัน "
+                "(หรือมีแถวรายได้แล้วแต่ยอด ≤ 0 ซึ่งถือว่ายังไม่ปิดยอดเช่นกัน) — ไปโหลดรายงานรายได้ "
+                "ของเดือนที่ขาดมาอัปโหลดเพิ่มที่แพลตฟอร์มนั้นด้านล่าง"
+            )
+            st.dataframe(
+                _missing_income_df.style.format({"ยอดที่รอ (ประเมิน)": "{:,.2f}"}),
+                width="stretch", hide_index=True,
+            )
+
     _plat_with_shops = sorted({s["platform"] for s in shops}, key=list(_PLATFORMS.keys()).index)
     _upload_platform = st.radio(
         "แพลตฟอร์ม", _plat_with_shops, format_func=lambda p: _PLATFORMS.get(p, p),
@@ -876,7 +893,7 @@ def _render_sales_profit():
             st.info("ยังไม่มีข้อมูล — อัปโหลดรายงานคำสั่งซื้อก่อนครับ (แท็บ '📥 นำเข้าข้อมูล')")
         else:
             st.dataframe(
-                ecom_df.style.format({"ยอด": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}"}, na_rep="รอยืนยัน"),
+                ecom_df.style.format({"ยอด": "{:,.2f}", "ยอดเงินที่ได้รับจริง": "{:,.2f}"}, na_rep="รอโอน"),
                 width="stretch", hide_index=True,
             )
             _net_received = ecom_df["ยอดเงินที่ได้รับจริง"].sum()

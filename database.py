@@ -1225,7 +1225,9 @@ def _clear_ecommerce_caches() -> None:
         get_unmapped_ecommerce_items, get_tiktok_pending_sync_count,
         get_tiktok_unmatched_organic_orders, get_tiktok_affiliate_orders_df,
         get_tiktok_order_income_df, get_ecommerce_return_emails_df,
-        get_ecommerce_order_notices_df,
+        get_ecommerce_order_notices_df, get_ecommerce_missing_income_months_df,
+        get_ecommerce_pending_income_df, get_ecommerce_pending_income_df_all,
+        get_ecommerce_product_margin_df_all,
     ):
         _fn.clear()
 
@@ -1490,7 +1492,7 @@ def get_ecommerce_product_margin_df(
     sale_date เก่าสุด/ล่าสุดของออเดอร์ที่ยังค้าง หรือ None ถ้าไม่มีค้าง — บอกผู้ใช้ว่า
     ต้องไปโหลดรายงาน Income ของช่วงวันที่เท่าไหร่มาอัปโหลดเพิ่ม) ตัวคูณ units_per_pack
     ใช้กับ SKU ที่ map เป็นแพ็ครวม shop_name: ระบุเพื่อกรองดูเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
-    _income_q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", platform)
+    _income_q = get_supabase().table("ecommerce_order_income").select("order_sn,net_amount").eq("platform", platform)
     if shop_name:
         _income_q = _income_q.eq("shop_name", shop_name)
     settled_sns = ecom_calc.settled_order_sns(_fetch_all(lambda: _income_q.order("order_sn")))
@@ -1564,9 +1566,14 @@ def _ecommerce_order_costs(
     if shop_name:
         _income_q = _income_q.eq("shop_name", shop_name)
     _income_rows = _fetch_all(lambda: _income_q.order("order_sn"))
+    # net_amount <= 0 = ยังไม่ปิดยอดจริง (ดู ecom_calc.settled_order_sns) — ไม่ใช่ "ขาดทุน
+    # เต็มต้นทุนที่ยืนยันแล้ว" ตัดออกจาก incomes ตรงนี้เพื่อให้ aggregate_order_costs ข้าม
+    # ออเดอร์นี้ไปเหมือนกรณียังไม่มีรายงาน Income มาเลย (order_anomaly_rows/
+    # order_profit_summary จะไม่นับเป็นขาดทุน ผู้ใช้จะเห็นออเดอร์นี้ในตาราง "ยังไม่มี
+    # Income มา match" แทน)
     incomes = {
         r["order_sn"]: (r["shop_name"], float(r.get("net_amount") or 0))
-        for r in _income_rows
+        for r in _income_rows if float(r.get("net_amount") or 0) > 0
     }
     shipping_extra = {
         r["order_sn"]: ecom_calc.shipping_overcharge_extra(r)
@@ -2124,7 +2131,7 @@ def get_ecommerce_pending_income_df(platform: str = "shopee", shop_name: str = N
     if not sales:
         return pd.DataFrame()
 
-    _income_q = get_supabase().table("ecommerce_order_income").select("order_sn").eq("platform", platform)
+    _income_q = get_supabase().table("ecommerce_order_income").select("order_sn,net_amount").eq("platform", platform)
     if shop_name:
         _income_q = _income_q.eq("shop_name", shop_name)
     settled_sns = ecom_calc.settled_order_sns(_fetch_all(lambda: _income_q.order("order_sn")))
@@ -2156,6 +2163,31 @@ def get_ecommerce_pending_income_df_all() -> pd.DataFrame:
 
 
 @st.cache_data(ttl=120)
+def get_ecommerce_missing_income_months_df() -> pd.DataFrame:
+    """สรุปต่อร้าน (ทุกแพลตฟอร์มรวมกัน) ว่ามีออเดอร์ที่ขายแล้วแต่ยังไม่มีรายงาน Income มา
+    ยืนยัน (ตามเกณฑ์ ecom_calc.settled_order_sns — net_amount>0 ถึงจะนับว่าปิดยอด) อยู่ใน
+    เดือนไหนบ้าง — ต่อยอด get_ecommerce_pending_income_df_all() มาจัดกลุ่มเป็นรายเดือนต่อ
+    ร้าน ไว้โชว์ในหน้า 📥 นำเข้าข้อมูล ให้รู้ทันทีว่าต้องไปโหลดรายงานรายได้เดือนไหนของร้าน
+    ไหนมาอัปโหลดเพิ่ม โดยไม่ต้องสลับไปเปิดแท็บ 🔍 ตรวจสอบปัญหา ดูทีละออเดอร์เอง"""
+    df = get_ecommerce_pending_income_df_all()
+    if df.empty:
+        return pd.DataFrame()
+    df = df.copy()
+    df["เดือน"] = pd.to_datetime(df["วันที่สั่งซื้อ"]).dt.strftime("%Y-%m")
+
+    def _join_months(s):
+        return ", ".join(sorted(s.unique()))
+
+    summary = df.groupby(["แพลตฟอร์ม", "ร้าน"]).agg(**{
+        "เดือนที่ขาดข้อมูลรายได้": ("เดือน", _join_months),
+        "จำนวนออเดอร์": ("เลขออเดอร์", "nunique"),
+        "ยอดที่รอ (ประเมิน)": ("ยอด", "sum"),
+    }).reset_index()
+    summary["ยอดที่รอ (ประเมิน)"] = summary["ยอดที่รอ (ประเมิน)"].round(2)
+    return summary.sort_values("จำนวนออเดอร์", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(ttl=120)
 def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None, shop_name: str = None) -> pd.DataFrame:
     """platform: กรองเฉพาะแพลตฟอร์มเดียว (None = รวมทุกแพลตฟอร์ม) shop_name: กรองเฉพาะร้านเดียว (None = รวมทุกร้าน)"""
     _q = get_supabase().table("ecommerce_sales").select(
@@ -2175,7 +2207,7 @@ def get_ecommerce_sales_df(start_date: str, end_date: str, platform: str = None,
     db = get_supabase()
     for i in range(0, len(order_sns), 50):
         chunk = order_sns[i:i + 50]
-        inc = _retry(lambda _c=chunk: db.table("ecommerce_order_income").select("order_sn").in_("order_sn", _c).execute()).data
+        inc = _retry(lambda _c=chunk: db.table("ecommerce_order_income").select("order_sn,net_amount").in_("order_sn", _c).execute()).data
         settled |= ecom_calc.settled_order_sns(inc)
 
     return pd.DataFrame([{
