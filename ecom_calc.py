@@ -42,10 +42,14 @@ def parse_shopee_return_emails(subject: str, body: str) -> list[dict]:
     ]
 
 
-# ยืนยันจากอีเมลจริงของ Shopee (info@mail.shopee.co.th) 2026-09-20 — 3 แบบหัวเรื่อง:
+# ยืนยันจากอีเมลจริงของ Shopee (info@mail.shopee.co.th) 2026-09-20 — 4 แบบหัวเรื่อง:
 #   1. "ถึงเวลาจัดส่งสินค้าหมายเลข #X แล้ว!"                      → ออเดอร์โอนปกติ ยืนยันแล้ว
 #   2. "คำสั่งซื้อชำระเงินปลายทาง #X จากผู้ซื้อ Y ถูกยืนยันแล้ว"     → ออเดอร์ COD ยืนยันแล้ว
 #   3. "คำสั่งซื้อหมายเลข #X ถูกทำการยกเลิกโดย Y"                   → ออเดอร์ถูกยกเลิก
+#   4. "คำสั่งซื้อ #X จากผู้ซื้อ Y ถูกยกเลิก"                        → ออเดอร์ถูกยกเลิก (คนละคำ
+#      กับแบบ 3 — พบเพิ่มทีหลัง 2026-09-20 จากอีเมลจริงช่วง 12-16 ก.ย. ที่ parse ไม่ออกมาก่อน
+#      เลย เพราะโค้ดเช็คแค่ "ถูกทำการยกเลิกโดย" ตัวเดียว — โครงสร้างเนื้อหาเหมือนแบบ 3 ทุกอย่าง
+#      แค่หัวเรื่องคนละคำ)
 # ทุกแบบมีบล็อก "รายละเอียดคำสั่งซื้อ" โครงสร้างเดียวกัน (แปลงมาจาก HTML table เป็น
 # pipe-table ในเนื้อหา plaintext): "| N. ชื่อสินค้า | [ตัวเลือกสินค้า: | variant |] จำนวน: |
 # qty | ราคา: | ฿price |" ซ้ำได้หลายรายการต่อออเดอร์ (ยังไม่เคยเห็นตัวอย่างจริงที่มี 2+
@@ -83,13 +87,13 @@ def _num(s: str | None) -> float | None:
 def parse_shopee_order_notice_email(subject: str, body: str) -> dict | None:
     """แกะอีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee — คืน {order_sn, shop_name, order_type,
     status, buyer_name, total_amount, shipping_fee, order_date,
-    items: [{name, variant, qty, price}]} หรือ None ถ้าหัวเรื่องไม่ตรงกับ 3 แบบที่รู้จัก
+    items: [{name, variant, qty, price}]} หรือ None ถ้าหัวเรื่องไม่ตรงกับ 4 แบบที่รู้จัก
     (ดูคอมเมนต์ด้านบน)"""
     if "ถึงเวลาจัดส่งสินค้าหมายเลข" in subject:
         order_type, status = "transfer", "ยืนยันแล้ว"
     elif "คำสั่งซื้อชำระเงินปลายทาง" in subject and "ถูกยืนยันแล้ว" in subject:
         order_type, status = "cod", "ยืนยันแล้ว"
-    elif "ถูกทำการยกเลิกโดย" in subject:
+    elif "ถูกทำการยกเลิกโดย" in subject or "ถูกยกเลิก" in subject:
         order_type, status = None, "ยกเลิก"
     else:
         return None

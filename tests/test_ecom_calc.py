@@ -147,6 +147,28 @@ class TestParseShopeeOrderNoticeEmail(unittest.TestCase):
         self.assertEqual(result["status"], "ยกเลิก")
         self.assertEqual(result["buyer_name"], "koxra")
 
+    def test_cancelled_order_alternate_subject_wording(self):
+        """พบเพิ่ม 2026-09-20 จากอีเมลจริง #260909K1U1F0KP (2026-09-16) — Shopee ใช้คำว่า
+        "ถูกยกเลิก" เฉยๆ (ไม่มี "ทำการ...โดย") กับหัวเรื่องแบบนี้ด้วย ก่อนแก้ parse ไม่ออก
+        เลยสักฟิลด์เดียว เพราะไม่ตรงกับแบบที่ 3 ("ถูกทำการยกเลิกโดย") ที่เช็คไว้แต่เดิม"""
+        subject = "คำสั่งซื้อ  #260909K1U1F0KP จากผู้ซื้อ ig6587v6m7 ถูกยกเลิก"
+        body = (
+            "เรียน คุณ ts_shop56, คำสั่งซื้อหมายเลข #260909K1U1F0KP ของคุณถูกยกเลิก "
+            "เนื่องจากเราไม่สามารถดำเนินการจัดส่งสินค้าให้แก่ผู้ซื้อ ig6587v6m7 ได้ตามเวลาที่กำหนด "
+            "รายละเอียดคำสั่งซื้อ หมายเลขคำสั่งซื้อ: | #260909K1U1F0KP | "
+            "วันที่สั่งซื้อ: | 09/09/2026 19:06:56 | "
+            "1. ยาสีฟันซูเลียน สไมล์ออน zhulian smile on ว่านหางจระเข้ 250 กรัม | "
+            "จำนวน: | 1 | ราคา: | ฿92 | "
+            "ยอดรวมค่าสินค้า: | ฿92 | ค่าจัดส่งสินค้า: | ฿0 |"
+        )
+        result = ecom_calc.parse_shopee_order_notice_email(subject, body)
+        self.assertEqual(result["order_sn"], "260909K1U1F0KP")
+        self.assertEqual(result["shop_name"], "ts_shop56")
+        self.assertIsNone(result["order_type"])
+        self.assertEqual(result["status"], "ยกเลิก")
+        self.assertEqual(result["buyer_name"], "ig6587v6m7")
+        self.assertEqual(result["total_amount"], 92.0)
+
     def test_multi_item_order_synthetic(self):
         """ยืนยันว่าโครงสร้าง regex วนซ้ำได้ตามที่ออกแบบไว้ (เคสง่าย ไม่มี URL รูปสินค้าคั่น)"""
         subject = "ถึงเวลาจัดส่งสินค้าหมายเลข #TEST123 แล้ว!"
