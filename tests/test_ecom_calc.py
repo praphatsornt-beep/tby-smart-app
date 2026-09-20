@@ -17,9 +17,12 @@ class TestSettledOrderSns(unittest.TestCase):
         rows = [{"order_sn": "A", "net_amount": 0}, {"order_sn": "B", "net_amount": 100}]
         self.assertEqual(ecom_calc.settled_order_sns(rows), {"B"})
 
-    def test_negative_net_amount_not_settled(self):
+    def test_negative_net_amount_is_settled(self):
+        # ต่างจาก net_amount=0 — ค่าติดลบคือยอดขาดทุนที่ยืนยันแล้วจริง (เช่นค่าปรับคืนสินค้า)
+        # ไม่ใช่ข้อมูลที่ยังไม่มา ต้องนับว่าปิดยอดแล้วตามปกติ (พบจริง order #260723DMNYMNFR
+        # ts_shop56 net_amount=-102.0 จากค่าปรับคืนสินค้าเต็มจำนวน)
         rows = [{"order_sn": "A", "net_amount": -5}]
-        self.assertEqual(ecom_calc.settled_order_sns(rows), set())
+        self.assertEqual(ecom_calc.settled_order_sns(rows), {"A"})
 
     def test_missing_net_amount_key_not_settled(self):
         rows = [{"order_sn": "A"}]

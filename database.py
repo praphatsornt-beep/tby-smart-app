@@ -1566,14 +1566,15 @@ def _ecommerce_order_costs(
     if shop_name:
         _income_q = _income_q.eq("shop_name", shop_name)
     _income_rows = _fetch_all(lambda: _income_q.order("order_sn"))
-    # net_amount <= 0 = ยังไม่ปิดยอดจริง (ดู ecom_calc.settled_order_sns) — ไม่ใช่ "ขาดทุน
-    # เต็มต้นทุนที่ยืนยันแล้ว" ตัดออกจาก incomes ตรงนี้เพื่อให้ aggregate_order_costs ข้าม
-    # ออเดอร์นี้ไปเหมือนกรณียังไม่มีรายงาน Income มาเลย (order_anomaly_rows/
+    # net_amount == 0 เป๊ะ = ยังไม่ปิดยอดจริง (ดู ecom_calc.settled_order_sns) — ไม่ใช่
+    # "ขาดทุนเต็มต้นทุนที่ยืนยันแล้ว" ตัดออกจาก incomes ตรงนี้เพื่อให้ aggregate_order_costs
+    # ข้ามออเดอร์นี้ไปเหมือนกรณียังไม่มีรายงาน Income มาเลย (order_anomaly_rows/
     # order_profit_summary จะไม่นับเป็นขาดทุน ผู้ใช้จะเห็นออเดอร์นี้ในตาราง "ยังไม่มี
-    # Income มา match" แทน)
+    # Income มา match" แทน) — net_amount ติดลบ (เช่นค่าปรับคืนสินค้า) ไม่ตัดออก ยังนับเป็น
+    # ปิดยอดแล้วตามปกติ เป็นยอดขาดทุนจริงที่ยืนยันแล้ว ไม่ใช่ข้อมูลที่ยังไม่มา
     incomes = {
         r["order_sn"]: (r["shop_name"], float(r.get("net_amount") or 0))
-        for r in _income_rows if float(r.get("net_amount") or 0) > 0
+        for r in _income_rows if float(r.get("net_amount") or 0) != 0
     }
     shipping_extra = {
         r["order_sn"]: ecom_calc.shipping_overcharge_extra(r)
