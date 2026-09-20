@@ -303,7 +303,7 @@ def _render_shopee_upload(shop_names: list[str]):
             _pc1, _pc2 = st.columns(2)
             if _pc1.button("✅ ยืนยันนำเข้าต่อ (ร้านถูกต้องแล้ว)", key="ecom_confirm_order_mismatch"):
                 _total = _map_products_and_upsert(_pending["rows_per_file"], "shopee")
-                _n_updated = db.allocate_ecommerce_order_income()
+                _n_updated = db.allocate_ecommerce_order_income("shopee", shop_name=_pending["shop_name"])
                 _set_flash("_ecom_order_import_msg", "success", f"✅ นำเข้า {_total} รายการ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
                 del st.session_state["_ecom_order_pending_import"]
                 st.session_state["_ecom_order_file_ver"] = _order_ver + 1
@@ -332,7 +332,7 @@ def _render_shopee_upload(shop_names: list[str]):
                             }
                         else:
                             _map_products_and_upsert(rows_per_file, "shopee")
-                            _n_updated = db.allocate_ecommerce_order_income()
+                            _n_updated = db.allocate_ecommerce_order_income("shopee", shop_name=_order_shop)
                             _set_flash("_ecom_order_import_msg", "success",
                                        f"✅ นำเข้า {len(all_rows)} รายการ จาก {len(_order_files)} ไฟล์ (แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ)")
                             st.session_state["_ecom_order_file_ver"] = _order_ver + 1
@@ -347,7 +347,7 @@ def _render_shopee_upload(shop_names: list[str]):
                 rows, _detected_shop = shopee_import.parse_income_export(_income_file)
                 if rows:
                     db.upsert_ecommerce_order_income(rows)
-                    _n_updated = db.allocate_ecommerce_order_income()
+                    _n_updated = db.allocate_ecommerce_order_income("shopee", shop_name=_detected_shop)
                     _set_flash("_ecom_income_import_msg", "success",
                                f"✅ นำเข้า {len(rows)} ออเดอร์ (ร้าน {_detected_shop}) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
                 else:
@@ -374,7 +374,7 @@ def _render_lazada_upload(shop_names: list[str]):
             else:
                 _map_products_and_upsert([sales_rows], "lazada")
                 db.upsert_ecommerce_order_income(income_rows)
-                _n_updated = db.allocate_ecommerce_order_income("lazada")
+                _n_updated = db.allocate_ecommerce_order_income("lazada", shop_name=_laz_shop)
                 _set_flash("_ecom_lazada_import_msg", "success",
                            f"✅ นำเข้า {len(sales_rows)} รายการ ({len(income_rows)} ออเดอร์) — แบ่งยอดเงินสุทธิให้ {_n_updated} รายการ")
             st.session_state["_ecom_lazada_file_ver"] = _laz_ver + 1

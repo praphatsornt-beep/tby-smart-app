@@ -1418,14 +1418,30 @@ def apply_ecommerce_product_map(mappings: list[dict], platform: str = "shopee") 
     _clear_ecommerce_caches()
 
 
-def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
+def allocate_ecommerce_order_income(platform: str = "shopee", shop_name: str = None) -> int:
     """แบ่งยอดโอนสุทธิต่อออเดอร์ (ecommerce_order_income) ลงในแต่ละ SKU
     (ecommerce_sales.net_amount) ตามสัดส่วน item_price ของแต่ละ SKU ในออเดอร์
     เดียวกัน — แถวสุดท้ายรับเศษปัดเหลือ (หลักการเดียวกับแบ่งจ่ายบางส่วนใน
-    บันทึกขาย) เรียกซ้ำได้ปลอดภัย (คำนวณใหม่ทับของเดิมทุกครั้ง)"""
+    บันทึกขาย) เรียกซ้ำได้ปลอดภัย (คำนวณใหม่ทับของเดิมทุกครั้ง)
+
+    shop_name: ระบุเพื่อคำนวณเฉพาะร้านเดียว (None = ทุกร้าน) — **สำคัญมาก** ตอนอัปโหลด
+    ไฟล์ Order.all/Income ของร้านใดร้านหนึ่งใน ecom_ui.py ต้องส่ง shop_name ของร้านนั้นมา
+    เสมอ ไม่งั้นจะคำนวณใหม่ทับทุกร้านทุกครั้งที่อัปโหลดไฟล์ (พบจริง 2026-09-20: ทำให้
+    อัปโหลดไฟล์เล็กๆ ของร้านเดียวใช้เวลานานหลายนาที เพราะ platform=shopee รวมทุกร้าน
+    มี ecommerce_order_income 2,500+ แถว)
+
+    แก้ 2026-09-20: เดิมอัปเดตทีละแถวด้วย .update() วนลูป (หนึ่ง HTTP round-trip ต่อ
+    หนึ่ง SKU บรรทัด) ช้ามากเมื่อข้อมูลสะสมหลักพันแถว — เปลี่ยนเป็น .upsert() เป็นก้อนแทน
+    ต้อง select("*") มาทั้งแถว (ไม่ใช่แค่ id/item_price) มาแก้แค่ net_amount ในเมโมรีแล้ว
+    ส่งกลับทั้งแถว เพราะ Postgrest upsert() สร้างเป็น INSERT...ON CONFLICT DO UPDATE จริงๆ
+    ที่ระดับ SQL — คอลัมน์ NOT NULL ที่ไม่ได้ส่งมาจะถูก validate เป็น INSERT ก่อนเช็ค
+    conflict เสมอ ถ้าส่งแค่ {id, net_amount} จะชน "null value ... violates not-null
+    constraint" ทันที แม้ id นั้นมีแถวอยู่แล้วจริงก็ตาม (ยืนยันจากการรันจริง 2026-09-20)"""
     db = get_supabase()
-    incomes = _fetch_all(lambda: db.table("ecommerce_order_income").select("order_sn,net_amount")
-                          .eq("platform", platform).order("order_sn"))
+    _income_q = db.table("ecommerce_order_income").select("order_sn,net_amount").eq("platform", platform)
+    if shop_name:
+        _income_q = _income_q.eq("shop_name", shop_name)
+    incomes = _fetch_all(lambda: _income_q.order("order_sn"))
     if not incomes:
         return 0
     income_map = {r["order_sn"]: float(r["net_amount"]) for r in incomes}
@@ -1433,11 +1449,12 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
     updated = 0
     for i in range(0, len(order_sns), 50):
         chunk = order_sns[i:i + 50]
-        sales = _retry(lambda _chunk=chunk: db.table("ecommerce_sales").select("id,order_sn,item_price")
+        sales = _retry(lambda _chunk=chunk: db.table("ecommerce_sales").select("*")
                         .eq("platform", platform).in_("order_sn", _chunk).execute()).data
         by_order: dict[str, list[dict]] = {}
         for s in sales:
             by_order.setdefault(s["order_sn"], []).append(s)
+        batch: list[dict] = []
         for order_sn, lines in by_order.items():
             net = income_map[order_sn]
             total_weight = sum(float(line_item["item_price"]) for line_item in lines) or 1
@@ -1448,9 +1465,11 @@ def allocate_ecommerce_order_income(platform: str = "shopee") -> int:
                 else:
                     share = round(net * (float(line_item["item_price"]) / total_weight), 2)
                     remaining -= share
-                _retry(lambda _id=line_item["id"], _share=share:
-                       db.table("ecommerce_sales").update({"net_amount": _share}).eq("id", _id).execute())
+                batch.append({**line_item, "net_amount": share})
                 updated += 1
+        for j in range(0, len(batch), 500):
+            _chunk_batch = batch[j:j + 500]
+            _retry(lambda _b=_chunk_batch: db.table("ecommerce_sales").upsert(_b, on_conflict="id").execute())
     _clear_ecommerce_caches()
     return updated
 
@@ -2382,7 +2401,7 @@ def sync_tiktok_to_ecommerce(shop_name: str) -> dict:
 
     upsert_ecommerce_sales(sales_rows)
     upsert_ecommerce_order_income(income_out_rows)
-    _n_alloc = allocate_ecommerce_order_income("tiktok")
+    _n_alloc = allocate_ecommerce_order_income("tiktok", shop_name=shop_name)
     return {
         "synced_orders": len(income_out_rows), "sales_rows": len(sales_rows),
         "allocated": _n_alloc, "unmatched": unmatched,
