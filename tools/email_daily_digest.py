@@ -103,11 +103,19 @@ def _upsert_ecommerce_order_notice(sb, order: dict, notice_subject: str, platfor
 
 
 def _upsert_ecommerce_return_email(
-    sb, order_sn: str, carrier_name: str, tracking_no: str, notice_subject: str, platform: str = "shopee",
+    sb, order_sn: str, carrier_name: str, tracking_no: str, notice_subject: str,
+    shop_name: str | None = None, platform: str = "shopee",
 ) -> None:
     """เหมือน database.upsert_ecommerce_return_email() แต่คุย Supabase ตรงๆ ผ่าน sb ที่รับมา
     (ไม่ import database.py — ดู docstring บนสุดของไฟล์) upsert คีย์ (platform, order_sn)
-    เอง, notice_count +1 ทุกครั้งที่เจอซ้ำ, คง first_seen_at เดิมไว้"""
+    เอง, notice_count +1 ทุกครั้งที่เจอซ้ำ, คง first_seen_at เดิมไว้
+
+    shop_name มาจาก label ของบัญชีอีเมลที่เจออีเมลนี้ (account["label"] ใน EMAIL_ACCOUNTS)
+    ไม่ได้ parse จากเนื้อหาอีเมล — ยืนยันกับผู้ใช้ 2026-09-20 ว่าอีเมลตีกลับของ Shopee
+    เองไม่มีชื่อร้าน/สินค้าอยู่ในเนื้อหาเลย (มีแค่ชื่อเล่นเจ้าของร้าน ไม่ตรงกับ shop_name ที่ใช้
+    ในตารางอื่น) แต่ 4 บัญชีอีเมลที่ตั้งค่าไว้ผูก 1 ต่อ 1 กับร้านจริง จึงใช้ label แทนได้เลย
+    ทันทีโดยไม่ต้องรอไฟล์ยอดขายมาจับคู่ — เขียนทับ shop_name เดิมทุกครั้งที่เจอซ้ำด้วย (เผื่อ
+    label ถูกแก้ทีหลังให้ตรงมากขึ้น)"""
     existing = sb.table("ecommerce_return_emails").select("id,notice_count") \
         .eq("platform", platform).eq("order_sn", order_sn).execute().data
     now = datetime.now(timezone.utc).isoformat()
@@ -115,12 +123,12 @@ def _upsert_ecommerce_return_email(
         row = existing[0]
         sb.table("ecommerce_return_emails").update({
             "carrier_name": carrier_name, "tracking_no": tracking_no, "notice_subject": notice_subject,
-            "notice_count": (row.get("notice_count") or 1) + 1, "last_seen_at": now,
+            "shop_name": shop_name, "notice_count": (row.get("notice_count") or 1) + 1, "last_seen_at": now,
         }).eq("id", row["id"]).execute()
     else:
         sb.table("ecommerce_return_emails").insert({
             "platform": platform, "order_sn": order_sn, "carrier_name": carrier_name,
-            "tracking_no": tracking_no, "notice_subject": notice_subject,
+            "tracking_no": tracking_no, "notice_subject": notice_subject, "shop_name": shop_name,
             "notice_count": 1, "first_seen_at": now, "last_seen_at": now,
         }).execute()
 
@@ -314,7 +322,7 @@ def main():
                         _upsert_ecommerce_return_email(
                             sb, order_sn=order["order_sn"], carrier_name=order["carrier_name"],
                             tracking_no=order["tracking_no"], notice_subject=mail["subject"],
-                            platform="shopee",
+                            shop_name=account.get("label"), platform="shopee",
                         )
                         n_saved += 1
                 continue

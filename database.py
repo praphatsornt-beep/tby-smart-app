@@ -1872,9 +1872,12 @@ def upsert_ecommerce_return_email(
 
 @st.cache_data(ttl=120)
 def get_ecommerce_return_emails_df(platform: str = "shopee") -> pd.DataFrame:
-    """ออเดอร์ตีกลับที่แกะได้จากอีเมล Shopee (ตาราง ecommerce_return_emails) join กับ
-    ecommerce_sales ด้วย order_sn เพื่อโชว์ร้าน/สินค้าจริงประกอบ — ถ้ายังไม่เจอใน
-    ecommerce_sales (เช่นไฟล์ยอดขายยังไม่ได้อัปโหลด) ยังโชว์แถวนั้นได้ แค่ไม่มีชื่อสินค้า"""
+    """ออเดอร์ตีกลับที่แกะได้จากอีเมล Shopee (ตาราง ecommerce_return_emails) — ร้านมาจาก
+    shop_name ที่บันทึกไว้ตอนดึงอีเมลโดยตรง (label ของบัญชีอีเมลที่เจอ — ยืนยันกับผู้ใช้
+    2026-09-20 ว่า 4 บัญชีอีเมลผูก 1 ต่อ 1 กับร้านจริง อีเมลตีกลับเองไม่มีชื่อร้าน/สินค้าให้
+    parse เลย) ส่วนสินค้า join กับ ecommerce_order_notices ก่อน (บันทึกทุกวันจากอีเมลยืนยัน
+    ออเดอร์ ไม่ต้องรอไฟล์ยอดขาย) ถ้าไม่เจอค่อย fallback ไป ecommerce_sales (ไฟล์ที่อัปโหลด)
+    — ถ้าไม่เจอทั้งคู่ก็ยังโชว์แถวนั้นได้ แค่ไม่มีชื่อสินค้า"""
     emails = _fetch_all(
         lambda: get_supabase().table("ecommerce_return_emails").select("*").eq("platform", platform).order("id")
     )
@@ -1882,23 +1885,34 @@ def get_ecommerce_return_emails_df(platform: str = "shopee") -> pd.DataFrame:
         return pd.DataFrame()
 
     order_sns = list({r["order_sn"] for r in emails})
+    notices_by_order: dict[str, dict] = {}
     sales_by_order: dict[str, dict] = {}
     db = get_supabase()
     for i in range(0, len(order_sns), 50):
         chunk = order_sns[i:i + 50]
-        rows = _retry(lambda _c=chunk: db.table("ecommerce_sales").select(
+        notice_rows = _retry(lambda _c=chunk: db.table("ecommerce_order_notices").select(
+            "order_sn,shop_name,items"
+        ).eq("platform", platform).in_("order_sn", _c).execute()).data
+        for r in notice_rows:
+            notices_by_order.setdefault(r["order_sn"], r)
+        sale_rows = _retry(lambda _c=chunk: db.table("ecommerce_sales").select(
             "order_sn,shop_name,product_id,item_name,products(name)"
         ).eq("platform", platform).in_("order_sn", _c).execute()).data
-        for r in rows:
+        for r in sale_rows:
             sales_by_order.setdefault(r["order_sn"], r)  # แถวแรกพอ (แค่ต้องการร้าน/สินค้าคร่าวๆ)
 
     out = []
     for r in emails:
+        notice = notices_by_order.get(r["order_sn"])
         sale = sales_by_order.get(r["order_sn"])
-        product_name = ((sale or {}).get("products") or {}).get("name") or (sale or {}).get("item_name") or "-"
+        if notice and notice.get("items"):
+            product_name = ", ".join(f"{it['name']} x{it['qty']}" for it in notice["items"])
+        else:
+            product_name = ((sale or {}).get("products") or {}).get("name") or (sale or {}).get("item_name") or "-"
+        shop_name = r.get("shop_name") or (notice or {}).get("shop_name") or (sale or {}).get("shop_name") or "-"
         out.append({
             "เลขออเดอร์": r["order_sn"],
-            "ร้าน": (sale or {}).get("shop_name") or "-",
+            "ร้าน": shop_name,
             "สินค้า": product_name,
             "ขนส่ง": r.get("carrier_name") or "",
             "เลขพัสดุ": r.get("tracking_no") or "",
