@@ -1227,7 +1227,8 @@ def _clear_ecommerce_caches() -> None:
         get_tiktok_order_income_df, get_ecommerce_return_emails_df,
         get_ecommerce_order_notices_df, get_ecommerce_missing_income_months_df,
         get_ecommerce_pending_income_df, get_ecommerce_pending_income_df_all,
-        get_ecommerce_product_margin_df_all,
+        get_ecommerce_product_margin_df_all, get_ecommerce_import_coverage_df_all,
+        get_ecommerce_import_status_df,
     ):
         _fn.clear()
 
@@ -1313,6 +1314,22 @@ def get_ecommerce_import_coverage_df(platform: str = "shopee") -> pd.DataFrame:
             "ช่วงที่ Order.all ยังไม่ครอบคลุม": " | ".join(gaps) if gaps else "-",
         })
     return pd.DataFrame(rows)
+
+
+@st.cache_data(ttl=120)
+def get_ecommerce_import_coverage_df_all() -> pd.DataFrame:
+    """เหมือน get_ecommerce_import_coverage_df แต่รวมทุกแพลตฟอร์มไว้ตารางเดียว (เพิ่ม
+    คอลัมน์ "แพลตฟอร์ม") — เดิมมีแค่จุดเรียกเดียวใน _render_shopee_upload() ที่ hardcode
+    "shopee" เท่านั้น ทำให้ Lazada/TikTok ไม่เคยเห็นตารางนี้เลย"""
+    platforms = sorted({s["platform"] for s in get_ecommerce_shops()})
+    frames = []
+    for platform in platforms:
+        df = get_ecommerce_import_coverage_df(platform=platform)
+        if not df.empty:
+            df = df.copy()
+            df.insert(0, "แพลตฟอร์ม", ecom_calc.PLATFORM_LABELS.get(platform, platform))
+            frames.append(df)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
 @st.cache_data(ttl=120)
@@ -2198,6 +2215,27 @@ def get_ecommerce_missing_income_months_df() -> pd.DataFrame:
     }).reset_index()
     summary["ยอดที่รอ (ประเมิน)"] = summary["ยอดที่รอ (ประเมิน)"].round(2)
     return summary.sort_values("จำนวนออเดอร์", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(ttl=120)
+def get_ecommerce_import_status_df() -> pd.DataFrame:
+    """รวมสถานะการนำเข้าข้อมูลของทุกร้านทุกแพลตฟอร์มไว้ตารางเดียว — ผสาน
+    get_ecommerce_import_coverage_df_all() (ช่วงวันที่ Order.all/Income ครอบคลุมถึงไหน)
+    เข้ากับ get_ecommerce_missing_income_months_df() (เดือน/จำนวนออเดอร์ที่ยังไม่ปิดยอด
+    Income จริง) เป็นแถวเดียวต่อร้าน (join ด้วย แพลตฟอร์ม+ร้าน) — เดิมเป็นตารางแยก 2 อัน
+    คนละที่ในหน้า (ตารางแรกอยู่ใต้แท็บ Shopee เท่านั้น ตารางสองอยู่บนสุดของหน้าแยกต่างหาก)
+    รวมเป็นอันเดียวไว้ดูภาพรวมสถานะนำเข้าของแต่ละร้านในที่เดียว ร้านที่ไม่มีออเดอร์ค้าง
+    ปิดยอด Income เลยจะได้ "-"/0 ในคอลัมน์ท้าย ไม่ใช่ค่าว่าง"""
+    coverage = get_ecommerce_import_coverage_df_all()
+    if coverage.empty:
+        return coverage
+    missing = get_ecommerce_missing_income_months_df()
+    missing = missing.rename(columns={"จำนวนออเดอร์": "จำนวนออเดอร์ค้าง Income"})
+    merged = coverage.merge(missing, on=["แพลตฟอร์ม", "ร้าน"], how="left")
+    merged["เดือนที่ขาดข้อมูลรายได้"] = merged["เดือนที่ขาดข้อมูลรายได้"].fillna("-")
+    merged["จำนวนออเดอร์ค้าง Income"] = merged["จำนวนออเดอร์ค้าง Income"].fillna(0).astype(int)
+    merged["ยอดที่รอ (ประเมิน)"] = merged["ยอดที่รอ (ประเมิน)"].fillna(0.0)
+    return merged
 
 
 @st.cache_data(ttl=120)
