@@ -79,7 +79,9 @@ def get_customer_by_phone(phone: str) -> dict | None:
 
 @st.cache_data(ttl=120)
 def _all_customer_addresses() -> list[dict]:
-    return get_supabase().table("customer_addresses").select("*, customers(name)").order("phone").execute().data
+    # ใช้ _fetch_all กัน PostgREST 1,000-row cap เงียบๆ — ตาราง 639 แถวแล้ว (2026-09-20)
+    # และโตขึ้นทุกครั้งที่บันทึกที่อยู่เบอร์ใหม่ ไม่ไกลจาก 1,000 เท่า transactions
+    return _fetch_all(lambda: get_supabase().table("customer_addresses").select("*, customers(name)").order("phone"))
 
 
 def get_customer_addresses(customer_id: str = None) -> list[dict]:
@@ -456,9 +458,13 @@ def delete_bill(bill_no: str, customer_id: str = None) -> int:
 
 @st.cache_data(ttl=120)
 def get_bill_list() -> list[str]:
-    rows = (get_supabase().table("transactions")
-            .select("bill_no").not_.is_("bill_no", "null")
-            .order("bill_no", desc=True).execute().data)
+    # _fetch_all กัน PostgREST 1,000-row cap — ไม่งั้นบิลเก่าสุดจะหายไปจากลิสต์เงียบๆ
+    # เมื่อ transactions โตเกิน 1,000 แถว (เหตุการณ์เดียวกับที่เคยเกิดกับ ecommerce_sales)
+    # .order("id") ต่อท้ายด้วย เพราะ bill_no เดียวกันมีได้หลายแถว (1 บิล = หลาย product line)
+    # ไม่ใช่ unique key พอเดียวจะ paginate เสถียร — ต้องมีคอลัมน์ unique ประกอบด้วยเสมอ
+    rows = _fetch_all(lambda: get_supabase().table("transactions")
+                       .select("bill_no").not_.is_("bill_no", "null")
+                       .order("bill_no", desc=True).order("id"))
     seen, result = set(), []
     for r in rows:
         bn = r.get("bill_no")
@@ -470,10 +476,11 @@ def get_bill_list() -> list[str]:
 @st.cache_data(ttl=120)
 def get_bill_summaries() -> list[dict]:
     """คืน [{bill_no, customer_name, total, date}] ต่อบิล เรียง desc"""
-    rows = _retry(lambda: get_supabase().table("transactions")
-                  .select("bill_no, total_amount, date, customers(name)")
-                  .not_.is_("bill_no", "null")
-                  .order("bill_no", desc=True).execute().data)
+    # _fetch_all + .order("id") ต่อท้าย — เหตุผลเดียวกับ get_bill_list ด้านบน
+    rows = _fetch_all(lambda: get_supabase().table("transactions")
+                       .select("bill_no, total_amount, date, customers(name)")
+                       .not_.is_("bill_no", "null")
+                       .order("bill_no", desc=True).order("id"))
     seen: dict[str, dict] = {}
     for r in rows:
         bn = r.get("bill_no")
@@ -766,7 +773,12 @@ def get_all_transactions_df(customer_id: str = None, bill_no: str = None,
         q = q.gte("date", date_from)
     if date_to:
         q = q.lte("date", date_to)
-    txns = _retry(lambda: q.order("bill_no", desc=True, nullsfirst=False).order("date", desc=True).execute().data)
+    # _fetch_all กัน PostgREST 1,000-row cap — เคสร้ายแรงสุดคือตอนไม่ส่ง date_from/date_to
+    # (ยอดค้าง/ledger เรียกแบบนี้) transactions ตอนนี้ 339 แถวเลยยังไม่ชนขีด แต่จะโตขึ้นเรื่อยๆ
+    # ถ้าไม่กันไว้ก่อน พอเกิน 1,000 บิลเก่าสุดจะหายจากยอดค้างเงียบๆ (เหมือนที่เคยเกิดกับ
+    # ecommerce_sales — ดู CLAUDE.md) .order("id") ต่อท้ายเพราะ bill_no/date ไม่ unique พอ
+    txns = _fetch_all(lambda: q.order("bill_no", desc=True, nullsfirst=False)
+                       .order("date", desc=True).order("id"))
 
     _TXN_COLS = ["id","วันที่","ลูกค้า","รหัส","สินค้า","สั่ง","รับแล้ว","ยอดรวม",
                  "จ่ายแล้ว","ค้างจ่าย","ค้างรับ","สถานะบิล","สถานะจ่าย","หมายเหตุ",
