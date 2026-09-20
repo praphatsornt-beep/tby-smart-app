@@ -119,17 +119,21 @@ def render():
         if _product_order_df.empty:
             st.caption("ยังไม่มีสินค้าที่ต้องส่ง")
         else:
-            _ship_products = (_product_order_df[["สินค้า", "จำนวนรวม"]]
-                               .groupby("สินค้า", as_index=False).sum()
+            _ship_products = (_product_order_df[["รหัสสินค้า", "สินค้า", "จำนวนรวม"]]
+                               .groupby(["รหัสสินค้า", "สินค้า"], as_index=False).sum()
                                .sort_values("จำนวนรวม", ascending=False))
             st.dataframe(
                 _ship_products, width="stretch", hide_index=True,
                 height=min(35 * len(_ship_products) + 38, 250),
                 column_config={
+                    "รหัสสินค้า": st.column_config.TextColumn(width="small"),
                     "สินค้า": st.column_config.TextColumn(width="large"),
                     "จำนวนรวม": st.column_config.NumberColumn(width="small"),
                 },
             )
+            if (_ship_products["รหัสสินค้า"] == "-").any():
+                st.caption("รหัสสินค้าขึ้น \"-\" = ยังไม่ได้ map ชื่อสินค้านี้ — ไปที่ 🛒 E-commerce → "
+                           "⚙️ ตั้งค่า/นำเข้าข้อมูล → \"Map ชื่อสินค้าจากอีเมล → รหัสสินค้า\"")
 
     # ── ออเดอร์ตีกลับ (Shopee จากอีเมล) — ยืนยันรับของคืนจริง ───────────────
     st.divider()

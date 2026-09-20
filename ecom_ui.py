@@ -228,6 +228,41 @@ def _render_config():
     else:
         st.success("✅ สินค้าทุกรายการ map แล้ว")
 
+    # ── Map ชื่อสินค้าจากอีเมลแจ้งออเดอร์ (Shopee) → รหัสสินค้า ──────────────
+    if _map_platform == "shopee":
+        st.divider()
+        st.subheader("Map ชื่อสินค้าจากอีเมล → รหัสสินค้า")
+        st.caption(
+            "ชื่อสินค้าที่แกะได้จากอีเมลแจ้งออเดอร์ Shopee เป็นข้อความยาวจากหน้าประกาศขาย "
+            "(คนละที่มากับ SKU ในไฟล์ Order.all ด้านบน) — map ครั้งเดียวต่อชื่อ แล้วจะโชว์เป็น "
+            "รหัสสินค้าในตาราง \"สินค้าที่ต้องเตรียมส่งวันนี้\" ที่หน้าแรกและตารางด้านล่างให้เอง"
+        )
+        _notice_unmapped = db.get_unmapped_order_notice_item_names("shopee")
+        if _notice_unmapped:
+            st.warning(f"มี {len(_notice_unmapped)} ชื่อสินค้าจากอีเมลที่ยังไม่ได้ map")
+            _all_products = db.get_products()
+            _prod_opts = {"— ยังไม่ map —": None} | {p["name"]: p["id"] for p in _all_products}
+            _notice_map_rows = []
+            for i, row in enumerate(_notice_unmapped):
+                nc1, nc2 = st.columns([3, 2])
+                nc1.write(f"**{row['item_name']}**\n\nรวม {row['total_qty']} ชิ้น (60 วันล่าสุด)")
+                sel = nc2.selectbox("สินค้าในระบบ", list(_prod_opts.keys()), key=f"notice_map_{i}")
+                if _prod_opts[sel]:
+                    _notice_map_rows.append({
+                        "id": str(uuid.uuid4()),
+                        "platform": "shopee_notice",
+                        "platform_item_id": row["item_name"],
+                        "product_id": _prod_opts[sel],
+                        "platform_product_name": row["item_name"],
+                        "units_per_pack": 1,
+                    })
+            if _notice_map_rows and st.button("💾 บันทึก Mapping", type="primary", key="ecom_notice_map_save"):
+                db.upsert_ecommerce_product_map(_notice_map_rows)
+                st.success(f"✅ Map แล้ว {len(_notice_map_rows)} รายการ")
+                st.rerun()
+        else:
+            st.success("✅ ชื่อสินค้าจากอีเมลทุกรายการ (60 วันล่าสุด) map แล้ว")
+
 
 def _render_shopee_upload(shop_names: list[str]):
     coverage_df = db.get_ecommerce_import_coverage_df("shopee")

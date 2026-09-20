@@ -1966,6 +1966,13 @@ def get_ecommerce_order_notices_df(
     if not rows:
         return pd.DataFrame(), pd.DataFrame()
 
+    # ชื่อสินค้าในอีเมลเป็นข้อความยาวจากหน้าประกาศขาย ไม่ใช่ SKU — map เป็นรหัสสินค้าในระบบ
+    # ผ่าน ecommerce_product_map namespace แยก "shopee_notice" (คนละคีย์กับ platform_item_id
+    # จริงจากไฟล์ Shopee export ที่ใช้ map ecommerce_sales) โดยใช้ตัวข้อความเต็มนี้เองเป็นคีย์
+    # แทน platform_item_id เพราะอีเมลไม่มี SKU id ให้ — ต้อง map มือครั้งแรกที่ 🛒 E-commerce →
+    # ⚙️ ตั้งค่า/นำเข้าข้อมูล → "Map ชื่อสินค้าจากอีเมล → รหัสสินค้า" แล้วจำไว้ใช้ได้ทุกครั้งถัดไป
+    _notice_prod_map = get_ecommerce_product_map()
+
     shop_stats: dict[str, dict] = {}
     product_stats: dict[tuple[str, str], dict] = {}
     for r in rows:
@@ -1981,14 +1988,38 @@ def get_ecommerce_order_notices_df(
         elif r.get("order_type") == "transfer":
             s["โอนแล้ว"] += 1
         for it in (r.get("items") or []):
-            key = (shop, it.get("name") or "-")
-            p = product_stats.setdefault(key, {"ร้าน": shop, "สินค้า": it.get("name") or "-", "จำนวนรวม": 0, "จำนวนออเดอร์": 0})
+            name = it.get("name") or "-"
+            key = (shop, name)
+            _code = (_notice_prod_map.get(("shopee_notice", name)) or {}).get("product_id") or "-"
+            p = product_stats.setdefault(key, {
+                "ร้าน": shop, "รหัสสินค้า": _code, "สินค้า": name, "จำนวนรวม": 0, "จำนวนออเดอร์": 0,
+            })
             p["จำนวนรวม"] += int(it.get("qty") or 0)
             p["จำนวนออเดอร์"] += 1
 
     shop_df = pd.DataFrame(shop_stats.values()).sort_values("ออเดอร์ยืนยันแล้ว", ascending=False).reset_index(drop=True)
     product_df = pd.DataFrame(product_stats.values()).sort_values("จำนวนรวม", ascending=False).reset_index(drop=True)
     return shop_df, product_df
+
+
+def get_unmapped_order_notice_item_names(platform: str = "shopee", limit_days: int = 60) -> list[dict]:
+    """ชื่อสินค้าที่แกะได้จากอีเมลแจ้งออเดอร์ (ecommerce_order_notices.items) ที่ยังไม่ได้ map
+    เป็นรหัสสินค้าในระบบ — ใช้แสดงในหน้า Map ชื่อสินค้าจากอีเมล → รหัสสินค้า (ecom_ui.py)
+    จำกัดแค่ N วันล่าสุด (ค่าเริ่มต้น 60) กันรายการเก่ามากๆ ที่ไม่ค้างขายแล้วมาปนเยอะเกินไป"""
+    from datetime import datetime, timedelta, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=limit_days)).date().isoformat()
+    rows = _fetch_all(
+        lambda: get_supabase().table("ecommerce_order_notices").select("items,first_seen_at")
+        .eq("platform", platform).gte("first_seen_at", cutoff)
+    )
+    mapped = {k[1] for k in get_ecommerce_product_map() if k[0] == "shopee_notice"}
+    seen: dict[str, int] = {}
+    for r in rows:
+        for it in (r.get("items") or []):
+            name = it.get("name")
+            if name and name not in mapped:
+                seen[name] = seen.get(name, 0) + int(it.get("qty") or 0)
+    return [{"item_name": k, "total_qty": v} for k, v in sorted(seen.items(), key=lambda kv: -kv[1])]
 
 
 @st.cache_data(ttl=120)
