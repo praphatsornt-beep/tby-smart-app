@@ -76,6 +76,21 @@ class TestParseShopeeReturnEmails(unittest.TestCase):
     def test_no_order_block_returns_empty(self):
         self.assertEqual(ecom_calc.parse_shopee_return_emails("อะไรสักอย่าง", "ไม่มีเลขคำสั่งซื้อในนี้เลย"), [])
 
+    def test_pipe_separator_from_html_conversion_not_included_in_carrier_name(self):
+        """ยืนยันจากข้อมูลจริงใน DB 2026-09-20 (order #2609178MC6HQW4) — หลังแก้
+        _get_body() ให้ fallback ไปแปลง HTML เอง (_html_to_text ใส่ " | " คั่นขอบเขต
+        cell) ทำให้ carrier_name เพี้ยนเป็น "SPX Express |" ก่อนแก้ regex นี้"""
+        subject = "[แจ้งเตือน] พัสดุกำลังทำการจัดส่งไปยังผู้ขาย กรุณารอการติดต่อจากบริษัทขนส่ง"
+        body = (
+            "เรียนผู้ขาย ts_shop56, รายละเอียดคำสั่งซื้อที่จัดส่งไม่สำเร็จ ดังนี้ "
+            "หมายเลขคำสั่งซื้อ : 2609178MC6HQW4 "
+            "บริษัทขนส่ง : SPX Express | หมายเลขติดตามพัสดุ : TH263561917946L"
+        )
+        result = ecom_calc.parse_shopee_return_emails(subject, body)
+        self.assertEqual(result, [{
+            "order_sn": "2609178MC6HQW4", "carrier_name": "SPX Express", "tracking_no": "TH263561917946L",
+        }])
+
 
 class TestParseShopeeOrderNoticeEmail(unittest.TestCase):
     """ยืนยันด้วยข้อความจากอีเมลจริงของ Shopee (info@mail.shopee.co.th) 2026-09-20 —
