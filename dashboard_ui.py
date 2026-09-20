@@ -51,19 +51,9 @@ def render():
                         .sort_values("ค้างรับ", ascending=False))
             _deposits = [{"name": r["สินค้า"], "qty": int(r["ค้างรับ"])} for _, r in _dep_sum.iterrows()]
 
-    # ── ยอดขาย 7 วันล่าสุด ──────────────────────────────────────────────────
+    # ── ข้อมูล 7 วันล่าสุด (ใช้ทำ "บิลล่าสุด" ด้านล่าง) ────────────────────
     _week_start = (_today - timedelta(days=6)).strftime("%Y-%m-%d")
     _week_df = db.get_all_transactions_df(date_from=_week_start, date_to=_today_str)
-    if not _week_df.empty:
-        _daily_sales = (pd.to_datetime(_week_df["วันที่"]).dt.date
-                        .pipe(lambda s: _week_df.groupby(s)["ยอดรวม"].sum()))
-    else:
-        _daily_sales = pd.Series(dtype=float)
-    _week_days = [_today - timedelta(days=_i) for _i in range(6, -1, -1)]
-    _chart_df = pd.DataFrame({
-        "วัน": [d.strftime("%d/%m") for d in _week_days],
-        "ยอดขาย": [float(_daily_sales.get(d, 0)) for d in _week_days],
-    }).set_index("วัน")
 
     # ── Metric cards ─────────────────────────────────────────────────────────
     _dc1, _dc2, _dc3, _dc4 = st.columns(4)
@@ -90,20 +80,71 @@ def render():
 
     st.divider()
 
-    # ── ยอดขาย 7 วันล่าสุด + สินค้าที่ลูกค้าฝาก ─────────────────────────────
-    _dch1, _dch2 = st.columns([3, 2])
-    with _dch1:
-        st.markdown("**📊 ยอดขาย 7 วันล่าสุด**")
-        st.bar_chart(_chart_df, color="#D9822B", width="stretch")
-    with _dch2:
-        st.markdown("**📋 สินค้าที่ลูกค้าฝาก**")
-        if not _deposits:
-            st.caption("ไม่มีสินค้าฝาก")
+    st.markdown("**📋 สินค้าที่ลูกค้าฝาก**")
+    if not _deposits:
+        st.caption("ไม่มีสินค้าฝาก")
+    else:
+        _dep_c1, _dep_c2 = st.columns(2)
+        _dep_half = (len(_deposits) + 1) // 2
+        for _col, _chunk in ((_dep_c1, _deposits[:_dep_half]), (_dep_c2, _deposits[_dep_half:])):
+            with _col:
+                for _it in _chunk:
+                    _lc1, _lc2 = st.columns([3, 1])
+                    _lc1.markdown(_it["name"])
+                    _lc2.markdown(f"**{_it['qty']} ชิ้น**")
+
+    # ── สรุปออเดอร์วันนี้ + สินค้าที่ต้องส่ง (Shopee จากอีเมล) ──────────────
+    st.divider()
+    try:
+        _shop_order_df, _product_order_df = db.get_ecommerce_order_notices_df(
+            platform="shopee", date_from=_today, date_to=_today,
+        )
+    except Exception:
+        _shop_order_df, _product_order_df = pd.DataFrame(), pd.DataFrame()
+
+    _oc1, _oc2 = st.columns([3, 2])
+    with _oc1:
+        st.markdown("**📦 สรุปออเดอร์วันนี้ต่อร้าน (Shopee จากอีเมล)**")
+        if _shop_order_df.empty:
+            st.caption("ยังไม่มีออเดอร์เข้ามาวันนี้")
         else:
-            for _it in _deposits[:8]:
-                _lc1, _lc2 = st.columns([3, 1])
-                _lc1.markdown(_it["name"])
-                _lc2.markdown(f"**{_it['qty']} ชิ้น**")
+            st.dataframe(_shop_order_df, width="stretch", hide_index=True)
+    with _oc2:
+        st.markdown("**🛍️ สินค้าที่ต้องเตรียมส่งวันนี้**")
+        if _product_order_df.empty:
+            st.caption("ยังไม่มีสินค้าที่ต้องส่ง")
+        else:
+            _ship_products = (_product_order_df[["สินค้า", "จำนวนรวม"]]
+                               .groupby("สินค้า", as_index=False).sum()
+                               .sort_values("จำนวนรวม", ascending=False))
+            st.dataframe(_ship_products, width="stretch", hide_index=True,
+                         height=min(35 * len(_ship_products) + 38, 250))
+
+    # ── ออเดอร์ตีกลับ (Shopee จากอีเมล) — ยืนยันรับของคืนจริง ───────────────
+    st.divider()
+    st.markdown("**↩️ ออเดอร์ตีกลับ (Shopee) — ยังไม่ได้รับคืน**")
+    try:
+        _ret_df = db.get_ecommerce_return_emails_df(platform="shopee")
+    except Exception:
+        _ret_df = pd.DataFrame()
+    if not _ret_df.empty:
+        _ret_df = _ret_df[~_ret_df["ได้รับคืนแล้ว"]].reset_index(drop=True)
+    if _ret_df.empty:
+        st.success("✅ ไม่มีออเดอร์ตีกลับค้างตรวจรับ")
+    else:
+        _ret_show = _ret_df.drop(columns=["ได้รับคืนแล้ว", "วันที่ได้รับคืน", "เจอครั้งแรก"])
+        _ret_sel = st.dataframe(
+            _ret_show, width="stretch", hide_index=True,
+            column_config={"เจอล่าสุด": st.column_config.DatetimeColumn(format="D/MM/YYYY HH:mm")},
+            selection_mode="multi-row", on_select="rerun", key="dash_return_select",
+        )
+        _ret_rows = _ret_sel.selection.rows if hasattr(_ret_sel, "selection") else []
+        if st.button("✅ ยืนยันได้รับของคืนแล้ว", key="dash_mark_received",
+                      disabled=not _ret_rows, type="primary"):
+            _order_sns = _ret_df.loc[_ret_rows, "เลขออเดอร์"].tolist()
+            _n = db.mark_ecommerce_return_received(_order_sns, platform="shopee")
+            st.success(f"✅ บันทึกแล้ว {_n} รายการ")
+            st.rerun()
 
     st.divider()
 

@@ -1904,10 +1904,33 @@ def get_ecommerce_return_emails_df(platform: str = "shopee") -> pd.DataFrame:
             "เลขพัสดุ": r.get("tracking_no") or "",
             "สถานะล่าสุด": r.get("notice_subject") or "",
             "แจ้งกี่ครั้ง": r.get("notice_count") or 1,
+            "ได้รับคืนแล้ว": bool(r.get("received_back_at")),
+            "วันที่ได้รับคืน": r.get("received_back_at"),
             "เจอครั้งแรก": r.get("first_seen_at"),
             "เจอล่าสุด": r.get("last_seen_at"),
         })
     return pd.DataFrame(out).sort_values("เจอล่าสุด", ascending=False).reset_index(drop=True)
+
+
+def mark_ecommerce_return_received(order_sns: list[str], platform: str = "shopee") -> int:
+    """ทำเครื่องหมายว่าได้ตรวจรับพัสดุตีกลับคืนจริงแล้ว (ปุ่ม "ได้รับของแล้ว" ที่หน้าแรก) —
+    set received_back_at เป็นเวลาปัจจุบัน ต่างจาก notice_count/last_seen_at ที่มาจากอีเมล
+    อัตโนมัติของ Shopee ล้วนๆ (ไม่รู้ว่าคนที่ร้านเช็คของจริงหรือยัง) ต้องมีคอลัมน์นี้ก่อน —
+    ดู ecommerce_return_emails_add_received_at.sql"""
+    if not order_sns:
+        return 0
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    db = get_supabase()
+    n = 0
+    for i in range(0, len(order_sns), 50):
+        chunk = order_sns[i:i + 50]
+        res = _retry(lambda _c=chunk: db.table("ecommerce_return_emails").update(
+            {"received_back_at": now}
+        ).eq("platform", platform).in_("order_sn", _c).execute())
+        n += len(res.data or [])
+    _clear_ecommerce_caches()
+    return n
 
 
 @st.cache_data(ttl=120)
