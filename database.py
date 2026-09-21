@@ -9,6 +9,7 @@ from math import floor
 import uuid
 import tiktok_income_import
 import ecom_calc
+import shipment_status
 
 
 def _retry(fn, attempts: int = 2, delay: float = 0.5):
@@ -2633,10 +2634,12 @@ def delete_shipment(shipment_id: str) -> None:
 
 
 def count_shipped_by_date_range(date_from: str, date_to: str) -> int:
-    """นับ shipments ที่จัดส่งสำเร็จในช่วง date_from..date_to (YYYY-MM-DD, Bangkok time)"""
+    """นับ shipments ที่จัดส่งสำเร็จในช่วง date_from..date_to (YYYY-MM-DD, Bangkok time) —
+    ใช้ shipment_status.DELIVERED_STATUSES (ไม่ใช่ .eq() ตายตัวคำเดียว) เพราะ iShip เปลี่ยนคำ
+    สถานะจาก "จัดส่งแล้ว" เป็น "จัดส่งสำเร็จ" กลางทาง ดู shipment_status.py"""
     res = (get_supabase().table("shipments")
            .select("id")
-           .eq("delivery_status", "จัดส่งแล้ว")
+           .in_("delivery_status", list(shipment_status.DELIVERED_STATUSES))
            .gte("created_at", f"{date_from}T00:00:00+07:00")
            .lte("created_at", f"{date_to}T23:59:59+07:00")
            .execute())
@@ -2647,7 +2650,7 @@ def delete_shipped_by_date_range(date_from: str, date_to: str) -> int:
     """ลบ shipments ที่จัดส่งสำเร็จในช่วงวันที่กำหนด คืนจำนวนแถวที่ลบ"""
     q = (get_supabase().table("shipments")
          .delete()
-         .eq("delivery_status", "จัดส่งแล้ว")
+         .in_("delivery_status", list(shipment_status.DELIVERED_STATUSES))
          .gte("created_at", f"{date_from}T00:00:00+07:00")
          .lte("created_at", f"{date_to}T23:59:59+07:00"))
     res = _retry(lambda: q.execute())
@@ -2788,8 +2791,6 @@ def mark_actual_shipping_costs(tracking_no_to_cost: dict[str, float]) -> int:
     return count
 
 
-_DELIVERY_TERMINAL = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
-
 def update_delivery_statuses(statuses: dict) -> int:
     """อัปเดต delivery_status ใน shipments, คืนจำนวนที่อัปเดต — group tracking
     number ตามค่า status เดียวกันแล้ว batch ด้วย .in_() แทนอัปเดตทีละแถว"""
@@ -2816,7 +2817,7 @@ def get_pending_delivery_tracking() -> list[str]:
             .neq("tracking_no", "")
             .execute().data)
     return [r["tracking_no"] for r in rows
-            if r.get("delivery_status") not in _DELIVERY_TERMINAL]
+            if r.get("delivery_status") not in shipment_status.TERMINAL_STATUSES]
 
 
 def get_customer_line_user_id(customer_id: str) -> str:

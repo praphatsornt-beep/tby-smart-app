@@ -61,6 +61,7 @@ import requests
 from supabase import create_client
 
 import ecom_calc
+import shipment_status
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
 ISHIP_WEB_BASE = "https://app.iship.cloud"
@@ -91,7 +92,7 @@ def _fetch_all_sb(build_query, page_size: int = 1000) -> list[dict]:
         offset += page_size
 
 
-_TERMINAL_SHIP_STATUSES = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
+_TERMINAL_SHIP_STATUSES = shipment_status.TERMINAL_STATUSES
 
 
 def _shipment_customer_name(sh: dict) -> str:

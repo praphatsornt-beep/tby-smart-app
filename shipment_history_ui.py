@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta, timezone
 
 import database as db
 import iship_api
+import shipment_status
 from ui_helpers import _to_bkk, BOX_WEIGHT_G, _esc
 
 
@@ -112,7 +113,7 @@ def render(customers):
         _sh_all = []
 
     # ── filter แสดงเฉพาะที่ต้องดำเนินการ ─────────────────────────────
-    _TERMINAL_STATUSES = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
+    _TERMINAL_STATUSES = shipment_status.TERMINAL_STATUSES
     _delay_cutoff = datetime.now(timezone.utc) - timedelta(days=3)
 
     def _is_delayed(r):
@@ -174,9 +175,9 @@ def render(customers):
         def _delivery_icon(status: str) -> str:
             if not status:
                 return ""
-            if "จัดส่งแล้ว" in status or "ชำระเงินสำเร็จ" in status:
+            if any(k in status for k in shipment_status.DELIVERED_STATUSES) or "ชำระเงินสำเร็จ" in status:
                 return "✅"
-            if "ตีกลับ" in status or "ยกเลิก" in status:
+            if any(k in status for k in (shipment_status.RETURNED_STATUSES | shipment_status.CANCELLED_STATUSES)):
                 return "❌"
             if "รอเข้ารับ" in status:
                 return "⏳"

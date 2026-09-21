@@ -5,6 +5,7 @@ from datetime import date, datetime, timezone, timedelta
 
 import database as db
 import iship_api
+import shipment_status
 from ui_helpers import _style_status
 
 _BKK = timezone(timedelta(hours=7))
@@ -228,7 +229,7 @@ def render():
         ) if its else "—"
 
     if _dash_ships:
-        _TERMINAL_S  = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
+        _TERMINAL_S  = shipment_status.TERMINAL_STATUSES
         _now_utc     = datetime.now(timezone.utc)
         _cutoff      = _now_utc - timedelta(days=3)
 
@@ -273,7 +274,7 @@ def render():
                 # else: COD รับแล้ว + เปิดบิลแล้ว → ไม่แสดง
 
             # ── พัสดุมีปัญหา ────────────────────────────────────────────
-            if _sh.get("delivery_status") in {"ตีกลับ", "ยกเลิก"}:
+            if _sh.get("delivery_status") in (shipment_status.RETURNED_STATUSES | shipment_status.CANCELLED_STATUSES):
                 _problem_ships.append({
                     "ลูกค้า":    _cname,
                     "สินค้า":    _its,

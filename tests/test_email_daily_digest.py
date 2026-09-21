@@ -269,7 +269,10 @@ class TestBuildSlowShipmentRows(unittest.TestCase):
         self.assertEqual(rows, [])
 
     def test_terminal_status_excluded(self):
-        for status in ["จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"]:
+        # "จัดส่งสำเร็จ"/"ส่งคืนสำเร็จ" เพิ่มเข้ามา 2026-09-21 — พบจริงว่า iShip เปลี่ยนคำจาก
+        # "จัดส่งแล้ว" เป็น "จัดส่งสำเร็จ" ทำให้พัสดุที่ส่งถึงแล้วจริง 107 รายการค้างโชว์ใน
+        # การ์ด "พัสดุค้างส่งเกิน 3 วัน" ตลอดไป (ดู shipment_status.py)
+        for status in ["จัดส่งแล้ว", "จัดส่งสำเร็จ", "ตีกลับ", "ส่งคืนสำเร็จ", "ยกเลิก"]:
             ship_rows = [{
                 "customers": {"name": "สมปอง"}, "cod_amount": 0, "tracking_no": "TH4",
                 "delivery_status": status, "created_at": "2026-09-01T10:00:00+00:00", "items": [],
