@@ -299,6 +299,47 @@ def _render_config():
         else:
             st.success("✅ ชื่อสินค้าจากอีเมลทุกรายการ (60 วันล่าสุด) map แล้ว")
 
+        # ── แก้ไข mapping ที่เคย map ไปแล้ว ──────────────────────────────────
+        # รายการด้านบนโชว์แค่ชื่อที่ "ยังไม่ได้" map เท่านั้น — พอ map ไปแล้วไม่มีทางกลับมาแก้
+        # units_per_pack/รหัสสินค้าที่ใส่ผิดได้อีกจากหน้านี้เลย (เจอเคสจริง 2026-09-21: ยาสีฟัน
+        # แพค 3 หลอด ใส่ units_per_pack ผิดตอน map ครั้งแรก) เพิ่ม expander นี้แยกไว้ (ปิดไว้ก่อน
+        # กันหน้าหนักถ้า mapping เยอะ) ให้แก้ไขย้อนหลังได้
+        _mapped_rows = db.get_notice_product_map_rows()
+        if _mapped_rows:
+            with st.expander(f"✏️ แก้ไข mapping ที่มีอยู่ ({len(_mapped_rows)} รายการ)"):
+                st.caption(
+                    "แก้รหัสสินค้า/จำนวนหน่วยต่อแพ็คของรายการที่ map ไปแล้ว — เช่นเคยใส่ "
+                    "\"1 หน่วยที่ขาย = กี่หน่วยสต็อก\" ผิดตอน map ครั้งแรก"
+                )
+                _edit_products = db.get_products()
+                _edit_prod_names = [p["name"] for p in _edit_products]
+                _edit_prod_id_by_name = {p["name"]: p["id"] for p in _edit_products}
+                _edit_prod_name_by_id = {p["id"]: p["name"] for p in _edit_products}
+                _edit_rows = []
+                for j, row in enumerate(_mapped_rows):
+                    ec1, ec2, ec3 = st.columns([3, 2, 1])
+                    ec1.write(f"**{row.get('platform_product_name') or row['platform_item_id']}**\n\n`{row['platform_item_id']}`")
+                    _cur_name = _edit_prod_name_by_id.get(row["product_id"])
+                    _default_idx = _edit_prod_names.index(_cur_name) if _cur_name in _edit_prod_names else 0
+                    sel2 = ec2.selectbox("สินค้าในระบบ", _edit_prod_names, index=_default_idx, key=f"notice_edit_prod_{j}")
+                    pack2 = ec3.number_input(
+                        "1 หน่วยที่ขาย = กี่หน่วยสต็อก", min_value=1,
+                        value=int(round(float(row.get("units_per_pack") or 1))), step=1,
+                        key=f"notice_edit_pack_{j}",
+                    )
+                    _edit_rows.append({
+                        "id": str(uuid.uuid4()),
+                        "platform": "shopee_notice",
+                        "platform_item_id": row["platform_item_id"],
+                        "product_id": _edit_prod_id_by_name[sel2],
+                        "platform_product_name": row.get("platform_product_name"),
+                        "units_per_pack": pack2,
+                    })
+                if st.button("💾 บันทึกการแก้ไข", type="primary", key="ecom_notice_map_edit_save"):
+                    db.upsert_ecommerce_product_map(_edit_rows)
+                    st.success(f"✅ บันทึกแล้ว {len(_edit_rows)} รายการ")
+                    st.rerun()
+
 
 def _render_shopee_upload(shop_names: list[str]):
     # ตารางช่วงวันที่ครอบคลุม + เดือนที่ขาด Income ย้ายไปรวมเป็นตารางเดียว "📊 สถานะ

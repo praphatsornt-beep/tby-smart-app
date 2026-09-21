@@ -1228,7 +1228,7 @@ def _clear_ecommerce_caches() -> None:
         get_ecommerce_order_notices_df, get_ecommerce_missing_income_months_df,
         get_ecommerce_pending_income_df, get_ecommerce_pending_income_df_all,
         get_ecommerce_product_margin_df_all, get_ecommerce_import_coverage_df_all,
-        get_ecommerce_import_status_df,
+        get_ecommerce_import_status_df, get_notice_product_map_rows,
     ):
         _fn.clear()
 
@@ -2295,6 +2295,19 @@ def upsert_ecommerce_product_map(rows: list[dict]) -> None:
             _chunk, on_conflict="platform,platform_item_id"
         ).execute())
     _clear_ecommerce_caches()
+
+
+@st.cache_data(ttl=120)
+def get_notice_product_map_rows() -> list[dict]:
+    """คืนแถว ecommerce_product_map ทั้งหมด namespace "shopee_notice" (ที่ map ไปแล้ว) แบบมี
+    id/platform_item_id/platform_product_name ครบ — ต่างจาก get_ecommerce_product_map() ที่คืน
+    แค่ dict สรุปไม่มี id (ใช้ตอน apply mapping ไม่ใช่ตอนแก้ไข) ใช้แสดง/แก้ไข mapping ที่เคย
+    ทำไปแล้วใน ecom_ui.py — เพิ่ม 2026-09-21 เพราะเดิม "Map ชื่อสินค้าจากอีเมล → รหัสสินค้า"
+    โชว์แค่รายการที่ *ยังไม่* map เท่านั้น (get_unmapped_order_notice_item_names) พอ map ไปแล้ว
+    ก็ไม่มีทางกลับมาแก้ไขค่า units_per_pack ที่ใส่ผิดได้อีกเลยจากหน้านี้ — user เจอเคสจริง
+    (ยาสีฟันแพค 3 หลอด ใส่ units_per_pack ผิดตอน map ครั้งแรก แก้ไม่ได้)"""
+    return _fetch_all(lambda: get_supabase().table("ecommerce_product_map").select("*")
+                       .eq("platform", "shopee_notice").order("platform_product_name"))
 
 
 @st.cache_data(ttl=120)
