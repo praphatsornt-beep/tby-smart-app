@@ -699,6 +699,29 @@ def delete_product(product_id: str) -> None:
     get_products.clear()
 
 
+def force_delete_product_with_history(product_id: str) -> None:
+    """ลบสินค้าพร้อมล้างประวัติที่ผูกอยู่ใน stock_counts/stock_deposits (ประวัตินับสต็อก/
+    ของฝาก) ก่อน แล้วค่อยลบตัวสินค้า — ทั้งสองตารางนี้มี `product_id TEXT REFERENCES
+    products(id)` แบบไม่มี ON DELETE CASCADE ใน supabase_setup.sql (default NO ACTION) จึง
+    บล็อก delete_product() ธรรมดาไว้เงียบๆ แม้สินค้าจะไม่มีรายการขายเลยก็ตาม — พบจริง
+    2026-09-21: TV6248 "เข็มขัด LZ ใหม่" ไม่มี transactions แต่มี stock_counts ค้าง 5 แถว
+    ทำให้ผู้ใช้กดลบใน ⚙️ จัดการข้อมูล → 🏷️ สินค้า แล้ว "ข้อมูลยังอยู่" อย่างงงๆ
+
+    **ตั้งใจไม่แตะ transactions เด็ดขาด** — ถ้าสินค้ามีรายการขายจริงอยู่ ฟังก์ชันนี้ต้องยัง
+    fail เหมือน delete_product() ปกติ (exception หลุดออกไปให้ฝั่งเรียกจับเอง) เพราะประวัติ
+    การขายสำคัญกว่าความสะดวกในการลบสินค้าเก่า — ต่างจาก stock_counts/stock_deposits ที่แค่
+    เป็น operational history ไม่ใช่ระบบบัญชี ลบตามสินค้าที่เลิกขายแล้วได้อย่างปลอดภัยกว่า
+
+    เรียกจาก UI เฉพาะตอนผู้ใช้ยืนยันชัดเจนแล้วเท่านั้น (ดู master_data_ui.py's "ลบพร้อมประวัติ"
+    ปุ่มแยกต่างหาก มี checkbox ยืนยันก่อนเสมอ) — เป็นการลบถาวร กู้คืนไม่ได้"""
+    db = get_supabase()
+    _retry(lambda: db.table("stock_counts").delete().eq("product_id", product_id).execute())
+    _retry(lambda: db.table("stock_deposits").delete().eq("product_id", product_id).execute())
+    _retry(lambda: db.table("products").delete().eq("id", product_id).execute())
+    get_products.clear()
+    get_latest_stock_counts.clear()
+
+
 def delete_customer(customer_id: str) -> None:
     _retry(lambda: get_supabase().table("customers").delete().eq("id", customer_id).execute())
     get_customers.clear()

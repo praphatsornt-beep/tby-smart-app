@@ -183,7 +183,48 @@ def render():
                         f"❌ ลบไม่ได้ {len(_fail)} รายการ (มีข้อมูลอื่นผูกอยู่ เช่น รายการขาย/ประวัตินับสต็อก/ของฝาก): "
                         + ", ".join(_fail)
                     )
+                    st.session_state["_prod_force_del_candidates"] = _fail
+                else:
+                    st.session_state.pop("_prod_force_del_candidates", None)
                 st.rerun()
+
+        # ── ลบพร้อมประวัติ (force) — สำหรับสินค้าที่ถูก stock_counts/stock_deposits บล็อกไว้ ──
+        # เพิ่ม 2026-09-21 ตามเคสจริง TV6248 "เข็มขัด LZ ใหม่": ไม่มีรายการขายเลย แต่ลบไม่ได้
+        # เพราะมีประวัตินับสต็อก 5 แถวผูกอยู่ — ปุ่มลบธรรมดาด้านบนตั้งใจไม่ล้าง stock_counts/
+        # stock_deposits ให้เอง (เป็น operational history ไม่ใช่แค่ noise) ต้องให้ผู้ใช้กดยืนยัน
+        # แยกอีกครั้งตรงนี้เท่านั้น ถึงจะลบพร้อมประวัติ — ยังคงกัน transactions ไว้เหมือนเดิม
+        # (db.force_delete_product_with_history ไม่แตะ transactions เลย ถ้ามีรายการขายจริง
+        # จะยัง fail อยู่ดี ไม่มีทางลบผ่านช่องทางนี้ได้)
+        _force_candidates = st.session_state.get("_prod_force_del_candidates")
+        if _force_candidates:
+            with st.expander(f"⚠️ ลบพร้อมประวัติที่ผูกอยู่ ({len(_force_candidates)} รายการ)", expanded=True):
+                st.warning(
+                    "รายการนี้ลบไม่ผ่านเพราะมีประวัตินับสต็อก/ของฝากผูกอยู่ (ไม่ใช่รายการขาย) — "
+                    "ถ้ากดลบพร้อมประวัติ ข้อมูลนับสต็อกเก่าของสินค้านี้จะหายไปถาวร กู้คืนไม่ได้:\n\n"
+                    + ", ".join(_force_candidates)
+                )
+                _force_confirm = st.checkbox("ยืนยันว่าต้องการลบพร้อมประวัติถาวร", key="prod_force_del_confirm")
+                _fc1, _fc2 = st.columns([1, 1])
+                if _fc1.button(
+                    "🗑️ ลบพร้อมประวัติ", key="prod_force_del_btn", disabled=not _force_confirm,
+                    type="primary", width="stretch",
+                ):
+                    _fok, _ffail = [], []
+                    for _pid in _force_candidates:
+                        try:
+                            db.force_delete_product_with_history(_pid)
+                            _fok.append(_pid)
+                        except Exception:
+                            _ffail.append(_pid)
+                    if _fok:
+                        st.success(f"✅ ลบแล้ว {len(_fok)} รายการ: {', '.join(_fok)}")
+                    if _ffail:
+                        st.error(f"❌ ยังลบไม่ได้ {len(_ffail)} รายการ (มีรายการขายจริงผูกอยู่): {', '.join(_ffail)}")
+                    del st.session_state["_prod_force_del_candidates"]
+                    st.rerun()
+                if _fc2.button("ยกเลิก", key="prod_force_del_cancel", width="stretch"):
+                    del st.session_state["_prod_force_del_candidates"]
+                    st.rerun()
 
     elif _md_active == _MD_TABS[1]:
         customers = db.get_customers()
