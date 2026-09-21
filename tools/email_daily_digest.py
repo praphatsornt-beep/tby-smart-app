@@ -366,15 +366,17 @@ def _resolve_notice_item(name: str, variant: str, qty: int, notice_map: dict[str
     ความจริงสำหรับสินค้าที่เป็นแพครวม ผู้ใช้ทักท้วง 2026-09-21 หลัง map "ยาสีฟัน 3 หลอด" แล้ว
     สังเกตว่ารหัสที่โชว์เป็นแค่ "TU2315" ไม่มีตัวคูณกำกับ — แก้ไขให้คูณจำนวนจริงแทนการเติมต่อ
     ท้ายรหัส (เช่น "TU2315-3") เพราะรหัสสินค้าในระบบต้องเป็น LETTERS+4DIGITS ล้วนเท่านั้น ไม่มี
-    "-" — ดู calc_logic.py's parse_calc_order() comment) ยังไม่เคย map มาก่อนก็ตัดชื่อให้สั้น
-    ลงแทนกันข้อความ LINE ยาวเป็นสิบบรรทัดจากชื่อโพสต์เดียว คงจำนวนดิบไว้ (ไม่มีตัวคูณให้ใช้)"""
+    "-" — ดู calc_logic.py's parse_calc_order() comment) ยังไม่เคย map มาก่อนคงชื่อเต็มไว้เสมอ
+    (เดิม 2026-09-21 ตัดให้สั้นเหลือ 27 ตัวอักษร+"..." กันข้อความ LINE ยาว แต่ user ทักท้วง
+    วันเดียวกันว่าอ่านไม่ออกว่าเป็นสินค้าอะไร — ยอมให้ข้อความยาวขึ้นแทนเพื่อให้อ่านรู้เรื่อง
+    ดีกว่า ตัวป้องกันข้อความ LINE เกิน 5,000 ตัวอักษรคือ _capped_rows() ที่จำกัดจำนวน*แถว*
+    อยู่แล้ว ไม่ได้พึ่งการตัดสั้นชื่อสินค้าจุดนี้)"""
     key = f"{name} :: {variant}" if variant else name
     mapped = notice_map.get(key)
     if mapped:
         pack = int(round(float(mapped.get("units_per_pack") or 1)))
         return mapped["product_id"], int(qty) * pack
-    label = name if len(name) <= 30 else name[:27] + "..."
-    return label, int(qty)
+    return name, int(qty)
 
 
 def _push_line_text(user_id: str, text: str) -> dict:

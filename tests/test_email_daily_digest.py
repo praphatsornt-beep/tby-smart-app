@@ -120,11 +120,13 @@ class TestResolveNoticeItem(unittest.TestCase):
         self.assertEqual(label, "กาแฟโสม")
         self.assertEqual(qty, 4)
 
-    def test_unmapped_long_name_truncated(self):
+    def test_unmapped_long_name_kept_full(self):
+        # เดิมตัดให้สั้นเหลือ 27 ตัวอักษร+"..." — user ทักท้วง 2026-09-21 ว่าอ่านไม่ออกว่าเป็น
+        # สินค้าอะไร เปลี่ยนให้คงชื่อเต็มไว้เสมอถ้ายังไม่ map (_capped_rows() คุมความยาวรวม
+        # ของข้อความ LINE แทนที่จุดนี้)
         long_name = "กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส สูตรพรีเมียม"
         label, qty = edd._resolve_notice_item(long_name, "", 1, {})
-        self.assertLessEqual(len(label), 30)
-        self.assertTrue(label.endswith("..."))
+        self.assertEqual(label, long_name)
         self.assertEqual(qty, 1)
 
 
