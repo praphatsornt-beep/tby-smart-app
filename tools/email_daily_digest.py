@@ -78,13 +78,29 @@ def _fetch_all_sb(build_query, page_size: int = 1000) -> list[dict]:
         offset += page_size
 
 
+_TERMINAL_SHIP_STATUSES = {"จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"}
+
+
+def _shipment_customer_name(sh: dict) -> str:
+    return (sh.get("customers") or {}).get("name") or sh.get("recipient_name") or "—"
+
+
+def _shipment_items_str(sh: dict) -> str:
+    items = sh.get("items") or []
+    return ", ".join(
+        f"{it.get('name') or it.get('product_id', '')} x{it.get('qty', 1)}" for it in items
+    ) or "—"
+
+
 def _build_cod_unbilled_rows(txn_rows: list[dict], ship_rows: list[dict]) -> list[dict]:
     """จับคู่ shipments ที่เป็น COD และโอนเงินมาแล้ว (cod_transferred_at ไม่ null) กับลูกค้า
     ที่ยังมีแถว transactions สถานะ COD+"ยังไม่เปิดบิล" ค้างอยู่ — แมตช์ด้วยชื่อลูกค้าเหมือนกับ
     ที่ dashboard_ui.py ทำในการ์ด "✅ รับแล้ว — ยังไม่เปิดบิล" (shipments ไม่มี FK ตรงไปยัง
     transactions/bill รายตัวให้จับคู่แม่นกว่านี้ได้) รับ txn_rows/ship_rows เป็นผลลัพธ์ดิบจาก
-    .execute().data ของ Supabase ตรงๆ — แยกออกมาเป็นฟังก์ชัน pure ให้ทดสอบได้โดยไม่ต้องปลอม
-    Supabase client (เพิ่ม 2026-09-21 ตามคำขอ user)"""
+    .execute().data ของ Supabase ตรงๆ (ship_rows เป็น shipments ทุกแถวไม่กรอง — ฟังก์ชันนี้
+    กรอง cod_amount>0 + cod_transferred_at เองข้างใน เพื่อใช้ shipments ชุดเดียวกันกับ
+    _build_slow_shipment_rows ได้โดยไม่ต้อง query ซ้ำ) แยกออกมาเป็นฟังก์ชัน pure ให้ทดสอบได้
+    โดยไม่ต้องปลอม Supabase client (เพิ่ม 2026-09-21 ตามคำขอ user)"""
     unbilled_names = {
         (t.get("customers") or {}).get("name")
         for t in txn_rows
@@ -94,19 +110,51 @@ def _build_cod_unbilled_rows(txn_rows: list[dict], ship_rows: list[dict]) -> lis
         return []
     rows = []
     for sh in ship_rows:
-        cname = (sh.get("customers") or {}).get("name") or sh.get("recipient_name") or "—"
+        if float(sh.get("cod_amount") or 0) <= 0 or not sh.get("cod_transferred_at"):
+            continue
+        cname = _shipment_customer_name(sh)
         if cname not in unbilled_names:
             continue
-        items = sh.get("items") or []
-        items_str = ", ".join(
-            f"{it.get('name') or it.get('product_id', '')} x{it.get('qty', 1)}" for it in items
-        ) or "—"
         rows.append({
             "customer": cname,
-            "items": items_str,
+            "items": _shipment_items_str(sh),
             "cod_amount": float(sh.get("cod_amount") or 0),
             "tracking_no": sh.get("tracking_no") or "—",
         })
+    return rows
+
+
+def _build_slow_shipment_rows(ship_rows: list[dict], now_utc: datetime, cutoff_days: int = 3) -> list[dict]:
+    """พัสดุที่ไม่ใช่ COD (ติดตามแยกในการ์ด COD อยู่แล้ว) ค้างเกิน `cutoff_days` วันโดยยังไม่ถึง
+    สถานะจบ (จัดส่งแล้ว/ตีกลับ/ยกเลิก) — เงื่อนไขเดียวกับ dashboard_ui.py's `_slow_ships` ทุก
+    ประการ (คัดลอกมาตรงนี้แทนการ import database.py/streamlit — ดู docstring บนสุดของไฟล์)
+    เพิ่ม 2026-09-21 ตามคำขอ user ("พัสดุค้างส่งเกิน 3 วัน... ให้แสดงชื่อผู้ส่ง วันที่ และสินค้า")"""
+    cutoff = now_utc - timedelta(days=cutoff_days)
+    bkk = timezone(timedelta(hours=7))
+    rows = []
+    for sh in ship_rows:
+        if float(sh.get("cod_amount") or 0) != 0:
+            continue
+        if not sh.get("tracking_no"):
+            continue
+        if sh.get("delivery_status") in _TERMINAL_SHIP_STATUSES:
+            continue
+        try:
+            sdt = datetime.fromisoformat((sh.get("created_at") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if sdt >= cutoff:
+            continue
+        rows.append({
+            "customer": _shipment_customer_name(sh),
+            "items": _shipment_items_str(sh),
+            "date": sdt.astimezone(bkk).strftime("%d/%m/%y"),
+            "days": (now_utc - sdt).days,
+            "tracking_no": sh.get("tracking_no") or "—",
+            "carrier": sh.get("carrier") or "",
+            "status": sh.get("delivery_status") or "ไม่มีข้อมูล",
+        })
+    rows.sort(key=lambda r: -r["days"])
     return rows
 
 
@@ -426,16 +474,17 @@ def main():
     if n_saved:
         print(f"💾 บันทึกลง Supabase แล้ว {n_saved} รายการ (ตีกลับ+ออเดอร์ใหม่ รวมกัน)")
 
-    # ── COD (ระบบขายของร้านเอง ไม่ใช่ Shopee/e-commerce) ที่รับเงินแล้วแต่ยังไม่เปิดบิล ──
-    # เหมือนการ์ด "✅ รับแล้ว — ยังไม่เปิดบิล" ใน dashboard_ui.py ทุกประการ — เพิ่มเข้า digest
-    # เพราะเป็นรายการที่ต้องรีบเปิดบิลให้ลูกค้า (เงินเข้าร้านแล้วแต่บัญชียังไม่ตัด)
+    # ── shipments (ระบบขายของร้านเอง ไม่ใช่ Shopee/e-commerce) — ดึงครั้งเดียวใช้ร่วมกัน 2 จุด:
+    # COD ที่รับเงินแล้วแต่ยังไม่เปิดบิล + พัสดุไม่ใช่ COD ที่ค้างส่งเกิน 3 วัน (เหมือน
+    # dashboard_ui.py's การ์ด COD + การ์ดพัสดุล่าช้าทุกประการ — เพิ่มเข้า digest เพราะทั้งคู่
+    # เป็นรายการที่ต้องรีบตามงาน ไม่ใช่แค่ดูเฉยๆ)
     txn_rows = _fetch_all_sb(lambda: sb.table("transactions").select("customer_id, customers(name)")
                               .eq("pay_status", "COD").eq("bill_status", "ยังไม่เปิดบิล").order("id"))
-    ship_rows = _fetch_all_sb(lambda: sb.table("shipments").select("*, customers(name)")
-                               .gt("cod_amount", 0).not_.is_("cod_transferred_at", "null").order("id"))
+    ship_rows = _fetch_all_sb(lambda: sb.table("shipments").select("*, customers(name)").order("id"))
     cod_unbilled = _build_cod_unbilled_rows(txn_rows, ship_rows)
+    slow_ships = _build_slow_shipment_rows(ship_rows, datetime.now(timezone.utc))
 
-    if not platform_lines and not bank_lines and not shop_summary and not cod_unbilled:
+    if not platform_lines and not bank_lines and not shop_summary and not cod_unbilled and not slow_ships:
         print("วันนี้ไม่มีอีเมลที่เข้าเกณฑ์ — ไม่ส่ง LINE")
         return
 
@@ -462,6 +511,10 @@ def main():
         parts.append(f"\n💰 COD รับเงินแล้ว แต่ยังไม่เปิดบิล ({len(cod_unbilled)} รายการ):")
         for r in cod_unbilled:
             parts.append(f"• {r['customer']} — {r['items']} ({r['cod_amount']:,.0f}฿, {r['tracking_no']})")
+    if slow_ships:
+        parts.append(f"\n🐌 พัสดุค้างส่งเกิน 3 วัน ({len(slow_ships)} รายการ):")
+        for r in slow_ships:
+            parts.append(f"• {r['customer']} — {r['date']} ({r['days']} วัน) — {r['items']} [{r['carrier']} {r['tracking_no']}]")
     text = "\n".join(parts)
 
     staff_line_id = os.environ.get("STAFF_LINE_USER_ID", "")

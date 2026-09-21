@@ -122,8 +122,8 @@ class TestBuildCodUnbilledRows(unittest.TestCase):
     def test_matches_shipment_to_unbilled_customer_by_name(self):
         txn_rows = [{"customer_id": "C-001", "customers": {"name": "สมชาย"}}]
         ship_rows = [{
-            "customers": {"name": "สมชาย"}, "cod_amount": 500, "tracking_no": "TH123",
-            "items": [{"name": "กาแฟโสม", "qty": 2}],
+            "customers": {"name": "สมชาย"}, "cod_amount": 500, "cod_transferred_at": "2026-09-20T10:00:00+00:00",
+            "tracking_no": "TH123", "items": [{"name": "กาแฟโสม", "qty": 2}],
         }]
         rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
         self.assertEqual(len(rows), 1)
@@ -134,21 +134,95 @@ class TestBuildCodUnbilledRows(unittest.TestCase):
 
     def test_shipment_for_already_billed_customer_excluded(self):
         # ลูกค้าไม่มีแถวค้าง "ยังไม่เปิดบิล" เลย (txn_rows ว่าง) → ไม่ต้องแสดง
-        ship_rows = [{"customers": {"name": "สมหญิง"}, "cod_amount": 300, "tracking_no": "TH999", "items": []}]
+        ship_rows = [{
+            "customers": {"name": "สมหญิง"}, "cod_amount": 300, "cod_transferred_at": "2026-09-20T10:00:00+00:00",
+            "tracking_no": "TH999", "items": [],
+        }]
         rows = edd._build_cod_unbilled_rows([], ship_rows)
         self.assertEqual(rows, [])
 
     def test_shipment_for_different_unbilled_customer_excluded(self):
         txn_rows = [{"customer_id": "C-002", "customers": {"name": "คนอื่น"}}]
-        ship_rows = [{"customers": {"name": "สมหญิง"}, "cod_amount": 300, "tracking_no": "TH999", "items": []}]
+        ship_rows = [{
+            "customers": {"name": "สมหญิง"}, "cod_amount": 300, "cod_transferred_at": "2026-09-20T10:00:00+00:00",
+            "tracking_no": "TH999", "items": [],
+        }]
         rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
         self.assertEqual(rows, [])
 
     def test_no_items_falls_back_to_dash(self):
         txn_rows = [{"customer_id": "C-003", "customers": {"name": "ก."}}]
-        ship_rows = [{"customers": {"name": "ก."}, "cod_amount": 100, "tracking_no": "TH1", "items": []}]
+        ship_rows = [{
+            "customers": {"name": "ก."}, "cod_amount": 100, "cod_transferred_at": "2026-09-20T10:00:00+00:00",
+            "tracking_no": "TH1", "items": [],
+        }]
         rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
         self.assertEqual(rows[0]["items"], "—")
+
+    def test_cod_not_yet_transferred_excluded(self):
+        # ยังไม่โอน COD มา (cod_transferred_at ว่าง) — ยังไม่ควรนับว่า "รับเงินแล้ว"
+        txn_rows = [{"customer_id": "C-004", "customers": {"name": "สมศรี"}}]
+        ship_rows = [{
+            "customers": {"name": "สมศรี"}, "cod_amount": 200, "cod_transferred_at": None,
+            "tracking_no": "TH2", "items": [],
+        }]
+        rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
+        self.assertEqual(rows, [])
+
+
+class TestBuildSlowShipmentRows(unittest.TestCase):
+    """เพิ่ม 2026-09-21 ตามคำขอ user — พัสดุไม่ใช่ COD ที่ค้างส่งเกิน 3 วัน ให้บอกชื่อลูกค้า/
+    วันที่/สินค้าด้วย (เหมือนการ์ด "พัสดุล่าช้า" ใน dashboard_ui.py)"""
+
+    def setUp(self):
+        from datetime import datetime, timezone
+        self.now = datetime(2026, 9, 21, 12, 0, 0, tzinfo=timezone.utc)
+
+    def test_old_non_cod_shipment_with_tracking_included(self):
+        ship_rows = [{
+            "customers": {"name": "สมชาย"}, "cod_amount": 0, "tracking_no": "TH1",
+            "carrier": "Flash", "delivery_status": "กำลังจัดส่ง",
+            "created_at": "2026-09-15T10:00:00+00:00",
+            "items": [{"name": "กาแฟโสม", "qty": 1}],
+        }]
+        rows = edd._build_slow_shipment_rows(ship_rows, self.now, cutoff_days=3)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["customer"], "สมชาย")
+        self.assertEqual(rows[0]["days"], 6)
+        self.assertIn("กาแฟโสม x1", rows[0]["items"])
+
+    def test_recent_shipment_excluded(self):
+        ship_rows = [{
+            "customers": {"name": "สมหญิง"}, "cod_amount": 0, "tracking_no": "TH2",
+            "delivery_status": "กำลังจัดส่ง", "created_at": "2026-09-20T10:00:00+00:00", "items": [],
+        }]
+        rows = edd._build_slow_shipment_rows(ship_rows, self.now, cutoff_days=3)
+        self.assertEqual(rows, [])
+
+    def test_cod_shipment_excluded_tracked_separately(self):
+        ship_rows = [{
+            "customers": {"name": "สมศรี"}, "cod_amount": 300, "tracking_no": "TH3",
+            "delivery_status": "กำลังจัดส่ง", "created_at": "2026-09-01T10:00:00+00:00", "items": [],
+        }]
+        rows = edd._build_slow_shipment_rows(ship_rows, self.now, cutoff_days=3)
+        self.assertEqual(rows, [])
+
+    def test_terminal_status_excluded(self):
+        for status in ["จัดส่งแล้ว", "ตีกลับ", "ยกเลิก"]:
+            ship_rows = [{
+                "customers": {"name": "สมปอง"}, "cod_amount": 0, "tracking_no": "TH4",
+                "delivery_status": status, "created_at": "2026-09-01T10:00:00+00:00", "items": [],
+            }]
+            rows = edd._build_slow_shipment_rows(ship_rows, self.now, cutoff_days=3)
+            self.assertEqual(rows, [], f"status={status} ควรถูกตัดออก")
+
+    def test_no_tracking_no_excluded(self):
+        ship_rows = [{
+            "customers": {"name": "สมปอง"}, "cod_amount": 0, "tracking_no": "",
+            "delivery_status": "กำลังจัดส่ง", "created_at": "2026-09-01T10:00:00+00:00", "items": [],
+        }]
+        rows = edd._build_slow_shipment_rows(ship_rows, self.now, cutoff_days=3)
+        self.assertEqual(rows, [])
 
 
 if __name__ == "__main__":
