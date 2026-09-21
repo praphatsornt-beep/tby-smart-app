@@ -109,16 +109,19 @@ def render():
                 if _c not in prod_df.columns:
                     prod_df[_c] = None
             prod_df = prod_df[prod_cols].rename(columns=col_rename)
+            prod_df.insert(0, "ลบ", False)
         else:
-            prod_df = pd.DataFrame(columns=list(col_rename.values()))
+            prod_df = pd.DataFrame(columns=["ลบ"] + list(col_rename.values()))
 
-        st.write("**แก้ไขหรือเพิ่มสินค้า** — แก้ในตารางได้โดยตรง กด `+` ที่มุมล่างขวาเพื่อเพิ่มแถวใหม่")
+        st.write("**แก้ไขหรือเพิ่มสินค้า** — แก้ในตารางได้โดยตรง กด `+` ที่มุมล่างขวาเพื่อเพิ่มแถวใหม่ / ติ๊ก "
+                  "**ลบ** หน้าแถวที่ต้องการลบแล้วกดปุ่มลบด้านล่าง")
         edited_prod_df = st.data_editor(
             prod_df,
             num_rows="dynamic",
             width="stretch",
             key="prod_editor",
             column_config={
+                "ลบ":          st.column_config.CheckboxColumn("ลบ", default=False, width="small"),
                 "รหัส":        st.column_config.TextColumn("รหัส", required=True),
                 "ชื่อสินค้า":  st.column_config.TextColumn("ชื่อสินค้า", required=True),
                 "ราคา (บาท)":  st.column_config.NumberColumn("ราคา (บาท)", min_value=0, step=10.0, format="%.2f"),
@@ -132,7 +135,8 @@ def render():
                 ),
             },
         )
-        if st.button("💾 บันทึกทั้งหมด", key="save_prod_editor", width="stretch", type="primary"):
+        _psc1, _psc2 = st.columns([1, 1])
+        if _psc1.button("💾 บันทึกทั้งหมด", key="save_prod_editor", width="stretch", type="primary"):
             valid = edited_prod_df.dropna(subset=["รหัส", "ชื่อสินค้า"])
             valid = valid[valid["รหัส"].astype(str).str.strip() != ""]
             if valid.empty:
@@ -155,24 +159,28 @@ def render():
                 st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
                 st.rerun()
 
-        if products:
-            with st.expander("🗑️ ลบสินค้า"):
-                prod_opts = {f"{p['id']} — {p['name']}": p["id"] for p in products}
-                pc1, pc2, pc3 = st.columns([4, 1, 1])
-                with pc1:
-                    del_prod = st.selectbox("เลือกสินค้า", list(prod_opts.keys()), key="delsel_prod")
-                with pc2:
-                    st.write("")
-                    confirm_prod = st.checkbox("ยืนยัน", key="delchk_prod")
-                with pc3:
-                    st.write("")
-                    if st.button("🗑️ ลบ", key="delbtn_prod", disabled=not confirm_prod, type="secondary"):
-                        try:
-                            db.delete_product(prod_opts[del_prod])
-                            st.success("✅ ลบแล้ว")
-                            st.rerun()
-                        except Exception:
-                            st.error("❌ ลบไม่ได้ — สินค้านี้มีรายการขายอยู่")
+        # ── ลบสินค้าที่ติ๊กเลือก (bulk) ──────────────────────────────────────
+        # อ่านเช็คบ็อกซ์ "ลบ" จากตารางแก้ไขด้านบนโดยตรง (แถวเดียวกับที่แก้ข้อมูล) แทนเมนู
+        # เลือกทีละตัวแบบเดิม — เพิ่ม 2026-09-21 ตามคำขอ user ("ติ๊กหน้าบรรทัด แล้วกดลบได้ทีเดียวเลย")
+        # ลบทีละ id ผ่าน db.delete_product() เหมือนเดิม (ยังกัน FK constraint ไว้ — ลบไม่ได้ถ้า
+        # สินค้ามีรายการขายอยู่แล้ว) แต่ทำทีละแถวแยก try/except กันไม่ให้ 1 แถวที่ลบไม่ได้ทำให้
+        # แถวอื่นในชุดเดียวกันลบไม่สำเร็จไปด้วย แล้วสรุปผลรวมให้ดูท้ายสุด
+        _prod_to_delete = edited_prod_df[edited_prod_df["ลบ"] == True]  # noqa: E712 — pandas bool mask ต้อง == ตรงๆ
+        if not _prod_to_delete.empty:
+            if _psc2.button(f"🗑️ ลบที่เลือก ({len(_prod_to_delete)} รายการ)", key="del_prod_checked_btn", width="stretch"):
+                _ok, _fail = [], []
+                for _, row in _prod_to_delete.iterrows():
+                    _pid = str(row["รหัส"]).strip()
+                    try:
+                        db.delete_product(_pid)
+                        _ok.append(_pid)
+                    except Exception:
+                        _fail.append(_pid)
+                if _ok:
+                    st.success(f"✅ ลบแล้ว {len(_ok)} รายการ: {', '.join(_ok)}")
+                if _fail:
+                    st.error(f"❌ ลบไม่ได้ {len(_fail)} รายการ (มีรายการขายอยู่): {', '.join(_fail)}")
+                st.rerun()
 
     elif _md_active == _MD_TABS[1]:
         customers = db.get_customers()

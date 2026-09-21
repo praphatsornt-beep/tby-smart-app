@@ -696,10 +696,12 @@ def get_pending_receipts_for_customer(customer_id: str) -> list[dict]:
 
 def delete_product(product_id: str) -> None:
     _retry(lambda: get_supabase().table("products").delete().eq("id", product_id).execute())
+    get_products.clear()
 
 
 def delete_customer(customer_id: str) -> None:
     _retry(lambda: get_supabase().table("customers").delete().eq("id", customer_id).execute())
+    get_customers.clear()
 
 
 @st.cache_data(ttl=60)
