@@ -284,5 +284,46 @@ class TestBuildSlowShipmentRows(unittest.TestCase):
         self.assertEqual(rows, [])
 
 
+class TestParseIshipStatusRows(unittest.TestCase):
+    """เพิ่ม 2026-09-21 ตามคำขอ user ("มันดึงทุกเช้าได้เองมั้ย") — พอร์ต
+    iship_api.get_shipment_statuses()'s HTML-parsing มาแยกเป็นฟังก์ชัน pure ให้ทดสอบได้โดยไม่
+    ต้องปลอม HTTP session/mock requests"""
+
+    def test_extracts_tracking_no_from_link_href(self):
+        rows = [{
+            "track_no": '<a href="https://app.iship.cloud/tracking?track=TH123456789" target="_blank">TH123456789</a>',
+            "status_btn": '<button class="btn btn-sm btn-success">จัดส่งสำเร็จ</button>',
+        }]
+        result = edd._parse_iship_status_rows(rows)
+        self.assertEqual(result, {"TH123456789": "จัดส่งสำเร็จ"})
+
+    def test_falls_back_to_link_text_when_no_track_param(self):
+        rows = [{
+            "track_no": '<span>TH999888777</span>',
+            "status_btn": '<button>กำลังจัดส่ง</button>',
+        }]
+        result = edd._parse_iship_status_rows(rows)
+        self.assertEqual(result, {"TH999888777": "กำลังจัดส่ง"})
+
+    def test_multiple_rows(self):
+        rows = [
+            {"track_no": '<a href="?track=TH111">TH111</a>', "status_btn": '<button>จัดส่งแล้ว</button>'},
+            {"track_no": '<a href="?track=TH222">TH222</a>', "status_btn": '<button>ตีกลับ</button>'},
+        ]
+        result = edd._parse_iship_status_rows(rows)
+        self.assertEqual(result, {"TH111": "จัดส่งแล้ว", "TH222": "ตีกลับ"})
+
+    def test_missing_tracking_or_status_skipped(self):
+        rows = [
+            {"track_no": "", "status_btn": '<button>จัดส่งแล้ว</button>'},
+            {"track_no": '<a href="?track=TH333">TH333</a>', "status_btn": ""},
+        ]
+        result = edd._parse_iship_status_rows(rows)
+        self.assertEqual(result, {})
+
+    def test_empty_rows_returns_empty_dict(self):
+        self.assertEqual(edd._parse_iship_status_rows([]), {})
+
+
 if __name__ == "__main__":
     unittest.main()

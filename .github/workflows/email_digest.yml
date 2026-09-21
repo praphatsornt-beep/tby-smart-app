@@ -1,4 +1,4 @@
-name: Daily Email Digest (Shopee ตีกลับ + บัตรเครดิต)
+name: Daily Digest (อีเมล Shopee + COD/พัสดุค้าง + sync iShip)
 
 on:
   schedule:
@@ -25,4 +25,6 @@ jobs:
           EMAIL_ACCOUNTS:           ${{ secrets.EMAIL_ACCOUNTS }}
           LINE_CHANNEL_ACCESS_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           STAFF_LINE_USER_ID:       ${{ secrets.STAFF_LINE_USER_ID }}
+          ISHIP_PHONE:              ${{ secrets.ISHIP_PHONE }}
+          ISHIP_PASSWORD:           ${{ secrets.ISHIP_PASSWORD }}
         run: python tools/email_daily_digest.py

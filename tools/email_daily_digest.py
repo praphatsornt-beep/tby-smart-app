@@ -15,6 +15,13 @@
 (เดิมมีเช็คอีเมลแจ้งยอดบัตรเครดิต/statement จากธนาคารด้วย — เอาออกแล้ว 2026-09-21 ตามคำขอ
 user "เอาเรื่องแจ้งยอดบัตรเครดิตออกก่อน" — โค้ดเดิมยังอยู่ใน git history ถ้าจะเอากลับมาทีหลัง)
 
+ก่อนสร้างสรุป ยัง sync สถานะจัดส่ง (delivery_status) ของ shipments ที่ยังไม่จบจาก iShip ให้
+อัตโนมัติด้วย (`_sync_iship_delivery_statuses`, เพิ่ม 2026-09-21 ตามคำขอ user "มันดึงทุกเช้า
+ได้เองมั้ย") — เหมือนกดปุ่ม "🚚 สถานะส่ง" ใน shipment_history_ui.py ทุกประการ แค่รันอัตโนมัติ
+ทุกเช้าแทน ต้องมี ISHIP_PHONE/ISHIP_PASSWORD ใน .env/secrets ด้วย (คนละตัวกับ ISHIP_TOKEN ที่
+ใช้สร้างออเดอร์ — นี่คือ login เว็บ iShip ตรงๆ) ไม่ critical ถ้า sync ล้มเหลว (เช่น iShip
+เปลี่ยนรหัสผ่าน) — แค่ print แจ้งเตือนแล้วรัน digest ส่วนที่เหลือต่อตามปกติ
+
 **Shopee ยืนยันจากอีเมลจริงแล้ว** (2026-09-19, ดู `ecom_calc.parse_shopee_return_emails`)
 — แกะเลขคำสั่งซื้อ/บริษัทขนส่ง/เลขติดตามพัสดุได้ครบ บันทึกลง Supabase ตาราง
 `ecommerce_return_emails` ให้แอปโชว์ต่อที่ 🛒 E-commerce → ตรวจสอบปัญหา ทุกครั้งที่เจอ
@@ -42,6 +49,7 @@ import email
 import html as html_mod
 from email.header import decode_header
 from datetime import datetime, timedelta, timezone
+from urllib.parse import unquote
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
@@ -49,11 +57,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import httpx
+import requests
 from supabase import create_client
 
 import ecom_calc
 
 LINE_PUSH_URL = "https://api.line.me/v2/bot/message/push"
+ISHIP_WEB_BASE = "https://app.iship.cloud"
 
 
 def _get_supabase():
@@ -175,6 +185,173 @@ def _capped_rows(rows: list[dict], max_items: int = _MAX_DIGEST_ROWS) -> tuple[l
     มาก่อนหน้าแล้วจาก caller (เอาอันสำคัญสุดขึ้นก่อนเสมอ ไม่ใช่สุ่ม/เรียงตาม id)"""
     shown = rows[:max_items]
     return shown, max(0, len(rows) - len(shown))
+
+
+# ── sync สถานะจัดส่งจาก iShip อัตโนมัติทุกเช้า ──────────────────────────────────────
+# เพิ่ม 2026-09-21 ตามคำขอ user ("มันดึงทุกเช้าได้เองมั้ย") หลังเจอว่า "พัสดุค้างส่งเกิน 3 วัน"
+# มีของเก่าที่ไม่เคย sync สถานะปนอยู่เพียบ (107 รายการ, เก่าสุด 46 วัน) — เดิมต้องกดปุ่ม
+# "🚚 สถานะส่ง" เองใน shipment_history_ui.py เท่านั้น พอร์ตมาที่นี่ให้รันอัตโนมัติก่อนสร้าง
+# digest ทุกเช้าแทน เพื่อให้ทั้งแอปและ LINE เห็นข้อมูลสดตรงกัน
+#
+# ทำไมพอร์ตได้ง่าย: iship_api.py ที่มีอยู่แล้ว import streamlit แต่จริงๆ ใช้แค่ 2 จุดผิวเผิน —
+# (1) อ่าน st.secrets เป็น fallback ของ env var (ไม่จำเป็นเลยที่นี่ เพราะรันผ่าน GitHub Actions
+# ตั้ง env var ตรงอยู่แล้ว) และ (2) แคช session ไว้ใน st.session_state กันต้อง login ซ้ำระหว่าง
+# user คลิกไปมาในแอป (ไม่จำเป็นเลยเหมือนกัน เพราะ script นี้รันครั้งเดียวจบ ไม่มี rerun ให้แคช
+# ข้าม) ตัว login/scrape จริง (_web_session()/get_shipment_statuses()) เป็น requests ล้วนๆ —
+# คัดลอกมาตรงนี้แทนการ import iship_api.py (เหตุผลเดียวกับที่ไม่ import database.py/line_api.py
+# ทั้งไฟล์ ดู docstring บนสุดของไฟล์)
+
+
+def _iship_login() -> tuple[requests.Session | None, str]:
+    """เหมือน iship_api._web_session() ทุกประการ แต่อ่าน ISHIP_PHONE/ISHIP_PASSWORD จาก env
+    ตรงๆ (ไม่ผ่าน st.secrets) และไม่แคช session (รันครั้งเดียวจบ ไม่มี rerun ให้แคชข้าม)"""
+    phone = os.environ.get("ISHIP_PHONE", "")
+    password = os.environ.get("ISHIP_PASSWORD", "")
+    if not phone or not password:
+        return None, "ไม่มี ISHIP_PHONE/ISHIP_PASSWORD ใน .env"
+    s = requests.Session()
+    s.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "th,en-US;q=0.9,en;q=0.8",
+    })
+    try:
+        r = s.get(f"{ISHIP_WEB_BASE}/login", timeout=10)
+        m = re.search(r'<input[^>]+name="_token"[^>]+value="([^"]+)"', r.text)
+        if not m:
+            return None, f"หาไม่เจอ _token ใน login page (status={r.status_code})"
+        r2 = s.post(f"{ISHIP_WEB_BASE}/login", data={
+            "_token": m.group(1), "phone": phone, "password": password, "remember": "1",
+        }, headers={
+            "Referer": f"{ISHIP_WEB_BASE}/login", "Origin": ISHIP_WEB_BASE,
+            "Content-Type": "application/x-www-form-urlencoded",
+        }, timeout=10, allow_redirects=True)
+        if "login" in r2.url:
+            _err = re.search(r'text-danger[^>]*>([^<]+)<', r2.text)
+            _msg = _err.group(1).strip() if _err else r2.text[:200]
+            return None, f"Login ไม่สำเร็จ: {_msg}"
+        return s, f"Login OK -> {r2.url}"
+    except Exception as e:
+        return None, f"Exception: {e}"
+
+
+def _parse_iship_status_rows(rows: list[dict]) -> dict[str, str]:
+    """แกะ {tracking_no: status_text} จากแถวดิบของ iShip's getdt-new-shipment API — เหมือน
+    iship_api.get_shipment_statuses() ทุกประการ (แยกเป็นฟังก์ชัน pure ต่างหากให้ทดสอบได้
+    โดยไม่ต้องปลอม HTTP session)"""
+    statuses: dict[str, str] = {}
+    for row in rows:
+        track_html = row.get("track_no", "") or ""
+        status_html = row.get("status_btn", "") or ""
+        m_tn = re.search(r'track=([A-Z0-9]+)', track_html)
+        if not m_tn:
+            m_tn = re.search(r'>([A-Z0-9]{8,})<', track_html)
+        tn = m_tn.group(1).strip() if m_tn else track_html.strip()
+        m_st = re.search(r'>([^<>]+)</', status_html)
+        status_text = m_st.group(1).strip() if m_st else status_html.strip()
+        if tn and status_text:
+            statuses[tn] = status_text
+    return statuses
+
+
+def _iship_get_shipment_statuses(days_back: int = 90) -> dict:
+    """เหมือน iship_api.get_shipment_statuses() ทุกประการ แต่ใช้ _iship_login() (ไม่แคช
+    session) แทน คืน {"statuses": {track_no: status_text}, "error": str|None}"""
+    sess, login_msg = _iship_login()
+    if not sess:
+        return {"statuses": {}, "error": login_msg}
+
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days_back)
+
+    sess.get(f"{ISHIP_WEB_BASE}/shipment", timeout=10)
+    xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
+    hdrs = {
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Referer": f"{ISHIP_WEB_BASE}/shipment",
+        "X-XSRF-TOKEN": xsrf,
+    }
+    _cols = [
+        ("checkbox", "", False, False),
+        ("order_date", "orders.created_at", True, True),
+        ("track_no", "shippings.track_no", True, True),
+        ("custom_order_id", "shippings.custom_order_id", True, True),
+        ("status_btn", "status_btn", False, False),
+        ("name", "", True, True),
+        ("dst_name", "", True, True),
+        ("dst_phone", "", True, True),
+        ("dst_address", "", True, True),
+        ("print_btn", "print_count", False, False),
+        ("cod_amount", "", True, True),
+        ("remark", "", True, True),
+        ("cancel_btn", "", True, True),
+        ("detail_btn", "", True, True),
+    ]
+    params = {
+        "draw": 1, "start": 0, "length": 200,
+        "order[0][column]": 1, "order[0][dir]": "desc",
+        "search[value]": "", "search[regex]": "false",
+        "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
+        "order_print": 3, "courier_filter": "all",
+    }
+    for i, (data, name, searchable, orderable) in enumerate(_cols):
+        params[f"columns[{i}][data]"] = data
+        params[f"columns[{i}][name]"] = name
+        params[f"columns[{i}][searchable]"] = "true" if searchable else "false"
+        params[f"columns[{i}][orderable]"] = "true" if orderable else "false"
+        params[f"columns[{i}][search][value]"] = ""
+        params[f"columns[{i}][search][regex]"] = "false"
+
+    try:
+        r = sess.get(f"{ISHIP_WEB_BASE}/getdt-new-shipment", headers=hdrs, params=params, timeout=15)
+        if r.status_code != 200 or not r.text.strip():
+            return {"statuses": {}, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+        try:
+            rows = r.json().get("data", [])
+        except Exception:
+            return {"statuses": {}, "error": f"JSON parse failed: {r.text[:300]}"}
+        return {"statuses": _parse_iship_status_rows(rows), "error": None}
+    except Exception as e:
+        return {"statuses": {}, "error": str(e)}
+
+
+def _sync_iship_delivery_statuses(sb) -> None:
+    """sync delivery_status ของ shipments ที่ยังไม่จบ (ไม่ terminal) จาก iShip เข้า Supabase —
+    เหมือนปุ่ม "🚚 สถานะส่ง" ใน shipment_history_ui.py ทุกประการ (db.get_pending_delivery_tracking
+    + iship_api.get_shipment_statuses + db.update_delivery_statuses) แค่รันอัตโนมัติแทนต้องกดเอง
+    ไม่ critical ถ้าล้มเหลว (เช่น iShip login ไม่ผ่าน/รหัสผ่านเปลี่ยน) — แค่ print แจ้งเตือนแล้ว
+    ปล่อยให้ digest ส่วนที่เหลือทำงานต่อตามปกติ ไม่ทำให้ทั้งฉบับล้มไปด้วย"""
+    try:
+        _ship_rows = _fetch_all_sb(
+            lambda: sb.table("shipments").select("tracking_no,delivery_status")
+            .not_.is_("tracking_no", "null").neq("tracking_no", "")
+        )
+        _pending_tn = {r["tracking_no"] for r in _ship_rows
+                       if r.get("delivery_status") not in _TERMINAL_SHIP_STATUSES}
+        if not _pending_tn:
+            print("🚚 ไม่มี tracking ที่รอสถานะ — ข้าม sync iShip")
+            return
+        _sr = _iship_get_shipment_statuses(days_back=90)
+        if _sr.get("error"):
+            print(f"⚠️ ดึงสถานะจัดส่งจาก iShip ไม่สำเร็จ: {_sr['error']}")
+            return
+        _to_update = {tn: st for tn, st in _sr["statuses"].items() if tn in _pending_tn}
+        if not _to_update:
+            print("🚚 ไม่มีสถานะใหม่จาก iShip")
+            return
+        by_status: dict[str, list[str]] = {}
+        for tn, st in _to_update.items():
+            by_status.setdefault(st, []).append(tn)
+        n_updated = 0
+        for st_text, tns in by_status.items():
+            for i in range(0, len(tns), 50):
+                chunk = tns[i:i + 50]
+                sb.table("shipments").update({"delivery_status": st_text}).in_("tracking_no", chunk).execute()
+                n_updated += len(chunk)
+        print(f"🚚 sync สถานะจัดส่งจาก iShip แล้ว {n_updated} tracking")
+    except Exception as e:
+        print(f"⚠️ sync สถานะจัดส่งจาก iShip ล้มเหลว: {e}")
 
 
 def _resolve_notice_item(name: str, variant: str, qty: int, notice_map: dict[str, dict]) -> tuple[str, int]:
@@ -486,6 +663,10 @@ def main():
 
     if n_saved:
         print(f"💾 บันทึกลง Supabase แล้ว {n_saved} รายการ (ตีกลับ+ออเดอร์ใหม่ รวมกัน)")
+
+    # sync สถานะจัดส่งจาก iShip ก่อน (ดู _sync_iship_delivery_statuses docstring) ให้ ship_rows
+    # ด้านล่างเห็นสถานะสดของวันนี้เลย ไม่ใช่ของเก่าที่ไม่เคย sync
+    _sync_iship_delivery_statuses(sb)
 
     # ── shipments (ระบบขายของร้านเอง ไม่ใช่ Shopee/e-commerce) — ดึงครั้งเดียวใช้ร่วมกัน 2 จุด:
     # COD ที่รับเงินแล้วแต่ยังไม่เปิดบิล + พัสดุไม่ใช่ COD ที่ค้างส่งเกิน 3 วัน (เหมือน
