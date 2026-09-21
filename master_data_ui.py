@@ -179,7 +179,10 @@ def render():
                 if _ok:
                     st.success(f"✅ ลบแล้ว {len(_ok)} รายการ: {', '.join(_ok)}")
                 if _fail:
-                    st.error(f"❌ ลบไม่ได้ {len(_fail)} รายการ (มีรายการขายอยู่): {', '.join(_fail)}")
+                    st.error(
+                        f"❌ ลบไม่ได้ {len(_fail)} รายการ (มีข้อมูลอื่นผูกอยู่ เช่น รายการขาย/ประวัตินับสต็อก/ของฝาก): "
+                        + ", ".join(_fail)
+                    )
                 st.rerun()
 
     elif _md_active == _MD_TABS[1]:
