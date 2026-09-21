@@ -2,15 +2,18 @@
 รัน: uv run tools/email_daily_digest.py
 หรือ: python tools/email_daily_digest.py
 
-เช็คอีเมล 4 บัญชี (IMAP) หา 3 อย่าง แล้วสรุปส่งเข้า LINE ส่วนตัวเจ้าของร้านวันละครั้ง:
+เช็คอีเมล 4 บัญชี (IMAP) แล้วสรุปส่งเข้า LINE ส่วนตัวเจ้าของร้านวันละครั้ง (พร้อมสถานะ COD/
+พัสดุค้างส่งจากระบบร้านเองด้วย — ดู `_build_cod_unbilled_rows`/`_build_slow_shipment_rows`):
   1. พัสดุ Shopee/Lazada/TikTok ที่มีปัญหา/ตีกลับ/ถูกตีคืน (เชื่อม API ทั้ง 3 แพลตฟอร์ม
      ไม่ได้ — Shopee ถูกปฏิเสธที่ Seller Identification เพราะไม่ใช่ Managed/Mall Seller,
      Lazada/TikTok ก็ไม่มี integration เหมือนกัน — อีเมลคือทางเดียวที่มีตอนนี้)
-  2. อีเมลแจ้งยอดบัตรเครดิต/statement จากธนาคาร
-  3. อีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee — สรุปจำนวนออเดอร์+สินค้า/จำนวนต่อร้านแบบ
+  2. อีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee — สรุปจำนวนออเดอร์+สินค้า/จำนวนต่อร้านแบบ
      เรียลไทม์ (ดู `ecom_calc.parse_shopee_order_notice_email`) บันทึกลง Supabase ตาราง
      `ecommerce_order_notices` ให้แอปโชว์ต่อที่ 🛒 E-commerce → ตรวจสอบปัญหา เหมือนกัน
      (Lazada/TikTok ยังไม่เช็คว่ามีอีเมลแบบนี้หรือไม่ — ทำ Shopee ก่อน)
+
+(เดิมมีเช็คอีเมลแจ้งยอดบัตรเครดิต/statement จากธนาคารด้วย — เอาออกแล้ว 2026-09-21 ตามคำขอ
+user "เอาเรื่องแจ้งยอดบัตรเครดิตออกก่อน" — โค้ดเดิมยังอยู่ใน git history ถ้าจะเอากลับมาทีหลัง)
 
 **Shopee ยืนยันจากอีเมลจริงแล้ว** (2026-09-19, ดู `ecom_calc.parse_shopee_return_emails`)
 — แกะเลขคำสั่งซื้อ/บริษัทขนส่ง/เลขติดตามพัสดุได้ครบ บันทึกลง Supabase ตาราง
@@ -287,20 +290,6 @@ def _detect_platform_return_problem(subject: str, sender: str, body: str) -> str
     return platform if any(k in text for k in _RETURN_KEYWORDS) else None
 
 
-_BANK_DOMAINS = [
-    "scb.co.th", "kasikornbank.com", "bangkokbank.com",
-    "ktb.co.th", "krungsri.com", "tmbthanachart.com",
-]
-_BANK_KEYWORDS = ["statement", "ยอดชำระ", "บัตรเครดิต", "credit card", "ใบแจ้งยอด"]
-
-
-def _is_bank_statement(subject: str, sender: str, body: str) -> bool:
-    if not any(d in sender.lower() for d in _BANK_DOMAINS):
-        return False
-    text = f"{subject} {body}".lower()
-    return any(k in text for k in _BANK_KEYWORDS)
-
-
 # ── IMAP fetch ────────────────────────────────────────────────────────────────
 
 # บางอีเมล (เจอจริงจากบัญชี ts_shop56) ประกาศ charset เป็นชื่อที่ Python ไม่รู้จักตรงๆ
@@ -424,7 +413,6 @@ def main():
 
     sb = _get_supabase()
     platform_lines: dict[str, list[str]] = {}
-    bank_lines = []
     order_notices: dict[str, tuple[dict, str]] = {}  # order_sn -> (parsed, notice_subject), เอาตัวหลังสุดในรอบนี้
     n_saved = 0
     for account in accounts:
@@ -444,9 +432,6 @@ def main():
                             shop_name=account.get("label"), platform="shopee",
                         )
                         n_saved += 1
-                continue
-            if _is_bank_statement(mail["subject"], mail["sender"], mail["body"]):
-                bank_lines.append(f"• {mail['subject']}")
                 continue
             # เช็คอีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee (คนละแบบกับพัสดุตีกลับด้านบน) —
             # เก็บล่าสุดต่อ order_sn ไว้ก่อน ค่อย upsert+สรุปทีเดียวหลัง loop เพราะถ้าออเดอร์
@@ -496,7 +481,7 @@ def main():
     cod_unbilled = _build_cod_unbilled_rows(txn_rows, ship_rows)
     slow_ships = _build_slow_shipment_rows(ship_rows, datetime.now(timezone.utc))
 
-    if not platform_lines and not bank_lines and not shop_summary and not cod_unbilled and not slow_ships:
+    if not platform_lines and not shop_summary and not cod_unbilled and not slow_ships:
         print("วันนี้ไม่มีอีเมลที่เข้าเกณฑ์ — ไม่ส่ง LINE")
         return
 
@@ -506,9 +491,6 @@ def main():
         if lines:
             parts.append(f"\n📦 พัสดุ {platform} มีปัญหา/ตีกลับ/ตีคืน:")
             parts += lines
-    if bank_lines:
-        parts.append("\n💳 แจ้งยอดบัตรเครดิต:")
-        parts += bank_lines
     if shop_summary:
         parts.append("\n📦 สรุปออเดอร์วันนี้ (Shopee จากอีเมล):")
         for shop, s in shop_summary.items():
