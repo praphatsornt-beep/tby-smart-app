@@ -91,6 +91,30 @@ class TestGetBody(unittest.TestCase):
         self.assertEqual(result["items"][0]["name"], "กาแฟโสม ซูเลียน กาแฟคอลลาเจน")
 
 
+class TestResolveNoticeItemLabel(unittest.TestCase):
+    """เพิ่ม 2026-09-21 ตามคำขอ user — ชื่อสินค้าจากอีเมล Shopee ยาวเกินไปสำหรับข้อความ LINE"""
+
+    def test_mapped_name_returns_short_code(self):
+        notice_map = {"กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส": "TF2581"}
+        label = edd._resolve_notice_item_label("กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส", "", notice_map)
+        self.assertEqual(label, "TF2581")
+
+    def test_mapped_name_with_variant_uses_combined_key(self):
+        notice_map = {"แชมพู :: ผิวแห้ง": "SP2001"}
+        label = edd._resolve_notice_item_label("แชมพู", "ผิวแห้ง", notice_map)
+        self.assertEqual(label, "SP2001")
+
+    def test_unmapped_short_name_unchanged(self):
+        label = edd._resolve_notice_item_label("กาแฟโสม", "", {})
+        self.assertEqual(label, "กาแฟโสม")
+
+    def test_unmapped_long_name_truncated(self):
+        long_name = "กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส สูตรพรีเมียม"
+        label = edd._resolve_notice_item_label(long_name, "", {})
+        self.assertLessEqual(len(label), 30)
+        self.assertTrue(label.endswith("..."))
+
+
 class TestBuildCodUnbilledRows(unittest.TestCase):
     """เพิ่ม 2026-09-21 ตามคำขอ user — ให้ digest รายวันบอกด้วยว่า COD รับเงินแล้วแต่ยังไม่
     เปิดบิลมีลูกค้าคนไหนบ้าง (เหมือนการ์ด "✅ รับแล้ว — ยังไม่เปิดบิล" ใน dashboard_ui.py)"""

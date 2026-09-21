@@ -110,6 +110,20 @@ def _build_cod_unbilled_rows(txn_rows: list[dict], ship_rows: list[dict]) -> lis
     return rows
 
 
+def _resolve_notice_item_label(name: str, variant: str, notice_map: dict[str, str]) -> str:
+    """ย่อชื่อสินค้ายาวจากอีเมลแจ้งออเดอร์ Shopee (คัดลอกมาจากหน้าประกาศขาย เช่น "กาแฟโสม
+    ซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส...") เป็นรหัสสินค้าภายในสั้นๆ ถ้าเคย map ไว้แล้ว — คีย์เดียว
+    กับ database.notice_item_map_key()/ecom_ui.py's mapping UI (namespace "shopee_notice" ใน
+    ecommerce_product_map) คัดลอกสูตรคีย์มาตรงนี้แทนการ import database.py (ดู docstring
+    บนสุดของไฟล์ว่าทำไมไม่ import) ยังไม่เคย map มาก่อนก็ตัดชื่อให้สั้นลงแทนกันข้อความ LINE
+    ยาวเป็นสิบบรรทัดจากชื่อโพสต์เดียว — เพิ่ม 2026-09-21 ตามคำขอ user ("ชื่อมันยาวมาก")"""
+    key = f"{name} :: {variant}" if variant else name
+    code = notice_map.get(key)
+    if code:
+        return code
+    return name if len(name) <= 30 else name[:27] + "..."
+
+
 def _push_line_text(user_id: str, text: str) -> dict:
     """ทำเหมือน line_api.push_text() แบบย่อ — ไม่ import line_api.py ตรงๆ เพราะไฟล์นั้น
     `import streamlit as st` ไว้ใช้ st.secrets fallback (ไม่จำเป็นตรงนี้ เพราะรันผ่าน
@@ -384,6 +398,14 @@ def main():
             if order:
                 order_notices[order["order_sn"]] = (order, mail["subject"])
 
+    # ชื่อสินค้าที่เคย map ไว้แล้วผ่าน 🛒 E-commerce → ⚙️ ตั้งค่า/นำเข้าข้อมูล → "Map ชื่อสินค้า
+    # จากอีเมล → รหัสสินค้า" — ใช้ย่อชื่อยาวๆ ในข้อความ LINE ด้วย (เดิมส่งชื่อดิบเต็มความยาว)
+    _notice_map_rows = _fetch_all_sb(
+        lambda: sb.table("ecommerce_product_map").select("platform_item_id,product_id")
+        .eq("platform", "shopee_notice")
+    )
+    notice_map = {r["platform_item_id"]: r["product_id"] for r in _notice_map_rows}
+
     shop_summary: dict[str, dict] = {}
     for order, notice_subject in order_notices.values():
         _upsert_ecommerce_order_notice(sb, order, notice_subject=notice_subject, platform="shopee")
@@ -398,7 +420,8 @@ def main():
         elif order.get("order_type") == "transfer":
             entry["transfer"] += 1
         for it in order.get("items") or []:
-            entry["items"][it["name"]] = entry["items"].get(it["name"], 0) + it["qty"]
+            label = _resolve_notice_item_label(it["name"], it.get("variant") or "", notice_map)
+            entry["items"][label] = entry["items"].get(label, 0) + it["qty"]
 
     if n_saved:
         print(f"💾 บันทึกลง Supabase แล้ว {n_saved} รายการ (ตีกลับ+ออเดอร์ใหม่ รวมกัน)")
