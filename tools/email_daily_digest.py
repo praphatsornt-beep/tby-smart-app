@@ -62,6 +62,54 @@ def _get_supabase():
     return create_client(url, key)
 
 
+def _fetch_all_sb(build_query, page_size: int = 1000) -> list[dict]:
+    """เหมือน database._fetch_all() แต่ทำเองตรงนี้แทน (ไม่ import database.py — ลาก
+    streamlit มาด้วย ดู docstring บนสุดของไฟล์) กัน PostgREST 1,000-แถว/request cap เงียบๆ
+    (ดูกติกาใน CLAUDE.md) เผื่อ transactions/shipments โตเกิน 1,000 แถวในอนาคต — build_query
+    ต้องเป็นฟังก์ชันไม่รับ argument คืน query builder ใหม่ทุกครั้ง (builder เดิมเรียกซ้ำ
+    หลัง .execute() ไม่ได้)"""
+    rows: list[dict] = []
+    offset = 0
+    while True:
+        page = build_query().range(offset, offset + page_size - 1).execute().data
+        rows.extend(page)
+        if len(page) < page_size:
+            return rows
+        offset += page_size
+
+
+def _build_cod_unbilled_rows(txn_rows: list[dict], ship_rows: list[dict]) -> list[dict]:
+    """จับคู่ shipments ที่เป็น COD และโอนเงินมาแล้ว (cod_transferred_at ไม่ null) กับลูกค้า
+    ที่ยังมีแถว transactions สถานะ COD+"ยังไม่เปิดบิล" ค้างอยู่ — แมตช์ด้วยชื่อลูกค้าเหมือนกับ
+    ที่ dashboard_ui.py ทำในการ์ด "✅ รับแล้ว — ยังไม่เปิดบิล" (shipments ไม่มี FK ตรงไปยัง
+    transactions/bill รายตัวให้จับคู่แม่นกว่านี้ได้) รับ txn_rows/ship_rows เป็นผลลัพธ์ดิบจาก
+    .execute().data ของ Supabase ตรงๆ — แยกออกมาเป็นฟังก์ชัน pure ให้ทดสอบได้โดยไม่ต้องปลอม
+    Supabase client (เพิ่ม 2026-09-21 ตามคำขอ user)"""
+    unbilled_names = {
+        (t.get("customers") or {}).get("name")
+        for t in txn_rows
+        if (t.get("customers") or {}).get("name")
+    }
+    if not unbilled_names:
+        return []
+    rows = []
+    for sh in ship_rows:
+        cname = (sh.get("customers") or {}).get("name") or sh.get("recipient_name") or "—"
+        if cname not in unbilled_names:
+            continue
+        items = sh.get("items") or []
+        items_str = ", ".join(
+            f"{it.get('name') or it.get('product_id', '')} x{it.get('qty', 1)}" for it in items
+        ) or "—"
+        rows.append({
+            "customer": cname,
+            "items": items_str,
+            "cod_amount": float(sh.get("cod_amount") or 0),
+            "tracking_no": sh.get("tracking_no") or "—",
+        })
+    return rows
+
+
 def _push_line_text(user_id: str, text: str) -> dict:
     """ทำเหมือน line_api.push_text() แบบย่อ — ไม่ import line_api.py ตรงๆ เพราะไฟล์นั้น
     `import streamlit as st` ไว้ใช้ st.secrets fallback (ไม่จำเป็นตรงนี้ เพราะรันผ่าน
@@ -355,7 +403,16 @@ def main():
     if n_saved:
         print(f"💾 บันทึกลง Supabase แล้ว {n_saved} รายการ (ตีกลับ+ออเดอร์ใหม่ รวมกัน)")
 
-    if not platform_lines and not bank_lines and not shop_summary:
+    # ── COD (ระบบขายของร้านเอง ไม่ใช่ Shopee/e-commerce) ที่รับเงินแล้วแต่ยังไม่เปิดบิล ──
+    # เหมือนการ์ด "✅ รับแล้ว — ยังไม่เปิดบิล" ใน dashboard_ui.py ทุกประการ — เพิ่มเข้า digest
+    # เพราะเป็นรายการที่ต้องรีบเปิดบิลให้ลูกค้า (เงินเข้าร้านแล้วแต่บัญชียังไม่ตัด)
+    txn_rows = _fetch_all_sb(lambda: sb.table("transactions").select("customer_id, customers(name)")
+                              .eq("pay_status", "COD").eq("bill_status", "ยังไม่เปิดบิล").order("id"))
+    ship_rows = _fetch_all_sb(lambda: sb.table("shipments").select("*, customers(name)")
+                               .gt("cod_amount", 0).not_.is_("cod_transferred_at", "null").order("id"))
+    cod_unbilled = _build_cod_unbilled_rows(txn_rows, ship_rows)
+
+    if not platform_lines and not bank_lines and not shop_summary and not cod_unbilled:
         print("วันนี้ไม่มีอีเมลที่เข้าเกณฑ์ — ไม่ส่ง LINE")
         return
 
@@ -378,6 +435,10 @@ def main():
             parts.append(line)
             for name, qty in s["items"].items():
                 parts.append(f"  • {name} x{qty}")
+    if cod_unbilled:
+        parts.append(f"\n💰 COD รับเงินแล้ว แต่ยังไม่เปิดบิล ({len(cod_unbilled)} รายการ):")
+        for r in cod_unbilled:
+            parts.append(f"• {r['customer']} — {r['items']} ({r['cod_amount']:,.0f}฿, {r['tracking_no']})")
     text = "\n".join(parts)
 
     staff_line_id = os.environ.get("STAFF_LINE_USER_ID", "")

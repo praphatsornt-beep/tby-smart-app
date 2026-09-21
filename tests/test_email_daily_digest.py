@@ -91,5 +91,41 @@ class TestGetBody(unittest.TestCase):
         self.assertEqual(result["items"][0]["name"], "กาแฟโสม ซูเลียน กาแฟคอลลาเจน")
 
 
+class TestBuildCodUnbilledRows(unittest.TestCase):
+    """เพิ่ม 2026-09-21 ตามคำขอ user — ให้ digest รายวันบอกด้วยว่า COD รับเงินแล้วแต่ยังไม่
+    เปิดบิลมีลูกค้าคนไหนบ้าง (เหมือนการ์ด "✅ รับแล้ว — ยังไม่เปิดบิล" ใน dashboard_ui.py)"""
+
+    def test_matches_shipment_to_unbilled_customer_by_name(self):
+        txn_rows = [{"customer_id": "C-001", "customers": {"name": "สมชาย"}}]
+        ship_rows = [{
+            "customers": {"name": "สมชาย"}, "cod_amount": 500, "tracking_no": "TH123",
+            "items": [{"name": "กาแฟโสม", "qty": 2}],
+        }]
+        rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["customer"], "สมชาย")
+        self.assertEqual(rows[0]["cod_amount"], 500.0)
+        self.assertEqual(rows[0]["tracking_no"], "TH123")
+        self.assertIn("กาแฟโสม x2", rows[0]["items"])
+
+    def test_shipment_for_already_billed_customer_excluded(self):
+        # ลูกค้าไม่มีแถวค้าง "ยังไม่เปิดบิล" เลย (txn_rows ว่าง) → ไม่ต้องแสดง
+        ship_rows = [{"customers": {"name": "สมหญิง"}, "cod_amount": 300, "tracking_no": "TH999", "items": []}]
+        rows = edd._build_cod_unbilled_rows([], ship_rows)
+        self.assertEqual(rows, [])
+
+    def test_shipment_for_different_unbilled_customer_excluded(self):
+        txn_rows = [{"customer_id": "C-002", "customers": {"name": "คนอื่น"}}]
+        ship_rows = [{"customers": {"name": "สมหญิง"}, "cod_amount": 300, "tracking_no": "TH999", "items": []}]
+        rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
+        self.assertEqual(rows, [])
+
+    def test_no_items_falls_back_to_dash(self):
+        txn_rows = [{"customer_id": "C-003", "customers": {"name": "ก."}}]
+        ship_rows = [{"customers": {"name": "ก."}, "cod_amount": 100, "tracking_no": "TH1", "items": []}]
+        rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
+        self.assertEqual(rows[0]["items"], "—")
+
+
 if __name__ == "__main__":
     unittest.main()
