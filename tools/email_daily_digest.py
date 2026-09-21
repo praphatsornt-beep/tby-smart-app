@@ -158,18 +158,27 @@ def _build_slow_shipment_rows(ship_rows: list[dict], now_utc: datetime, cutoff_d
     return rows
 
 
-def _resolve_notice_item_label(name: str, variant: str, notice_map: dict[str, str]) -> str:
-    """ย่อชื่อสินค้ายาวจากอีเมลแจ้งออเดอร์ Shopee (คัดลอกมาจากหน้าประกาศขาย เช่น "กาแฟโสม
-    ซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส...") เป็นรหัสสินค้าภายในสั้นๆ ถ้าเคย map ไว้แล้ว — คีย์เดียว
-    กับ database.notice_item_map_key()/ecom_ui.py's mapping UI (namespace "shopee_notice" ใน
-    ecommerce_product_map) คัดลอกสูตรคีย์มาตรงนี้แทนการ import database.py (ดู docstring
-    บนสุดของไฟล์ว่าทำไมไม่ import) ยังไม่เคย map มาก่อนก็ตัดชื่อให้สั้นลงแทนกันข้อความ LINE
-    ยาวเป็นสิบบรรทัดจากชื่อโพสต์เดียว — เพิ่ม 2026-09-21 ตามคำขอ user ("ชื่อมันยาวมาก")"""
+def _resolve_notice_item(name: str, variant: str, qty: int, notice_map: dict[str, dict]) -> tuple[str, int]:
+    """คืน (label, จำนวนจริง) สำหรับ 1 รายการสินค้าในอีเมลแจ้งออเดอร์ Shopee — ย่อชื่อยาวจาก
+    หน้าประกาศขาย (เช่น "กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส...") เป็นรหัสสินค้าภายในสั้นๆ
+    ถ้าเคย map ไว้แล้ว (คีย์เดียวกับ database.notice_item_map_key()/ecom_ui.py's mapping UI,
+    namespace "shopee_notice" ใน ecommerce_product_map — คัดลอกสูตรคีย์มาตรงนี้แทนการ import
+    database.py ดู docstring บนสุดของไฟล์) พร้อม**คูณด้วย units_per_pack** ด้วยเสมอ (เช่น
+    "ยาสีฟันแพค 3 หลอด" map ไว้เป็นรหัสเดี่ยว + units_per_pack=3 → 1 ออเดอร์ต้องนับเป็น 3
+    หลอดจริง ไม่ใช่ 1) เหมือนกับที่ database.get_ecommerce_order_notices_df() คำนวณ "จำนวนรวม"
+    ให้ตารางในแอป — เดิม (2026-09-21 รอบแรก) ลืมคูณจุดนี้ ทำให้ตัวเลขใน LINE digest น้อยกว่า
+    ความจริงสำหรับสินค้าที่เป็นแพครวม ผู้ใช้ทักท้วง 2026-09-21 หลัง map "ยาสีฟัน 3 หลอด" แล้ว
+    สังเกตว่ารหัสที่โชว์เป็นแค่ "TU2315" ไม่มีตัวคูณกำกับ — แก้ไขให้คูณจำนวนจริงแทนการเติมต่อ
+    ท้ายรหัส (เช่น "TU2315-3") เพราะรหัสสินค้าในระบบต้องเป็น LETTERS+4DIGITS ล้วนเท่านั้น ไม่มี
+    "-" — ดู calc_logic.py's parse_calc_order() comment) ยังไม่เคย map มาก่อนก็ตัดชื่อให้สั้น
+    ลงแทนกันข้อความ LINE ยาวเป็นสิบบรรทัดจากชื่อโพสต์เดียว คงจำนวนดิบไว้ (ไม่มีตัวคูณให้ใช้)"""
     key = f"{name} :: {variant}" if variant else name
-    code = notice_map.get(key)
-    if code:
-        return code
-    return name if len(name) <= 30 else name[:27] + "..."
+    mapped = notice_map.get(key)
+    if mapped:
+        pack = int(round(float(mapped.get("units_per_pack") or 1)))
+        return mapped["product_id"], int(qty) * pack
+    label = name if len(name) <= 30 else name[:27] + "..."
+    return label, int(qty)
 
 
 def _push_line_text(user_id: str, text: str) -> dict:
@@ -449,10 +458,13 @@ def main():
     # ชื่อสินค้าที่เคย map ไว้แล้วผ่าน 🛒 E-commerce → ⚙️ ตั้งค่า/นำเข้าข้อมูล → "Map ชื่อสินค้า
     # จากอีเมล → รหัสสินค้า" — ใช้ย่อชื่อยาวๆ ในข้อความ LINE ด้วย (เดิมส่งชื่อดิบเต็มความยาว)
     _notice_map_rows = _fetch_all_sb(
-        lambda: sb.table("ecommerce_product_map").select("platform_item_id,product_id")
+        lambda: sb.table("ecommerce_product_map").select("platform_item_id,product_id,units_per_pack")
         .eq("platform", "shopee_notice")
     )
-    notice_map = {r["platform_item_id"]: r["product_id"] for r in _notice_map_rows}
+    notice_map = {
+        r["platform_item_id"]: {"product_id": r["product_id"], "units_per_pack": r.get("units_per_pack")}
+        for r in _notice_map_rows
+    }
 
     shop_summary: dict[str, dict] = {}
     for order, notice_subject in order_notices.values():
@@ -468,8 +480,8 @@ def main():
         elif order.get("order_type") == "transfer":
             entry["transfer"] += 1
         for it in order.get("items") or []:
-            label = _resolve_notice_item_label(it["name"], it.get("variant") or "", notice_map)
-            entry["items"][label] = entry["items"].get(label, 0) + it["qty"]
+            label, eff_qty = _resolve_notice_item(it["name"], it.get("variant") or "", it["qty"], notice_map)
+            entry["items"][label] = entry["items"].get(label, 0) + eff_qty
 
     if n_saved:
         print(f"💾 บันทึกลง Supabase แล้ว {n_saved} รายการ (ตีกลับ+ออเดอร์ใหม่ รวมกัน)")

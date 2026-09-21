@@ -91,28 +91,41 @@ class TestGetBody(unittest.TestCase):
         self.assertEqual(result["items"][0]["name"], "กาแฟโสม ซูเลียน กาแฟคอลลาเจน")
 
 
-class TestResolveNoticeItemLabel(unittest.TestCase):
-    """เพิ่ม 2026-09-21 ตามคำขอ user — ชื่อสินค้าจากอีเมล Shopee ยาวเกินไปสำหรับข้อความ LINE"""
+class TestResolveNoticeItem(unittest.TestCase):
+    """เพิ่ม 2026-09-21 ตามคำขอ user — ชื่อสินค้าจากอีเมล Shopee ยาวเกินไปสำหรับข้อความ LINE,
+    แก้เพิ่มรอบสองวันเดียวกันให้คูณ units_per_pack ด้วย (พลาดรอบแรก user ทักหลัง map "ยาสีฟัน
+    3 หลอด" แล้วสังเกตว่าไม่มีตัวคูณ)"""
 
     def test_mapped_name_returns_short_code(self):
-        notice_map = {"กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส": "TF2581"}
-        label = edd._resolve_notice_item_label("กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส", "", notice_map)
+        notice_map = {"กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส": {"product_id": "TF2581", "units_per_pack": 1}}
+        label, qty = edd._resolve_notice_item("กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส", "", 2, notice_map)
         self.assertEqual(label, "TF2581")
+        self.assertEqual(qty, 2)
 
     def test_mapped_name_with_variant_uses_combined_key(self):
-        notice_map = {"แชมพู :: ผิวแห้ง": "SP2001"}
-        label = edd._resolve_notice_item_label("แชมพู", "ผิวแห้ง", notice_map)
+        notice_map = {"แชมพู :: ผิวแห้ง": {"product_id": "SP2001", "units_per_pack": 1}}
+        label, qty = edd._resolve_notice_item("แชมพู", "ผิวแห้ง", 1, notice_map)
         self.assertEqual(label, "SP2001")
+        self.assertEqual(qty, 1)
+
+    def test_mapped_bundle_multiplies_qty_by_units_per_pack(self):
+        # ยาสีฟัน 3 หลอด map เป็นรหัสเดี่ยว + units_per_pack=3 — 1 ออเดอร์ต้องนับเป็น 3 หลอด
+        notice_map = {"ยาสีฟันแพค 3 หลอด": {"product_id": "TU2315", "units_per_pack": 3}}
+        label, qty = edd._resolve_notice_item("ยาสีฟันแพค 3 หลอด", "", 1, notice_map)
+        self.assertEqual(label, "TU2315")
+        self.assertEqual(qty, 3)
 
     def test_unmapped_short_name_unchanged(self):
-        label = edd._resolve_notice_item_label("กาแฟโสม", "", {})
+        label, qty = edd._resolve_notice_item("กาแฟโสม", "", 4, {})
         self.assertEqual(label, "กาแฟโสม")
+        self.assertEqual(qty, 4)
 
     def test_unmapped_long_name_truncated(self):
         long_name = "กาแฟโสมซูเลียน ขนาด 40 ซอง คอฟฟี่พลัส สูตรพรีเมียม"
-        label = edd._resolve_notice_item_label(long_name, "", {})
+        label, qty = edd._resolve_notice_item(long_name, "", 1, {})
         self.assertLessEqual(len(label), 30)
         self.assertTrue(label.endswith("..."))
+        self.assertEqual(qty, 1)
 
 
 class TestBuildCodUnbilledRows(unittest.TestCase):
