@@ -12,12 +12,17 @@
  * อัตโนมัติจาก git repo นี้ไปที่ Apps Script เลย
  *
  * ใช้จัดการสต็อกกาแฟแบบเลขซีเรียล ผ่าน LINE โดยมี 2 กลุ่มคำสั่งหลัก:
- *   - addcoffee [รหัสเริ่ม] [จำนวน]  (หรือ "addcoffee" เฉยๆ ให้ระบบถามทีละขั้น)
+ *   - addcoffee [รหัสเริ่ม] [จำนวนลัง]  (หรือ "addcoffee" เฉยๆ ให้ระบบถามทีละขั้น)
  *     ลงทะเบียนแถวซีเรียลใหม่ในชีท "Coffee" + ตัวอักษรตัวแรกของรหัส (เช่น
- *     BCG9451 → ชีท CoffeeB) สถานะเริ่มต้น "ว่าง"
+ *     BCG9451 → ชีท CoffeeB) สถานะเริ่มต้น "ว่าง" — "จำนวน" ที่กรอกคือจำนวน
+ *     "ลัง" ไม่ใช่จำนวนห่อตรงๆ (เปลี่ยน 2026-09-21 ตามที่ user ระบุ): ตัวอักษร
+ *     แรกของรหัส B = กาแฟ 40 ซอง ลังละ 18 ห่อ, S = กาแฟ 84 ซอง ลังละ 10 ห่อ
+ *     (ดู `UNITS_PER_BOX` ด้านล่าง — ตัวอักษรอื่นที่ยังไม่รู้จัก default 1 ห่อ/ลัง
+ *     คือพฤติกรรมเดิม) ตอบกลับบอกเลขซีเรียลตัวสุดท้ายที่ลงทะเบียนเสมอ
  *   - out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]  เติมแถวว่างถัดไปในชีทนั้น
  *     ด้วยวันที่/ชื่อ/เลขสมาชิก แล้วตั้งสถานะ "ส่งแล้ว" — บรรทัดถัดไปพิมพ์แค่
- *     วันที่ เลขสมาชิก ชื่อ จำนวน (ไม่ต้องพิมพ์ชื่อชีทซ้ำ) ได้เลย
+ *     วันที่ เลขสมาชิก ชื่อ จำนวน (ไม่ต้องพิมพ์ชื่อชีทซ้ำ) ได้เลย (จำนวนที่นี่ยัง
+ *     เป็นจำนวนห่อตรงๆ เหมือนเดิม ไม่เกี่ยวกับ addcoffee/ลัง)
  *
  * ป้อนข้อมูลเข้ารายงานกระทบยอด TBYกาแฟ[เดือน]_2026.xlsx รายเดือน (ดู
  * .claude/skills/tby-accounting/SKILL.md หัวข้อ "Coffee serial number
@@ -33,6 +38,13 @@
 function getLineAccessToken_() {
   return PropertiesService.getScriptProperties().getProperty('LINE_ACCESS_TOKEN');
 }
+
+// จำนวนห่อต่อ 1 ลัง แยกตามตัวอักษรตัวแรกของรหัส (ตัวเดียวกับที่ใช้เลือกชีท
+// "Coffee" + ตัวอักษรนี้) — B = กาแฟ 40 ซอง (ลังละ 18 ห่อ), S = กาแฟ 84 ซอง
+// (ลังละ 10 ห่อ) เพิ่มเข้ามา 2026-09-21 ตามที่ user ระบุ ตัวอักษรอื่นที่ยังไม่
+// รู้จัก default เป็น 1 (พฤติกรรมเดิม คือ "จำนวน" หมายถึงจำนวนห่อตรงๆ) —
+// เพิ่มคู่ใหม่ตรงนี้ได้เลยถ้ามีสินค้าเพิ่ม
+var UNITS_PER_BOX = { 'B': 18, 'S': 10 };
 
 function doPost(e) {
   if (!e || !e.postData) return;
@@ -72,31 +84,34 @@ function doPost(e) {
       _state.step   = 'waiting_qty';
       _state.serial = userMessage.toUpperCase();
       _cache.put(_cacheKey, JSON.stringify(_state), 300);
-      replyMessage(replyToken, '📦 รหัสเริ่มต้น: ' + _state.serial + '\nจะเพิ่มกี่แก้ว?');
+      replyMessage(replyToken, '📦 รหัสเริ่มต้น: ' + _state.serial + '\nจะเพิ่มกี่ลัง?');
       return;
     }
 
     if (_state.step === 'waiting_qty') {
-      var _qty = parseInt(userMessage);
-      if (isNaN(_qty) || _qty <= 0) {
+      var _boxQty = parseInt(userMessage);
+      if (isNaN(_boxQty) || _boxQty <= 0) {
         replyMessage(replyToken, '❌ จำนวนไม่ถูกต้อง พิมพ์ใหม่ หรือ ยกเลิก');
         return;
       }
       _state.step = 'waiting_confirm';
-      _state.qty  = _qty;
+      _state.qty  = _boxQty;   // เก็บเป็น "จำนวนลัง" — คูณเป็นจำนวนห่อจริงตอน preRegisterSerials
       _cache.put(_cacheKey, JSON.stringify(_state), 300);
 
-      var _m    = _state.serial.match(/^([A-Za-z]+)(\d+)$/i);
-      var _pfx  = _m[1].toUpperCase();
-      var _sNum = parseInt(_m[2]);
-      var _end  = _pfx + (_sNum + _qty - 1).toString().padStart(_m[2].length, '0');
-      var _sh   = 'Coffee' + _pfx.charAt(0).toUpperCase();
+      var _m           = _state.serial.match(/^([A-Za-z]+)(\d+)$/i);
+      var _pfx         = _m[1].toUpperCase();
+      var _sNum        = parseInt(_m[2]);
+      var _firstLetter = _pfx.charAt(0);
+      var _unitsPerBox = UNITS_PER_BOX[_firstLetter] || 1;
+      var _totalUnits  = _boxQty * _unitsPerBox;
+      var _end         = _pfx + (_sNum + _totalUnits - 1).toString().padStart(_m[2].length, '0');
+      var _sh          = 'Coffee' + _firstLetter;
 
       sendQuickReplyGas(replyToken,
         '📋 ตรวจสอบก่อนบันทึก\n' +
         '📊 ชีท: ' + _sh + '\n' +
         '🔢 ' + _state.serial + ' → ' + _end + '\n' +
-        '📦 จำนวน: ' + _qty + ' รายการ',
+        '📦 จำนวน: ' + _boxQty + ' ลัง (' + _totalUnits + ' ห่อ)',
         [
           { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_addcoffee' } },
           { type: 'action', action: { type: 'message', label: '❌ ยกเลิก',       text: 'ยกเลิก'           } }
@@ -157,7 +172,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวน]\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)");
+        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)");
       } else {
         results.push("⚠️ ไม่พบคำสั่ง: " + command);
       }
@@ -203,21 +218,29 @@ function handleCoffeeOut(ss, text, lock, isFirstLine) {
   } finally { lock.releaseLock(); }
 }
 
-function preRegisterSerials(ss, sc, q) {
+function preRegisterSerials(ss, sc, boxQty) {
   var m = sc.match(/^([A-Za-z]+)(\d+)$/);
   if (!m) return "❌ รหัสผิด (เช่น BCG9451)";
-  var prefix    = m[1];
-  var startNum  = parseInt(m[2]);
-  var sheetName = "Coffee" + prefix.charAt(0).toUpperCase();
-  var sheet     = ss.getSheetByName(sheetName);
+  var prefix      = m[1];
+  var startNum    = parseInt(m[2]);
+  var firstLetter = prefix.charAt(0).toUpperCase();
+  var sheetName   = "Coffee" + firstLetter;
+  var sheet       = ss.getSheetByName(sheetName);
   if (!sheet) return "❌ ไม่พบชีท: " + sheetName;
+
+  // boxQty = จำนวนลัง ไม่ใช่จำนวนห่อโดยตรง — คูณด้วยจำนวนห่อ/ลังตามตัวอักษรแรกของ
+  // รหัส (UNITS_PER_BOX) ก่อนสร้างแถวจริง (เพิ่ม 2026-09-21 ตามที่ user ระบุ)
+  var unitsPerBox = UNITS_PER_BOX[firstLetter] || 1;
+  var q = boxQty * unitsPerBox;
 
   var rows = [];
   for (var i = 0; i < q; i++) {
     rows.push(["", prefix + (startNum + i).toString().padStart(m[2].length, "0"), "", "", "ว่าง"]);
   }
   sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, 5).setValues(rows);
-  return "📦 เพิ่มใน " + sheetName + " " + q + " รายการสำเร็จ";
+
+  var endSerial = prefix + (startNum + q - 1).toString().padStart(m[2].length, "0");
+  return "📦 เพิ่มใน " + sheetName + " " + boxQty + " ลัง (" + q + " ห่อ)\n🔢 " + sc.toUpperCase() + " → " + endSerial;
 }
 
 function parseDate(s) {
