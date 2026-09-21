@@ -182,6 +182,52 @@ class TestBuildCodUnbilledRows(unittest.TestCase):
         rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
         self.assertEqual(rows, [])
 
+    def test_sorted_by_cod_amount_descending(self):
+        # เรียงยอด COD สูงสุดก่อน — สำคัญตอน _capped_rows() ตัดเหลือ N รายการแรกสำหรับ LINE
+        txn_rows = [
+            {"customer_id": "C-005", "customers": {"name": "เล็ก"}},
+            {"customer_id": "C-006", "customers": {"name": "ใหญ่"}},
+        ]
+        ship_rows = [
+            {"customers": {"name": "เล็ก"}, "cod_amount": 100, "cod_transferred_at": "2026-09-20T10:00:00+00:00",
+             "tracking_no": "TH1", "items": []},
+            {"customers": {"name": "ใหญ่"}, "cod_amount": 999, "cod_transferred_at": "2026-09-20T10:00:00+00:00",
+             "tracking_no": "TH2", "items": []},
+        ]
+        rows = edd._build_cod_unbilled_rows(txn_rows, ship_rows)
+        self.assertEqual([r["customer"] for r in rows], ["ใหญ่", "เล็ก"])
+
+
+class TestCappedRows(unittest.TestCase):
+    """เพิ่ม 2026-09-21 หลังเจอ dry-run จริง: "พัสดุค้างส่งเกิน 3 วัน" มี 107 รายการ รวมข้อความ
+    ยาว 16,028 ตัวอักษร เกินขีดจำกัด LINE push text (5,000 ตัวอักษร) — ถ้าส่งจริงจะโดนปฏิเสธ
+    ทั้งฉบับ ผู้ใช้ยืนยันให้จำกัดไว้ 10 รายการต่อส่วน"""
+
+    def test_fewer_than_max_returns_all_no_remainder(self):
+        rows = [{"x": i} for i in range(5)]
+        shown, more = edd._capped_rows(rows, max_items=10)
+        self.assertEqual(len(shown), 5)
+        self.assertEqual(more, 0)
+
+    def test_more_than_max_truncates_and_counts_remainder(self):
+        rows = [{"x": i} for i in range(107)]
+        shown, more = edd._capped_rows(rows, max_items=10)
+        self.assertEqual(len(shown), 10)
+        self.assertEqual(more, 97)
+        self.assertEqual([r["x"] for r in shown], list(range(10)))
+
+    def test_exactly_max_no_remainder(self):
+        rows = [{"x": i} for i in range(10)]
+        shown, more = edd._capped_rows(rows, max_items=10)
+        self.assertEqual(len(shown), 10)
+        self.assertEqual(more, 0)
+
+    def test_default_max_is_10(self):
+        rows = [{"x": i} for i in range(15)]
+        shown, more = edd._capped_rows(rows)
+        self.assertEqual(len(shown), 10)
+        self.assertEqual(more, 5)
+
 
 class TestBuildSlowShipmentRows(unittest.TestCase):
     """เพิ่ม 2026-09-21 ตามคำขอ user — พัสดุไม่ใช่ COD ที่ค้างส่งเกิน 3 วัน ให้บอกชื่อลูกค้า/

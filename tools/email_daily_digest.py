@@ -124,6 +124,7 @@ def _build_cod_unbilled_rows(txn_rows: list[dict], ship_rows: list[dict]) -> lis
             "cod_amount": float(sh.get("cod_amount") or 0),
             "tracking_no": sh.get("tracking_no") or "—",
         })
+    rows.sort(key=lambda r: -r["cod_amount"])
     return rows
 
 
@@ -159,6 +160,21 @@ def _build_slow_shipment_rows(ship_rows: list[dict], now_utc: datetime, cutoff_d
         })
     rows.sort(key=lambda r: -r["days"])
     return rows
+
+
+_MAX_DIGEST_ROWS = 10  # กัน LINE push text เกิน 5,000 ตัวอักษร (ขีดจำกัดจริงของ LINE Messaging
+# API) — พบจริง 2026-09-21 ตอนทดสอบ dry-run: "พัสดุค้างส่งเกิน 3 วัน" มีค้างสะสมถึง 107 รายการ
+# (พัสดุเก่าที่ไม่เคย sync สถานะ ไม่ใช่พัสดุที่เพิ่งค้างจริงๆ) รวมเป็นข้อความยาว 16,028
+# ตัวอักษร ถ้าส่งจริงจะโดน LINE ปฏิเสธทั้งฉบับทันที (รวมส่วนอื่นที่ปกติดีไปด้วย) — ผู้ใช้
+# ยืนยันให้จำกัดไว้ 10 รายการต่อส่วน (ที่สำคัญที่สุดก่อน — เรียงมาแล้วจาก caller: ค้างนานสุด/
+# ยอด COD สูงสุด) ที่เหลือสรุปเป็นตัวเลขรวมแทนแทนการแจกแจงทุกแถว
+
+
+def _capped_rows(rows: list[dict], max_items: int = _MAX_DIGEST_ROWS) -> tuple[list[dict], int]:
+    """คืน (แถวที่จะแสดงใน LINE, จำนวนที่เหลือที่ไม่ได้แสดง) — rows ต้องเรียงลำดับความสำคัญ
+    มาก่อนหน้าแล้วจาก caller (เอาอันสำคัญสุดขึ้นก่อนเสมอ ไม่ใช่สุ่ม/เรียงตาม id)"""
+    shown = rows[:max_items]
+    return shown, max(0, len(rows) - len(shown))
 
 
 def _resolve_notice_item(name: str, variant: str, qty: int, notice_map: dict[str, dict]) -> tuple[str, int]:
@@ -502,13 +518,19 @@ def main():
             for name, qty in s["items"].items():
                 parts.append(f"  • {name} x{qty}")
     if cod_unbilled:
+        _shown, _more = _capped_rows(cod_unbilled)
         parts.append(f"\n💰 COD รับเงินแล้ว แต่ยังไม่เปิดบิล ({len(cod_unbilled)} รายการ):")
-        for r in cod_unbilled:
+        for r in _shown:
             parts.append(f"• {r['customer']} — {r['items']} ({r['cod_amount']:,.0f}฿, {r['tracking_no']})")
+        if _more:
+            parts.append(f"...และอีก {_more} รายการ ดูทั้งหมดที่หน้าแรก")
     if slow_ships:
-        parts.append(f"\n🐌 พัสดุค้างส่งเกิน 3 วัน ({len(slow_ships)} รายการ):")
-        for r in slow_ships:
+        _shown, _more = _capped_rows(slow_ships)
+        parts.append(f"\n🐌 พัสดุค้างส่งเกิน 3 วัน ({len(slow_ships)} รายการ — แสดง {len(_shown)} รายการที่ค้างนานสุด):")
+        for r in _shown:
             parts.append(f"• {r['customer']} — {r['date']} ({r['days']} วัน) — {r['items']} [{r['carrier']} {r['tracking_no']}]")
+        if _more:
+            parts.append(f"...และอีก {_more} รายการ ดูทั้งหมดที่หน้าแรก")
     text = "\n".join(parts)
 
     staff_line_id = os.environ.get("STAFF_LINE_USER_ID", "")
