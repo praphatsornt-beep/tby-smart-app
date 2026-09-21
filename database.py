@@ -2616,6 +2616,25 @@ def get_shipments(customer_id: str = None) -> list[dict]:
     return q.order("created_at", desc=True).execute().data
 
 
+def mark_shipment_return_confirmed(shipment_ids: list[str]) -> int:
+    """ทำเครื่องหมายว่าตรวจรับพัสดุตีกลับ/ยกเลิกคืนจริงแล้ว (ปุ่ม "✅ รับของตีกลับแล้ว" ที่หน้าแรก) —
+    ต้องมีคอลัมน์นี้ก่อน ดู shipments_add_return_confirmed_at.sql"""
+    if not shipment_ids:
+        return 0
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    db = get_supabase()
+    n = 0
+    for i in range(0, len(shipment_ids), 50):
+        chunk = shipment_ids[i:i + 50]
+        res = _retry(lambda _c=chunk: db.table("shipments").update(
+            {"return_confirmed_at": now}
+        ).in_("id", _c).execute())
+        n += len(res.data or [])
+    get_shipments.clear()
+    return n
+
+
 def update_shipment_tracking(shipment_id: str, tracking_no: str, carrier: str = None) -> None:
     _upd = {"tracking_no": tracking_no}
     if carrier:

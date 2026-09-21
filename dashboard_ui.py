@@ -274,8 +274,10 @@ def render():
                 # else: COD รับแล้ว + เปิดบิลแล้ว → ไม่แสดง
 
             # ── พัสดุมีปัญหา ────────────────────────────────────────────
-            if _sh.get("delivery_status") in (shipment_status.RETURNED_STATUSES | shipment_status.CANCELLED_STATUSES):
+            if (_sh.get("delivery_status") in (shipment_status.RETURNED_STATUSES | shipment_status.CANCELLED_STATUSES)
+                    and not _sh.get("return_confirmed_at")):
                 _problem_ships.append({
+                    "id":        _sh.get("id"),
                     "ลูกค้า":    _cname,
                     "สินค้า":    _its,
                     "Tracking":  _sh.get("tracking_no", "—"),
@@ -371,6 +373,20 @@ def render():
         if _problem_ships:
             st.divider()
             st.markdown(f"**⚠️ พัสดุที่มีปัญหา ตีกลับ/ยกเลิก ({len(_problem_ships)} รายการ)**")
-            st.dataframe(pd.DataFrame(_problem_ships),
-                         width="stretch", hide_index=True,
-                         height=min(35 * len(_problem_ships) + 38, 300))
+            _prob_df = pd.DataFrame(_problem_ships)
+            _prob_show = _prob_df.drop(columns=["id"])
+            _prob_sel = st.dataframe(
+                _prob_show, width="stretch", hide_index=True,
+                height=min(35 * len(_prob_show) + 38, 300),
+                selection_mode="multi-row", on_select="rerun", key="dash_problem_select",
+            )
+            _prob_rows = _prob_sel.selection.rows if hasattr(_prob_sel, "selection") else []
+            if st.button("✅ รับของตีกลับแล้ว", key="dash_mark_return_confirmed",
+                          disabled=not _prob_rows, type="primary"):
+                _ids = _prob_df.loc[_prob_rows, "id"].tolist()
+                try:
+                    _n = db.mark_shipment_return_confirmed(_ids)
+                    st.success(f"✅ บันทึกแล้ว {_n} รายการ")
+                    st.rerun()
+                except Exception as _mrc_e:
+                    st.error(f"❌ บันทึกไม่สำเร็จ — ต้องรัน shipments_add_return_confirmed_at.sql ใน Supabase ก่อน ({_mrc_e})")
