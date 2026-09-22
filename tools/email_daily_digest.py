@@ -615,19 +615,32 @@ def main():
         for mail in fetch_account(account):
             platform = _detect_platform_return_problem(mail["subject"], mail["sender"], mail["body"])
             if platform:
-                platform_lines.setdefault(platform, []).append(f"• {mail['subject']}")
+                # ระบุร้านในบรรทัด LINE ด้วย — เดิมโชว์แค่ subject ดิบ ไม่รู้ว่ามาจากร้านไหน
+                # ใช้ label บัญชีอีเมลได้เลย (ยืนยันแล้วว่า 4 บัญชีผูก 1:1 กับร้านจริง ดู
+                # ecommerce_return_emails ใน CLAUDE.md)
+                shop_label = account.get("label") or "?"
                 # เก็บลง Supabase เฉพาะ Shopee เท่านั้น — parser โครงสร้าง
                 # (ecom_calc.parse_shopee_return_emails) รู้จักฟอร์แมตอีเมลจริงของ Shopee
                 # แค่แพลตฟอร์มเดียว (ยืนยันด้วยอีเมลจริง 2026-09-19) ให้แอปโชว์ต่อที่
                 # 🛒 E-commerce → ตรวจสอบปัญหา → "ออเดอร์ตีกลับ (จากอีเมลแจ้งเตือน Shopee)"
                 if platform == "Shopee":
-                    for order in ecom_calc.parse_shopee_return_emails(mail["subject"], mail["body"]):
-                        _upsert_ecommerce_return_email(
-                            sb, order_sn=order["order_sn"], carrier_name=order["carrier_name"],
-                            tracking_no=order["tracking_no"], notice_subject=mail["subject"],
-                            shop_name=account.get("label"), platform="shopee",
-                        )
-                        n_saved += 1
+                    orders = ecom_calc.parse_shopee_return_emails(mail["subject"], mail["body"])
+                    if orders:
+                        for order in orders:
+                            platform_lines.setdefault(platform, []).append(
+                                f"• ร้าน {shop_label} — #{order['order_sn']} "
+                                f"({order['carrier_name']} {order['tracking_no']})"
+                            )
+                            _upsert_ecommerce_return_email(
+                                sb, order_sn=order["order_sn"], carrier_name=order["carrier_name"],
+                                tracking_no=order["tracking_no"], notice_subject=mail["subject"],
+                                shop_name=shop_label, platform="shopee",
+                            )
+                            n_saved += 1
+                    else:
+                        platform_lines.setdefault(platform, []).append(f"• ร้าน {shop_label} — {mail['subject']}")
+                else:
+                    platform_lines.setdefault(platform, []).append(f"• ร้าน {shop_label} — {mail['subject']}")
                 continue
             # เช็คอีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee (คนละแบบกับพัสดุตีกลับด้านบน) —
             # เก็บล่าสุดต่อ order_sn ไว้ก่อน ค่อย upsert+สรุปทีเดียวหลัง loop เพราะถ้าออเดอร์
