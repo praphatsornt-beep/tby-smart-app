@@ -2,7 +2,7 @@ name: Daily Digest (อีเมล Shopee + COD/พัสดุค้าง + s
 
 on:
   schedule:
-    - cron: "37 2 * * *"   # 09:37 น. เวลาไทย (UTC+7) ทุกวัน — เยื้องจาก :30 พอดี กันชนคิว GitHub Actions
+    - cron: "0 6 * * *"    # ทดสอบชั่วคราว 13:00 น. เวลาไทย (UTC+7) เช็คว่า schedule ทำงานจริงก่อน (เช้า 22 ก.ย. หลุดไปทั้งวัน) — ยืนยันแล้วค่อยเปลี่ยนกลับเป็น 09:37
   workflow_dispatch: {}    # กดรันเองได้จาก tab Actions ของ repo
 
 jobs:
