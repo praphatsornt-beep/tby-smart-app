@@ -2,7 +2,7 @@ name: Daily Digest (อีเมล Shopee + COD/พัสดุค้าง + s
 
 on:
   schedule:
-    - cron: "30 2 * * *"   # 09:30 น. เวลาไทย (UTC+7) ทุกวัน
+    - cron: "37 2 * * *"   # 09:37 น. เวลาไทย (UTC+7) ทุกวัน — เยื้องจาก :30 พอดี กันชนคิว GitHub Actions
   workflow_dispatch: {}    # กดรันเองได้จาก tab Actions ของ repo
 
 jobs:
