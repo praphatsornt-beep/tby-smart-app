@@ -494,7 +494,13 @@ function doPost(e) {
     summaryText += '💰 ' + (isCOD ? (lang === 'mm' ? 'ပစ္စည်းရောက်ငွေချေ: ' : 'ยอดปลายทาง: ') : (lang === 'mm' ? 'စုစုပေါင်းကျသင့်ငွေ: ' : 'ยอดโอนสุทธิ: ')) + '฿' + finalPay.toLocaleString() + '\n';
 
     if (!hasShipping) summaryText += '\nပို့ဆောင်ခ သီးသန့်ဖြစ်သည်။\nราคานี้ยังไม่รวมค่าจัดส่ง';
-    else if (!isCOD && lang !== 'none') summaryText += '\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
+    else if (!isCOD) {
+      // แจ้งเงื่อนไขจัดส่งหลังได้รับสลิปโอนเงิน — ไม่เกี่ยวกับ COD (จ่ายปลายทาง ไม่มีสลิป)
+      // ขึ้นทั้งไทย+พม่าเสมอไม่ขึ้นกับ lang เหมือน MM_REMOTE_NOTE/ข้อความสินค้าหมด
+      summaryText += '\n📦 จัดส่งให้หลังได้รับสลิปโอนเงินค่ะ (ทางร้านจะถ่ายรูปสินค้า+หน้ากล่องให้ดูก่อนส่งค่ะ)\n'
+        + '📦 ငွေလွှဲပြေစာ ရရှိပြီးမှ ပစ္စည်းပို့ဆောင်ပေးပါမည် (ပို့ဆောင်မီ ပစ္စည်းဓာတ်ပုံနှင့် ဘောက်စ်ဓာတ်ပုံ ကြိုတင်ပို့ပေးပါမည်)';
+      if (lang !== 'none') summaryText += '\n\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
+    }
   }
 
   sendReply(replyToken, summaryText + translatedNote);
