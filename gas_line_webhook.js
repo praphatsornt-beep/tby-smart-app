@@ -496,8 +496,9 @@ function doPost(e) {
     summaryText += (lang === 'mm' ? '🚚📦 ပို့ဆောင်မှု (စံပို့ဆောင်မှု): +' : '🚚📦 จัดส่ง (စံပို့ဆောင်မှု): +') + shipBaseEstimate + ' = ฿' + deliverEst.toLocaleString() + '\n';
     summaryText += '\n' + MM_REMOTE_NOTE;
 
-    extraBubble = SHIP_AFTER_SLIP_NOTE;
-    if (lang !== 'none') extraBubble += '\n\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
+    // เรียงบัญชีธนาคารก่อน แล้วค่อยโน้ตจัดส่งหลังสลิปตามหลัง (ตามที่ผู้ใช้ขอ)
+    if (lang !== 'none') extraBubble += '🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency\n\n';
+    extraBubble += SHIP_AFTER_SLIP_NOTE;
   } else {
     summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး: ฿' : '💵 สินค้า: ฿') + totalPrice.toLocaleString() + '\n';
     if (hasShipping) summaryText += (lang === 'mm' ? '🚚 ပို့ခ: ฿' : '🚚 ค่าส่ง: ฿') + shipFinal.toLocaleString() + feeNote + '\n';
@@ -509,14 +510,10 @@ function doPost(e) {
     summaryText += '\n' + calcFormula + ' = ' + finalPay.toLocaleString() + '\n';
     summaryText += '💰 ' + (isCOD ? (lang === 'mm' ? 'ပစ္စည်းရောက်ငွေချေ: ' : 'ยอดปลายทาง: ') : (lang === 'mm' ? 'စုစုပေါင်းကျသင့်ငွေ: ' : 'ยอดโอนสุทธิ: ')) + '฿' + finalPay.toLocaleString() + '\n';
 
+    // กรณีมี SH (ระบุจัดส่งแล้ว) ไม่ใช่ COD — จบแค่ยอดโอนสุทธิ ไม่ต่อท้ายด้วยบัญชีธนาคาร/โน้ต
+    // จัดส่งหลังสลิปเลย (ยืนยันกับผู้ใช้แล้วว่าตัดออกทั้งคู่ ต่างจากกรณีไม่มี SH ด้านบนที่ยัง
+    // มีทั้งคู่ แค่แยกเป็นบับเบิลที่ 2)
     if (!hasShipping) summaryText += '\nပို့ဆောင်ခ သီးသန့်ဖြစ်သည်။\nราคานี้ยังไม่รวมค่าจัดส่ง';
-    else if (!isCOD) {
-      // แจ้งเงื่อนไขจัดส่งหลังได้รับสลิปโอนเงิน — ไม่เกี่ยวกับ COD (จ่ายปลายทาง ไม่มีสลิป)
-      // กรณีนี้ (มี SH แล้ว) รวมเป็นข้อความเดียวกับสรุปยอด ไม่แยกบับเบิล (ต่างจากกรณีไม่มี SH
-      // ด้านบนที่แยก — ยืนยันกับผู้ใช้แล้ว)
-      summaryText += '\n' + SHIP_AFTER_SLIP_NOTE;
-      if (lang !== 'none') summaryText += '\n\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
-    }
   }
 
   if (extraBubble) {
