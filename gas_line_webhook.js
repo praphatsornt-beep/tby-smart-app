@@ -21,6 +21,11 @@ var SUPABASE_KEY = _scriptProps.getProperty('SUPABASE_KEY');
 // (กันลูกค้าพิมพ์โดนคำสั่งโดยไม่ตั้งใจ — ถ้าไม่มี # ในลิสต์นี้ จะไม่ทำงานเลย)
 var STAFF_TAGS = ['milk', 'max'];
 
+// รหัสสินค้าที่ของหมดชั่วคราว — ถ้าลูกค้าพิมพ์รหัสนี้ ไม่คำนวณยอด/PV ให้ (ไม่นับรวม
+// totalPrice/PV/น้ำหนักด้วย) ตอบแจ้งว่าสินค้าหมดแทน แก้ลิสต์นี้เองได้เลยเวลาของหมด/
+// กลับมาเข้าใหม่ (เพิ่ม/ลบรหัสตรงนี้) — เพิ่ม TU3103 ตามคำขอ 2026-09-25
+var OUT_OF_STOCK_CODES = ['TU3103'];
+
 // โน้ตพื้นที่ห่างไกล/เกาะ (ตอนคำนวณออเดอร์แต่ยังไม่รู้วิธีส่ง) — ภาษาพม่าล้วน เพราะ
 // ลูกค้าส่วนใหญ่เป็นแรงงานพม่า ไม่บอกราคาที่แน่นอน (ค่าธรรมเนียมจริงแตกต่างกันตามโซน
 // 30/50/60 บาท) แค่แจ้งว่ามีค่าเพิ่มแล้วจะแจ้งราคาจริงทีหลัง — พอร์ตมาจาก
@@ -366,8 +371,13 @@ function doPost(e) {
     }
   }
 
-  var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '';
+  var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '', outOfStockNote = '';
   Object.keys(orderMap).forEach(function(code) {
+    if (OUT_OF_STOCK_CODES.indexOf(code) !== -1) {
+      // ของหมด — ไม่นับเข้า totalPrice/PV/น้ำหนักเลย แค่แจ้งแยกไว้ต่างหาก
+      outOfStockNote += '⚠️ [' + code + '] สินค้าหมด ขออภัยค่ะ ตอนนี้ของยังไม่เข้า\n';
+      return;
+    }
     for (var i = 0; i < pData.length; i++) {
       if (pData[i][0].toString().toUpperCase() == code) {
         var qty = orderMap[code], pPrice = pData[i][3], pPV = pData[i][4], pW = pData[i][5];
@@ -384,6 +394,11 @@ function doPost(e) {
     }
   });
 
+  if (detailText === '' && outOfStockNote !== '') {
+    // พิมพ์แต่รหัสของหมด ไม่มีรหัสอื่นที่คำนวณได้เลย — ตอบแค่แจ้งของหมด ไม่ต้องสรุปยอด
+    sendReply(replyToken, outOfStockNote.trim() + translatedNote);
+    return;
+  }
   if (detailText === '' && translatedNote !== '') { sendReply(replyToken, '🇲🇲 Message:\n' + rawMsg + translatedNote); return; }
   else if (detailText === '') {
     // หารหัสสินค้าไม่เจอสักตัว (หรือไม่มีการพิมพ์รหัสแบบ CODE-QTY เลย) — ไม่ต้องตอบกลับ
@@ -393,7 +408,7 @@ function doPost(e) {
 
   var totalWeightKg = productWeight + 0.5;
   var summaryHeader = lang === 'th' ? '📜 สรุปยอดคำสั่งซื้อ\n\n' : (lang === 'mm' ? '📜 အော်ဒါအကျဉ်းချုပ်\n\n' : '📝 รายการสินค้า\n\n');
-  var summaryText = summaryHeader + detailText + '\n';
+  var summaryText = summaryHeader + detailText + (outOfStockNote ? '\n' + outOfStockNote : '') + '\n';
 
   var planMatches = rawMsg.toLowerCase().match(/plan\s+([\d\*\s]+)/);
   if (planMatches && lang === 'none') {
