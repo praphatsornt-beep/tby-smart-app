@@ -380,6 +380,48 @@ def _resolve_notice_item(name: str, variant: str, qty: int, notice_map: dict[str
     return name, int(qty)
 
 
+def _shopee_return_item_summary(sb, order_sn: str, fresh_notices: dict, notice_map: dict) -> str:
+    """สรุปสินค้า+จำนวนของออเดอร์ตีกลับ 1 รายการ (Shopee) สำหรับต่อท้ายบรรทัด "พัสดุมีปัญหา/
+    ตีกลับ" ใน digest — เดิมบรรทัดนี้มีแค่เลขออเดอร์/ขนส่ง ไม่มีสินค้าเลย (user ขอ 2026-09-25)
+    ใช้ pattern เดียวกับ database.get_ecommerce_return_emails_df() ที่แอปใช้แสดงหน้า
+    🛒 E-commerce → ตรวจสอบปัญหา ทุกประการ: หา items จาก ecommerce_order_notices ก่อน (มาจาก
+    อีเมลยืนยันออเดอร์ ซึ่งมาถึงก่อนอีเมลตีกลับเสมอในทางปฏิบัติ) — เช็ค fresh_notices (ที่เพิ่ง
+    parse ได้ในรอบรันนี้) ก่อน ถ้าไม่เจอค่อย query DB ย้อนหลัง (ออเดอร์อาจถูกสั่งไปหลายวันก่อน
+    วันนี้ ไม่อยู่ใน 24 ชม. ล่าสุดที่เพิ่งดึงมา) ถ้ายังไม่เจอ fallback ไป ecommerce_sales (ไฟล์
+    ที่อัปโหลด, ครอบคลุมออเดอร์เก่ากว่าที่ order_notices เพิ่งเริ่มเก็บ 2026-09-20) ไม่เจอเลย
+    ทั้งคู่คืนค่าว่าง (บรรทัดเดิมไม่มีสินค้าต่อท้ายเหมือนก่อนแก้)"""
+    fresh = fresh_notices.get(order_sn)
+    items = fresh[0].get("items") if fresh else None
+    if not items:
+        rows = _fetch_all_sb(
+            lambda: sb.table("ecommerce_order_notices").select("items,first_seen_at")
+            .eq("platform", "shopee").eq("order_sn", order_sn).order("first_seen_at", desc=True)
+        )
+        items = rows[0]["items"] if rows and rows[0].get("items") else None
+    if items:
+        return ", ".join(
+            f"{label} x{eff_qty}"
+            for label, eff_qty in (
+                _resolve_notice_item(it["name"], it.get("variant") or "", it["qty"], notice_map)
+                for it in items
+            )
+        )
+    sale_rows = _fetch_all_sb(
+        lambda: sb.table("ecommerce_sales").select("product_id,item_name,qty,products(name)")
+        .eq("platform", "shopee").eq("order_sn", order_sn)
+    )
+    if sale_rows:
+        def _qty_str(q) -> str:
+            q = float(q or 0)
+            return str(int(q)) if q == int(q) else str(q)
+        return ", ".join(
+            f"{(r.get('products') or {}).get('name') or r.get('item_name') or r.get('product_id') or '?'} "
+            f"x{_qty_str(r.get('qty'))}"
+            for r in sale_rows
+        )
+    return ""
+
+
 def _push_line_text(user_id: str, text: str) -> dict:
     """ทำเหมือน line_api.push_text() แบบย่อ — ไม่ import line_api.py ตรงๆ เพราะไฟล์นั้น
     `import streamlit as st` ไว้ใช้ st.secrets fallback (ไม่จำเป็นตรงนี้ เพราะรันผ่าน
@@ -610,6 +652,10 @@ def main():
     sb = _get_supabase()
     platform_lines: dict[str, list[str]] = {}
     order_notices: dict[str, tuple[dict, str]] = {}  # order_sn -> (parsed, notice_subject), เอาตัวหลังสุดในรอบนี้
+    # ออเดอร์ตีกลับของ Shopee ที่ parse โครงสร้างได้ (มี order_sn จริง) — เก็บไว้ก่อน ยังไม่ต่อ
+    # ชื่อสินค้า/จำนวนตรงนี้เพราะ notice_map (ชื่อสินค้า→รหัสที่เคย map ไว้) ยังไม่พร้อมจนกว่าจะ
+    # ผ่าน loop หลักครบ (ดู _shopee_return_item_summary ด้านล่าง, ต่อท้ายบรรทัดหลัง loop)
+    shopee_return_orders: list[dict] = []
     n_saved = 0
     for account in accounts:
         for mail in fetch_account(account):
@@ -627,10 +673,10 @@ def main():
                     orders = ecom_calc.parse_shopee_return_emails(mail["subject"], mail["body"])
                     if orders:
                         for order in orders:
-                            platform_lines.setdefault(platform, []).append(
-                                f"• ร้าน {shop_label} — #{order['order_sn']} "
-                                f"({order['carrier_name']} {order['tracking_no']})"
-                            )
+                            shopee_return_orders.append({
+                                "order_sn": order["order_sn"], "carrier_name": order["carrier_name"],
+                                "tracking_no": order["tracking_no"], "shop_label": shop_label,
+                            })
                             _upsert_ecommerce_return_email(
                                 sb, order_sn=order["order_sn"], carrier_name=order["carrier_name"],
                                 tracking_no=order["tracking_no"], notice_subject=mail["subject"],
@@ -640,6 +686,8 @@ def main():
                     else:
                         platform_lines.setdefault(platform, []).append(f"• ร้าน {shop_label} — {mail['subject']}")
                 else:
+                    # Lazada/TikTok: ยังเป็นการเดาแบบหยาบ (subject+sender keyword) ไม่มี order_sn
+                    # ให้ join หาสินค้า/จำนวนได้เหมือน Shopee — ดู docstring บนสุดของไฟล์
                     platform_lines.setdefault(platform, []).append(f"• ร้าน {shop_label} — {mail['subject']}")
                 continue
             # เช็คอีเมลแจ้งออเดอร์ใหม่/ยกเลิกของ Shopee (คนละแบบกับพัสดุตีกลับด้านบน) —
@@ -659,6 +707,15 @@ def main():
         r["platform_item_id"]: {"product_id": r["product_id"], "units_per_pack": r.get("units_per_pack")}
         for r in _notice_map_rows
     }
+
+    # ต่อสินค้า+จำนวนท้ายบรรทัด "พัสดุ Shopee มีปัญหา/ตีกลับ" ตอนนี้ (รอ notice_map พร้อมก่อน —
+    # ดู comment ตอนเก็บ shopee_return_orders ด้านบน) — user ขอ 2026-09-25
+    for ro in shopee_return_orders:
+        items_str = _shopee_return_item_summary(sb, ro["order_sn"], order_notices, notice_map)
+        line = f"• ร้าน {ro['shop_label']} — #{ro['order_sn']} ({ro['carrier_name']} {ro['tracking_no']})"
+        if items_str:
+            line += f" — {items_str}"
+        platform_lines.setdefault("Shopee", []).append(line)
 
     shop_summary: dict[str, dict] = {}
     for order, notice_subject in order_notices.values():

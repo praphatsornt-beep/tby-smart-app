@@ -330,5 +330,74 @@ class TestParseIshipStatusRows(unittest.TestCase):
         self.assertEqual(edd._parse_iship_status_rows([]), {})
 
 
+class _FakeQuery:
+    """ปลอม query builder ของ supabase-py แบบขั้นต่ำ — เก็บ data คงที่ไว้ ทุก chained method
+    (select/eq/order/range ฯลฯ) คืน self ไปเรื่อยๆ จนกว่าจะ .execute() แล้วได้ data กลับ"""
+    def __init__(self, data):
+        self._data = data
+
+    def __getattr__(self, _name):
+        return lambda *a, **kw: self
+
+    def execute(self):
+        from types import SimpleNamespace
+        return SimpleNamespace(data=self._data)
+
+
+class _FakeSupabaseRaises:
+    """ปลอม sb client ที่ระเบิดทันทีถ้าถูกเรียก .table() เลย — ใช้พิสูจน์ว่า path ที่เจอ
+    fresh_notices แล้วไม่ต้อง query DB เพิ่มจริงๆ"""
+    def table(self, _name):
+        raise AssertionError("ไม่ควร query DB เมื่อเจอใน fresh_notices แล้ว")
+
+
+class _FakeSupabaseByTable:
+    def __init__(self, table_data: dict):
+        self._table_data = table_data
+
+    def table(self, name):
+        return _FakeQuery(self._table_data.get(name, []))
+
+
+class TestShopeeReturnItemSummary(unittest.TestCase):
+    """เพิ่ม 2026-09-25 ตามคำขอ user — บรรทัด "พัสดุ Shopee มีปัญหา/ตีกลับ" ใน digest เดิมมีแค่
+    เลขออเดอร์/ขนส่ง ไม่มีสินค้า/จำนวนเลย"""
+
+    def test_uses_fresh_notices_without_db_call(self):
+        fresh = {"26091545QUFXSM": ({"items": [{"name": "กาแฟโสม", "variant": "", "qty": 2}]}, "subj")}
+        notice_map = {"กาแฟโสม": {"product_id": "TF2581", "units_per_pack": 1}}
+        result = edd._shopee_return_item_summary(_FakeSupabaseRaises(), "26091545QUFXSM", fresh, notice_map)
+        self.assertEqual(result, "TF2581 x2")
+
+    def test_falls_back_to_db_order_notices_when_not_fresh(self):
+        sb = _FakeSupabaseByTable({
+            "ecommerce_order_notices": [{"items": [{"name": "แชมพู", "variant": "", "qty": 1}]}],
+        })
+        result = edd._shopee_return_item_summary(sb, "260901ABC", {}, {})
+        self.assertEqual(result, "แชมพู x1")
+
+    def test_falls_back_to_ecommerce_sales_when_no_notices(self):
+        sb = _FakeSupabaseByTable({
+            "ecommerce_order_notices": [],
+            "ecommerce_sales": [{"product_id": "TF2504", "item_name": None, "qty": 2.0, "products": {"name": "กาแฟโสม"}}],
+        })
+        result = edd._shopee_return_item_summary(sb, "260901XYZ", {}, {})
+        self.assertEqual(result, "กาแฟโสม x2")
+
+    def test_whole_number_qty_not_shown_as_decimal(self):
+        # ecommerce_sales.qty เป็น float ใน DB จริง — "x2.0" อ่านแปลก ต้องโชว์ "x2" ถ้าเป็นจำนวนเต็ม
+        sb = _FakeSupabaseByTable({
+            "ecommerce_order_notices": [],
+            "ecommerce_sales": [{"product_id": "TF2504", "item_name": None, "qty": 1.5, "products": None}],
+        })
+        result = edd._shopee_return_item_summary(sb, "260901QTY", {}, {})
+        self.assertEqual(result, "TF2504 x1.5")
+
+    def test_returns_empty_string_when_nothing_found(self):
+        sb = _FakeSupabaseByTable({"ecommerce_order_notices": [], "ecommerce_sales": []})
+        result = edd._shopee_return_item_summary(sb, "260901NONE", {}, {})
+        self.assertEqual(result, "")
+
+
 if __name__ == "__main__":
     unittest.main()
