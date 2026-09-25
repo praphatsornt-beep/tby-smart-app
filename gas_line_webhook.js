@@ -34,6 +34,14 @@ var MM_REMOTE_NOTE =
   'ကျွန်းများ သို့မဟုတ် တောင်တန်းဒေသများအတွက် ပို့ဆောင်ခ 50 ဘတ် ' +
   'ထပ်မံပေးဆောင်ရမည် (ကျွန်ုပ်တို့ အမြန်ဆုံး အကြောင်းကြားပါမည်)။';
 
+// โน้ตแจ้งว่าจัดส่งหลังได้รับสลิปโอนเงิน (ไม่ใช้กับ COD — จ่ายปลายทาง ไม่มีสลิป) ขึ้นทั้ง
+// ไทย+พม่าเสมอไม่ขึ้นกับ lang เหมือน MM_REMOTE_NOTE ด้านบน (ลูกค้าส่วนใหญ่เป็นแรงงานพม่า
+// แต่ไม่ค่อยพิมพ์ "mm " นำหน้าเอง) ใช้ร่วมกัน 2 จุด: กรณีระบุวิธีจัดส่งแล้ว (มี SH) และกรณี
+// ยังไม่ระบุวิธีจัดส่ง (ราคาคู่ ไม่มี SH) — เก็บเป็นค่าเดียวกันกันข้อความสองจุดเพี้ยนไม่ตรงกัน
+var SHIP_AFTER_SLIP_NOTE =
+  '📦 หลังจากได้รับสลิปโอนเงิน ทางร้านจะถ่ายรูปสินค้าและหน้ากล่องพัสดุให้ค่ะ 😊\n' +
+  '📦 ငွေလွှဲပြေစာ ရရှိပြီးနောက် ဆိုင်မှ ပစ္စည်းဓာတ်ပုံနှင့် ပါဆယ်ဘောက်စ်ဓာတ်ပုံများကို ပို့ပေးပါမည် 😊';
+
 // ─── Supabase REST helpers ────────────────────────────────────────────────────
 
 function _sbReadHdrs() {
@@ -472,6 +480,11 @@ function doPost(e) {
 
   summaryText += '✨ ' + totalPV.toLocaleString() + ' PV | ⚖️ ' + totalWeightKg.toFixed(2) + ' kg\n\n';
 
+  // ข้อความบับเบิลที่ 2 แยกจากสรุปยอด — ใช้เฉพาะกรณีลูกค้ายังไม่ระบุวิธีจัดส่ง (ไม่มี SH/ไม่ใช่
+  // COD) ตามที่ยืนยันกับผู้ใช้: กรณีนี้แยกเป็น 2 บับเบิล ส่วนกรณีมี SH (ระบุจัดส่งแล้ว) ยังคงรวม
+  // เป็นข้อความเดียวเหมือนเดิม ไม่แยก
+  var extraBubble = '';
+
   if (!hasShipping && !isCOD) {
     // ลูกค้ายังไม่บอกว่ารับหน้าร้านหรือจัดส่ง (ไม่มี SH/ไม่ใช่ COD) — โชว์ราคาทั้ง 2
     // แบบในข้อความเดียว แทนที่จะบอกแค่ "ยังไม่รวมค่าจัดส่ง" เฉยๆ (พอร์ตจาก
@@ -482,6 +495,9 @@ function doPost(e) {
     summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး (ဆိုင်မှာ လာယူပါ): ฿' : '💵 สินค้า (ဆိုင်မှာ လာယူပါ): ฿') + totalPrice.toLocaleString() + '\n';
     summaryText += (lang === 'mm' ? '🚚📦 ပို့ဆောင်မှု (စံပို့ဆောင်မှု): +' : '🚚📦 จัดส่ง (စံပို့ဆောင်မှု): +') + shipBaseEstimate + ' = ฿' + deliverEst.toLocaleString() + '\n';
     summaryText += '\n' + MM_REMOTE_NOTE;
+
+    extraBubble = SHIP_AFTER_SLIP_NOTE;
+    if (lang !== 'none') extraBubble += '\n\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
   } else {
     summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး: ฿' : '💵 สินค้า: ฿') + totalPrice.toLocaleString() + '\n';
     if (hasShipping) summaryText += (lang === 'mm' ? '🚚 ပို့ခ: ฿' : '🚚 ค่าส่ง: ฿') + shipFinal.toLocaleString() + feeNote + '\n';
@@ -496,14 +512,18 @@ function doPost(e) {
     if (!hasShipping) summaryText += '\nပို့ဆောင်ခ သီးသန့်ဖြစ်သည်။\nราคานี้ยังไม่รวมค่าจัดส่ง';
     else if (!isCOD) {
       // แจ้งเงื่อนไขจัดส่งหลังได้รับสลิปโอนเงิน — ไม่เกี่ยวกับ COD (จ่ายปลายทาง ไม่มีสลิป)
-      // ขึ้นทั้งไทย+พม่าเสมอไม่ขึ้นกับ lang เหมือน MM_REMOTE_NOTE/ข้อความสินค้าหมด
-      summaryText += '\n📦 จัดส่งให้หลังได้รับสลิปโอนเงินค่ะ (ทางร้านจะถ่ายรูปสินค้า+หน้ากล่องให้ดูก่อนส่งค่ะ)\n'
-        + '📦 ငွေလွှဲပြေစာ ရရှိပြီးမှ ပစ္စည်းပို့ဆောင်ပေးပါမည် (ပို့ဆောင်မီ ပစ္စည်းဓာတ်ပုံနှင့် ဘောက်စ်ဓာတ်ပုံ ကြိုတင်ပို့ပေးပါမည်)';
+      // กรณีนี้ (มี SH แล้ว) รวมเป็นข้อความเดียวกับสรุปยอด ไม่แยกบับเบิล (ต่างจากกรณีไม่มี SH
+      // ด้านบนที่แยก — ยืนยันกับผู้ใช้แล้ว)
+      summaryText += '\n' + SHIP_AFTER_SLIP_NOTE;
       if (lang !== 'none') summaryText += '\n\n🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency';
     }
   }
 
-  sendReply(replyToken, summaryText + translatedNote);
+  if (extraBubble) {
+    sendReply(replyToken, [summaryText + translatedNote, extraBubble]);
+  } else {
+    sendReply(replyToken, summaryText + translatedNote);
+  }
   } catch (err) {
     // GAS ไม่มี log ที่ดูง่าย — เก็บ error ล่าสุดไว้ใน Script Property แทน
     // (ดูได้ผ่าน GAS Editor > Project Settings > Script Properties เท่านั้น ไม่มี
@@ -518,7 +538,11 @@ function doPost(e) {
 // ─── sendReply ────────────────────────────────────────────────────────────────
 
 function sendReply(token, text, imageUrl) {
-  var messages = [{ type: 'text', text: text }];
+  // รับได้ทั้ง string เดียว (ปกติ) หรือ array ของ string หลายข้อความ — ส่งเป็นหลายบับเบิลใน
+  // reply call เดียวกัน (replyToken ใช้ได้แค่ครั้งเดียว ยิงซ้ำไม่ได้ ต้องรวมเป็น array นี้แทน
+  // การเรียก sendReply สองรอบ) ใช้ตอนอยากแยกสรุปยอด/โน้ตจัดส่งออกเป็นคนละบับเบิล
+  var texts = Array.isArray(text) ? text : [text];
+  var messages = texts.map(function(t) { return { type: 'text', text: t }; });
   if (imageUrl) messages.push({ type: 'image', originalContentUrl: imageUrl, previewImageUrl: imageUrl });
   UrlFetchApp.fetch('https://api.line.me/v2/bot/message/reply', {
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + CHANNEL_ACCESS_TOKEN },
