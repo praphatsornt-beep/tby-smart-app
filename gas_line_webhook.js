@@ -374,8 +374,11 @@ function doPost(e) {
   var totalPrice = 0, totalPV = 0, productWeight = 0, stockPool = [], detailText = '', outOfStockNote = '';
   Object.keys(orderMap).forEach(function(code) {
     if (OUT_OF_STOCK_CODES.indexOf(code) !== -1) {
-      // ของหมด — ไม่นับเข้า totalPrice/PV/น้ำหนักเลย แค่แจ้งแยกไว้ต่างหาก
-      outOfStockNote += '⚠️ [' + code + '] สินค้าหมด ขออภัยค่ะ ตอนนี้ของยังไม่เข้า\n';
+      // ของหมด — ไม่นับเข้า totalPrice/PV/น้ำหนักเลย แค่แจ้งแยกไว้ต่างหาก ขึ้นทั้งไทย+พม่า
+      // เสมอไม่ว่า lang จะเป็นอะไร (เหมือน MM_REMOTE_NOTE — ลูกค้าส่วนใหญ่เป็นแรงงานพม่า
+      // แต่ไม่ค่อยพิมพ์ "mm " นำหน้าเอง พึ่ง lang==='mm' อย่างเดียวจะไม่ถึงคนส่วนใหญ่)
+      outOfStockNote += '⚠️ [' + code + '] สินค้าหมด ขออภัยค่ะ ตอนนี้ของยังไม่เข้า\n'
+        + '⚠️ [' + code + '] ပစ္စည်းကုန်သွားပါပြီ၊ ခွင့်လွှတ်ပါ။ လောလောဆယ် ပစ္စည်း မရှိသေးပါ။\n';
       return;
     }
     for (var i = 0; i < pData.length; i++) {
