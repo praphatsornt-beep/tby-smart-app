@@ -503,9 +503,11 @@ function doPost(e) {
     summaryText += (lang === 'mm' ? '🚚📦 ပို့ဆောင်မှု (စံပို့ဆောင်မှု): +' : '🚚📦 จัดส่ง (စံပို့ဆောင်မှု): +') + shipBaseEstimate + ' = ฿' + deliverEst.toLocaleString() + '\n';
     summaryText += '\n' + MM_REMOTE_NOTE;
 
-    // เรียงบัญชีธนาคารก่อน แล้วค่อยโน้ตจัดส่งหลังสลิปตามหลัง (ตามที่ผู้ใช้ขอ) — โน้ตใช้ภาษา
-    // เดียวตามที่พิมพ์ (th/mm) หรือทั้งคู่ถ้าไม่ระบุ (lang==='none') ผ่าน _shipAfterSlipNoteFor
-    if (lang !== 'none') extraBubble += '🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency\n\n';
+    // เรียงบัญชีธนาคารก่อน แล้วค่อยโน้ตจัดส่งหลังสลิปตามหลัง (ตามที่ผู้ใช้ขอ) — บัญชีธนาคาร
+    // โชว์เสมอไม่ว่า lang จะเป็นอะไร (2026-09-25 ผู้ใช้ขอเพิ่มให้กรณี lang==='none' ด้วย
+    // จากเดิมที่กันไว้เฉพาะ lang!=='none') ส่วนโน้ตข้อความยังใช้ภาษาเดียวตามที่พิมพ์
+    // (th/mm) หรือทั้งคู่ถ้าไม่ระบุ (lang==='none') ผ่าน _shipAfterSlipNoteFor เหมือนเดิม
+    extraBubble += '🏦 SCB 165-2716485\n👤 Zhulian Sathupradit New Agency\n\n';
     extraBubble += _shipAfterSlipNoteFor(lang);
   } else {
     summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး: ฿' : '💵 สินค้า: ฿') + totalPrice.toLocaleString() + '\n';
