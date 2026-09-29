@@ -585,7 +585,13 @@ def _render_tiktok_affiliate():
         st.info("ยังไม่มีข้อมูล — อัปโหลดไฟล์ที่แท็บ '📥 นำเข้าข้อมูล' ก่อนครับ")
         return
 
-    _tt_df["วันที่"] = pd.to_datetime(_tt_df["order_created_at"]).dt.strftime("%d/%m/%Y")
+    # เก็บเป็น date object จริง (ไม่ใช่ string "dd/mm/yyyy") ให้ st.dataframe คลิกหัวคอลัมน์
+    # แล้วเรียงถูกตามวันที่จริง — ก่อนหน้านี้เก็บเป็น string ทำให้คลิกเรียง "วันที่" ในตาราง
+    # (glide-data-grid รองรับคลิกหัวคอลัมน์เรียงได้เอง) เรียงแบบ lexicographic ตัวอักษรแทน
+    # เช่น "02/05/2026" มาก่อน "01/08/2026" เพราะเทียบ "02" < "01"... ผิดจริง (เจอจริง
+    # 2026-09-29 ตามคำขอ user "กรองวันที่ แล้วเรียงไม่ได้จริง") ส่วนการแสดงผล dd/mm/yyyy
+    # ทำผ่าน column_config=DateColumn(format=...) ด้านล่างแทน ไม่ใช่ format ที่ตัว string
+    _tt_df["วันที่"] = pd.to_datetime(_tt_df["order_created_at"]).dt.date
 
     # ตัดออเดอร์ "ไม่มีสิทธิ์" ออกทั้งหมด — สินค้าตีกลับ/คำสั่งซื้อไม่สมบูรณ์ ไม่ใช่ยอดขาย
     # จริง ไม่ควรโผล่ทั้งในตารางและยอดรวมทุกจุดของแท็บนี้
@@ -700,6 +706,7 @@ def _render_tiktok_order_detail(_tt_df, _tt_row_points):
         hide_index=True, width="stretch",
         column_order=["เลขที่ออเดอร์", "วันที่", "สินค้า", "นายหน้า",
                       "ยอดขาย", "ยอดนายหน้า", "ยอดที่เราได้โดยประมาณ", "สถานะออเดอร์"],
+        column_config={"วันที่": st.column_config.DateColumn("วันที่", format="DD/MM/YYYY")},
         selection_mode="multi-row", on_select="rerun", key="ecom_tiktok_detail_select",
     )
     # clamp กัน index ค้างจากตารางรอบก่อนที่แถวเยอะกว่า (เช่นเพิ่งกดยืนยัน/ยกเลิกเปิดบิล
