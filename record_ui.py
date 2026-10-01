@@ -777,6 +777,7 @@ def render(tab1, products, customers, customer_map):
                         msg        = "✅ ส่งของค้างเก่า"
                         if is_shipping: msg += f" | 🚚 ค่าส่ง {ship_fee:.0f} ฿"
                     # ── iShip + บันทึกรับของเก่า/จ่ายเงิน ─────────────────────────
+                    _staged_iship_dialog = False
                     if is_shipping and r_addr_line:
                         _old_ship_items = []
                         if _rx_df is not None and _rx_edit is not None:
@@ -811,7 +812,7 @@ def render(tab1, products, customers, customer_map):
                                 "remark":       st.session_state.get("m_iship_note", "").strip(),
                                 "default_carrier": m_carrier,
                             }
-                            pass  # _iship_carrier_select set above — dialog triggers automatically
+                            _staged_iship_dialog = True  # dialog triggers automatically — ดูเหตุผลไม่ล้างฟอร์มด้านล่าง
                     elif not is_shipping and _rx_df is not None and _rx_edit is not None:
                         # บันทึกรับของเก่า สำหรับ รับแล้ว / ฝากของ (จ่ายอัตโนมัติตามสัดส่วน)
                         _process_old_items_receipt(
@@ -843,11 +844,18 @@ def render(tab1, products, customers, customer_map):
                             "old_total":   _rx_total_pay,
                             "grand_total": total_amt + _rx_total_pay,
                         }
-                    # ล้างฟอร์มสำหรับลูกค้าถัดไป
-                    for _k in _sale_keys:
-                        st.session_state.pop(_k, None)
-                    st.session_state.pop(_cart_key, None)
-                    st.session_state["_cart_version"] = _cart_ver + 1
+                    # ล้างฟอร์มสำหรับลูกค้าถัดไป — ข้ามถ้ากำลังจะเปิด dialog เลือกขนส่ง
+                    # (_staged_iship_dialog) เพราะธุรกรรมขายถูกบันทึกจริงไปแล้ว (insert_transactions_batch
+                    # ด้านบน) แต่ขั้นเลือกขนส่ง/ยิง iShip ยังไม่จบ — ถ้าล้างฟอร์มตอนนี้เลย ปุ่ม
+                    # "⬅️ ย้อนกลับแก้ไข" ใน dialog (app.py) จะกลับมาเจอฟอร์มว่างเปล่า ข้อมูลที่เพิ่ง
+                    # พิมพ์ (ตะกร้า/เบอร์โทร/ที่อยู่) หายหมดทั้งที่ปุ่มนั้นตั้งใจให้กลับมาแก้ได้
+                    # (เจอจริงจากผู้ใช้รายงาน 2026-10-01) ปล่อยให้ _do_clear_after_iship (ด้านบนสุด
+                    # ของฟังก์ชันนี้) เป็นคนล้างแทนตอนกด "ส่ง iShip"/"ข้าม" สำเร็จจริงๆ
+                    if not _staged_iship_dialog:
+                        for _k in _sale_keys:
+                            st.session_state.pop(_k, None)
+                        st.session_state.pop(_cart_key, None)
+                        st.session_state["_cart_version"] = _cart_ver + 1
                     st.rerun()
 
                 # ── ปุ่มรับแต่ของเก่า (เฉพาะ ส่งพัสดุ + ไม่มีสินค้าใหม่) ────────
@@ -1448,7 +1456,8 @@ def render(tab1, products, customers, customer_map):
                     # ตั้ง iShip pending เพื่อส่งขนส่ง — ไม่ต้องใส่ชื่อลูกค้า/รหัสสินค้าซ้ำ
                     # ตรงนี้ เพราะ app.py._show_carrier_select ประกอบให้เองจาก customer_name/items
                     _sp_remark = " ".join(filter(None, [_sp_notes.strip(), _sp_iship_note.strip()]))
-                    if iship_api.is_configured():
+                    _sp_staged_iship_dialog = iship_api.is_configured()
+                    if _sp_staged_iship_dialog:
                         st.session_state.pop("_cs_carrier_sel", None)
                         st.session_state.pop("_cs_carrier_table", None)
                         st.session_state.pop("_cs_table_sel_prev", None)
@@ -1472,11 +1481,17 @@ def render(tab1, products, customers, customer_map):
                             "default_carrier": _sp_carrier,
                         }
                         st.session_state["_open_carrier_select"] = True
-                    for _k in _sp_keys:
-                        st.session_state.pop(_k, None)
-                    st.session_state["_sp_addr_ver"] = _sp_av + 1
-                    st.session_state.pop(f"sp_cart_{_sp_cart_ver_now}", None)
-                    st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
+                    # ล้างฟอร์มสำหรับการส่งถัดไป — ข้ามถ้ากำลังจะเปิด dialog เลือกขนส่ง เหตุผล
+                    # เดียวกับฝั่งบันทึกขาย (ดู _staged_iship_dialog ด้านบนในแท็บ 📝 บันทึกขาย):
+                    # แถว shipments ถูกบันทึกจริงไปแล้ว แต่ปุ่ม "⬅️ ย้อนกลับแก้ไข" ใน dialog ควร
+                    # กลับมาเจอฟอร์มที่ยังมีข้อมูลเดิมอยู่ ไม่ใช่ฟอร์มว่างเปล่า (เจอจริงจากผู้ใช้
+                    # รายงาน 2026-10-01) ปล่อยให้ _do_clear_after_iship ล้างแทนตอนจบ dialog จริงๆ
+                    if not _sp_staged_iship_dialog:
+                        for _k in _sp_keys:
+                            st.session_state.pop(_k, None)
+                        st.session_state["_sp_addr_ver"] = _sp_av + 1
+                        st.session_state.pop(f"sp_cart_{_sp_cart_ver_now}", None)
+                        st.session_state["_sp_cart_ver"] = _sp_cart_ver_now + 1
                     st.rerun()
 
             st.caption("กรอกข้อมูลด้านบนแล้วกด 💾 บันทึกการส่งของ — tracking จะบันทึกอัตโนมัติหลังส่ง iShip")
