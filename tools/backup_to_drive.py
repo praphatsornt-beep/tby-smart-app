@@ -175,5 +175,21 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
+        # พิมพ์ traceback เต็ม + response body (ถ้าเป็น httpx error) ออกทาง stdout แบบ
+        # flush ทันทีเอง ก่อนปล่อยให้ Python พิมพ์ traceback เริ่มต้นผ่าน stderr ตามปกติ —
+        # เจอจริง 2026-10-01: log ของ GitHub Actions รอบที่ backup ล้มเหลว (26-30 ก.ย.)
+        # ตัดจบแค่ "Error: Process completed with exit code 1." ไม่มี traceback ของ
+        # Python ติดมาด้วยเลยสักบรรทัด (สงสัยว่า stdout/stderr buffer ไม่ flush ทันก่อน
+        # process จบ) ทำให้วินิจฉัยสาเหตุจริงจาก log ไม่ได้เลย ต้องเดาจากพฤติกรรมอื่นแทน —
+        # แก้ไม่ให้เกิดซ้ำด้วยการ flush เอง + ตั้ง PYTHONUNBUFFERED=1 ใน backup.yml คู่กัน
+        import traceback
+        print("\n" + "=" * 70, flush=True)
+        print(f"❌ Backup ล้มเหลว: {type(e).__name__}: {e}", flush=True)
+        if isinstance(e, httpx.HTTPStatusError):
+            print(f"HTTP {e.response.status_code} response body: {e.response.text}", flush=True)
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        print("=" * 70, flush=True)
         _notify_failure(e)
-        raise
+        sys.exit(1)

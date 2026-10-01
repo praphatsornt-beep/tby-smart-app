@@ -20,6 +20,7 @@ jobs:
 
       - name: Run backup
         env:
+          PYTHONUNBUFFERED:     "1"
           SUPABASE_URL:         ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY:         ${{ secrets.SUPABASE_KEY }}
           GDRIVE_CLIENT_ID:     ${{ secrets.GDRIVE_CLIENT_ID }}
