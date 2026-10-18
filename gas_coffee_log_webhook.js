@@ -192,13 +192,15 @@ function doPost(e) {
       sendQuickReplyGas(replyToken, '🧾 เปิดบิล หรือ ไม่เปิดบิล?', [
         { type: 'action', action: { type: 'message', label: 'เปิดบิล', text: 'เปิดบิล' } },
         { type: 'action', action: { type: 'message', label: 'บันทึกขาย+คืนคะแนน', text: 'เปิดบิล_คืนคะแนน' } },
+        { type: 'action', action: { type: 'message', label: 'บันทึกขาย+ยืมคะแนน', text: 'เปิดบิล_ยืมคะแนน' } },
         { type: 'action', action: { type: 'message', label: 'ไม่เปิดบิล', text: 'ไม่เปิดบิล' } },
         { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
       ]);
       return;
     }
     if (_orderState.step === 'waiting_bill'
-        && (userMessage === 'เปิดบิล' || userMessage === 'ไม่เปิดบิล' || userMessage === 'เปิดบิล_คืนคะแนน')) {
+        && (userMessage === 'เปิดบิล' || userMessage === 'ไม่เปิดบิล'
+            || userMessage === 'เปิดบิล_คืนคะแนน' || userMessage === 'เปิดบิล_ยืมคะแนน')) {
       _orderState.bill = userMessage;
       _orderState.step = 'waiting_confirm';
       _cache.put(_orderCacheKey, JSON.stringify(_orderState), 300);
@@ -341,7 +343,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ ไม่ต้องพิมพ์คำสั่ง คืนคะแนน แยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)");
+        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)");
       } else {
         results.push("⚠️ ไม่พบคำสั่ง: " + command);
       }
@@ -656,6 +658,7 @@ function buildTbyOrderPreview_(state) {
   var delivLabel = state.delivery === 'รับของ'   ? '✅ รับของแล้ว' : '📦 ยังไม่ได้รับ (ส่งของ)';
   var billLabel  = state.bill === 'เปิดบิล' ? '🧾 เปิดบิลแล้ว'
     : state.bill === 'เปิดบิล_คืนคะแนน' ? '🧾 เปิดบิลแล้ว + 🔗 คืนคะแนน'
+    : state.bill === 'เปิดบิล_ยืมคะแนน' ? '🧾 เปิดบิลแล้ว + 📝 ยืมคะแนน'
     : '📋 ยังไม่เปิดบิล';
 
   var msg = '📋 ตรวจสอบก่อนบันทึก: คุณ' + state.custName + '\n';
@@ -676,7 +679,8 @@ function commitTbyOrder_(state, replyToken) {
   var billNo        = _getNextBillNo_(today);
   var receiveNow    = state.delivery === 'รับของ';
   var linkPv        = state.bill === 'เปิดบิล_คืนคะแนน';
-  var billStatus    = (state.bill === 'เปิดบิล' || linkPv) ? 'เปิดบิลแล้ว' : 'ยังไม่เปิดบิล';
+  var linkLend      = state.bill === 'เปิดบิล_ยืมคะแนน';
+  var billStatus    = (state.bill === 'เปิดบิล' || linkPv || linkLend) ? 'เปิดบิลแล้ว' : 'ยังไม่เปิดบิล';
   var payStatus     = state.pay  === 'จ่ายเงิน' ? 'จ่ายแล้ว' : 'ค้างจ่าย';
   var transactionType = (billStatus === 'ยังไม่เปิดบิล' && receiveNow) ? 'เบิกของก่อน' : 'ขายปกติ';
 
@@ -708,7 +712,25 @@ function commitTbyOrder_(state, replyToken) {
   if (billStatus === 'ยังไม่เปิดบิล') msg += '✨ คะแนนรอเปิดบิล: ' + numFmt_(totalPV) + ' PV\n';
   msg += '🧾 เลขที่บิล: ' + billNo + '\n';
 
-  if (!linkPv) {
+  if (!linkPv && !linkLend) {
+    replyMessage(replyToken, msg);
+    return;
+  }
+
+  // ── "บันทึกขาย เก็บ PV ยืมคะแนน" — สร้างรายการยืมคะแนนใหม่ทันทีจากบิลที่เพิ่งเปิดนี้
+  // (เพิ่ม 2026-10-18 ตามคำขอ — คู่กับ "บันทึกขาย+คืนคะแนน" ด้านบน ปิดวงจรยืม/คืนคะแนน
+  // ให้ทำจบในไลน์ได้ทั้งหมด ไม่ต้องสลับไปเปิดแอป Streamlit) ง่ายกว่าฝั่งคืนคะแนนเพราะ
+  // "ยืม" คือสร้างเรคอร์ดใหม่เสมอ ไม่มีของเดิมให้ค้นหา/เลือกแบบฝั่งคืนคะแนน — พอร์ตตรงจาก
+  // pv_loan_ui.py's "➕ บันทึกยืมคะแนนใหม่" (สร้าง pv_loans 1 แถว, pv_lent/bv_lent/baht_lent
+  // เป็น snapshot จาก get_bill_totals ตอนนั้นเลย ไม่ join สดทุกครั้งที่อ่านทีหลัง)
+  if (linkLend) {
+    var lendTotals = _getBillTotals_(billNo);
+    _sbPost_('pv_loans', {
+      id: Utilities.getUuid(), customer_id: state.custId, lend_date: today, lend_bill_no: billNo,
+      pv_lent: lendTotals.pv, bv_lent: lendTotals.bv, baht_lent: lendTotals.baht,
+      notes: 'บันทึกผ่าน LINE Coffee Log',
+    });
+    msg += '📝 บันทึกยืมคะแนนให้คุณ' + state.custName + ' แล้ว (' + numFmt_(lendTotals.pv) + ' PV)\n';
     replyMessage(replyToken, msg);
     return;
   }
