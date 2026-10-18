@@ -63,6 +63,17 @@ function _sbPatch_(path, data) {
     muteHttpExceptions: true,
   });
 }
+function _sbPost_(table, data) {
+  UrlFetchApp.fetch(getSupabaseUrl_() + '/rest/v1/' + table, {
+    method: 'POST',
+    headers: {
+      'apikey': getSupabaseKey_(), 'Authorization': 'Bearer ' + getSupabaseKey_(),
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal',
+    },
+    payload: JSON.stringify(data),
+    muteHttpExceptions: true,
+  });
+}
 
 // จำนวนห่อต่อ 1 ลัง แยกตามตัวอักษรตัวแรกของรหัส (ตัวเดียวกับที่ใช้เลือกชีท
 // "Coffee" + ตัวอักษรนี้) — B = กาแฟ 40 ซอง (ลังละ 18 ห่อ), S = กาแฟ 84 ซอง
@@ -114,6 +125,88 @@ function doPost(e) {
   // เพราะตัวเลือกในลิสต์มาจาก DB จริงอยู่แล้ว ไม่มีความเสี่ยงพิมพ์รหัสผิด)
   if (userMessage.toLowerCase() === 'sp') {
     handleListUnreceivedReturns_(replyToken);
+    return;
+  }
+
+  // ── บันทึกรายการขาย/เบิกของเข้า TBY SMART APP จากไลน์นี้โดยตรง ─────────────────
+  // เพิ่ม 2026-10-18 ตามคำขอ (บอทนี้จะใช้บันทึกข้อมูลหลังร้านต่อไป ไม่ใช่แค่กาแฟ) —
+  // พิมพ์ "[ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...]" เฉยๆ ไม่ต้องมีคำสั่งนำหน้า แล้วบอท
+  // จะถามทีละขั้น (จ่ายเงิน/ไม่จ่าย → รับของ/ส่งของ → เปิดบิล/ไม่เปิดบิล → ยืนยัน/ยกเลิก)
+  // ก่อนเขียนลง Supabase transactions จริง — ยืนยันกับผู้ใช้แล้ว 3 จุด:
+  //   1. ไม่สร้างพัสดุ/ออเดอร์ iShip จริง — "ส่งของ" แค่ติดสถานะในระบบเฉยๆ (ตีความว่า
+  //      ของยังไม่ถึงมือลูกค้าจริง เทียบเท่า "ฝากของ" ในแอปหลัก → initial_qty_received=0
+  //      ส่วน "รับของ" = ลูกค้าได้ของแล้ว → initial_qty_received=qty เหมือน "รับของแล้ว"
+  //      ของแอปหลัก — ดู record_ui.py's receive_now/m_receipt ถ้าตีความผิดแก้ได้ตรงนี้)
+  //   2. รูปแบบคำสั่ง: พิมพ์ชื่อ+รายการเฉยๆ แล้วให้บอทถามทีละขั้น (ไม่ใช่คำสั่งสำเร็จรูป
+  //      แบบ เบิก/เบิกจ่าย ของ gas_line_webhook.js)
+  //   3. ไม่ต้องมี #staffTag นำหน้า — OA นี้ใช้ภายในอยู่แล้ว
+  // ไม่มีขั้นยืนยันซ้อนสองรอบ (ตอบปุ่มสุดท้ายแล้วค่อยมีปุ่ม "ยืนยันบันทึก" อีกรอบเดียว)
+  var _orderCacheKey  = 'tbyorder_' + _userId;
+  var _orderStateRaw  = _userId ? _cache.get(_orderCacheKey) : null;
+  if (_orderStateRaw) {
+    var _orderState = JSON.parse(_orderStateRaw);
+
+    if (userMessage === 'ยกเลิก') {
+      _cache.remove(_orderCacheKey);
+      replyMessage(replyToken, '❌ ยกเลิกแล้วค่ะ ยังไม่มีการบันทึกข้อมูล');
+      return;
+    }
+
+    if (_orderState.step === 'waiting_pay' && (userMessage === 'จ่ายเงิน' || userMessage === 'ไม่จ่าย')) {
+      _orderState.pay  = userMessage;
+      _orderState.step = 'waiting_delivery';
+      _cache.put(_orderCacheKey, JSON.stringify(_orderState), 300);
+      sendQuickReplyGas(replyToken, '📦 รับของแล้ว หรือ ยังไม่ได้ส่งของ (ส่งของ)?', [
+        { type: 'action', action: { type: 'message', label: 'รับของ', text: 'รับของ' } },
+        { type: 'action', action: { type: 'message', label: 'ส่งของ', text: 'ส่งของ' } },
+        { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+      ]);
+      return;
+    }
+    if (_orderState.step === 'waiting_delivery' && (userMessage === 'รับของ' || userMessage === 'ส่งของ')) {
+      _orderState.delivery = userMessage;
+      _orderState.step     = 'waiting_bill';
+      _cache.put(_orderCacheKey, JSON.stringify(_orderState), 300);
+      sendQuickReplyGas(replyToken, '🧾 เปิดบิล หรือ ไม่เปิดบิล?', [
+        { type: 'action', action: { type: 'message', label: 'เปิดบิล', text: 'เปิดบิล' } },
+        { type: 'action', action: { type: 'message', label: 'ไม่เปิดบิล', text: 'ไม่เปิดบิล' } },
+        { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+      ]);
+      return;
+    }
+    if (_orderState.step === 'waiting_bill' && (userMessage === 'เปิดบิล' || userMessage === 'ไม่เปิดบิล')) {
+      _orderState.bill = userMessage;
+      _orderState.step = 'waiting_confirm';
+      _cache.put(_orderCacheKey, JSON.stringify(_orderState), 300);
+      sendQuickReplyGas(replyToken, buildTbyOrderPreview_(_orderState), [
+        { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_tbyorder' } },
+        { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+      ]);
+      return;
+    }
+    if (_orderState.step === 'waiting_confirm') {
+      if (userMessage === 'ยืนยัน_tbyorder') {
+        _cache.remove(_orderCacheKey);
+        replyMessage(replyToken, commitTbyOrder_(_orderState));
+      } else {
+        sendQuickReplyGas(replyToken, '⚠️ กรุณากดปุ่มยืนยันหรือยกเลิกค่ะ', [
+          { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_tbyorder' } },
+          { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+        ]);
+      }
+      return;
+    }
+    // พิมพ์อย่างอื่นมาตอนกำลังรออยู่กลางขั้น — เตือนให้เลือกจากปุ่มหรือยกเลิก
+    replyMessage(replyToken, '⚠️ กรุณาเลือกจากปุ่มด้านบน หรือพิมพ์ "ยกเลิก" ค่ะ');
+    return;
+  }
+
+  // ── เริ่มรายการใหม่: "[ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...]" ไม่ต้องมีคำสั่งนำหน้า —
+  // รหัสสินค้าจริงเป็น LETTERS+4DIGITS เสมอ (ยืนยันแล้วทั้งระบบ) ใช้แยกส่วน "ชื่อ" ออก
+  // จากส่วน "รายการ" แบบไม่ต้องมีคำสั่งคั่นกลาง
+  var _orderStart = userMessage.match(/^(.+?)\s+((?:[A-Za-z]+\d{4}-\d+(?:\.\d+)?\s*)+)$/i);
+  if (_orderStart) {
+    startTbyOrder_(_orderStart[1].trim(), _orderStart[2].trim(), replyToken, _userId, _cache, _orderCacheKey);
     return;
   }
 
@@ -224,7 +317,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)");
+        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น)");
       } else {
         results.push("⚠️ ไม่พบคำสั่ง: " + command);
       }
@@ -350,6 +443,203 @@ function handleEcommerceReturnReceived_(rawCodes, replyToken, confirmed) {
     msg += '⚠️ ไม่พบรหัสนี้ในระบบ เช็คอีกทีค่ะ: ' + notFound.join(', ');
   }
   replyMessage(replyToken, msg.trim() || '❌ ไม่พบรหัสที่พิมพ์ในระบบเลย');
+}
+
+// ── ───────────────────────────────────────────────────────────────────────────
+// ฟังก์ชันสำหรับ "บันทึกรายการขาย/เบิกของเข้า TBY SMART APP" (เพิ่ม 2026-10-18) —
+// พอร์ตมาจาก gas_line_webhook.js's _getProducts/numFmt/_today/_getNextBillNo/
+// findOneCustomer (ชื่อฟังก์ชันต่อ _ ท้ายกันชนกับต้นฉบับ เผื่อวันหลังก็อปโค้ดชิ้นอื่น
+// มาจากไฟล์นั้นเพิ่มแล้วชื่อซ้ำกัน) — ตัดส่วน COD/ค่าส่ง/iShip ออกหมด เพราะฟีเจอร์นี้
+// แค่ติดสถานะในระบบ ไม่สร้างพัสดุจริง (ยืนยันกับผู้ใช้แล้ว)
+// ── ───────────────────────────────────────────────────────────────────────────
+
+var _cachedProducts_ = null;
+function _getProducts_() {
+  if (_cachedProducts_) return _cachedProducts_;
+  var _raw = _sbGet_('/rest/v1/products?select=id,name,name_mm,price,points_per_unit,weight_grams&order=id');
+  if (!Array.isArray(_raw)) {
+    throw new Error('_getProducts_ non-array response: ' + JSON.stringify(_raw));
+  }
+  _cachedProducts_ = _raw.map(function(p) {
+    return [p.id, p.name, p.name_mm || '', p.price, p.points_per_unit, (p.weight_grams || 0) / 1000];
+  });
+  return _cachedProducts_;
+}
+
+function numFmt_(n) {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function _todayBkk_() {
+  return Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd');
+}
+
+// เลขที่บิล YYMMDD-NNN ถัดไป (รูปแบบเดียวกับ database.py get_next_bill_no /
+// gas_line_webhook.js's _getNextBillNo)
+function _getNextBillNo_(dateStr) {
+  var prefix = dateStr.replace(/-/g, '').substring(2);
+  var rows = _sbGet_('/rest/v1/transactions?bill_no=like.' + prefix + '-*&select=bill_no') || [];
+  var maxNum = 0;
+  rows.forEach(function(r) {
+    var bn = r.bill_no || '';
+    if (bn.indexOf(prefix + '-') === 0) {
+      var n = parseInt(bn.split('-')[1], 10);
+      if (!isNaN(n) && n > maxNum) maxNum = n;
+    }
+  });
+  var next = maxNum + 1;
+  var nextStr = next < 10 ? '00' + next : next < 100 ? '0' + next : '' + next;
+  return prefix + '-' + nextStr;
+}
+
+// ค้นหาลูกค้า 1 คนจากชื่อ — ต่างจาก gas_line_webhook.js's findOneCustomer แค่ตอบ
+// ข้อความชัดเจนเมื่อไม่พบเลย (ไม่เงียบ) เพราะที่นี่ไม่มีคำสั่งนำหน้าบอกเจตนา ("[ชื่อ]
+// CODE-จำนวน" ธรรมดา) ผู้ใช้ควรรู้ทันทีว่าพิมพ์ชื่อผิดหรือหาไม่เจอ ไม่ใช่เงียบแล้วงงว่า
+// ทำไมบอทไม่ตอบ
+function findOneCustomer_(name, replyToken, resendTemplate) {
+  var enc = encodeURIComponent('%' + name + '%');
+  var rows = _sbGet_('/rest/v1/customers?name=ilike.' + enc + '&select=id,name');
+
+  if (!rows || rows.length === 0) {
+    var needle = name.trim().toLowerCase().replace(/\s+/g, '');
+    var allRows = _sbGet_('/rest/v1/customers?select=id,name') || [];
+    rows = allRows.filter(function(c) {
+      return c.name.toLowerCase().replace(/\s+/g, '').indexOf(needle) !== -1;
+    });
+  }
+  if (!rows || rows.length === 0) {
+    replyMessage(replyToken, '❌ ไม่พบลูกค้าชื่อ "' + name + '" ในระบบค่ะ');
+    return null;
+  }
+
+  if (rows.length === 1 && rows[0].name.toLowerCase() !== name.trim().toLowerCase()) {
+    var firstWord = name.trim().split(/\s+/)[0];
+    if (firstWord.length >= 2) {
+      var prefixEnc = encodeURIComponent(firstWord + '%');
+      var similar = _sbGet_('/rest/v1/customers?name=ilike.' + prefixEnc + '&select=id,name') || [];
+      if (similar.length > 1) rows = similar;
+    }
+  }
+
+  if (rows.length > 1) {
+    if (rows.length <= 13) {
+      var items = rows.map(function(c) {
+        var text = (resendTemplate || '{name}').replace('{name}', c.name);
+        return { type: 'action', action: { type: 'message', label: c.name.substring(0, 20), text: text } };
+      });
+      sendQuickReplyGas(replyToken, '🔍 พบ ' + rows.length + ' คน ตรงกับ "' + name + '" เลือกเลยค่ะ:', items);
+    } else {
+      var names = rows.slice(0, 13).map(function(c) { return c.name; }).join(', ');
+      replyMessage(replyToken, '🔍 พบ ' + rows.length + ' คน: ' + names + ' ...\nพิมพ์ชื่อให้ชัดขึ้นค่ะ');
+    }
+    return null;
+  }
+  return rows[0];
+}
+
+// เริ่มรายการใหม่ — ตรวจสินค้า/ลูกค้าให้ครบก่อน แล้วเข้าขั้นแรกของ flow (ถามจ่ายเงินไหม)
+function startTbyOrder_(name, itemsText, replyToken, userId, cache, orderCacheKey) {
+  var itemTokens = itemsText.trim().split(/\s+/);
+  var pData = _getProducts_();
+  var lines = '', notFound = '', valid = [];
+
+  itemTokens.forEach(function(tok) {
+    var p    = tok.split('-');
+    var code = p[0].toUpperCase();
+    var qty  = parseFloat(p[1]);
+    var prod = null;
+    for (var i = 0; i < pData.length; i++) {
+      if (pData[i][0].toString().toUpperCase() === code) {
+        prod = { name: pData[i][1], price: pData[i][3], pv: pData[i][4] };
+        break;
+      }
+    }
+    if (!prod) { notFound += '❌ ไม่พบสินค้า [' + code + ']\n'; return; }
+    var totalAmt = prod.price * qty;
+    valid.push({ code: code, qty: qty, name: prod.name, price: prod.price, pv: prod.pv, totalAmt: totalAmt });
+    lines += '📦 [' + code + '] ' + prod.name + '\n      ' + qty + ' ชิ้น x ฿' + numFmt_(prod.price) + ' = ฿' + numFmt_(totalAmt) + '\n';
+  });
+
+  if (valid.length === 0) {
+    replyMessage(replyToken, notFound || '❌ ไม่พบสินค้าที่ระบุ');
+    return;
+  }
+
+  var _resendItems = valid.map(function(it) { return it.code + '-' + it.qty; }).join(' ');
+  var cust = findOneCustomer_(name, replyToken, '{name} ' + _resendItems);
+  if (!cust) return; // findOneCustomer_ ตอบไปแล้ว (ไม่พบ/ให้เลือกจากเมนู)
+
+  var state = {
+    step: 'waiting_pay',
+    custId: cust.id, custName: cust.name,
+    items: valid, lines: lines, notFound: notFound,
+  };
+  if (userId) cache.put(orderCacheKey, JSON.stringify(state), 300);
+
+  sendQuickReplyGas(replyToken,
+    (notFound ? notFound + '\n' : '') + '📋 คุณ' + cust.name + '\n' + lines + '\n💰 จ่ายเงินหรือยัง?',
+    [
+      { type: 'action', action: { type: 'message', label: 'จ่ายเงิน', text: 'จ่ายเงิน' } },
+      { type: 'action', action: { type: 'message', label: 'ไม่จ่าย', text: 'ไม่จ่าย' } },
+      { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+    ]
+  );
+}
+
+function buildTbyOrderPreview_(state) {
+  var totalAll = state.items.reduce(function(s, it) { return s + it.totalAmt; }, 0);
+  var totalPV  = state.items.reduce(function(s, it) { return s + it.pv * it.qty; }, 0);
+  var payLabel   = state.pay      === 'จ่ายเงิน' ? '✅ จ่ายแล้ว' : '🔴 ค้างจ่าย';
+  var delivLabel = state.delivery === 'รับของ'   ? '✅ รับของแล้ว' : '📦 ยังไม่ได้รับ (ส่งของ)';
+  var billLabel  = state.bill     === 'เปิดบิล'   ? '🧾 เปิดบิลแล้ว' : '📋 ยังไม่เปิดบิล';
+
+  var msg = '📋 ตรวจสอบก่อนบันทึก: คุณ' + state.custName + '\n';
+  msg += '─────────────────\n' + state.lines + '─────────────────\n';
+  msg += '💰 ยอดรวม: ฿' + numFmt_(totalAll) + ' (' + payLabel + ')\n';
+  msg += '📦 สถานะรับของ: ' + delivLabel + '\n';
+  msg += '🧾 สถานะบิล: ' + billLabel + '\n';
+  if (state.bill === 'ไม่เปิดบิล') msg += '✨ คะแนนรอเปิดบิล: ' + numFmt_(totalPV) + ' PV\n';
+  return msg;
+}
+
+// บันทึกจริงลง Supabase transactions — สูตร transaction_type/initial_qty_received
+// เดียวกับ record_ui.py's บันทึกขาย (receive_now/m_bill logic)
+function commitTbyOrder_(state) {
+  var today        = _todayBkk_();
+  var billNo        = _getNextBillNo_(today);
+  var receiveNow    = state.delivery === 'รับของ';
+  var billStatus    = state.bill === 'เปิดบิล' ? 'เปิดบิลแล้ว' : 'ยังไม่เปิดบิล';
+  var payStatus     = state.pay  === 'จ่ายเงิน' ? 'จ่ายแล้ว' : 'ค้างจ่าย';
+  var transactionType = (billStatus === 'ยังไม่เปิดบิล' && receiveNow) ? 'เบิกของก่อน' : 'ขายปกติ';
+
+  state.items.forEach(function(it) {
+    _sbPost_('transactions', {
+      id: Utilities.getUuid(),
+      date: today,
+      customer_id: state.custId,
+      product_id: it.code,
+      product_name: it.name,
+      qty: it.qty,
+      price_per_unit: it.price,
+      points_per_unit: it.pv,
+      total_amount: it.totalAmt,
+      initial_qty_received: receiveNow ? it.qty : 0,
+      transaction_type: transactionType,
+      bill_status: billStatus,
+      pay_status: payStatus,
+      notes: 'บันทึกผ่าน LINE Coffee Log',
+      bill_no: billNo,
+    });
+  });
+
+  var totalAll = state.items.reduce(function(s, it) { return s + it.totalAmt; }, 0);
+  var totalPV  = state.items.reduce(function(s, it) { return s + it.pv * it.qty; }, 0);
+  var msg = '✅ บันทึกแล้ว คุณ' + state.custName + '\n';
+  msg += '─────────────────\n' + state.lines + '─────────────────\n';
+  msg += '💰 ยอดรวม: ฿' + numFmt_(totalAll) + (payStatus === 'จ่ายแล้ว' ? ' (จ่ายแล้ว)' : ' (ค้างจ่าย)') + '\n';
+  if (billStatus === 'ยังไม่เปิดบิล') msg += '✨ คะแนนรอเปิดบิล: ' + numFmt_(totalPV) + ' PV\n';
+  msg += '🧾 เลขที่บิล: ' + billNo + '\n';
+  return msg;
 }
 
 function parseDate(s) {
