@@ -128,6 +128,28 @@ function doPost(e) {
     return;
   }
 
+  // ── คืนคะแนน [ชื่อลูกค้า] [bill_no] — ผูกบิลจริงที่เปิดแล้วเข้ากับยืมคะแนนที่ค้างคืน ───
+  // เพิ่ม 2026-10-18 ตามคำขอ — คู่กับแท็บ 💳 ยืมคะแนน ของแอป Streamlit (pv_loan_ui.py/
+  // pv_loans+pv_loan_repayments) บิลที่จะคืนต้องมีอยู่แล้วจริง (เปิดบิลแล้วผ่านบันทึกขาย
+  // ปกติ หรือผ่านคำสั่ง "[ชื่อ] CODE-จำนวน..." ด้านล่างนี้ก่อน) คำสั่งนี้แค่ผูก/คำนวณ
+  // ฿/PV/BV ของบิลนั้นเข้ากับยืมคะแนนที่ยังค้างอยู่ — ไม่สร้าง transactions ใหม่
+  var _repayPv = userMessage.match(/^คืนคะแนน\s+(.+?)\s+(\S+)$/i);
+  if (_repayPv) {
+    handlePvRepayment_(_repayPv[1].trim(), _repayPv[2].trim(), replyToken);
+    return;
+  }
+  // เลือกว่าจะคืนให้ยืมรายการไหน (ลูกค้าคนนี้มียืมค้างมากกว่า 1 รายการ)
+  var _repayPvPick = userMessage.match(/^คืนคะแนน_เลือก\s+(\S+)\s+(\S+)$/i);
+  if (_repayPvPick) {
+    handlePvRepaymentPick_(_repayPvPick[1], _repayPvPick[2], replyToken);
+    return;
+  }
+  var _repayPvConfirm = userMessage.match(/^ยืนยัน_คืนคะแนน\s+(\S+)\s+(\S+)$/i);
+  if (_repayPvConfirm) {
+    commitPvRepayment_(_repayPvConfirm[1], _repayPvConfirm[2], replyToken);
+    return;
+  }
+
   // ── บันทึกรายการขาย/เบิกของเข้า TBY SMART APP จากไลน์นี้โดยตรง ─────────────────
   // เพิ่ม 2026-10-18 ตามคำขอ (บอทนี้จะใช้บันทึกข้อมูลหลังร้านต่อไป ไม่ใช่แค่กาแฟ) —
   // พิมพ์ "[ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...]" เฉยๆ ไม่ต้องมีคำสั่งนำหน้า แล้วบอท
@@ -317,7 +339,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น)");
+        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วเข้ากับยืมคะแนนที่ค้างคืน (บิลต้องเปิดบิลแล้วจริงก่อน)");
       } else {
         results.push("⚠️ ไม่พบคำสั่ง: " + command);
       }
@@ -679,6 +701,197 @@ function commitTbyOrder_(state) {
   if (billStatus === 'ยังไม่เปิดบิล') msg += '✨ คะแนนรอเปิดบิล: ' + numFmt_(totalPV) + ' PV\n';
   msg += '🧾 เลขที่บิล: ' + billNo + '\n';
   return msg;
+}
+
+// ── ───────────────────────────────────────────────────────────────────────────
+// ฟังก์ชันสำหรับ "คืนคะแนน" (เพิ่ม 2026-10-18) — คู่กับแท็บ 💳 ยืมคะแนน ของแอป Streamlit
+// (pv_loan_ui.py, ตาราง pv_loans/pv_loan_repayments) ผูกบิลจริงที่เปิดแล้วเข้ากับยืม
+// คะแนนที่ยังค้างคืนอยู่ — ไม่มี CacheService state เหมือน TBY order-entry ด้านบน เพราะ
+// ทุกขั้นส่ง loanId+billNo กลับมาในปุ่มได้ตรงๆ (เหมือนแพทเทิร์น รับคืน/ยืนยัน_รับคืน
+// ของพัสดุ Shopee ด้านบน — เรียบง่ายกว่าเก็บ state ไว้)
+// ── ───────────────────────────────────────────────────────────────────────────
+
+// คำนวณยอด ฿/PV/BV รวมของบิลที่ "เปิดบิลแล้ว" เลขนี้ (พอร์ตจาก database.py's
+// get_bill_totals — BV อยู่แค่ใน products.bv_per_unit ไม่มีคอลัมน์นี้ใน transactions)
+function _getBillTotals_(billNo) {
+  var rows = _sbGet_('/rest/v1/transactions?bill_no=eq.' + encodeURIComponent(billNo)
+    + '&bill_status=eq.' + encodeURIComponent('เปิดบิลแล้ว')
+    + '&select=product_id,qty,total_amount,points_per_unit,customer_id') || [];
+  if (rows.length === 0) return { baht: 0, pv: 0, bv: 0, found: false, customer_id: null };
+
+  var baht = 0, pv = 0, productIds = [];
+  rows.forEach(function(r) {
+    baht += parseFloat(r.total_amount || 0);
+    pv += parseFloat(r.points_per_unit || 0) * parseFloat(r.qty || 0);
+    if (r.product_id && productIds.indexOf(r.product_id) === -1) productIds.push(r.product_id);
+  });
+  var bvMap = {};
+  if (productIds.length > 0) {
+    var enc = productIds.map(function(p) { return encodeURIComponent(p); }).join(',');
+    var prodRows = _sbGet_('/rest/v1/products?id=in.(' + enc + ')&select=id,bv_per_unit') || [];
+    prodRows.forEach(function(p) { bvMap[p.id] = parseFloat(p.bv_per_unit || 0); });
+  }
+  var bv = 0;
+  rows.forEach(function(r) { bv += (bvMap[r.product_id] || 0) * parseFloat(r.qty || 0); });
+  return { baht: baht, pv: pv, bv: bv, found: true, customer_id: rows[0].customer_id };
+}
+
+function _getPvLoanById_(loanId) {
+  var rows = _sbGet_('/rest/v1/pv_loans?id=eq.' + encodeURIComponent(loanId)
+    + '&select=id,customer_id,lend_date,lend_bill_no,pv_lent,bv_lent,baht_lent') || [];
+  return rows.length > 0 ? rows[0] : null;
+}
+
+function _getPvLoanRepaidTotals_(loanId) {
+  var rows = _sbGet_('/rest/v1/pv_loan_repayments?loan_id=eq.' + encodeURIComponent(loanId)
+    + '&select=pv_repaid,bv_repaid,baht_repaid') || [];
+  var pv = 0, bv = 0, baht = 0;
+  rows.forEach(function(r) {
+    pv += parseFloat(r.pv_repaid || 0); bv += parseFloat(r.bv_repaid || 0); baht += parseFloat(r.baht_repaid || 0);
+  });
+  return { pv: pv, bv: bv, baht: baht };
+}
+
+// loan + pv_remaining คำนวณสด (ใช้ตอนกดเลือกจากเมนู "มียืมค้างหลายรายการ" — ตอนนั้นมีแค่
+// loanId+billNo ส่งกลับมา ต้องดึงรายละเอียด loan ใหม่)
+function _getLoanWithRemaining_(loanId) {
+  var loan = _getPvLoanById_(loanId);
+  if (!loan) return null;
+  var repaid = _getPvLoanRepaidTotals_(loanId);
+  loan.pv_remaining = Math.max(0, parseFloat(loan.pv_lent) - repaid.pv);
+  return loan;
+}
+
+function _getCustomerNameById_(customerId) {
+  var rows = _sbGet_('/rest/v1/customers?id=eq.' + encodeURIComponent(customerId) + '&select=name') || [];
+  return rows.length > 0 ? rows[0].name : customerId;
+}
+
+// ยืมคะแนนที่ยังค้างคืนของลูกค้าคนนี้ทั้งหมด (pv_repaid สะสม < pv_lent) เรียงเก่าสุดก่อน
+function _getOutstandingPvLoans_(customerId) {
+  var loans = _sbGet_('/rest/v1/pv_loans?customer_id=eq.' + encodeURIComponent(customerId)
+    + '&select=id,lend_date,lend_bill_no,pv_lent,bv_lent,baht_lent&order=lend_date.asc') || [];
+  var outstanding = [];
+  loans.forEach(function(l) {
+    var repaid = _getPvLoanRepaidTotals_(l.id);
+    var pvRemaining = Math.max(0, parseFloat(l.pv_lent) - repaid.pv);
+    if (pvRemaining > 0.001) {
+      l.pv_remaining = pvRemaining;
+      outstanding.push(l);
+    }
+  });
+  return outstanding;
+}
+
+function buildPvRepayPreview_(loan, totals, custName, billNo) {
+  var afterPv = Math.max(0, loan.pv_remaining - totals.pv);
+  var msg = '📋 ยืนยันคืนคะแนน: คุณ' + custName + '\n';
+  msg += '─────────────────\n';
+  msg += 'ยืมไว้: ' + numFmt_(loan.pv_lent) + ' PV (วันที่ ' + loan.lend_date + ', บิล ' + loan.lend_bill_no + ')\n';
+  msg += 'ค้างคืนอยู่: ' + numFmt_(loan.pv_remaining) + ' PV\n';
+  msg += '─────────────────\n';
+  msg += 'บิล ' + billNo + ' นี้: ฿' + numFmt_(totals.baht) + ' | ' + numFmt_(totals.pv) + ' PV | '
+    + numFmt_(totals.bv) + ' BV\n';
+  msg += '─────────────────\n';
+  msg += (afterPv <= 0 ? '✅ คืนครบแล้ว (เหลือ 0 PV)' : '🟡 ยังค้างอีก ' + numFmt_(afterPv) + ' PV') + '\n';
+  return msg;
+}
+
+function _showPvRepayConfirm_(loan, totals, custName, billNo, replyToken) {
+  sendQuickReplyGas(replyToken, buildPvRepayPreview_(loan, totals, custName, billNo), [
+    { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_คืนคะแนน ' + loan.id + ' ' + billNo } },
+    { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+  ]);
+}
+
+// คืนคะแนน [ชื่อลูกค้า] [bill_no] — จุดเริ่มต้นของคำสั่ง
+function handlePvRepayment_(name, billNo, replyToken) {
+  var cust = findOneCustomer_(name, replyToken, 'คืนคะแนน {name} ' + billNo);
+  if (!cust) return;
+
+  var outstanding = _getOutstandingPvLoans_(cust.id);
+  if (outstanding.length === 0) {
+    replyMessage(replyToken, '❌ คุณ' + cust.name + ' ไม่มีรายการยืมคะแนนค้างคืนเลยค่ะ');
+    return;
+  }
+
+  var totals = _getBillTotals_(billNo);
+  if (!totals.found) {
+    replyMessage(replyToken, '❌ ไม่พบบิล "' + billNo + '" ที่เปิดบิลแล้ว (เช็คว่าพิมพ์เลขบิลถูกไหมค่ะ)');
+    return;
+  }
+  if (totals.customer_id && totals.customer_id !== cust.id) {
+    replyMessage(replyToken, '⚠️ บิล "' + billNo + '" ไม่ใช่ของคุณ' + cust.name + ' ค่ะ เช็คเลขบิลอีกทีนะคะ');
+    return;
+  }
+
+  if (outstanding.length === 1) {
+    _showPvRepayConfirm_(outstanding[0], totals, cust.name, billNo, replyToken);
+    return;
+  }
+
+  // label ของ Quick Reply ของ LINE ยาวได้สูงสุด 20 ตัวอักษร — ใส่รายละเอียดเต็ม (วันที่ยืม
+  // + PV ค้าง) ไว้ในเนื้อข้อความด้านบนปุ่มแทน (เหมือน handleListUnreceivedReturns_) แล้วให้
+  // label สั้นๆ แค่ "เลือก N" พอกดแยกแต่ละรายการได้ ไม่งั้นข้อความสำคัญ (PV ค้าง) จะถูก
+  // ตัดหายไปเงียบๆ (เจอจริงตอนทดสอบ 2026-10-18 — label ยาวเกิน 20 ตัวจนเลขหายไปหมด)
+  var lines = outstanding.map(function(l, idx) {
+    return (idx + 1) + '. ยืม ' + l.lend_date + ' — ค้าง ' + numFmt_(l.pv_remaining) + ' PV (บิล ' + l.lend_bill_no + ')';
+  }).join('\n');
+  var items = outstanding.slice(0, 13).map(function(l, idx) {
+    return {
+      type: 'action',
+      action: {
+        type: 'message',
+        label: 'เลือก ' + (idx + 1),
+        text: 'คืนคะแนน_เลือก ' + l.id + ' ' + billNo,
+      },
+    };
+  });
+  sendQuickReplyGas(replyToken,
+    '🔍 คุณ' + cust.name + ' มียืมคะแนนค้างคืน ' + outstanding.length + ' รายการ เลือกว่าจะคืนให้รายการไหนค่ะ:\n' + lines,
+    items);
+}
+
+// คืนคะแนน_เลือก [loanId] [bill_no] — เลือกแล้วจากเมนู "มียืมค้างหลายรายการ" ด้านบน
+function handlePvRepaymentPick_(loanId, billNo, replyToken) {
+  var loan = _getLoanWithRemaining_(loanId);
+  if (!loan) { replyMessage(replyToken, '❌ ไม่พบรายการยืมคะแนนนี้แล้ว (อาจถูกลบไปก่อน)'); return; }
+  var totals = _getBillTotals_(billNo);
+  if (!totals.found) { replyMessage(replyToken, '❌ ไม่พบบิล "' + billNo + '" ที่เปิดบิลแล้ว'); return; }
+  var custName = _getCustomerNameById_(loan.customer_id);
+  _showPvRepayConfirm_(loan, totals, custName, billNo, replyToken);
+}
+
+// ยืนยัน_คืนคะแนน [loanId] [bill_no] — บันทึกจริงลง pv_loan_repayments
+function commitPvRepayment_(loanId, billNo, replyToken) {
+  var loan = _getPvLoanById_(loanId);
+  if (!loan) { replyMessage(replyToken, '❌ ไม่พบรายการยืมคะแนนนี้แล้ว (อาจถูกลบไปก่อน)'); return; }
+  var totals = _getBillTotals_(billNo);
+  if (!totals.found) { replyMessage(replyToken, '❌ ไม่พบบิล "' + billNo + '" ที่เปิดบิลแล้ว'); return; }
+
+  _sbPost_('pv_loan_repayments', {
+    id: Utilities.getUuid(), loan_id: loanId, repay_date: _todayBkk_(), repay_bill_no: billNo,
+    pv_repaid: totals.pv, bv_repaid: totals.bv, baht_repaid: totals.baht,
+    notes: 'บันทึกผ่าน LINE Coffee Log',
+  });
+
+  var repaidAfter = _getPvLoanRepaidTotals_(loanId);
+  var pvRemaining = Math.max(0, parseFloat(loan.pv_lent) - repaidAfter.pv);
+  var custName = _getCustomerNameById_(loan.customer_id);
+
+  var msg = '✅ บันทึกคืนคะแนนให้คุณ' + custName + ' แล้ว\n';
+  msg += 'บิลที่คืน: ' + billNo + ' (฿' + numFmt_(totals.baht) + ' | ' + numFmt_(totals.pv) + ' PV | '
+    + numFmt_(totals.bv) + ' BV)\n';
+  if (pvRemaining <= 0) {
+    var diffBaht = repaidAfter.baht - parseFloat(loan.baht_lent);
+    msg += '🎉 คืนครบแล้ว!\n';
+    if (diffBaht < -0.5) msg += '⚠️ ขาดทุน ฿' + numFmt_(Math.abs(diffBaht)) + '\n';
+    else if (diffBaht > 0.5) msg += '🎉 ได้คืนเกินมา ฿' + numFmt_(diffBaht) + '\n';
+    else msg += '✅ เท่าทุน\n';
+  } else {
+    msg += '🟡 ยังค้างคืนอีก ' + numFmt_(pvRemaining) + ' PV\n';
+  }
+  replyMessage(replyToken, msg);
 }
 
 function parseDate(s) {
