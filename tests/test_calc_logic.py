@@ -29,6 +29,20 @@ class TestParseCalcOrder(unittest.TestCase):
     def test_cod_flag(self):
         r = calc_logic.parse_calc_order("TF2581-1 COD", PRODUCTS)
         self.assertTrue(r["is_cod"])
+        self.assertEqual(r["cod_cash_given"], -1.0)
+
+    def test_cod_cash_given_attached(self):
+        r = calc_logic.parse_calc_order("TY2006-1 SH-KG12170 COD1000", [
+            {"id": "TY2006", "price": 100, "points_per_unit": 10, "weight_grams": 200}
+        ])
+        self.assertTrue(r["is_cod"])
+        self.assertEqual(r["cod_cash_given"], 1000.0)
+        self.assertEqual(r["ship_zip"], "12170")
+
+    def test_cod_cash_given_with_dash(self):
+        r = calc_logic.parse_calc_order("TF2581-1 COD-500", PRODUCTS)
+        self.assertTrue(r["is_cod"])
+        self.assertEqual(r["cod_cash_given"], 500.0)
 
     def test_sh_kg_no_space(self):
         r = calc_logic.parse_calc_order("TF2581-1 SH-KG12170", PRODUCTS)

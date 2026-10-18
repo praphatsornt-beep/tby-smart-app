@@ -337,6 +337,15 @@ function doPost(e) {
   if (userMsg.startsWith('th ')) { lang = 'th'; userMsg = userMsg.replace('th ', '').trim(); }
   else if (userMsg.startsWith('mm ')) { lang = 'mm'; userMsg = userMsg.replace('mm ', '').trim(); }
 
+  // cod1000 — ลูกค้าจะยื่นเงินสดแบงก์ 1000 ให้คนส่งของ ไม่ใช่ยอดที่ต้องเก็บจริง (ยอดเก็บจริง
+  // คือ finalPay คำนวณด้านล่าง) ต้องรู้ว่าต้องทอนลูกค้าเท่าไหร่ — เลขติดกับคำว่า cod ได้เลย
+  // ไม่ต้องมีขีด/เว้นวรรค ตามตัวอย่างที่ลูกค้าพิมพ์จริง เช่น "TY2006-1 sh cod1000" (เพิ่ม
+  // 2026-10-18 ตามคำขอ) ดึงจาก rawMsg ตรงๆ ก่อนเข้า tokenizer/normalize รหัสสินค้า — ไม่ชน
+  // กับ regex normalize รหัสสินค้า typo ด้านล่าง เพราะ "cod" ไม่มีตัวเลข 4 หลัก+จำนวนต่อท้าย
+  // ให้ตรงรูปแบบนั้น
+  var _codCashMatch = rawMsg.toLowerCase().match(/\bcod[\s-]*(\d+(?:\.\d+)?)\b/);
+  var codCashGiven = _codCashMatch ? parseFloat(_codCashMatch[1]) : -1;
+
   // ลูกค้าพิมพ์รหัสสินค้าเองมักไม่ตรงรูปแบบ CODE-QTY มาตรฐาน — เจอจริงเช่น "ty -2010=1"
   // (เว้นวรรค+ขีดนำหน้าเลข), "tf--2581=1" (ขีดคู่ + ใช้ = คั่นจำนวนแทน -), "tu..2315.2"/
   // "tu.3601.1" (จุดแทนขีด ทั้งคั่นหน้าเลขและคั่นจำนวน บางทีจุดคู่), "tf2581 2" (เว้นวรรค
@@ -488,6 +497,7 @@ function doPost(e) {
 
   var codFee = isCOD ? Math.ceil((totalPrice + shipFinal) * 0.0321) : 0;
   var finalPay = totalPrice + shipFinal + codFee;
+  var codChange = (isCOD && codCashGiven >= 0) ? (codCashGiven - finalPay) : null;
 
   summaryText += '✨ ' + totalPV.toLocaleString() + ' PV | ⚖️ ' + totalWeightKg.toFixed(2) + ' kg\n\n';
 
@@ -523,6 +533,14 @@ function doPost(e) {
     if (codFee > 0) calcFormula += ' + ' + codFee;
     summaryText += '\n' + calcFormula + ' = ' + finalPay.toLocaleString() + '\n';
     summaryText += '💰 ' + (isCOD ? (lang === 'mm' ? 'ပစ္စည်းရောက်ငွေချေ: ' : 'ยอดปลายทาง: ') : (lang === 'mm' ? 'စုစုပေါင်းကျသင့်ငွေ: ' : 'ยอดโอนสุทธิ: ')) + '฿' + finalPay.toLocaleString() + '\n';
+    if (codChange !== null) {
+      summaryText += (lang === 'mm' ? '💵 ဖောက်သည်ပေးငွေ: ฿' : '💵 รับเงินจากลูกค้า: ฿') + codCashGiven.toLocaleString() + '\n';
+      if (codChange >= 0) {
+        summaryText += (lang === 'mm' ? '🔄 ပြန်ပေးရငွေ: ฿' : '🔄 ทอนลูกค้า: ฿') + codChange.toLocaleString() + '\n';
+      } else {
+        summaryText += (lang === 'mm' ? '⚠️ ငွေမလုံလောက်ပါ လိုသေးသည်: ฿' : '⚠️ เงินที่ลูกค้าให้ไม่พอ ขาดอีก: ฿') + Math.abs(codChange).toLocaleString() + '\n';
+      }
+    }
 
     // กรณีมี SH (ระบุจัดส่งแล้ว) ไม่ใช่ COD: lang==='none' (ไม่ระบุภาษา) → จบแค่ยอดโอนสุทธิ
     // เฉยๆ ไม่ต่อท้ายอะไร (ยืนยันกับผู้ใช้แล้ว) แต่ถ้าพิมพ์ "th "/"mm " ระบุภาษามาเอง → โชว์

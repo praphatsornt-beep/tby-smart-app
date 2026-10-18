@@ -28,6 +28,9 @@ def _normalize_customer_codes(text: str) -> str:
     )
 
 
+_COD_CASH_RE = re.compile(r"^COD-?(\d+(?:\.\d+)?)$")
+
+
 def parse_calc_order(text: str, products: list) -> dict:
     """แปลงข้อความรหัสสินค้าแบบ LINE OA เป็นรายการสินค้า/รหัสไปรษณีย์/COD
 
@@ -36,17 +39,29 @@ def parse_calc_order(text: str, products: list) -> dict:
     ก่อน tokenize จะ normalize รูปแบบที่ลูกค้าพิมพ์เพี้ยนบ่อยๆ ก่อนเสมอ (ดู
     _normalize_customer_codes) เช่น "Ty -2010=1"/"TF--2581=1"/"TU..2315.2" →
     "TY2010-1"/"TF2581-1"/"TU2315-2"
+
+    "COD1000"/"COD-1000" (เลขติดคำว่า COD) = ลูกค้าจะยื่นเงินสดแบงก์ 1000 ให้คนส่งของ ไม่ใช่
+    ยอดที่ต้องเก็บจริง — เก็บไว้ใน cod_cash_given (-1 ถ้าพิมพ์ COD เปล่าๆ ไม่มีตัวเลข) ให้
+    ผู้เรียกคำนวณว่าต้องทอนลูกค้าเท่าไหร่ (พอร์ตคู่กับ gas_line_webhook.js's codCashGiven
+    ให้บอทกับแท็บนี้อ่านตรงกัน — เพิ่ม 2026-10-18 ตามคำขอ)
     """
     text = _normalize_customer_codes(text)
     product_map = {p["id"].upper(): p for p in products}
     tokens = text.strip().upper().split()
     items, ship_zip, manual_ship, is_cod, errors = [], "", -1, False, []
+    cod_cash_given = -1.0
     n = len(tokens)
     i = 0
     while i < n:
         token = tokens[i]
         if token == "COD":
             is_cod = True
+            i += 1
+            continue
+        _cod_cash_m = _COD_CASH_RE.match(token)
+        if _cod_cash_m:
+            is_cod = True
+            cod_cash_given = float(_cod_cash_m.group(1))
             i += 1
             continue
         if "-" not in token:
@@ -86,7 +101,8 @@ def parse_calc_order(text: str, products: list) -> dict:
                 errors.append(f"จำนวนไม่ถูกต้อง: {token}")
         i += 1
     return {"items": items, "ship_zip": ship_zip,
-            "manual_ship": manual_ship, "is_cod": is_cod, "errors": errors}
+            "manual_ship": manual_ship, "is_cod": is_cod, "errors": errors,
+            "cod_cash_given": cod_cash_given}
 
 
 def _parse_target_list(raw: str) -> list[int]:

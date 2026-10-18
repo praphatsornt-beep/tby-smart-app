@@ -1736,6 +1736,14 @@ def render(tab1, products, customers, customer_map):
                         if _c_cod_fee > 0:     _parts_raw.append(str(int(_c_cod_fee)))
                         st.markdown(f"{' + '.join(_parts_raw)} = {_c_grand:,.0f}")
                         st.markdown(f"**💰 ยอดโอนสุทธิ: ฿{_c_grand:,.0f}**")
+                        _cod_cash_given = _cr.get("cod_cash_given", -1)
+                        if _cod_cash_given >= 0:
+                            _cod_change = _cod_cash_given - _c_grand
+                            st.markdown(f"💵 รับเงินจากลูกค้า: ฿{_cod_cash_given:,.0f}")
+                            if _cod_change >= 0:
+                                st.markdown(f"**🔄 ทอนลูกค้า: ฿{_cod_change:,.0f}**")
+                            else:
+                                st.error(f"⚠️ เงินที่ลูกค้าให้ไม่พอ ขาดอีก ฿{abs(_cod_change):,.0f}")
 
                     # ─── ส่วนเจ้าของ (ราคาจริง + ตารางขนส่ง) ─────────────────
                     st.divider()
