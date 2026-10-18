@@ -191,12 +191,14 @@ function doPost(e) {
       _cache.put(_orderCacheKey, JSON.stringify(_orderState), 300);
       sendQuickReplyGas(replyToken, '🧾 เปิดบิล หรือ ไม่เปิดบิล?', [
         { type: 'action', action: { type: 'message', label: 'เปิดบิล', text: 'เปิดบิล' } },
+        { type: 'action', action: { type: 'message', label: 'เปิดบิล+คืนคะแนน', text: 'เปิดบิล_คืนคะแนน' } },
         { type: 'action', action: { type: 'message', label: 'ไม่เปิดบิล', text: 'ไม่เปิดบิล' } },
         { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
       ]);
       return;
     }
-    if (_orderState.step === 'waiting_bill' && (userMessage === 'เปิดบิล' || userMessage === 'ไม่เปิดบิล')) {
+    if (_orderState.step === 'waiting_bill'
+        && (userMessage === 'เปิดบิล' || userMessage === 'ไม่เปิดบิล' || userMessage === 'เปิดบิล_คืนคะแนน')) {
       _orderState.bill = userMessage;
       _orderState.step = 'waiting_confirm';
       _cache.put(_orderCacheKey, JSON.stringify(_orderState), 300);
@@ -209,7 +211,7 @@ function doPost(e) {
     if (_orderState.step === 'waiting_confirm') {
       if (userMessage === 'ยืนยัน_tbyorder') {
         _cache.remove(_orderCacheKey);
-        replyMessage(replyToken, commitTbyOrder_(_orderState));
+        commitTbyOrder_(_orderState, replyToken);
       } else {
         sendQuickReplyGas(replyToken, '⚠️ กรุณากดปุ่มยืนยันหรือยกเลิกค่ะ', [
           { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_tbyorder' } },
@@ -339,7 +341,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วเข้ากับยืมคะแนนที่ค้างคืน (บิลต้องเปิดบิลแล้วจริงก่อน)");
+        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"เปิดบิล+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ ไม่ต้องพิมพ์คำสั่ง คืนคะแนน แยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)");
       } else {
         results.push("⚠️ ไม่พบคำสั่ง: " + command);
       }
@@ -652,7 +654,9 @@ function buildTbyOrderPreview_(state) {
   var totalPV  = state.items.reduce(function(s, it) { return s + it.pv * it.qty; }, 0);
   var payLabel   = state.pay      === 'จ่ายเงิน' ? '✅ จ่ายแล้ว' : '🔴 ค้างจ่าย';
   var delivLabel = state.delivery === 'รับของ'   ? '✅ รับของแล้ว' : '📦 ยังไม่ได้รับ (ส่งของ)';
-  var billLabel  = state.bill     === 'เปิดบิล'   ? '🧾 เปิดบิลแล้ว' : '📋 ยังไม่เปิดบิล';
+  var billLabel  = state.bill === 'เปิดบิล' ? '🧾 เปิดบิลแล้ว'
+    : state.bill === 'เปิดบิล_คืนคะแนน' ? '🧾 เปิดบิลแล้ว + 🔗 คืนคะแนน'
+    : '📋 ยังไม่เปิดบิล';
 
   var msg = '📋 ตรวจสอบก่อนบันทึก: คุณ' + state.custName + '\n';
   msg += '─────────────────\n' + state.lines + '─────────────────\n';
@@ -665,11 +669,14 @@ function buildTbyOrderPreview_(state) {
 
 // บันทึกจริงลง Supabase transactions — สูตร transaction_type/initial_qty_received
 // เดียวกับ record_ui.py's บันทึกขาย (receive_now/m_bill logic)
-function commitTbyOrder_(state) {
+// ส่ง replyToken มาด้วยแทนการ return ข้อความเฉยๆ (เดิม) เพราะกรณี "เปิดบิล_คืนคะแนน"
+// ที่มียืมคะแนนค้างมากกว่า 1 รายการ ต้องส่งเป็น Quick Reply ปุ่มเลือก ไม่ใช่ข้อความล้วน
+function commitTbyOrder_(state, replyToken) {
   var today        = _todayBkk_();
   var billNo        = _getNextBillNo_(today);
   var receiveNow    = state.delivery === 'รับของ';
-  var billStatus    = state.bill === 'เปิดบิล' ? 'เปิดบิลแล้ว' : 'ยังไม่เปิดบิล';
+  var linkPv        = state.bill === 'เปิดบิล_คืนคะแนน';
+  var billStatus    = (state.bill === 'เปิดบิล' || linkPv) ? 'เปิดบิลแล้ว' : 'ยังไม่เปิดบิล';
   var payStatus     = state.pay  === 'จ่ายเงิน' ? 'จ่ายแล้ว' : 'ค้างจ่าย';
   var transactionType = (billStatus === 'ยังไม่เปิดบิล' && receiveNow) ? 'เบิกของก่อน' : 'ขายปกติ';
 
@@ -700,6 +707,73 @@ function commitTbyOrder_(state) {
   msg += '💰 ยอดรวม: ฿' + numFmt_(totalAll) + (payStatus === 'จ่ายแล้ว' ? ' (จ่ายแล้ว)' : ' (ค้างจ่าย)') + '\n';
   if (billStatus === 'ยังไม่เปิดบิล') msg += '✨ คะแนนรอเปิดบิล: ' + numFmt_(totalPV) + ' PV\n';
   msg += '🧾 เลขที่บิล: ' + billNo + '\n';
+
+  if (!linkPv) {
+    replyMessage(replyToken, msg);
+    return;
+  }
+
+  // ── "เปิดบิล เก็บ PV คืนคะแนน" — ผูกบิลที่เพิ่งเปิดนี้เข้ากับยืมคะแนนที่ค้างคืนของ
+  // ลูกค้าคนนี้ทันที ไม่ต้องพิมพ์คำสั่ง "คืนคะแนน" แยกอีกรอบทีหลัง (เพิ่ม 2026-10-18
+  // ตามคำขอ — เดิมถ้าบิลที่จะคืนยังไม่มีอยู่ในระบบเลย ต้องเปิดบิลผ่านคำสั่งนี้ก่อน
+  // แล้วค่อยพิมพ์ "คืนคะแนน" แยกอีกคำสั่งหนึ่ง เสียเวลา 2 ขั้น) ยืนยันกับผู้ใช้แล้ว:
+  //   1. ถ้าลูกค้าคนนี้ไม่มียืมคะแนนค้างคืนอยู่เลย (พิมพ์ชื่อผิด/คืนครบไปแล้ว) — เปิดบิล
+  //      ให้ตามปกติ + แจ้งเตือนเฉยๆ ไม่บล็อกการบันทึก
+  //   2. ถ้ามียืมค้างมากกว่า 1 รายการพร้อมกัน — ขึ้นปุ่มเลือกเหมือนคำสั่ง "คืนคะแนน"
+  //      เดิมทุกอย่าง (ส่ง "คืนคะแนน_เลือก loanId billNo" ตรงๆ ใช้ handlePvRepaymentPick_
+  //      ที่มีอยู่แล้วได้เลย ไม่ต้องเขียนใหม่)
+  var outstanding = _getOutstandingPvLoans_(state.custId);
+  if (outstanding.length === 0) {
+    msg += 'ℹ️ คุณ' + state.custName + ' ไม่มีรายการยืมคะแนนค้างคืนอยู่เลยค่ะ — เปิดบิลให้ตามปกติ\n';
+    replyMessage(replyToken, msg);
+    return;
+  }
+
+  var totals = _getBillTotals_(billNo);
+  if (outstanding.length === 1) {
+    msg += _autoApplyPvRepayment_(outstanding[0], billNo, totals);
+    replyMessage(replyToken, msg);
+    return;
+  }
+
+  // มียืมค้างมากกว่า 1 รายการ — label ปุ่มสั้นแค่ "เลือก N" รายละเอียด (วันที่ยืม+PV ค้าง)
+  // อยู่ในเนื้อข้อความด้านบนแทน กัน LINE ตัด label เกิน 20 ตัวอักษรจนข้อมูลสำคัญหายเงียบๆ
+  // (บั๊กที่เจอจริงตอนทำคำสั่ง คืนคะแนน แบบ standalone มาก่อนหน้านี้ในเซสชันเดียวกัน)
+  var pickLines = outstanding.map(function(l, idx) {
+    return (idx + 1) + '. ยืม ' + l.lend_date + ' — ค้าง ' + numFmt_(l.pv_remaining) + ' PV (บิล ' + l.lend_bill_no + ')';
+  }).join('\n');
+  var pickItems = outstanding.slice(0, 13).map(function(l, idx) {
+    return {
+      type: 'action',
+      action: { type: 'message', label: 'เลือก ' + (idx + 1), text: 'คืนคะแนน_เลือก ' + l.id + ' ' + billNo },
+    };
+  });
+  sendQuickReplyGas(replyToken,
+    msg + '🔍 มียืมคะแนนค้างคืน ' + outstanding.length + ' รายการ เลือกว่าจะคืนให้บิลนี้รายการไหนค่ะ:\n' + pickLines,
+    pickItems);
+}
+
+// ผูก pv_loan_repayments อัตโนมัติ ตอนสั่ง "เปิดบิล_คืนคะแนน" แล้วลูกค้าคนนี้มียืมค้างอยู่
+// พอดี 1 รายการ (ไม่ต้องถามเลือก) — ไม่ใช้ร่วมกับ commitPvRepayment_ ของคำสั่ง "ยืนยัน_
+// คืนคะแนน" แบบ standalone ตั้งใจแยกไว้ กันแก้โค้ดที่ทดสอบแล้วของฟีเจอร์เดิมโดยไม่จำเป็น
+function _autoApplyPvRepayment_(loan, billNo, totals) {
+  _sbPost_('pv_loan_repayments', {
+    id: Utilities.getUuid(), loan_id: loan.id, repay_date: _todayBkk_(), repay_bill_no: billNo,
+    pv_repaid: totals.pv, bv_repaid: totals.bv, baht_repaid: totals.baht,
+    notes: 'บันทึกผ่าน LINE Coffee Log (ผูกอัตโนมัติตอนเปิดบิล_คืนคะแนน)',
+  });
+  var repaidAfter = _getPvLoanRepaidTotals_(loan.id);
+  var pvRemaining = Math.max(0, parseFloat(loan.pv_lent) - repaidAfter.pv);
+  var msg = '🔗 ผูกบิลนี้เข้ากับยืมคะแนนที่ค้างอยู่ (ยืม ' + loan.lend_date + ', บิล ' + loan.lend_bill_no + ') แล้ว\n';
+  if (pvRemaining <= 0) {
+    var diffBaht = repaidAfter.baht - parseFloat(loan.baht_lent);
+    msg += '🎉 คืนครบแล้ว!\n';
+    if (diffBaht < -0.5) msg += '⚠️ ขาดทุน ฿' + numFmt_(Math.abs(diffBaht)) + '\n';
+    else if (diffBaht > 0.5) msg += '🎉 ได้คืนเกินมา ฿' + numFmt_(diffBaht) + '\n';
+    else msg += '✅ เท่าทุน\n';
+  } else {
+    msg += '🟡 ยังค้างคืนอีก ' + numFmt_(pvRemaining) + ' PV\n';
+  }
   return msg;
 }
 
