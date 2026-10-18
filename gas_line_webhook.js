@@ -495,9 +495,14 @@ function doPost(e) {
     shipFinal = shipBase + extra;
   } else if (manualShipPrice !== -1) { hasShipping = true; shipFinal = manualShipPrice; feeNote = ' (ระบุเอง)'; }
 
-  var codFee = isCOD ? Math.ceil((totalPrice + shipFinal) * 0.0321) : 0;
-  var finalPay = totalPrice + shipFinal + codFee;
-  var codChange = (isCOD && codCashGiven >= 0) ? (codCashGiven - finalPay) : null;
+  // เมื่อพิมพ์เลขติดกับ cod (เช่น cod1000) หมายถึง "ยอดเก็บปลายทางที่กำหนดเอง" (เลขกลมๆ
+  // ให้ง่ายต่อการจ่าย) ไม่ใช่เงินที่ลูกค้าจะยื่นมาแล้วรอทอนจากยอดที่คำนวณได้ — ค่าธรรมเนียม
+  // COD ต้องคิดจากยอดเก็บจริงนี้ (ไม่ใช่จากสินค้า+ค่าส่ง) แล้วส่วนที่เหลือหลังหักค่าธรรมเนียม+
+  // ค่าส่ง+สินค้า คือเงินที่ต้องทอนคืนลูกค้า (แก้สูตรตามที่ผู้ใช้ชี้ 2026-10-18 — เดิมเข้าใจผิด
+  // ว่าเลขนี้คือเงินสดที่ลูกค้ายื่นมาต่างหาก)
+  var codFee = isCOD ? Math.ceil(((isCOD && codCashGiven >= 0) ? codCashGiven : (totalPrice + shipFinal)) * 0.0321) : 0;
+  var finalPay = (isCOD && codCashGiven >= 0) ? codCashGiven : (totalPrice + shipFinal + codFee);
+  var codChange = (isCOD && codCashGiven >= 0) ? (codCashGiven - codFee - shipFinal - totalPrice) : null;
 
   summaryText += '✨ ' + totalPV.toLocaleString() + ' PV | ⚖️ ' + totalWeightKg.toFixed(2) + ' kg\n\n';
 
@@ -526,20 +531,24 @@ function doPost(e) {
   } else {
     summaryText += (lang === 'mm' ? '💵 ပစ္စည်းဖိုး: ฿' : '💵 สินค้า: ฿') + totalPrice.toLocaleString() + '\n';
     if (hasShipping) summaryText += (lang === 'mm' ? '🚚 ပို့ခ: ฿' : '🚚 ค่าส่ง: ฿') + shipFinal.toLocaleString() + feeNote + '\n';
-    if (isCOD) summaryText += '➕ COD: ฿' + codFee.toLocaleString() + '\n';
 
-    var calcFormula = totalPrice.toString();
-    if (shipFinal > 0) calcFormula += ' + ' + shipFinal;
-    if (codFee > 0) calcFormula += ' + ' + codFee;
-    summaryText += '\n' + calcFormula + ' = ' + finalPay.toLocaleString() + '\n';
-    summaryText += '💰 ' + (isCOD ? (lang === 'mm' ? 'ပစ္စည်းရောက်ငွေချေ: ' : 'ยอดปลายทาง: ') : (lang === 'mm' ? 'စုစုပေါင်းကျသင့်ငွေ: ' : 'ยอดโอนสุทธิ: ')) + '฿' + finalPay.toLocaleString() + '\n';
     if (codChange !== null) {
-      summaryText += (lang === 'mm' ? '💵 ဖောက်သည်ပေးငွေ: ฿' : '💵 รับเงินจากลูกค้า: ฿') + codCashGiven.toLocaleString() + '\n';
+      // cod1000 (ยอดเก็บปลายทางกำหนดเอง) — ดูคอมเมนต์ที่ codFee/finalPay ด้านบน
+      summaryText += (lang === 'mm' ? '💰 ကောက်ခံမည့်ငွေ (သတ်မှတ်ထား): ฿' : '💰 ยอดเก็บปลายทาง (กำหนดเอง): ฿') + codCashGiven.toLocaleString() + '\n';
+      summaryText += (lang === 'mm' ? '➕ COD ကြေး 3.21%: ฿' : '➕ ค่าธรรมเนียม COD 3.21%: ฿') + codFee.toLocaleString() + '\n';
+      summaryText += '\n' + codCashGiven.toLocaleString() + ' - ' + codFee + ' - ' + shipFinal + ' - ' + totalPrice + ' = ' + codChange.toLocaleString() + '\n';
       if (codChange >= 0) {
         summaryText += (lang === 'mm' ? '🔄 ပြန်ပေးရငွေ: ฿' : '🔄 ทอนลูกค้า: ฿') + codChange.toLocaleString() + '\n';
       } else {
-        summaryText += (lang === 'mm' ? '⚠️ ငွေမလုံလောက်ပါ လိုသေးသည်: ฿' : '⚠️ เงินที่ลูกค้าให้ไม่พอ ขาดอีก: ฿') + Math.abs(codChange).toLocaleString() + '\n';
+        summaryText += (lang === 'mm' ? '⚠️ ကောက်ခံမည့်ငွေ မလုံလောက်ပါ လိုသေးသည်: ฿' : '⚠️ ยอดเก็บปลายทางที่กำหนดไม่พอ ขาดอีก: ฿') + Math.abs(codChange).toLocaleString() + '\n';
       }
+    } else {
+      if (isCOD) summaryText += '➕ COD: ฿' + codFee.toLocaleString() + '\n';
+      var calcFormula = totalPrice.toString();
+      if (shipFinal > 0) calcFormula += ' + ' + shipFinal;
+      if (codFee > 0) calcFormula += ' + ' + codFee;
+      summaryText += '\n' + calcFormula + ' = ' + finalPay.toLocaleString() + '\n';
+      summaryText += '💰 ' + (isCOD ? (lang === 'mm' ? 'ပစ္စည်းရောက်ငွေချေ: ' : 'ยอดปลายทาง: ') : (lang === 'mm' ? 'စုစုပေါင်းကျသင့်ငွေ: ' : 'ยอดโอนสุทธิ: ')) + '฿' + finalPay.toLocaleString() + '\n';
     }
 
     // กรณีมี SH (ระบุจัดส่งแล้ว) ไม่ใช่ COD: lang==='none' (ไม่ระบุภาษา) → จบแค่ยอดโอนสุทธิ
