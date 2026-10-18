@@ -39,6 +39,31 @@ function getLineAccessToken_() {
   return PropertiesService.getScriptProperties().getProperty('LINE_ACCESS_TOKEN');
 }
 
+// ── Supabase REST (เพิ่ม 2026-10-18 เฉพาะคำสั่ง "รับคืน" ด้านล่าง) ──────────────
+// บอทนี้ไม่เคยคุยกับ Supabase มาก่อน (เขียนลง Google Sheets อย่างเดียว ดูคอมเมนต์หัว
+// ไฟล์) — ต้องตั้ง Script Properties เพิ่ม 2 ตัวใน Apps Script ตัวจริง: SUPABASE_URL
+// (เช่น https://xxxx.supabase.co), SUPABASE_KEY (anon key จาก Supabase > Settings > API)
+// ใช้ค่าเดียวกับที่ gas_line_webhook.js/tools/*.py ของ TBY SMART APP ใช้อยู่แล้วได้เลย
+function getSupabaseUrl_() { return PropertiesService.getScriptProperties().getProperty('SUPABASE_URL'); }
+function getSupabaseKey_() { return PropertiesService.getScriptProperties().getProperty('SUPABASE_KEY'); }
+function _sbGet_(path) {
+  return JSON.parse(UrlFetchApp.fetch(getSupabaseUrl_() + path, {
+    headers: { 'apikey': getSupabaseKey_(), 'Authorization': 'Bearer ' + getSupabaseKey_() },
+    muteHttpExceptions: true,
+  }).getContentText());
+}
+function _sbPatch_(path, data) {
+  UrlFetchApp.fetch(getSupabaseUrl_() + path, {
+    method: 'PATCH',
+    headers: {
+      'apikey': getSupabaseKey_(), 'Authorization': 'Bearer ' + getSupabaseKey_(),
+      'Content-Type': 'application/json', 'Prefer': 'return=minimal',
+    },
+    payload: JSON.stringify(data),
+    muteHttpExceptions: true,
+  });
+}
+
 // จำนวนห่อต่อ 1 ลัง แยกตามตัวอักษรตัวแรกของรหัส (ตัวเดียวกับที่ใช้เลือกชีท
 // "Coffee" + ตัวอักษรนี้) — B = กาแฟ 40 ซอง (ลังละ 18 ห่อ), S = กาแฟ 84 ซอง
 // (ลังละ 10 ห่อ) เพิ่มเข้ามา 2026-09-21 ตามที่ user ระบุ ตัวอักษรอื่นที่ยังไม่
@@ -62,6 +87,24 @@ function doPost(e) {
   // ของ TBY SMART APP มาที่บอทนี้แทน — userId เป็นค่าเฉพาะต่อ OA เท่านั้น) ──
   if (userMessage.toLowerCase() === 'myid') {
     replyMessage(replyToken, 'userId: ' + _userId);
+    return;
+  }
+
+  // ── รับคืน CODE [CODE ...] — ยืนยันว่าพัสดุ Shopee ตีกลับได้คืนร้านจริงแล้ว ───────
+  // เพิ่ม 2026-10-18: digest สรุปออเดอร์ Shopee ของ TBY SMART APP (tools/email_daily_
+  // digest.py) ถูกย้ายมาส่งเข้า LINE OA นี้ (Coffee Log) แทน OA ลูกค้าหลัก "zhulian TBY"
+  // แล้ว (กันข้อมูลภายในปนกับแชทลูกค้า — ดูคอมเมนต์หัวไฟล์/memory coffee-line-oa-separate-
+  // system) ดังนั้นคำสั่งยืนยัน "ได้รับพัสดุตีกลับคืนแล้ว" ต้องอยู่ที่นี่ ไม่ใช่
+  // gas_line_webhook.js (เคยเพิ่มผิดไฟล์ไปก่อน แก้ย้ายมาที่นี่) — พิมพ์รหัส order_sn
+  // ตรงจากบรรทัด "📦 พัสดุ Shopee มีปัญหา/ตีกลับ" ในดิจ (ตัด # นำหน้าออกให้เอง) แล้วตั้ง
+  // ecommerce_return_emails.received_back_at ผ่าน Supabase REST ตรงๆ — เหมือนปุ่ม
+  // "✅ ยืนยันได้รับของคืนแล้ว" ที่หน้าแรกของแอป (db.mark_ecommerce_return_received)
+  if (/^รับคืน\s+\S/i.test(userMessage)) {
+    handleEcommerceReturnReceived_(userMessage.replace(/^รับคืน\s+/i, ''), replyToken, false);
+    return;
+  }
+  if (/^ยืนยัน_รับคืน\s+\S/i.test(userMessage)) {
+    handleEcommerceReturnReceived_(userMessage.replace(/^ยืนยัน_รับคืน\s+/i, ''), replyToken, true);
     return;
   }
 
@@ -172,7 +215,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)");
+        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. รับคืน CODE [CODE ...] → ยืนยันว่าได้รับพัสดุ Shopee ตีกลับคืนร้านแล้ว (CODE = รหัสออเดอร์ตามดิจสรุปรายวัน)");
       } else {
         results.push("⚠️ ไม่พบคำสั่ง: " + command);
       }
@@ -241,6 +284,37 @@ function preRegisterSerials(ss, sc, boxQty) {
 
   var endSerial = prefix + (startNum + q - 1).toString().padStart(m[2].length, "0");
   return "📦 เพิ่มใน " + sheetName + " " + boxQty + " ลัง (" + q + " ห่อ)\n🔢 " + sc.toUpperCase() + " → " + endSerial;
+}
+
+function handleEcommerceReturnReceived_(rawCodes, replyToken, confirmed) {
+  var codes = rawCodes.trim().split(/\s+/).map(function(c) { return c.replace(/^#/, '').toUpperCase(); });
+
+  if (!confirmed) {
+    sendQuickReplyGas(replyToken,
+      '📦 ยืนยันว่าได้รับพัสดุตีกลับคืนร้านแล้ว:\n' + codes.join('\n') + '\n\n(จะบันทึกในระบบว่า "ได้รับคืนแล้ว")',
+      [
+        { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_รับคืน ' + codes.join(' ') } },
+        { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } }
+      ]);
+    return;
+  }
+
+  var enc = codes.map(function(c) { return encodeURIComponent(c); }).join(',');
+  var existing = _sbGet_('/rest/v1/ecommerce_return_emails?platform=eq.shopee&order_sn=in.(' + enc + ')&select=order_sn') || [];
+  var foundSet = {};
+  existing.forEach(function(r) { foundSet[r.order_sn] = true; });
+  var notFound = codes.filter(function(c) { return !foundSet[c]; });
+
+  var msg = '';
+  if (existing.length > 0) {
+    _sbPatch_('/rest/v1/ecommerce_return_emails?platform=eq.shopee&order_sn=in.(' + enc + ')',
+      { received_back_at: new Date().toISOString() });
+    msg += '✅ บันทึกแล้วว่าได้รับคืน:\n' + existing.map(function(r) { return r.order_sn; }).join('\n') + '\n';
+  }
+  if (notFound.length > 0) {
+    msg += '⚠️ ไม่พบรหัสนี้ในระบบ เช็คอีกทีค่ะ: ' + notFound.join(', ');
+  }
+  replyMessage(replyToken, msg.trim() || '❌ ไม่พบรหัสที่พิมพ์ในระบบเลย');
 }
 
 function parseDate(s) {

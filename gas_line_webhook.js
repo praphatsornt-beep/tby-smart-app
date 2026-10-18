@@ -213,8 +213,6 @@ function doPost(e) {
   if (_staffTag && STAFF_TAGS.indexOf(_staffTag.toLowerCase()) !== -1) {
     // check [name]
     var _chk = _msg.match(/^check\s+(.+)$/i);
-    // รับคืน CODE [CODE ...] — ยืนยันว่าพัสดุ Shopee ตีกลับได้คืนร้านจริงแล้ว
-    var _returnReceived = _msg.match(/^รับคืน\s+(.+)$/i);
     // [name] เก่า CODE-QTY [CODE-QTY ...] (จ่าย[bill] amount)? — รับของได้หลายรายการ
     var _old = _msg.match(/^(.+?)\s+เก่า\s+([A-Za-z0-9]+-\d+(?:\s+[A-Za-z0-9]+-\d+)*)(?:\s+จ่าย(\S+)\s+(\d+(?:\.\d+)?))?$/);
     // [name] เก่า  (ไม่ระบุ CODE-QTY — แสดงรายการของค้างรับทั้งหมด)
@@ -268,7 +266,6 @@ function doPost(e) {
       handleCustomerByName(_chkArg, replyToken);
       return;
     }
-    if (_returnReceived) { handleEcommerceReturnReceived(_returnReceived[1], replyToken, _confirmed, _staffTag); return; }
 
     if (_old) {
       var _oldItems = _old[2].trim().split(/\s+/).map(function(tok) {
@@ -935,9 +932,6 @@ function handleManual(replyToken, staffTag) {
   msg += '  • ' + tag + ' [ชื่อ] จ่าย  — แสดงบิลค้างจ่ายทั้งหมดให้เลือก\n';
   msg += '  • ' + tag + ' [ชื่อ] จ่ายเลขบิล จำนวนเงิน  — บันทึกรับเงิน (จ่ายบางส่วนได้)\n\n';
 
-  msg += '📦 พัสดุ Shopee ตีกลับ\n';
-  msg += '  • ' + tag + ' รับคืน CODE [CODE ...]  — ยืนยันว่าได้รับพัสดุตีกลับคืนร้านแล้ว (CODE = รหัสออเดอร์ตามดิจสรุปรายวัน)\n\n';
-
   msg += '🆕 รับของใหม่ (ยังไม่เปิดบิล)\n';
   msg += '  • ' + tag + ' [ชื่อ] เบิก CODE-จำนวน CODE-จำนวน ...  — รับของ ค้างจ่าย\n';
   msg += '  • ' + tag + ' [ชื่อ] เบิกจ่าย CODE-จำนวน CODE-จำนวน ...  — รับของ + จ่ายเงินแล้ว\n';
@@ -1029,44 +1023,6 @@ function handleCustomerByName(name, replyToken) {
   var cust = findOneCustomer(name, replyToken, 'check {name}');
   if (!cust) return;
   buildAndSendSummary(cust.id, cust.name, replyToken);
-}
-
-// ─── รับคืน CODE [CODE ...] — ยืนยันพัสดุตีกลับ Shopee ได้คืนร้านจริงแล้ว ─────────
-// เพิ่ม 2026-10-17 ตามคำขอ: พิมพ์รหัส order_sn ตรงจากดิจสรุปรายวัน (ตัด # นำหน้าออกให้
-// เอง ไม่ต้องพิมพ์ให้ตรงเป๊ะ) แล้วบันทึก ecommerce_return_emails.received_back_at —
-// เหมือนปุ่ม "✅ ยืนยันได้รับของคืนแล้ว" ที่หน้าแรกของแอป (db.mark_ecommerce_return_received)
-// แค่ทำให้พนักงานกดยืนยันจาก LINE ได้ตรงๆ ไม่ต้องเปิดแอป — เฉพาะ Shopee (แพลตฟอร์มเดียว
-// ที่มีอีเมลตีกลับให้ตรวจจับ ดู CLAUDE.md ecommerce_return_emails)
-function handleEcommerceReturnReceived(rawCodes, replyToken, confirmed, staffTag) {
-  var codes = rawCodes.trim().split(/\s+/).map(function(c) { return c.replace(/^#/, '').toUpperCase(); });
-
-  if (!confirmed) {
-    sendQuickReply(replyToken,
-      '📦 ยืนยันว่าได้รับพัสดุตีกลับคืนร้านแล้ว:\n' + codes.join('\n') + '\n\n(จะบันทึกในระบบว่า "ได้รับคืนแล้ว")',
-      [
-        { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก',
-            text: 'ยืนยัน #' + staffTag + ' รับคืน ' + codes.join(' ') } },
-        { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } }
-      ]);
-    return;
-  }
-
-  var enc = codes.map(function(c) { return encodeURIComponent(c); }).join(',');
-  var existing = _sbGet('/rest/v1/ecommerce_return_emails?platform=eq.shopee&order_sn=in.(' + enc + ')&select=order_sn') || [];
-  var foundSet = {};
-  existing.forEach(function(r) { foundSet[r.order_sn] = true; });
-  var notFound = codes.filter(function(c) { return !foundSet[c]; });
-
-  var msg = '';
-  if (existing.length > 0) {
-    _sbPatch('/rest/v1/ecommerce_return_emails?platform=eq.shopee&order_sn=in.(' + enc + ')',
-      { received_back_at: new Date().toISOString() });
-    msg += '✅ บันทึกแล้วว่าได้รับคืน:\n' + existing.map(function(r) { return r.order_sn; }).join('\n') + '\n';
-  }
-  if (notFound.length > 0) {
-    msg += '⚠️ ไม่พบรหัสนี้ในระบบ เช็คอีกทีค่ะ: ' + notFound.join(', ');
-  }
-  sendReply(replyToken, msg.trim() || '❌ ไม่พบรหัสที่พิมพ์ในระบบเลย');
 }
 
 // ─── [name] จ่าย (ไม่ระบุยอด/บิล) — แสดงบิลค้างจ่ายให้เลือก ──────────────────
