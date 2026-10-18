@@ -108,6 +108,15 @@ function doPost(e) {
     return;
   }
 
+  // ── sp — เมนู "รับคืน" ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน ให้เลือกจาก
+  // Quick Reply ได้เลย (เพิ่ม 2026-10-18 ตามคำขอ: ไม่ต้องจำ/พิมพ์เลข order_sn เอง) —
+  // เลือกแล้วบันทึกทันที (ส่ง "ยืนยัน_รับคืน CODE" ตรงๆ ไม่ต้องผ่านขั้นยืนยันซ้ำอีกที
+  // เพราะตัวเลือกในลิสต์มาจาก DB จริงอยู่แล้ว ไม่มีความเสี่ยงพิมพ์รหัสผิด)
+  if (userMessage.toLowerCase() === 'sp') {
+    handleListUnreceivedReturns_(replyToken);
+    return;
+  }
+
   // ── Multi-step addcoffee flow ────────────────────────────────────────────
   var _stateRaw = _userId ? _cache.get(_cacheKey) : null;
   if (_stateRaw) {
@@ -215,7 +224,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. รับคืน CODE [CODE ...] → ยืนยันว่าได้รับพัสดุ Shopee ตีกลับคืนร้านแล้ว (CODE = รหัสออเดอร์ตามดิจสรุปรายวัน)");
+        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)");
       } else {
         results.push("⚠️ ไม่พบคำสั่ง: " + command);
       }
@@ -284,6 +293,32 @@ function preRegisterSerials(ss, sc, boxQty) {
 
   var endSerial = prefix + (startNum + q - 1).toString().padStart(m[2].length, "0");
   return "📦 เพิ่มใน " + sheetName + " " + boxQty + " ลัง (" + q + " ห่อ)\n🔢 " + sc.toUpperCase() + " → " + endSerial;
+}
+
+function handleListUnreceivedReturns_(replyToken) {
+  var rows = _sbGet_(
+    '/rest/v1/ecommerce_return_emails?platform=eq.shopee&received_back_at=is.null' +
+    '&select=order_sn,shop_name,carrier_name,tracking_no&order=last_seen_at.desc'
+  ) || [];
+  if (rows.length === 0) {
+    replyMessage(replyToken, '✅ ไม่มีพัสดุ Shopee ตีกลับที่รอยืนยันรับคืนค่ะ');
+    return;
+  }
+
+  if (rows.length <= 13) {
+    var lines = rows.map(function(r) {
+      return '📦 ' + r.order_sn + ' — ' + (r.shop_name || '-') + ' (' + (r.carrier_name || '-') + ' ' + (r.tracking_no || '-') + ')';
+    });
+    var items = rows.map(function(r) {
+      return { type: 'action', action: { type: 'message', label: r.order_sn.substring(0, 20), text: 'ยืนยัน_รับคืน ' + r.order_sn } };
+    });
+    sendQuickReplyGas(replyToken, '📦 รับคืน — เลือกออเดอร์ที่ได้รับคืนแล้ว:\n' + lines.join('\n'), items);
+  } else {
+    // เกิน 13 รายการ — Quick Reply ของ LINE โชว์ได้สูงสุด 13 ปุ่ม แสดงรายการแรก 13
+    // แบบข้อความล้วนแทน แล้วให้พิมพ์ "รับคืน CODE" เองสำหรับที่เหลือ
+    var names = rows.slice(0, 13).map(function(r) { return r.order_sn; }).join(', ');
+    replyMessage(replyToken, '📦 พัสดุตีกลับที่รอยืนยัน (' + rows.length + ' รายการ): ' + names + ' ...\nพิมพ์ "รับคืน CODE" เพื่อยืนยันค่ะ');
+  }
 }
 
 function handleEcommerceReturnReceived_(rawCodes, replyToken, confirmed) {
