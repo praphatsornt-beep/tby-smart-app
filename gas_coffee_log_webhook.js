@@ -128,6 +128,28 @@ function doPost(e) {
     return;
   }
 
+  // ── พิมพ์ตัวเลขอย่างเดียว หลังกดปุ่ม "✏️ จ่ายบางส่วน" (เมนู "[ชื่อ] จ่าย" ด้านล่าง) —
+  // ใช้เป็นยอดที่จะจ่าย — พอร์ตมาจาก gas_line_webhook.js's 'pp_'+userId cache/_bareAmt
+  // (คนละ cache key กับ 'addcoffee_'/'tbyorder_' ของไฟล์นี้ กันชนกัน) ต้องเช็คก่อนเข้า
+  // บล็อก addcoffee/tbyorder ด้านล่าง เพราะบล็อกพวกนั้นก็รับ input เป็นตัวเลขได้เหมือนกัน
+  // (เช่น addcoffee รอ "จะเพิ่มกี่ลัง?") — เช็คแบบ "มี state settlepay_ ค้างอยู่จริงไหม"
+  // ก่อนเท่านั้น ถ้าไม่มีก็ fallthrough ต่อไปตามปกติ ไม่ไปขวางบล็อกอื่น
+  if (userMessage === 'ยกเลิก' && _userId && _cache.get('settlepay_' + _userId)) {
+    _cache.remove('settlepay_' + _userId);
+    replyMessage(replyToken, '❌ ยกเลิกแล้วค่ะ ยังไม่มีการบันทึกข้อมูล');
+    return;
+  }
+  var _bareAmt = userMessage.match(/^(\d+(?:\.\d+)?)$/);
+  if (_bareAmt && _userId) {
+    var _spRaw = _cache.get('settlepay_' + _userId);
+    if (_spRaw) {
+      var _sp = JSON.parse(_spRaw);
+      _cache.remove('settlepay_' + _userId);
+      handlePartialPaymentAmount_(_sp.custId, _sp.billNo, parseFloat(_bareAmt[1]), replyToken);
+      return;
+    }
+  }
+
   // ── คืนคะแนน [ชื่อลูกค้า] [bill_no] — ผูกบิลจริงที่เปิดแล้วเข้ากับยืมคะแนนที่ค้างคืน ───
   // เพิ่ม 2026-10-18 ตามคำขอ — คู่กับแท็บ 💳 ยืมคะแนน ของแอป Streamlit (pv_loan_ui.py/
   // pv_loans+pv_loan_repayments) บิลที่จะคืนต้องมีอยู่แล้วจริง (เปิดบิลแล้วผ่านบันทึกขาย
@@ -165,6 +187,30 @@ function doPost(e) {
   if (_payFullConfirm) { commitSettleBill_(_payFullConfirm[1], _payFullConfirm[2], 'pay', replyToken); return; }
   var _recvFullConfirm = userMessage.match(/^ยืนยัน_รับของครบ\s+(\S+)\s+(\S+)$/i);
   if (_recvFullConfirm) { commitSettleBill_(_recvFullConfirm[1], _recvFullConfirm[2], 'recv', replyToken); return; }
+
+  // ── [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ — เมนูเลือกบิลที่ค้างจ่าย/ค้างรับ โดยไม่ต้อง
+  // รู้เลขบิลล่วงหน้า (เพิ่ม 2026-10-18 ตามคำขอ) — เดิมมีคำสั่งคล้ายกันอยู่ใน
+  // gas_line_webhook.js (#staffTag [ชื่อ] จ่าย / เก่า) แต่ตัดสินใจย้ายมาทำที่นี่ทั้งหมด
+  // แทน (ลบออกจากไฟล์นั้นแล้ว) เพราะ OA นี้ใช้ภายในอยู่แล้ว ไม่ต้องมี #staffTag นำหน้า —
+  // และ UX ฝั่งรับของปรับเป็นกดปุ่มเลือกสินค้า (เดิมของ gas_line_webhook.js ให้พิมพ์
+  // CODE-จำนวนเอง ซึ่งเสี่ยงพิมพ์รหัสผิด) ปุ่ม "จ่ายเต็ม"/"รับทั้งหมด" ในเมนูนี้ส่งต่อไป
+  // ที่คำสั่ง ยืนยัน_จ่ายครบ/ยืนยัน_รับของครบ ด้านบนตรงๆ (ใช้ตรรกะเดียวกัน ไม่เขียนซ้ำ)
+  var _payMenuCmd = userMessage.match(/^(.+?)\s+จ่าย$/i);
+  if (_payMenuCmd) { handlePayMenu_(_payMenuCmd[1].trim(), replyToken); return; }
+  var _recvMenuCmd = userMessage.match(/^(.+?)\s+รับของ$/i);
+  if (_recvMenuCmd) { handleReceiveMenu_(_recvMenuCmd[1].trim(), replyToken); return; }
+  var _payPickBill = userMessage.match(/^จ่ายเลือกบิล\s+(\S+)\s+(\S+)$/i);
+  if (_payPickBill) { handlePayBillChoice_(_payPickBill[1], _payPickBill[2], replyToken); return; }
+  var _payPartialStart = userMessage.match(/^จ่ายบางส่วนเลือกบิล\s+(\S+)\s+(\S+)$/i);
+  if (_payPartialStart) { handlePayPartialPrompt_(_payPartialStart[1], _payPartialStart[2], replyToken, _userId, _cache); return; }
+  var _payPartialConfirm = userMessage.match(/^ยืนยัน_จ่ายบางส่วน\s+(\S+)\s+(\S+)\s+(\d+(?:\.\d+)?)$/i);
+  if (_payPartialConfirm) { commitPartialPayment_(_payPartialConfirm[1], _payPartialConfirm[2], parseFloat(_payPartialConfirm[3]), replyToken); return; }
+  var _recvPickBill = userMessage.match(/^รับของเลือกบิล\s+(\S+)\s+(\S+)$/i);
+  if (_recvPickBill) { handleReceiveBillChoice_(_recvPickBill[1], _recvPickBill[2], replyToken); return; }
+  var _recvPickItem = userMessage.match(/^รับของเลือกสินค้า\s+(\S+)\s+(\S+)\s+(\S+)$/i);
+  if (_recvPickItem) { handleReceiveLineChoice_(_recvPickItem[1], _recvPickItem[2], _recvPickItem[3], replyToken); return; }
+  var _recvItemConfirm = userMessage.match(/^ยืนยัน_รับของสินค้า\s+(\S+)\s+(\S+)\s+(\S+)$/i);
+  if (_recvItemConfirm) { commitReceiveLine_(_recvItemConfirm[1], _recvItemConfirm[2], _recvItemConfirm[3], replyToken); return; }
 
   // ── บันทึกรายการขาย/เบิกของเข้า TBY SMART APP จากไลน์นี้โดยตรง ─────────────────
   // เพิ่ม 2026-10-18 ตามคำขอ (บอทนี้จะใช้บันทึกข้อมูลหลังร้านต่อไป ไม่ใช่แค่กาแฟ) —
@@ -359,7 +405,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)");
+        results.push("📖 คู่มือ:\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)");
       } else {
         results.push("⚠️ ไม่พบคำสั่ง: " + command);
       }
@@ -1147,6 +1193,255 @@ function commitSettleBill_(custId, billNo, kind, replyToken) {
   var msg = '✅ บันทึก' + cmdLabel + 'ให้คุณ' + custName + ' แล้ว\n';
   msg += 'บิล: ' + billNo + ' (' + (kind === 'pay' ? '฿' + numFmt_(info.totalAmt) : numFmt_(info.totalQty) + ' ชิ้น') + ')\n';
   if (info.skippedCod > 0) msg += 'ℹ️ ข้าม ' + info.skippedCod + ' รายการ COD ที่ยังไม่เก็บเงินปลายทาง (ไม่แก้ไข)\n';
+  replyMessage(replyToken, msg);
+}
+
+// ── ───────────────────────────────────────────────────────────────────────────
+// ฟังก์ชันสำหรับเมนู "[ชื่อ] จ่าย"/"[ชื่อ] รับของ" (เพิ่ม 2026-10-18) — พอร์ตมาจาก
+// gas_line_webhook.js's _getOpenBills/handlePaymentMenu/handlePayBillMenu/
+// handlePayPartialPrompt/handlePayment (ลบออกจากไฟล์นั้นแล้ว — ย้ายมาที่นี่ทั้งหมด)
+// ── ───────────────────────────────────────────────────────────────────────────
+
+// รวมยอดค้างจ่าย/ค้างรับของลูกค้าคนนี้ แยกตามเลขบิล (kind: 'pay'/'recv') — ตรรกะ
+// เดียวกับ _computeSettleRows_ (ข้าม COD ตอน kind==='pay') แต่สแกนทุกบิลของลูกค้า
+// คนนี้พร้อมกัน ไม่ใช่บิลเดียว — ใช้โชว์เมนูเลือกบิลโดยไม่ต้องรู้เลขบิลล่วงหน้า
+function _getCustomerOpenBills_(customerId, kind) {
+  var rows = _sbGet_('/rest/v1/transactions?customer_id=eq.' + encodeURIComponent(customerId)
+    + '&bill_no=not.is.null&select=id,bill_no,product_name,qty,total_amount,pay_status,initial_qty_received') || [];
+  if (rows.length === 0) return [];
+
+  var txnIds = rows.map(function(r) { return r.id; });
+  var sums = _getPartialEventSums_(txnIds);
+
+  var billMap = {}, billOrder = [];
+  rows.forEach(function(r) {
+    var sum = sums[r.id] || { paid: 0, received: 0 };
+    var totalPaid = _FULLY_PAID_STATUSES_.indexOf(r.pay_status) !== -1 ? parseFloat(r.total_amount) : sum.paid;
+    var totalReceived = parseInt(r.initial_qty_received || 0, 10) + sum.received;
+    var outstandingAmt = parseFloat(r.total_amount) - totalPaid;
+    var outstandingQty = parseInt(r.qty, 10) - totalReceived;
+
+    if (kind === 'pay') {
+      if (r.pay_status === 'COD' || outstandingAmt <= 0.01) return;
+      if (!billMap[r.bill_no]) { billMap[r.bill_no] = { bill_no: r.bill_no, amt: 0, qty: 0 }; billOrder.push(r.bill_no); }
+      billMap[r.bill_no].amt += outstandingAmt;
+    } else {
+      if (outstandingQty <= 0) return;
+      if (!billMap[r.bill_no]) { billMap[r.bill_no] = { bill_no: r.bill_no, amt: 0, qty: 0 }; billOrder.push(r.bill_no); }
+      billMap[r.bill_no].qty += outstandingQty;
+    }
+  });
+  return billOrder.map(function(b) { return billMap[b]; });
+}
+
+// [ชื่อ] จ่าย — ลิสต์บิลที่ค้างจ่ายทั้งหมดของลูกค้าคนนี้เป็นปุ่มให้เลือก
+function handlePayMenu_(name, replyToken) {
+  var cust = findOneCustomer_(name, replyToken, '{name} จ่าย');
+  if (!cust) return;
+
+  var bills = _getCustomerOpenBills_(cust.id, 'pay');
+  if (bills.length === 0) { replyMessage(replyToken, '✅ คุณ' + cust.name + ' ไม่มียอดค้างจ่ายแล้วค่ะ'); return; }
+
+  if (bills.length <= 13) {
+    var items = bills.map(function(b) {
+      return { type: 'action', action: { type: 'message',
+        label: (b.bill_no + ' ฿' + numFmt_(b.amt)).substring(0, 20),
+        text: 'จ่ายเลือกบิล ' + cust.id + ' ' + b.bill_no } };
+    });
+    sendQuickReplyGas(replyToken, '🧾 คุณ' + cust.name + ' มียอดค้างจ่าย เลือกบิลที่จะจ่ายค่ะ:', items);
+  } else {
+    var names = bills.slice(0, 13).map(function(b) { return b.bill_no + ' (฿' + numFmt_(b.amt) + ')'; }).join(', ');
+    replyMessage(replyToken, '🧾 คุณ' + cust.name + ' มีบิลค้างจ่าย: ' + names + ' ...\nพิมพ์ "จ่ายครบ ' + cust.name + ' เลขบิล" ค่ะ');
+  }
+}
+
+// [ชื่อ] รับของ — ลิสต์บิลที่ค้างรับทั้งหมดของลูกค้าคนนี้เป็นปุ่มให้เลือก
+function handleReceiveMenu_(name, replyToken) {
+  var cust = findOneCustomer_(name, replyToken, '{name} รับของ');
+  if (!cust) return;
+
+  var bills = _getCustomerOpenBills_(cust.id, 'recv');
+  if (bills.length === 0) { replyMessage(replyToken, '✅ คุณ' + cust.name + ' ไม่มีของค้างรับแล้วค่ะ'); return; }
+
+  if (bills.length <= 13) {
+    var items = bills.map(function(b) {
+      return { type: 'action', action: { type: 'message',
+        label: (b.bill_no + ' ' + numFmt_(b.qty) + ' ชิ้น').substring(0, 20),
+        text: 'รับของเลือกบิล ' + cust.id + ' ' + b.bill_no } };
+    });
+    sendQuickReplyGas(replyToken, '📦 คุณ' + cust.name + ' มีของค้างรับ เลือกบิลที่จะรับค่ะ:', items);
+  } else {
+    var names = bills.slice(0, 13).map(function(b) { return b.bill_no + ' (' + numFmt_(b.qty) + ' ชิ้น)'; }).join(', ');
+    replyMessage(replyToken, '📦 คุณ' + cust.name + ' มีของค้างรับ: ' + names + ' ...\nพิมพ์ "รับของครบ ' + cust.name + ' เลขบิล" ค่ะ');
+  }
+}
+
+// จ่ายเลือกบิล [custId] [bill_no] — เลือกบิลจากเมนูแล้ว ให้เลือกจ่ายเต็ม/บางส่วน
+function handlePayBillChoice_(custId, billNo, replyToken) {
+  var info = _computeSettleRows_(billNo, 'pay');
+  if (!info.found || info.customer_id !== custId) { replyMessage(replyToken, '⚠️ ไม่พบบิล "' + billNo + '" ของลูกค้านี้แล้วค่ะ'); return; }
+  if (info.rows.length === 0) {
+    replyMessage(replyToken, info.skippedCod > 0
+      ? '⚠️ บิลนี้มีแต่รายการ COD ที่ยังไม่เก็บเงินปลายทาง ข้ามไปไม่แก้ไขค่ะ'
+      : '✅ บิลนี้ไม่มียอดค้างจ่ายเหลือแล้วค่ะ');
+    return;
+  }
+
+  var custName = _getCustomerNameById_(custId);
+  sendQuickReplyGas(replyToken,
+    '🧾 บิล ' + billNo + ' ค้างจ่าย ฿' + numFmt_(info.totalAmt) + ' ของคุณ' + custName + ' — จ่ายเต็มหรือบางส่วนคะ:',
+    [
+      { type: 'action', action: { type: 'message', label: ('✅ จ่ายเต็ม ฿' + numFmt_(info.totalAmt)).substring(0, 20), text: 'ยืนยัน_จ่ายครบ ' + custId + ' ' + billNo } },
+      { type: 'action', action: { type: 'message', label: '✏️ จ่ายบางส่วน', text: 'จ่ายบางส่วนเลือกบิล ' + custId + ' ' + billNo } },
+    ]);
+}
+
+// จ่ายบางส่วนเลือกบิล [custId] [bill_no] — ปุ่มจากเมนูด้านบน บอกให้พิมพ์จำนวนเงิน
+// (เก็บ custId/billNo ไว้ใน CacheService รอรับตัวเลขที่พิมพ์ครั้งต่อไป)
+function handlePayPartialPrompt_(custId, billNo, replyToken, userId, cache) {
+  var info = _computeSettleRows_(billNo, 'pay');
+  if (!info.found || info.customer_id !== custId || info.rows.length === 0) {
+    replyMessage(replyToken, '⚠️ ไม่พบยอดค้างของบิล ' + billNo + ' แล้วค่ะ');
+    return;
+  }
+  if (userId) cache.put('settlepay_' + userId, JSON.stringify({ custId: custId, billNo: billNo }), 300);
+  replyMessage(replyToken, '✏️ พิมพ์จำนวนเงินที่จะจ่ายค่ะ (ยอดค้างบิล ' + billNo + ' ฿' + numFmt_(info.totalAmt) + ')');
+}
+
+// พิมพ์จำนวนเงินเข้ามาแล้ว (จาก cache ด้านบน) — แสดง preview ก่อนบันทึกจริง
+function handlePartialPaymentAmount_(custId, billNo, amount, replyToken) {
+  var info = _computeSettleRows_(billNo, 'pay');
+  if (!info.found || info.customer_id !== custId || info.rows.length === 0) {
+    replyMessage(replyToken, '⚠️ ไม่พบยอดค้างของบิล ' + billNo + ' แล้วค่ะ (อาจจ่ายครบไปก่อนหน้านี้แล้ว)');
+    return;
+  }
+
+  var totalOwed = info.totalAmt;
+  var overNote = '';
+  var actualPay = amount;
+  if (amount > totalOwed + 0.01) {
+    overNote = '⚠️ ยอดค้างมีเพียง ฿' + numFmt_(totalOwed) + ' บันทึกเฉพาะส่วนที่ค้างนะคะ\n';
+    actualPay = totalOwed;
+  }
+
+  var custName = _getCustomerNameById_(custId);
+  var preview = overNote;
+  preview += '📋 ตรวจสอบก่อนบันทึก: รับเงิน ฿' + numFmt_(actualPay) + ' จากคุณ' + custName + ' (บิล ' + billNo + ')\n';
+  preview += '─────────────────\n';
+  preview += '💰 ยอดค้างหลังจ่าย: ฿' + numFmt_(Math.max(0, totalOwed - actualPay)) + '\n';
+  sendQuickReplyGas(replyToken, preview, [
+    { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_จ่ายบางส่วน ' + custId + ' ' + billNo + ' ' + actualPay } },
+    { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+  ]);
+}
+
+// ยืนยัน_จ่ายบางส่วน [custId] [bill_no] [amount] — บันทึกจริง แบ่งจ่ายตามลำดับรายการ
+// ในบิล (รายการแรกได้ก่อน เหมือน gas_line_webhook.js's handlePayment เดิม)
+function commitPartialPayment_(custId, billNo, amount, replyToken) {
+  var info = _computeSettleRows_(billNo, 'pay');
+  if (!info.found || info.customer_id !== custId || info.rows.length === 0) {
+    replyMessage(replyToken, '❌ ไม่พบยอดค้างของบิลนี้แล้วค่ะ (อาจมีคนบันทึกไปก่อนหน้านี้แล้ว)');
+    return;
+  }
+
+  var totalOwed = info.totalAmt;
+  var actualPay = Math.min(amount, totalOwed);
+  var today = _todayBkk_();
+  var remaining = actualPay, confirmLines = '', fullyPaidIds = [];
+  info.rows.forEach(function(r) {
+    if (remaining < 0.01) return;
+    var applyAmt = Math.min(remaining, r.amt);
+    remaining -= applyAmt;
+    _sbPost_('partial_events', {
+      id: Utilities.getUuid(), date: today, transaction_id: r.id,
+      qty_received: 0, amount_paid: Math.round(applyAmt * 100) / 100,
+      event_type: 'จ่ายเงิน', notes: 'บันทึกผ่าน LINE Coffee Log',
+    });
+    var fullyPaid = applyAmt >= r.amt - 0.01;
+    if (fullyPaid) fullyPaidIds.push(r.id);
+    confirmLines += '💰 ' + r.product_name + ': ฿' + numFmt_(applyAmt)
+      + (fullyPaid ? ' (ชำระครบ ✓)' : ' (ยังค้าง ฿' + numFmt_(r.amt - applyAmt) + ')') + '\n';
+  });
+  if (fullyPaidIds.length > 0) {
+    var enc = fullyPaidIds.map(function(id) { return encodeURIComponent(id); }).join(',');
+    _sbPatch_('/rest/v1/transactions?id=in.(' + enc + ')', { pay_status: 'จ่ายแล้ว' });
+  }
+
+  var custName = _getCustomerNameById_(custId);
+  var msg = '✅ บันทึกรับเงิน ฿' + numFmt_(actualPay) + ' จากคุณ' + custName + ' (บิล ' + billNo + ')\n';
+  msg += '─────────────────\n' + confirmLines + '─────────────────\n';
+  msg += '💰 ยอดค้างหลังจ่าย: ฿' + numFmt_(Math.max(0, totalOwed - actualPay)) + '\n';
+  replyMessage(replyToken, msg);
+}
+
+// รับของเลือกบิล [custId] [bill_no] — เลือกบิลจากเมนูแล้ว ถ้ามีสินค้าค้างรับชิ้นเดียว
+// ให้ยืนยันตรงๆ ถ้ามีหลายรายการ ให้เลือกว่าจะรับตัวไหน (หรือรับทั้งหมด)
+function handleReceiveBillChoice_(custId, billNo, replyToken) {
+  var info = _computeSettleRows_(billNo, 'recv');
+  if (!info.found || info.customer_id !== custId) { replyMessage(replyToken, '⚠️ ไม่พบบิล "' + billNo + '" ของลูกค้านี้แล้วค่ะ'); return; }
+  if (info.rows.length === 0) { replyMessage(replyToken, '✅ บิลนี้ไม่มีของค้างรับเหลือแล้วค่ะ'); return; }
+
+  var custName = _getCustomerNameById_(custId);
+
+  if (info.rows.length === 1) {
+    var only = info.rows[0];
+    sendQuickReplyGas(replyToken,
+      '📦 บิล ' + billNo + ' ของคุณ' + custName + ' — ค้างรับ ' + only.product_name + ' ' + numFmt_(only.qty) + ' ชิ้น',
+      [
+        { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_รับของครบ ' + custId + ' ' + billNo } },
+        { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+      ]);
+    return;
+  }
+
+  // หลายรายการ — ปุ่มสั้น "เลือก N" (รายละเอียดอยู่ในเนื้อข้อความ กัน label เกิน 20
+  // ตัวอักษรของ LINE ตัดข้อมูลหาย — บั๊กเดียวกับที่เจอตอนทำ คืนคะแนน ก่อนหน้าในเซสชันนี้)
+  // บวกปุ่ม "รับทั้งหมด" อีก 1 ปุ่ม รวมไม่เกิน 13 ปุ่ม (ลิมิตของ LINE Quick Reply)
+  var lines = info.rows.map(function(r, idx) {
+    return (idx + 1) + '. ' + r.product_name + ' — ค้างรับ ' + numFmt_(r.qty) + ' ชิ้น';
+  }).join('\n');
+  var items = info.rows.slice(0, 12).map(function(r, idx) {
+    return { type: 'action', action: { type: 'message', label: 'เลือก ' + (idx + 1),
+      text: 'รับของเลือกสินค้า ' + custId + ' ' + billNo + ' ' + r.id } };
+  });
+  items.push({ type: 'action', action: { type: 'message', label: '✅ รับทั้งหมด', text: 'ยืนยัน_รับของครบ ' + custId + ' ' + billNo } });
+
+  sendQuickReplyGas(replyToken,
+    '📦 บิล ' + billNo + ' ของคุณ' + custName + ' — มีของค้างรับหลายรายการ เลือกรายการที่จะรับ หรือรับทั้งหมด:\n' + lines,
+    items);
+}
+
+// รับของเลือกสินค้า [custId] [bill_no] [txnId] — เลือกรายการเดียวจากเมนูแล้ว ยืนยันอีกที
+function handleReceiveLineChoice_(custId, billNo, txnId, replyToken) {
+  var info = _computeSettleRows_(billNo, 'recv');
+  var row = info.found ? info.rows.filter(function(r) { return r.id === txnId; })[0] : null;
+  if (!row) { replyMessage(replyToken, '❌ ไม่พบรายการนี้แล้วค่ะ (อาจมีคนบันทึกไปก่อนหน้านี้แล้ว)'); return; }
+
+  sendQuickReplyGas(replyToken,
+    '📦 ยืนยันรับของ: ' + row.product_name + ' ' + numFmt_(row.qty) + ' ชิ้น (บิล ' + billNo + ')',
+    [
+      { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_รับของสินค้า ' + custId + ' ' + billNo + ' ' + txnId } },
+      { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+    ]);
+}
+
+// ยืนยัน_รับของสินค้า [custId] [bill_no] [txnId] — บันทึกจริงรายการเดียว
+function commitReceiveLine_(custId, billNo, txnId, replyToken) {
+  var info = _computeSettleRows_(billNo, 'recv');
+  var row = info.found ? info.rows.filter(function(r) { return r.id === txnId; })[0] : null;
+  if (!row) { replyMessage(replyToken, '❌ ไม่พบรายการนี้แล้วค่ะ (อาจมีคนบันทึกไปก่อนหน้านี้แล้ว)'); return; }
+
+  _sbPost_('partial_events', {
+    id: Utilities.getUuid(), date: _todayBkk_(), transaction_id: row.id,
+    qty_received: row.qty, amount_paid: 0, event_type: 'รับของ',
+    notes: 'บันทึกผ่าน LINE Coffee Log',
+  });
+
+  var custName = _getCustomerNameById_(custId);
+  var remaining = info.rows.filter(function(r) { return r.id !== txnId; });
+  var msg = '✅ บันทึกรับของให้คุณ' + custName + ' แล้ว\n';
+  msg += row.product_name + ' — รับ ' + numFmt_(row.qty) + ' ชิ้น (บิล ' + billNo + ')\n';
+  if (remaining.length > 0) msg += 'ℹ️ ยังเหลือค้างรับอีก ' + remaining.length + ' รายการในบิลนี้ค่ะ';
   replyMessage(replyToken, msg);
 }
 
