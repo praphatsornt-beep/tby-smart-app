@@ -492,22 +492,61 @@ function _getNextBillNo_(dateStr) {
   return prefix + '-' + nextStr;
 }
 
-// ค้นหาลูกค้า 1 คนจากชื่อ — ต่างจาก gas_line_webhook.js's findOneCustomer แค่ตอบ
-// ข้อความชัดเจนเมื่อไม่พบเลย (ไม่เงียบ) เพราะที่นี่ไม่มีคำสั่งนำหน้าบอกเจตนา ("[ชื่อ]
-// CODE-จำนวน" ธรรมดา) ผู้ใช้ควรรู้ทันทีว่าพิมพ์ชื่อผิดหรือหาไม่เจอ ไม่ใช่เงียบแล้วงงว่า
-// ทำไมบอทไม่ตอบ
+// Levenshtein edit distance (ตัวเล็ก-ใหญ่ไม่สน) — ใช้หาชื่อ "ใกล้เคียง" ให้เลือกตอน
+// ไม่เจอตรงๆ เลย (เพิ่ม 2026-10-18 ตามคำขอ) ไม่มี library ให้ใช้ใน Apps Script เลย
+// เขียน DP ตรงไปตรงมา (O(n*m) โอเคสำหรับความยาวชื่อคน ไม่ใช่ข้อความยาวๆ)
+function _levenshtein_(a, b) {
+  a = (a || '').toLowerCase(); b = (b || '').toLowerCase();
+  var m = a.length, n = b.length;
+  var dp = [];
+  for (var i = 0; i <= m; i++) { dp.push([i]); }
+  for (var j = 0; j <= n; j++) { dp[0][j] = j; }
+  for (var i = 1; i <= m; i++) {
+    for (var j = 1; j <= n; j++) {
+      dp[i][j] = a.charAt(i - 1) === b.charAt(j - 1)
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[m][n];
+}
+
+// ค้นหาลูกค้า 1 คนจากชื่อ — ต่างจาก gas_line_webhook.js's findOneCustomer 2 จุด:
+// (1) ตอบข้อความชัดเจนเมื่อไม่พบเลย (ไม่เงียบ) เพราะที่นี่ไม่มีคำสั่งนำหน้าบอกเจตนา
+// ("[ชื่อ] CODE-จำนวน" ธรรมดา) ผู้ใช้ควรรู้ทันทีว่าพิมพ์ชื่อผิดหรือหาไม่เจอ ไม่ใช่เงียบ
+// แล้วงงว่าทำไมบอทไม่ตอบ (2) ถ้าหาไม่เจอเลยทั้ง ilike และตัดช่องว่างเทียบ ลองเสนอชื่อ
+// "ใกล้เคียง" ด้วย Levenshtein distance ให้เลือกแทนที่จะจบที่ "ไม่พบ" เฉยๆ (เพิ่มตามคำขอ
+// 2026-10-18 — เผื่อพิมพ์ชื่อผิด/สะกดเพี้ยนเล็กน้อย เช่นพิมพ์ "Pyu Win" แทน "Phyu Win")
 function findOneCustomer_(name, replyToken, resendTemplate) {
   var enc = encodeURIComponent('%' + name + '%');
   var rows = _sbGet_('/rest/v1/customers?name=ilike.' + enc + '&select=id,name');
+  var allRows = null; // ดึงทั้งหมดครั้งเดียว ใช้ซ้ำได้ทั้ง fallback ตัดช่องว่าง และ fuzzy ด้านล่าง
 
   if (!rows || rows.length === 0) {
+    allRows = _sbGet_('/rest/v1/customers?select=id,name') || [];
     var needle = name.trim().toLowerCase().replace(/\s+/g, '');
-    var allRows = _sbGet_('/rest/v1/customers?select=id,name') || [];
     rows = allRows.filter(function(c) {
       return c.name.toLowerCase().replace(/\s+/g, '').indexOf(needle) !== -1;
     });
   }
+
   if (!rows || rows.length === 0) {
+    if (!allRows) allRows = _sbGet_('/rest/v1/customers?select=id,name') || [];
+    var needleTrim = name.trim();
+    var scored = allRows.map(function(c) { return { c: c, dist: _levenshtein_(needleTrim, c.name) }; })
+      .sort(function(a, b) { return a.dist - b.dist; });
+    // threshold ยอมรับ — ผ่อนตามความยาวชื่อที่พิมพ์มา (ชื่อสั้นต้องใกล้เคียงกว่าชื่อยาว)
+    var threshold = Math.max(2, Math.ceil(needleTrim.length * 0.5));
+    var close = scored.filter(function(s) { return s.dist <= threshold; }).slice(0, 5).map(function(s) { return s.c; });
+
+    if (close.length > 0) {
+      var closeItems = close.map(function(c) {
+        var text = (resendTemplate || '{name}').replace('{name}', c.name);
+        return { type: 'action', action: { type: 'message', label: c.name.substring(0, 20), text: text } };
+      });
+      sendQuickReplyGas(replyToken, '❓ ไม่พบ "' + name + '" ตรงๆ — ใกล้เคียงชื่อนี้ไหมคะ:', closeItems);
+      return null;
+    }
     replyMessage(replyToken, '❌ ไม่พบลูกค้าชื่อ "' + name + '" ในระบบค่ะ');
     return null;
   }
