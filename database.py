@@ -978,6 +978,119 @@ def delete_expense_record(expense_id: str) -> None:
     get_expense_records_df.clear()
 
 
+# ─── ยืมคะแนน (ลูกค้าให้เปิดบิลไปก่อนเพื่อนับ PV/BV ทันที แล้วคืนคะแนนทีหลังด้วยบิลจริง
+# อีกใบ) — จัดการที่แท็บ 🗂️ รายละเอียดบิล → 💳 ยืมคะแนน (pv_loan_ui.py) ────────────────
+
+def get_bill_totals(bill_no: str) -> dict:
+    """คำนวณยอด ฿/PV/BV รวมของบิลเลขนี้จาก transactions join products — BV อยู่แค่ใน
+    products.bv_per_unit (transactions ไม่มีคอลัมน์นี้) ใช้ครั้งเดียวตอน preview ก่อน
+    บันทึกยืม/คืนคะแนน แล้ว snapshot ผลลัพธ์ลง pv_loans/pv_loan_repayments ไม่ join สดอีก"""
+    sb = get_supabase()
+    rows = _retry(lambda: sb.table("transactions").select(
+        "product_id, qty, total_amount, points_per_unit"
+    ).eq("bill_no", bill_no).execute()).data
+    if not rows:
+        return {"baht": 0.0, "pv": 0.0, "bv": 0.0, "found": False}
+    baht = sum(float(r.get("total_amount") or 0) for r in rows)
+    pv = sum(float(r.get("points_per_unit") or 0) * float(r.get("qty") or 0) for r in rows)
+    product_ids = list({r["product_id"] for r in rows if r.get("product_id")})
+    bv_map: dict[str, float] = {}
+    for i in range(0, len(product_ids), 50):
+        chunk = product_ids[i:i + 50]
+        prod_rows = _retry(lambda _c=chunk: sb.table("products").select("id, bv_per_unit")
+                            .in_("id", _c).execute()).data
+        for p in prod_rows:
+            bv_map[p["id"]] = float(p.get("bv_per_unit") or 0)
+    bv = sum(bv_map.get(r.get("product_id"), 0.0) * float(r.get("qty") or 0) for r in rows)
+    return {"baht": baht, "pv": pv, "bv": bv, "found": True}
+
+
+@st.cache_data(ttl=60)
+def get_customer_opened_bills_df(customer_id: str) -> pd.DataFrame:
+    """บิลที่ "เปิดบิลแล้ว" ของลูกค้าคนนี้เท่านั้น (เฉพาะสถานะนี้ถึงนับ PV/BV จริง) ใช้เลือก
+    ตอนบันทึกยืม/คืนคะแนน — group ตาม bill_no รวม ฿/PV (ไม่รวม BV ตรงนี้ ดู get_bill_totals
+    สำหรับยอดเต็ม BV ตอนเลือกบิลแล้ว — กันต้อง join products ทุกครั้งที่แค่โชว์ลิสต์เฉยๆ)"""
+    rows = _retry(lambda: get_supabase().table("transactions").select(
+        "bill_no, date, total_amount, qty, points_per_unit"
+    ).eq("customer_id", customer_id).eq("bill_status", "เปิดบิลแล้ว")
+     .not_.is_("bill_no", "null").execute()).data
+    if not rows:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    df["pv"] = df["points_per_unit"].astype(float) * df["qty"].astype(float)
+    g = (df.groupby("bill_no")
+         .agg(date=("date", "first"), total_amount=("total_amount", "sum"), pv=("pv", "sum"))
+         .reset_index())
+    return g.sort_values("date", ascending=False)
+
+
+@st.cache_data(ttl=60)
+def get_pv_loans_df() -> pd.DataFrame:
+    """ยืมคะแนนทุกรายการ + ยอดคืนสะสม (sum ของ pv_loan_repayments ต่อ loan) — เพิ่มคอลัมน์
+    pv_repaid/bv_repaid/baht_repaid/pv_remaining/is_settled (settled เมื่อคืน PV ครบแล้ว)"""
+    loans = _retry(lambda: get_supabase().table("pv_loans").select(
+        "*, customers(name)"
+    ).order("lend_date", desc=True).execute()).data
+    if not loans:
+        return pd.DataFrame()
+    df = pd.DataFrame(loans)
+    df["customer_name"] = df["customers"].apply(lambda c: (c or {}).get("name", ""))
+    df = df.drop(columns=["customers"])
+
+    repays = _retry(lambda: get_supabase().table("pv_loan_repayments").select(
+        "loan_id, pv_repaid, bv_repaid, baht_repaid"
+    ).execute()).data
+    rdf = pd.DataFrame(repays) if repays else pd.DataFrame()
+    sums = (rdf.groupby("loan_id")[["pv_repaid", "bv_repaid", "baht_repaid"]].sum()
+            if not rdf.empty else pd.DataFrame())
+
+    for col in ["pv_repaid", "bv_repaid", "baht_repaid"]:
+        df[col] = df["id"].map(sums[col]) if col in sums else 0.0
+        df[col] = df[col].fillna(0.0)
+
+    df["pv_remaining"] = (df["pv_lent"].astype(float) - df["pv_repaid"]).clip(lower=0)
+    df["is_settled"] = df["pv_repaid"] >= df["pv_lent"].astype(float)
+    return df
+
+
+def create_pv_loan(customer_id: str, lend_date: str, lend_bill_no: str,
+                    pv_lent: float, bv_lent: float, baht_lent: float, notes: str = "") -> None:
+    _retry(lambda: get_supabase().table("pv_loans").insert({
+        "id": str(uuid.uuid4()), "customer_id": customer_id, "lend_date": lend_date,
+        "lend_bill_no": lend_bill_no, "pv_lent": pv_lent, "bv_lent": bv_lent,
+        "baht_lent": baht_lent, "notes": notes,
+    }).execute())
+    get_pv_loans_df.clear()
+
+
+def delete_pv_loan(loan_id: str) -> None:
+    """ลบยืมคะแนน + ประวัติคืนที่ผูกกันทั้งหมด (ON DELETE CASCADE ของ pv_loan_repayments)"""
+    _retry(lambda: get_supabase().table("pv_loans").delete().eq("id", loan_id).execute())
+    get_pv_loans_df.clear()
+
+
+def add_pv_loan_repayment(loan_id: str, repay_date: str, repay_bill_no: str,
+                           pv_repaid: float, bv_repaid: float, baht_repaid: float, notes: str = "") -> None:
+    """เพิ่มแถวคืนคะแนน (append-only — คืนบางส่วนได้หลายครั้งต่อ 1 ยืม ไม่ทับยอดเดิม)"""
+    _retry(lambda: get_supabase().table("pv_loan_repayments").insert({
+        "id": str(uuid.uuid4()), "loan_id": loan_id, "repay_date": repay_date,
+        "repay_bill_no": repay_bill_no, "pv_repaid": pv_repaid, "bv_repaid": bv_repaid,
+        "baht_repaid": baht_repaid, "notes": notes,
+    }).execute())
+    get_pv_loans_df.clear()
+
+
+def get_pv_loan_repayments_df(loan_id: str) -> pd.DataFrame:
+    rows = _retry(lambda: get_supabase().table("pv_loan_repayments").select("*")
+                   .eq("loan_id", loan_id).order("repay_date").execute()).data
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def delete_pv_loan_repayment(repayment_id: str) -> None:
+    _retry(lambda: get_supabase().table("pv_loan_repayments").delete().eq("id", repayment_id).execute())
+    get_pv_loans_df.clear()
+
+
 # ─── Commission / ใบหัก ณ ที่จ่าย (50 ทวิ) / เคลม VAT ────────────────────────
 
 @st.cache_data(ttl=60)
