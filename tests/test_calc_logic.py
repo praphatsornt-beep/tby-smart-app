@@ -39,6 +39,11 @@ class TestParseCalcOrder(unittest.TestCase):
         self.assertEqual(r["cod_cash_given"], 1000.0)
         self.assertEqual(r["ship_zip"], "12170")
 
+    def test_cod_cash_given_with_space(self):
+        r = calc_logic.parse_calc_order("TF2581-1 COD 1000", PRODUCTS)
+        self.assertTrue(r["is_cod"])
+        self.assertEqual(r["cod_cash_given"], 1000.0)
+
     def test_cod_cash_given_with_dash(self):
         r = calc_logic.parse_calc_order("TF2581-1 COD-500", PRODUCTS)
         self.assertTrue(r["is_cod"])

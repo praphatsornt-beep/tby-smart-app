@@ -56,6 +56,12 @@ def parse_calc_order(text: str, products: list) -> dict:
         token = tokens[i]
         if token == "COD":
             is_cod = True
+            # "COD 1000" (เว้นวรรค) — ตัวเลขยอดเก็บปลายทางอยู่ token ถัดไปแยกกัน ต่างจาก
+            # "COD1000"/"COD-1000" ที่ติดกันเป็น token เดียว (เช็คด้านล่าง)
+            if i + 1 < n and re.match(r"^\d+(?:\.\d+)?$", tokens[i + 1]):
+                cod_cash_given = float(tokens[i + 1])
+                i += 2
+                continue
             i += 1
             continue
         _cod_cash_m = _COD_CASH_RE.match(token)
