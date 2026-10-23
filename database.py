@@ -107,6 +107,23 @@ def upsert_customer_address(data: dict) -> None:
         # ตั้งใจลบทุกแถวที่เบอร์นี้ทิ้งก่อน insert เสมอ (ยืนยันจากผู้ใช้ 2026-09-01) — เบอร์
         # เดียวกัน = ที่อยู่ล่าสุดของเบอร์นั้นเท่านั้นที่ถูกต้อง ไม่เก็บที่อยู่เก่าซ้ำไว้
         _retry(lambda: db.table("customer_addresses").delete().eq("phone", data["phone"].strip()).execute())
+    if data.get("customer_id"):
+        # ลูกค้าคนเดิม ที่อยู่เดิมเป๊ะ (บ้านเลขที่/ตำบล/อำเภอ/จังหวัด/รหัสไปรษณีย์ตรงกันหมด)
+        # แต่เปลี่ยนแค่เบอร์โทร — เงื่อนไข eq("phone", ...) ด้านบนไม่ลบแถวเก่า (เบอร์ไม่ตรงกัน)
+        # ทำให้เหลือ 2 แถวซ้ำกันของลูกค้าคนเดียวกัน ต่างกันแค่เบอร์ (ยืนยันจากผู้ใช้ 2026-10-23)
+        # เทียบแบบ exact-match หลัง strip() เท่านั้น ไม่ fuzzy — เหมือนที่อื่นในไฟล์นี้ที่ไม่มี
+        # fuzzy address matching ไว้เลย (get_address_by_phone ก็ exact เหมือนกัน)
+        _norm = lambda s: (s or "").strip()
+        _new_key = tuple(_norm(data.get(k)) for k in
+                          ("address_line", "district", "amphure", "province", "postal_code"))
+        _existing = _retry(lambda: db.table("customer_addresses")
+                            .select("id,address_line,district,amphure,province,postal_code")
+                            .eq("customer_id", data["customer_id"]).execute()).data
+        _dup_ids = [r["id"] for r in _existing
+                    if tuple(_norm(r.get(k)) for k in
+                             ("address_line", "district", "amphure", "province", "postal_code")) == _new_key]
+        if _dup_ids:
+            _retry(lambda: db.table("customer_addresses").delete().in_("id", _dup_ids).execute())
     _retry(lambda: db.table("customer_addresses").insert(data).execute())
     _all_customer_addresses.clear()
 
