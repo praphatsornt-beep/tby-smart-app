@@ -371,7 +371,30 @@ def render(tab1, products, customers, customer_map):
                                 except Exception as _sa_load_e:
                                     _saved_addrs = []
                                     st.caption(f"⚠️ โหลดที่อยู่เดิมไม่สำเร็จ: {_sa_load_e}")
-                                if _saved_addrs:
+                                if len(_saved_addrs) == 1 and st.session_state.get("_addr_auto_cid") != _cid:
+                                    # มีที่อยู่เดิมของลูกค้านี้แค่ 1 รายการ — เติมให้ทันทีไม่ต้อง
+                                    # กดเปิด expander + กดเลือกซ้ำ (เดิมต้อง 2 คลิกแม้ไม่มีตัวเลือก
+                                    # อื่นให้เลือกเลย) ยืนยันจากผู้ใช้ 2026-10-23 — เติมแค่ครั้งเดียว
+                                    # ต่อ customer_id เดียวกัน (ไม่เติมซ้ำทุก rerun) เพื่อให้แก้ไขเอง
+                                    # ต่อได้โดยไม่ถูกเขียนทับ เหมือน pattern _last_rph_fill ด้านล่าง
+                                    _sa = _saved_addrs[0]
+                                    st.session_state["_addr_auto_cid"] = _cid
+                                    _qa_dt = (_sa.get("district", "") or "").strip()
+                                    _qa_pc = (_sa.get("postal_code", "") or "").strip()
+                                    st.session_state["_fr_rname"] = _sa.get("recipient_name", "")
+                                    st.session_state["_fr_rphone"]= _sa.get("phone", "")
+                                    st.session_state["_fr_al"]  = _sa.get("address_line", "")
+                                    st.session_state["_fr_dt"]  = _qa_dt
+                                    st.session_state["_fr_am"]  = _sa.get("amphure", "")
+                                    st.session_state["_fr_pv"]  = _sa.get("province", "")
+                                    st.session_state["_staged_pc"]     = _qa_pc
+                                    st.session_state["_r_last_dt"]     = _qa_dt
+                                    st.session_state["_r_last_pc"]     = _qa_pc
+                                    st.session_state["_last_rph_fill"] = _sa.get("phone", "")
+                                    st.session_state.pop("r_dt_searchbox", None)
+                                    st.session_state.pop("r_am_searchbox", None)
+                                    st.rerun()
+                                elif len(_saved_addrs) > 1:
                                     # st.expander เก็บสถานะเปิด/ปิดฝั่ง frontend เอง (uncontrolled) —
                                     # ส่ง expanded=False ซ้ำๆ ไม่ทำให้มันปิดถ้า key เดิมยังไม่เปลี่ยน
                                     # ต้องเปลี่ยน key (version-bump) เพื่อบังคับ remount ใหม่ทุกครั้ง
@@ -394,6 +417,7 @@ def render(tab1, products, customers, customer_map):
                                                 st.session_state["_r_last_dt"]     = _qa_dt
                                                 st.session_state["_r_last_pc"]     = _qa_pc
                                                 st.session_state["_last_rph_fill"] = _sa.get("phone", "")
+                                                st.session_state["_addr_auto_cid"] = _cid
                                                 st.session_state.pop("r_dt_searchbox", None)
                                                 st.session_state.pop("r_am_searchbox", None)
                                                 st.session_state[f"_addr_open_ver_{_cid}"] = _addr_exp_ver + 1
@@ -650,6 +674,9 @@ def render(tab1, products, customers, customer_map):
                 if valid_items:
                     if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก การจ่าย")
                     if m_bill is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")
+                if m_delivery == "ส่งพัสดุ":
+                    if not r_addr_line.strip(): m_errors.append("⚠️ เลือกส่งพัสดุ แต่ยังไม่ได้กรอกที่อยู่")
+                    if not m_postcode.strip():   m_errors.append("⚠️ เลือกส่งพัสดุ แต่ยังไม่ได้กรอกรหัสไปรษณีย์")
 
                 if m_errors:
                     st.markdown(
@@ -1260,7 +1287,27 @@ def render(tab1, products, customers, customer_map):
                     except Exception as _sp_load_e:
                         _sp_saved = []
                         st.caption(f"⚠️ โหลดที่อยู่เดิมไม่สำเร็จ: {_sp_load_e}")
-                    if _sp_saved:
+                    if len(_sp_saved) == 1 and st.session_state.get("_sp_addr_auto_cid") != _sp_cid:
+                        # มีที่อยู่เดิมแค่ 1 รายการ — เติมให้ทันทีไม่ต้องกดเปิด expander + เลือก
+                        # ซ้ำ (เหมือนฝั่ง 📝 บันทึกขาย ด้านบน) ยืนยันจากผู้ใช้ 2026-10-23
+                        _sa = _sp_saved[0]
+                        st.session_state["_sp_addr_auto_cid"] = _sp_cid
+                        _sa_dt = (_sa.get("district", "") or "").strip()
+                        _sa_pc = (_sa.get("postal_code", "") or "").strip()
+                        st.session_state["_fsp_rname"] = _sa.get("recipient_name", "")
+                        st.session_state["_fsp_rphone"]= _sa.get("phone", "")
+                        st.session_state["_fsp_al"]   = _sa.get("address_line", "")
+                        st.session_state["_fsp_dt"]   = _sa_dt
+                        st.session_state["_fsp_am"]   = _sa.get("amphure", "")
+                        st.session_state["_fsp_pv"]   = _sa.get("province", "")
+                        st.session_state["_fsp_pc"]   = _sa_pc
+                        st.session_state["_sp_last_dt"] = _sa_dt
+                        st.session_state["_sp_last_pc"] = _sa_pc
+                        st.session_state["_sp_last_rph_fill"] = _sa.get("phone", "")
+                        st.session_state.pop(f"sp_dt_searchbox_v{_sp_av}", None)
+                        st.session_state.pop(f"sp_am_searchbox_v{_sp_av}", None)
+                        st.rerun()
+                    elif len(_sp_saved) > 1:
                         with st.expander(f"⚡ ที่อยู่เดิม ({len(_sp_saved)} รายการ)", expanded=False):
                             for _sa in _sp_saved:
                                 _lbl = f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  {_sa.get('address_line','')} {_sa.get('district','')} {_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}"
@@ -1276,6 +1323,7 @@ def render(tab1, products, customers, customer_map):
                                     st.session_state["_fsp_pc"]   = _sa_pc
                                     st.session_state["_sp_last_dt"] = _sa_dt
                                     st.session_state["_sp_last_pc"] = _sa_pc
+                                    st.session_state["_sp_addr_auto_cid"] = _sp_cid
                                     st.session_state.pop(f"sp_dt_searchbox_v{_sp_av}", None)
                                     st.session_state.pop(f"sp_am_searchbox_v{_sp_av}", None)
                                     st.rerun()
@@ -1425,6 +1473,8 @@ def render(tab1, products, customers, customer_map):
                     st.error("กรุณากรอกชื่อผู้รับ")
                 elif not _sp_pc.strip():
                     st.error("กรุณากรอกรหัสไปรษณีย์")
+                elif not _sp_items:
+                    st.error("กรุณาเลือกสินค้าที่จะส่งอย่างน้อย 1 รายการ")
                 elif not _guard_double_submit("sp_save"):
                     pass  # กดซ้ำเร็วเกินไป (เน็ตช้า/ใจร้อน) — ข้ามโดยไม่แจ้ง error
                 else:
