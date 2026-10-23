@@ -2815,11 +2815,17 @@ def mark_cod_transferred(tracking_nos: list[str]) -> None:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).isoformat()
     db = get_supabase()
-    _retry(lambda: db.table("shipments")
-           .update({"cod_transferred_at": now})
-           .in_("tracking_no", tracking_nos)
-           .is_("cod_transferred_at", "null")
-           .execute())
+    # chunk ทีละ 50 — PostgREST .in_() จำกัดความยาว URL ไว้ที่ราว 50 id เหมือนทุกที่
+    # ในไฟล์นี้ที่ batch ด้วย .in_() (เดิมส่ง tracking_nos ทั้งลิสต์เดียว ถ้า iShip คืนมา
+    # เกิน 50 tracking ในช่วง 90 วัน จะ fail เงียบๆ ไม่มี error ใดๆ — พบ 2026-10-23)
+    for i in range(0, len(tracking_nos), 50):
+        chunk = tracking_nos[i:i + 50]
+        _retry(lambda: db.table("shipments")
+               .update({"cod_transferred_at": now})
+               .in_("tracking_no", chunk)
+               .is_("cod_transferred_at", "null")
+               .execute())
+    get_shipments.clear()
 
 
 def mark_cod_paid(tracking_no_to_date: dict[str, str]) -> int:
@@ -2955,6 +2961,7 @@ def update_delivery_statuses(statuses: dict) -> int:
             _retry(lambda: db.table("shipments").update(
                 {"delivery_status": status}).in_("tracking_no", chunk).execute())
             count += len(chunk)
+    get_shipments.clear()
     return count
 
 
