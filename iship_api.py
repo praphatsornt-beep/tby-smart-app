@@ -434,6 +434,12 @@ def create_order(
         payload["label_phone"]   = src["ISHIP_LABEL_PHONE"]
         payload["label_address"] = src["ISHIP_SRC_ADDRESS"]
         payload["label_zipcode"] = src["ISHIP_SRC_ZIPCODE"]
+        # บันทึกที่อยู่ผู้รับเข้าสมุดที่อยู่ของ iShip ด้วย (ค้นจากเบอร์โทรบนเว็บ iShip ได้
+        # ครั้งหน้า) — เดิม REST API /create_order ไม่มีฟิลด์นี้เลย ทำให้ลูกค้าที่ส่งแบบ
+        # โอนเงิน (ไม่ใช่ COD) ไม่ถูกบันทึกที่อยู่ใน iship เหมือนกัน (ยืนยันจากผู้ใช้
+        # 2026-10-23) เพิ่มให้ตรงกับฝั่ง COD ข้างล่าง — ไม่มีเอกสาร API ยืนยันชื่อฟิลด์นี้
+        # ตรงกับฟอร์มเว็บ ต้องทดสอบของจริงอีกครั้งว่า iShip รับฟิลด์นี้ผ่าน REST API จริง
+        payload["save_dst_address"] = "1"
     if is_cod:
         _prod_list = [{
             "product_name":   "สินค้าซูเลียน",
@@ -456,7 +462,13 @@ def create_order(
             "order_type":        "1",
             "is_optional":       "0",
             "category_id":       "2",
-            "save_dst_address":  "0",
+            # "1" = ติ๊ก checkbox "บันทึกที่อยู่" (ค่า default ของฟอร์มเว็บจริงคือติ๊กไว้
+            # เสมอ — ยืนยันจากสกรีนช็อตฟอร์มจริง 2026-10-23) เดิมเป็น "0" มาตั้งแต่ commit
+            # ที่ copy payload เต็มจากฟอร์มเว็บจริงมาตอนแรก (76047008) — ตอน capture ฟอร์ม
+            # นั้นบังเอิญไม่ได้ติ๊กไว้ ไม่ใช่ค่าที่ตั้งใจปิดไว้ ทำให้ที่อยู่ลูกค้าที่ส่งผ่าน
+            # COD ไม่เคยถูกบันทึกเข้าสมุดที่อยู่ของ iShip เองเลย (ค้นจากเบอร์โทรบนเว็บ
+            # iShip ไม่เจอ) แก้เป็น "1" ให้ตรงกับพฤติกรรม default จริง
+            "save_dst_address":  "1",
             "product_value":     "",
             "weight":            str(_weight_int),
             "width":             str(width_cm) if width_cm else "",
