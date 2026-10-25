@@ -2801,17 +2801,20 @@ def get_last_pack_event(tracking_no: str) -> dict | None:
     return rows[0] if rows else None
 
 
-def insert_pack_event(tracking_no: str, source: str = "other",
+def insert_pack_event(tracking_no: str, source: str = "shopee",
                        matched_customer_name: str | None = None,
-                       matched_carrier: str | None = None) -> None:
+                       matched_carrier: str | None = None,
+                       order_sn: str | None = None) -> None:
     """บันทึก 1 แถวทุกครั้งที่สแกนสำเร็จ — ตั้งใจให้ append-only (ไม่ upsert/dedup ในระดับ DB)
     เพราะแพคของชิ้นเดียวกันซ้ำ (เช่น สแกนผิดมือ) ก็ยังอยากเห็นเป็นประวัติ ไม่อยากให้หายไปเงียบๆ —
-    การเตือน "เคยสแกนมาก่อน" ทำที่ get_last_pack_event ก่อนเรียกฟังก์ชันนี้แทน"""
+    การเตือน "เคยสแกนมาก่อน" ทำที่ get_last_pack_event ก่อนเรียกฟังก์ชันนี้แทน — order_sn เติม
+    เฉพาะตอนสแกนเจอบาร์โค้ดเลขที่ออเดอร์ Shopee แยกต่างหากบนใบปะหน้าด้วย (ดู pack_scan_ui.py)"""
     _retry(lambda: get_supabase().table("pack_events").insert({
         "tracking_no": tracking_no,
         "source": source,
         "matched_customer_name": matched_customer_name,
         "matched_carrier": matched_carrier,
+        "order_sn": order_sn,
     }).execute())
     get_pack_events_df.clear()
 

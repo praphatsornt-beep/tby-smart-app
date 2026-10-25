@@ -10,10 +10,16 @@ CREATE TABLE IF NOT EXISTS pack_events (
   -- 'iship' = match ตรงกับ shipments.tracking_no ของร้านเอง (รู้แน่นอน)
   -- 'lazada' = เดาจากคำนำหน้าเลข "LEX" (ขนส่งในเครือ Lazada เอง ไม่มีใน carrier list ของ
   --            iship เลย — ดู pack_scan_ui.py's _guess_source())
-  -- 'shopee' = ที่เหลือทั้งหมด (เดาดีที่สุดเท่าที่ทำได้ ไม่ใช่ข้อเท็จจริง 100%)
+  -- 'shopee' = รู้แน่นอนถ้าเจอ order_sn ด้วย (ดูคอลัมน์ order_sn ด้านล่าง) ไม่งั้นเป็นแค่เดา
+  --            ที่เหลือทั้งหมด (ดีที่สุดเท่าที่ทำได้ ไม่ใช่ข้อเท็จจริง 100%)
   source                 TEXT NOT NULL DEFAULT 'shopee',
   matched_customer_name  TEXT,  -- เติมเฉพาะ source='iship' ที่หาเจอใน shipments ตอนสแกน
   matched_carrier        TEXT,  -- เติมเฉพาะ source='iship' เช่นกัน
+  -- เลขที่ออเดอร์ Shopee (รูปแบบ YYMMDD+8 ตัวอักษร/ตัวเลข เช่น 261024F2DR9DEW) ถ้าสแกนเจอ
+  -- บาร์โค้ดที่ 2 บนใบปะหน้า Shopee (แยกจากบาร์โค้ด tracking หลัก) — ยืนยันกับ user 2026-10-25
+  -- ว่าอยากบันทึกไว้ด้วยให้ชัวร์ขึ้นว่าเป็น Shopee จริง ไม่ใช่แค่เดา — ไม่มีของ Lazada/iship
+  -- (Lazada ไม่มีบาร์โค้ดเลขออเดอร์แยกให้สแกนในรูปที่เช็ค, iship รู้จาก shipments อยู่แล้ว)
+  order_sn               TEXT,
   packed_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

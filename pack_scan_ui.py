@@ -12,6 +12,7 @@ Shopee (ดีที่สุดเท่าที่ทำได้ — ไม�
 WebRTC เชื่อมต่อไม่ติดสำหรับผู้ใช้หลังบ้าน NAT สูงกว่าความเร็วที่ได้มา (ดู good_version/
 segfault incident ในอดีต — โปรเจกต์นี้ระวังเรื่อง binary dependency เปราะบางบน Cloud อยู่แล้ว)
 """
+import re
 from datetime import date
 
 import streamlit as st
@@ -26,6 +27,18 @@ import database as db
 # Lazada เกือบชัวร์ (ต่างจาก SPX/Flash ที่ทั้ง iship และ Shopee ใช้ร่วมกัน เลขคำนำหน้าแบบนั้น
 # แยกไม่ได้จริงๆ ว่าใครส่ง ต้อง match กับ shipments เท่านั้นถึงจะมั่นใจ)
 _LAZADA_TRACKING_PREFIXES = ("LEX",)
+
+# รูปแบบเลขที่ออเดอร์ Shopee — YYMMDD (6 หลัก) + 8 ตัวอักษร/ตัวเลข เช่น "261024F2DR9DEW"
+# (ยืนยันจากใบปะหน้า Shopee จริง 2026-10-25 — มีบาร์โค้ดเลขออเดอร์แยกต่างหากจากบาร์โค้ด
+# tracking หลักบนใบเดียวกัน) เจอรหัสนี้ตอนสแกน = รู้แน่นอนว่าเป็น Shopee ไม่ใช่แค่เดาแล้ว
+# (ต่างจาก _guess_source ด้านล่างที่เดา Shopee แบบ "ที่เหลือทั้งหมด") — ไม่ชนกับ tracking
+# number ของขนส่งไหนเลย (ทุกเจ้าขึ้นต้นด้วยตัวอักษรเสมอ ไม่ใช่ตัวเลขล้วน 6 หลักแบบนี้) และ
+# ไม่ชนกับเลขที่ออเดอร์ Lazada (ยาว 16 หลักตัวเลขล้วน ไม่มีตัวอักษรปน)
+_SHOPEE_ORDER_SN_RE = re.compile(r"^\d{6}[A-Za-z0-9]{8}$")
+
+
+def _looks_like_shopee_order_sn(code: str) -> bool:
+    return bool(_SHOPEE_ORDER_SN_RE.match(code))
 
 
 def _guess_source(tracking_no: str, shipment: dict | None) -> str:
@@ -66,22 +79,30 @@ def _decode_codes(image: Image.Image) -> list[str]:
     return codes
 
 
-def _classify_and_save(tracking_no: str) -> dict:
+def _classify_and_save(tracking_no: str, order_sn: str | None = None) -> dict:
     """เช็คว่า tracking_no นี้ตรงกับ shipments (ออเดอร์ iship ของร้านเอง) ไหม แล้วบันทึกลง
-    pack_events — คืน dict สรุปผลให้ render() เอาไปแสดง (query แค่ครั้งเดียว ไม่ query ซ้ำ)"""
+    pack_events — คืน dict สรุปผลให้ render() เอาไปแสดง (query แค่ครั้งเดียว ไม่ query ซ้ำ)
+    order_sn (ถ้ามี — มาจากบาร์โค้ดเลขที่ออเดอร์ Shopee แยกที่สแกนเจอในภาพเดียวกัน) ทำให้รู้
+    แน่นอนว่าเป็น Shopee เลย ไม่ต้องพึ่ง _guess_source แบบเดาที่เหลือทั้งหมดอีกต่อไป"""
     shipment = db.find_shipment_by_tracking_no(tracking_no)
     last_event = db.get_last_pack_event(tracking_no)
-    source = _guess_source(tracking_no, shipment)
+    if shipment:
+        source = "iship"
+    elif order_sn:
+        source = "shopee"
+    else:
+        source = _guess_source(tracking_no, shipment)
     if shipment:
         customer_name = (shipment.get("customers") or {}).get("name")
         carrier = shipment.get("carrier")
     else:
         customer_name = None
         carrier = None
-    db.insert_pack_event(tracking_no, source, customer_name, carrier)
+    db.insert_pack_event(tracking_no, source, customer_name, carrier, order_sn)
     return {
         "tracking_no": tracking_no,
         "source": source,
+        "order_sn": order_sn,
         "customer_name": customer_name,
         "carrier": carrier,
         "already_scanned_before": last_event is not None,
@@ -95,6 +116,11 @@ def _show_result(result: dict) -> None:
         st.success(
             f"✅ บันทึกแพคแล้ว: **{result['tracking_no']}** "
             f"({result['carrier'] or '-'}) — คุณ{result['customer_name']}"
+        )
+    elif result.get("order_sn"):
+        st.success(
+            f"✅ บันทึกแพคแล้ว: **{result['tracking_no']}** — {_label} "
+            f"(ออเดอร์ {result['order_sn']})"
         )
     else:
         st.success(f"✅ บันทึกแพคแล้ว: **{result['tracking_no']}** — {_label}")
@@ -126,17 +152,31 @@ def render():
             st.error(f"❌ ถอดรหัสไม่สำเร็จ: {e}")
             codes = []
 
+        # แยกรหัสที่ "หน้าตาเหมือนเลขที่ออเดอร์ Shopee" ออกมาต่างหากก่อน (ถ้ามี) — ที่เหลือถึง
+        # ไปตีความเป็น "เลข tracking" ตามปกติ กันกรณีใบ Shopee มีทั้ง 2 บาร์โค้ดอยู่ในภาพเดียว
+        # (ยืนยันจากใบจริง) ไม่ให้ผู้ใช้ต้องมานั่งเลือกเองว่าอันไหนคือ tracking อันไหนคือเลขออเดอร์
+        _order_sn = next((c for c in codes if _looks_like_shopee_order_sn(c)), None)
+        _tracking_candidates = [c for c in codes if c != _order_sn]
+
         if not codes:
             st.error("❌ อ่านไม่ออก — ลองถ่ายใหม่ให้บาร์โค้ด/QR อยู่กลางภาพ คมชัด และไม่สะท้อนแสง")
-        elif len(codes) == 1:
-            st.session_state["_pack_last_result"] = _classify_and_save(codes[0])
+        elif len(_tracking_candidates) == 1:
+            st.session_state["_pack_last_result"] = _classify_and_save(
+                _tracking_candidates[0], order_sn=_order_sn
+            )
+            st.session_state["_pack_cam_ver"] = _ver + 1
+            st.rerun()
+        elif not _tracking_candidates and _order_sn:
+            # เจอแต่เลขที่ออเดอร์ ไม่มีบาร์โค้ด tracking ติดมาด้วยเลย (เช่น ถ่ายมาแค่ครึ่งใบ) —
+            # ใช้เลขออเดอร์เป็น tracking_no ไปก่อน ยังดีกว่าไม่บันทึกอะไรเลย
+            st.session_state["_pack_last_result"] = _classify_and_save(_order_sn, order_sn=_order_sn)
             st.session_state["_pack_cam_ver"] = _ver + 1
             st.rerun()
         else:
-            st.warning(f"พบ {len(codes)} รหัสในภาพเดียว — เลือกรหัสที่เป็นเลข tracking:")
-            for i, c in enumerate(codes):
+            st.warning(f"พบ {len(_tracking_candidates)} รหัสที่อาจเป็นเลข tracking — เลือกอันที่ถูก:")
+            for i, c in enumerate(_tracking_candidates):
                 if st.button(f"✅ {c}", key=f"_pack_pick_{_ver}_{i}", width="stretch"):
-                    st.session_state["_pack_last_result"] = _classify_and_save(c)
+                    st.session_state["_pack_last_result"] = _classify_and_save(c, order_sn=_order_sn)
                     st.session_state["_pack_cam_ver"] = _ver + 1
                     st.rerun()
 
@@ -154,10 +194,12 @@ def _render_today_log() -> None:
     st.caption(f"แพคไปแล้ว {len(df)} ชิ้นวันนี้")
     df = df.copy()
     df["source"] = df["source"].map(lambda s: _SOURCE_LABELS.get(s, s))
-    _cols = ["packed_at", "tracking_no", "source", "matched_customer_name", "matched_carrier"]
+    _cols = ["packed_at", "tracking_no", "source", "order_sn", "matched_customer_name", "matched_carrier"]
+    _cols = [c for c in _cols if c in df.columns]
     st.dataframe(
         df[_cols].rename(columns={
             "packed_at": "เวลา", "tracking_no": "Tracking", "source": "ที่มา",
+            "order_sn": "เลขออเดอร์ (Shopee)",
             "matched_customer_name": "ลูกค้า (iship)", "matched_carrier": "ขนส่ง (iship)",
         }),
         width="stretch", hide_index=True,
