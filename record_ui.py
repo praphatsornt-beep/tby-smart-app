@@ -1202,6 +1202,20 @@ def render(tab1, products, customers, customer_map):
             _sp_date = _sp_c2.date_input("วันที่", value=date.today(), key="sp_date")
             _sp_cid  = _sc_map[_sp_cust]["id"] if _sp_cust != "— เลือกลูกค้า —" else ""
 
+            # ── Reset recipient fields when customer changes (เหมือนฝั่ง 📝 บันทึกขาย) ──
+            # เดิมแท็บนี้ไม่มี reset นี้เลย — สลับลูกค้า (เช่นกด "✕ เปลี่ยน" แล้วเลือกคนใหม่)
+            # ที่อยู่ของลูกค้าคนก่อนยังค้างอยู่ในฟอร์ม เสี่ยงบันทึกที่อยู่ผิดคนไปกับลูกค้าใหม่
+            # เจอตอนไล่เช็คแท็บนี้ซ้ำ 2026-10-25 หลังแก้ validation ที่อยู่/สินค้าหายไปแล้ว
+            if _sp_cid:
+                if st.session_state.get("_sp_prev_cid") != _sp_cid:
+                    st.session_state["_sp_prev_cid"] = _sp_cid
+                    for _k in ("rname", "rphone", "al", "dt", "am", "pv", "pc"):
+                        st.session_state[f"sp_{_k}_v{_sp_av}"] = ""
+                    st.session_state.pop(f"sp_dt_searchbox_v{_sp_av}", None)
+                    st.session_state.pop(f"sp_am_searchbox_v{_sp_av}", None)
+            else:
+                st.session_state.pop("_sp_prev_cid", None)
+
             # ── เพิ่มสินค้า+ตะกร้า+ที่อยู่ | สรุปยอด (จัดหน้าให้เหมือนบันทึกขาย) ──
             _ship_cart_col, _ship_summary_col = st.columns([1.9, 1.0], gap="medium")
 
