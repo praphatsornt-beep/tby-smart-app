@@ -16,7 +16,7 @@ import stock_ui
 import master_data_ui
 import record_ui
 import bill_detail_ui
-from ui_helpers import _extract_tracking, _extract_iship_order_id, _build_success_info, get_bulky_presets
+from ui_helpers import _extract_tracking, _extract_iship_order_id, _build_success_info, get_bulky_presets, goto_customer_ledger
 
 thai_address._load_db()  # pre-warm cache
 
@@ -1252,10 +1252,20 @@ def _show_iship_success_dialog():
             with st.expander("🔍 iShip response (หา order_id)"):
                 st.json(_dbg_resp)
 
-    if st.button("✅ ตกลง / เริ่มออเดอร์ใหม่", type="primary", width="stretch"):
+    _dsc1, _dsc2 = st.columns(2)
+    if _dsc1.button("✅ ตกลง / เริ่มออเดอร์ใหม่", type="primary", width="stretch"):
         _tab = info.get("tab", "sale")
         st.session_state.pop("_iship_success_info", None)
         st.session_state["_do_clear_after_iship"] = _tab
+        st.rerun()
+    if _dsc2.button("👤 สรุปยอดลูกค้า", width="stretch",
+                     disabled=not bool(info.get("customer")),
+                     help="ไปดูสรุปยอด/ประวัติของลูกค้าคนนี้ที่ 👤 บัตรลูกค้า" if info.get("customer")
+                          else "ออเดอร์นี้ไม่ได้ผูกกับลูกค้าที่ลงทะเบียนไว้"):
+        _tab = info.get("tab", "sale")
+        st.session_state.pop("_iship_success_info", None)
+        st.session_state["_do_clear_after_iship"] = _tab
+        goto_customer_ledger(info["customer"])
         st.rerun()
 
 

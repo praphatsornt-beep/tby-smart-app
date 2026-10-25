@@ -369,6 +369,23 @@ def _build_success_info(tracking, tab, customer, dst_name, dst_phone, address,
     return d
 
 
+def goto_customer_ledger(customer_name: str) -> None:
+    """ตั้ง session_state ให้พาไปแท็บ 🗂️ รายละเอียดบิล → 👤 บัตรลูกค้า พร้อมเลือกลูกค้าคนนี้
+    ไว้ให้เลย — ใช้ร่วมกันจากปุ่ม "👤 สรุปยอดลูกค้า" หลังบันทึกขาย/ส่งของสำเร็จ (record_ui.py's
+    _print_popup และ app.py's iShip success dialog) เพิ่ม 2026-10-25 ตามคำขอ user ("พอบันทึก
+    ขาย หรือบันทึกหลังส่งแล้ว ให้มีปุ่มกด ให้ไปหน้าสรุปยอดลูกค้าชื่อคนนี้")
+
+    ผู้เรียกต้องจัดการปิด popup/dialog ของตัวเองเสร็จก่อน (ลบ key ที่ทำให้ popup โชว์อยู่) แล้ว
+    ค่อยเรียก st.rerun() เอง — ฟังก์ชันนี้แค่ตั้ง 3 คีย์ที่หน้าเป้าหมายต้องใช้ตามลำดับก่อน
+    widget ของมันเองจะ render ในรอบถัดไป (ตาม pattern staging-key เดิมของแอปนี้ — ปลอดภัยเพราะ
+    รอบนี้ยังไม่ถึงคิว bill_detail_ui.render() เลย จะไปรันจริงตอน rerun รอบหน้าเท่านั้น):
+    `active_tab` (เมนูซ้าย, app.py), `_t5_active_sub` (pills เลือกแท็บย่อยใน bill_detail_ui.py),
+    `t5_ledger_cust` (selectbox เลือกลูกค้าในแท็บบัตรลูกค้า — ต้องตรงชื่อเป๊ะกับ customers.name)"""
+    st.session_state["active_tab"] = "🗂️ รายละเอียดบิล"
+    st.session_state["_t5_active_sub"] = "👤 บัตรลูกค้า"
+    st.session_state["t5_ledger_cust"] = customer_name
+
+
 def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,
                                event_date: str,
                                collect_ship_items: bool = False,

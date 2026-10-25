@@ -15,7 +15,7 @@ from ui_helpers import (
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
     get_bulky_presets, _render_cart_card, _cart_add_items, _guard_double_submit,
-    _esc,
+    _esc, goto_customer_ledger,
 )
 import carriers as carr
 
@@ -942,7 +942,7 @@ def render(tab1, products, customers, customer_map):
                     if _old_items:
                         _items_txt += "  ·  เก่า: " + ", ".join(f"{it['product_id']} {it['name']} ×{it['qty']}" for it in _old_items)
                     with st.container(border=True):
-                        _pb1, _pb2, _pb3, _pb4, _pb5 = st.columns([4, 3, 1, 1, 1])
+                        _pb1, _pb2, _pb3, _pb4, _pb5, _pb6 = st.columns([4, 3, 1, 1, 1, 1.3])
                         _pb1.markdown(
                             f"✅ **{_pd['customer_name']}** — บิล `{_pd['bill_no']}` | {_pd['bill_date']}"
                             f"\n\n_{_items_txt}_"
@@ -982,6 +982,12 @@ def render(tab1, products, customers, customer_map):
                         if _pb5.button("✕ ปิด", key="popup_close", width="stretch"):
                             del st.session_state["_print_popup"]
                             st.session_state.pop("_popup_show_print", None)
+                            st.rerun()
+                        if _pb6.button("👤 สรุปยอด", key="popup_goto_ledger", width="stretch",
+                                       help="ไปดูสรุปยอด/ประวัติของลูกค้าคนนี้ที่ 👤 บัตรลูกค้า"):
+                            del st.session_state["_print_popup"]
+                            st.session_state.pop("_popup_show_print", None)
+                            goto_customer_ledger(_pd["customer_name"])
                             st.rerun()
 
                     if st.session_state.get("_popup_show_print") and st.session_state.get("_print_popup"):
