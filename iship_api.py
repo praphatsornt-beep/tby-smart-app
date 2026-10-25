@@ -145,32 +145,32 @@ def get_cod_transfers(days_back: int = 60) -> dict:
     _cols = ["datetime","txn_id","withdraw_type","bank_name","bank_account_name",
              "bank_account_number","amount","non_vat","vat","fee","service_fee",
              "transfer_fee","net_total_amount","wd_remark","txn_id"]
-    _list_params = {
-        "draw": 1, "start": 0, "length": 200,
-        "start_date": str(start_date), "end_date": str(end_date),
-        "order[0][column]": 0, "order[0][dir]": "desc",
-        "search[value]": "", "search[regex]": "false",
-    }
-    for i, col in enumerate(_cols):
-        _list_params[f"columns[{i}][data]"]            = col
-        _list_params[f"columns[{i}][name]"]            = ""
-        _list_params[f"columns[{i}][searchable]"]      = "true"
-        _list_params[f"columns[{i}][orderable]"]       = "true"
-        _list_params[f"columns[{i}][search][value]"]   = ""
-        _list_params[f"columns[{i}][search][regex]"]   = "false"
+
+    def _list_fetch_page(start, length):
+        _list_params = {
+            "draw": 1, "start": start, "length": length,
+            "start_date": str(start_date), "end_date": str(end_date),
+            "order[0][column]": 0, "order[0][dir]": "desc",
+            "search[value]": "", "search[regex]": "false",
+        }
+        for i, col in enumerate(_cols):
+            _list_params[f"columns[{i}][data]"]            = col
+            _list_params[f"columns[{i}][name]"]            = ""
+            _list_params[f"columns[{i}][searchable]"]      = "true"
+            _list_params[f"columns[{i}][orderable]"]       = "true"
+            _list_params[f"columns[{i}][search][value]"]   = ""
+            _list_params[f"columns[{i}][search][regex]"]   = "false"
+        r = sess.get(f"{WEB_BASE}/getdt-withdraw", headers=hdrs, timeout=15, params=_list_params)
+        if r.status_code != 200 or not r.text.strip():
+            raise RuntimeError(f"list HTTP {r.status_code}: {r.text[:200]}")
+        try:
+            return r.json().get("data", [])
+        except Exception:
+            raise RuntimeError(f"JSON parse failed: {r.text[:300]}")
 
     try:
-        # ── 1. list WD batches ───────────────────────────────────────
-        r_list = sess.get(f"{WEB_BASE}/getdt-withdraw", headers=hdrs,
-                          timeout=15, params=_list_params)
-        if r_list.status_code != 200:
-            return {"transfers": {}, "error": f"list HTTP {r_list.status_code}: {r_list.text[:200]}"}
-        if not r_list.text.strip():
-            return {"transfers": {}, "error": f"empty response (url={r_list.url}, cookies={list(sess.cookies.keys())})"}
-        try:
-            batches = r_list.json().get("data", [])
-        except Exception:
-            return {"transfers": {}, "error": f"JSON parse failed: {r_list.text[:300]}"}
+        # ── 1. list WD batches (วนทุกหน้า — ดู _fetch_all_dt_rows) ─────
+        batches = _fetch_all_dt_rows(_list_fetch_page)
 
         # ── 2. detail แบบ parallel ──────────────────────────────────
         # สร้าง session ใหม่ต่อ thread (copy cookies+headers จาก session หลัก)
@@ -185,16 +185,25 @@ def get_cod_transfers(days_back: int = 60) -> dict:
         _det_cols = ["created_at","pickedup_date","courier_code","track_no",
                      "dst_name","dst_phone","cod_amount","cod_fee",
                      "cod_balance","updated_at"]
-        _det_params_base = {"draw": 1, "start": 0, "length": 200,
-                            "order[0][column]": 0, "order[0][dir]": "desc",
-                            "search[value]": "", "search[regex]": "false"}
-        for _i, _c in enumerate(_det_cols):
-            _det_params_base[f"columns[{_i}][data]"]          = _c
-            _det_params_base[f"columns[{_i}][name]"]          = ""
-            _det_params_base[f"columns[{_i}][searchable]"]    = "true"
-            _det_params_base[f"columns[{_i}][orderable]"]     = "true"
-            _det_params_base[f"columns[{_i}][search][value]"] = ""
-            _det_params_base[f"columns[{_i}][search][regex]"] = "false"
+
+        def _det_fetch_page(_s, hdrs2, txn_id, start, length):
+            _p = {"draw": 1, "start": start, "length": length,
+                  "order[0][column]": 0, "order[0][dir]": "desc",
+                  "search[value]": "", "search[regex]": "false"}
+            for _i, _c in enumerate(_det_cols):
+                _p[f"columns[{_i}][data]"]          = _c
+                _p[f"columns[{_i}][name]"]          = ""
+                _p[f"columns[{_i}][searchable]"]    = "true"
+                _p[f"columns[{_i}][orderable]"]     = "true"
+                _p[f"columns[{_i}][search][value]"] = ""
+                _p[f"columns[{_i}][search][regex]"] = "false"
+            r = _s.get(f"{WEB_BASE}/getdt-report-cod/{txn_id}", headers=hdrs2, timeout=15, params=_p)
+            if r.status_code != 200 or not r.text.strip():
+                raise RuntimeError(f"status={r.status_code} empty={not r.text.strip()} url={r.url[:80]}")
+            try:
+                return r.json().get("data", [])
+            except Exception:
+                raise RuntimeError(f"JSON fail: {r.text[:200]}")
 
         def _fetch_detail(batch):
             txn_id  = batch.get("txn_id", "")
@@ -205,14 +214,9 @@ def get_cod_transfers(days_back: int = 60) -> dict:
             _s = _make_sess()
             hdrs2 = {**hdrs, "Referer": f"{WEB_BASE}/report/withdraw/{txn_id}"}
             try:
-                r = _s.get(f"{WEB_BASE}/getdt-report-cod/{txn_id}",
-                           headers=hdrs2, timeout=15, params=_det_params_base)
-                if r.status_code != 200 or not r.text.strip():
-                    return {"_debug_det": f"status={r.status_code} empty={not r.text.strip()} url={r.url[:80]}"}
-                try:
-                    rows = r.json().get("data", [])
-                except Exception:
-                    return {"_debug_det": f"JSON fail: {r.text[:200]}"}
+                # แต่ละ withdrawal batch อาจมี tracking มากกว่า 1 หน้าได้เหมือนกันถ้า batch
+                # นั้นครอบคลุม tracking จำนวนมาก (ดู _fetch_all_dt_rows) — วนให้ครบเหมือนกัน
+                rows = _fetch_all_dt_rows(lambda start, length: _det_fetch_page(_s, hdrs2, txn_id, start, length))
             except Exception as ex:
                 return {"_debug_det": str(ex)}
             result = {}
@@ -247,9 +251,37 @@ def get_cod_transfers(days_back: int = 60) -> dict:
         return {"transfers": {}, "error": str(e)}
 
 
+def _fetch_all_dt_rows(fetch_page, page_size: int = 200, max_pages: int = 25):
+    """วน fetch endpoint สไตล์ DataTables ของ iShip (start/length) จนกว่าหน้าจะมาไม่เต็มแล้ว
+    หยุด — กันกรณีมีมากกว่า 1 หน้าแต่โค้ดเดิมดึงแค่หน้าแรกเสมอ (เจอจริง 2026-10-25:
+    get_shipment_statuses() เดิม fetch แค่หน้าแรก length=200 เรียงใหม่สุดก่อนเสมอ พอจำนวน
+    shipments ในช่วง days_back เกิน 200 แถว (ร้านนี้มี 451 แถวใน 90 วัน) แถวที่เลยลำดับที่
+    200 ไปเงียบๆ ไม่ถูกเช็คสถานะอีกเลยไม่ว่าจะรัน sync กี่ครั้ง/กี่เช้าก็ตาม — ยืนยันจากข้อมูล
+    จริง พบแถวค้างสถานะ "ชำระเงินสำเร็จ" ตั้งแต่ก.ย. ไม่เคยอัปเดตเลยทั้งที่รันทุกเช้ามาตลอด)
+    fetch_page(start, length) คืน list ของแถวดิบ (ไม่ใช่ response ทั้งก้อน) หรือ raise Exception
+    ถ้าหน้าแรกพังให้ปล่อย exception ขึ้นไปตามเดิม (คงพฤติกรรม error-reporting เดิม) แต่ถ้าหน้า
+    ถัดๆไปพังกลางทาง ให้หยุดเงียบๆ แล้วคืนเท่าที่ได้มา (ดีกว่าทิ้งทุกอย่างที่ดึงมาแล้วทั้งหมด)"""
+    rows = []
+    start = 0
+    for i in range(max_pages):
+        try:
+            page_rows = fetch_page(start, page_size)
+        except Exception:
+            if i == 0:
+                raise
+            break
+        if not page_rows:
+            break
+        rows += page_rows
+        if len(page_rows) < page_size:
+            break
+        start += page_size
+    return rows
+
+
 def get_shipment_statuses(days_back: int = 60) -> dict:
     """
-    ดึงสถานะการจัดส่งจาก iShip
+    ดึงสถานะการจัดส่งจาก iShip (วนทุกหน้าถ้ามีเกิน 1 หน้า — ดู _fetch_all_dt_rows)
     คืน: {"statuses": {track_no: status_text}, "error": str|None}
     """
     sess, login_msg = _get_cached_web_session()
@@ -284,30 +316,32 @@ def get_shipment_statuses(days_back: int = 60) -> dict:
         ("cancel_btn",      "",                          True,  True),
         ("detail_btn",      "",                          True,  True),
     ]
-    params = {
-        "draw": 1, "start": 0, "length": 200,
-        "order[0][column]": 1, "order[0][dir]": "desc",
-        "search[value]": "", "search[regex]": "false",
-        "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
-        "order_print": 3, "courier_filter": "all",
-    }
-    for i, (data, name, searchable, orderable) in enumerate(_cols):
-        params[f"columns[{i}][data]"]          = data
-        params[f"columns[{i}][name]"]          = name
-        params[f"columns[{i}][searchable]"]    = "true" if searchable else "false"
-        params[f"columns[{i}][orderable]"]     = "true" if orderable else "false"
-        params[f"columns[{i}][search][value]"] = ""
-        params[f"columns[{i}][search][regex]"] = "false"
+
+    def _fetch_page(start, length):
+        params = {
+            "draw": 1, "start": start, "length": length,
+            "order[0][column]": 1, "order[0][dir]": "desc",
+            "search[value]": "", "search[regex]": "false",
+            "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
+            "order_print": 3, "courier_filter": "all",
+        }
+        for i, (data, name, searchable, orderable) in enumerate(_cols):
+            params[f"columns[{i}][data]"]          = data
+            params[f"columns[{i}][name]"]          = name
+            params[f"columns[{i}][searchable]"]    = "true" if searchable else "false"
+            params[f"columns[{i}][orderable]"]     = "true" if orderable else "false"
+            params[f"columns[{i}][search][value]"] = ""
+            params[f"columns[{i}][search][regex]"] = "false"
+        r = sess.get(f"{WEB_BASE}/getdt-new-shipment", headers=hdrs, params=params, timeout=15)
+        if r.status_code != 200 or not r.text.strip():
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
+        try:
+            return r.json().get("data", [])
+        except Exception:
+            raise RuntimeError(f"JSON parse failed: {r.text[:300]}")
 
     try:
-        r = sess.get(f"{WEB_BASE}/getdt-new-shipment", headers=hdrs,
-                     params=params, timeout=15)
-        if r.status_code != 200 or not r.text.strip():
-            return {"statuses": {}, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
-        try:
-            rows = r.json().get("data", [])
-        except Exception:
-            return {"statuses": {}, "error": f"JSON parse failed: {r.text[:300]}"}
+        rows = _fetch_all_dt_rows(_fetch_page)
         statuses = {}
         for row in rows:
             track_html   = row.get("track_no", "") or ""
@@ -354,30 +388,34 @@ def get_shipping_report(days_back: int = 60) -> dict:
     _cols = ["created_at", "pickedup_date", "delivered_at", "courier_code", "track_no",
              "custom_order_id", "dst_name", "dst_address", "cod_amount", "size", "box",
              "actual_weight", "discount_price", "status_name", "remark"]
-    params = {
-        "draw": 1, "start": 0, "length": 1000,
-        "order[0][column]": 0, "order[0][dir]": "desc",
-        "search[value]": "", "search[regex]": "false",
-        "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
-        "pickedup_date": "",
-    }
-    for i, c in enumerate(_cols):
-        params[f"columns[{i}][data]"]          = c
-        params[f"columns[{i}][name]"]          = c
-        params[f"columns[{i}][searchable]"]    = "true"
-        params[f"columns[{i}][orderable]"]     = "true"
-        params[f"columns[{i}][search][value]"] = ""
-        params[f"columns[{i}][search][regex]"] = "false"
+
+    def _fetch_page(start, length):
+        params = {
+            "draw": 1, "start": start, "length": length,
+            "order[0][column]": 0, "order[0][dir]": "desc",
+            "search[value]": "", "search[regex]": "false",
+            "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
+            "pickedup_date": "",
+        }
+        for i, c in enumerate(_cols):
+            params[f"columns[{i}][data]"]          = c
+            params[f"columns[{i}][name]"]          = c
+            params[f"columns[{i}][searchable]"]    = "true"
+            params[f"columns[{i}][orderable]"]     = "true"
+            params[f"columns[{i}][search][value]"] = ""
+            params[f"columns[{i}][search][regex]"] = "false"
+        r = sess.get(f"{WEB_BASE}/getdt-shipping-report", headers=hdrs, params=params, timeout=15)
+        if r.status_code != 200 or not r.text.strip():
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
+        try:
+            return r.json().get("data", [])
+        except Exception:
+            raise RuntimeError(f"JSON parse failed: {r.text[:300]}")
 
     try:
-        r = sess.get(f"{WEB_BASE}/getdt-shipping-report", headers=hdrs,
-                     params=params, timeout=15)
-        if r.status_code != 200 or not r.text.strip():
-            return {"report": {}, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
-        try:
-            rows = r.json().get("data", [])
-        except Exception:
-            return {"report": {}, "error": f"JSON parse failed: {r.text[:300]}"}
+        # 1000/page เดิมเผื่อไว้มากแล้ว แต่ยังวนหน้าต่อให้ด้วยเผื่อโตเกินในอนาคต (ดู
+        # _fetch_all_dt_rows — เจอบั๊กคล้ายกันจริงใน get_shipment_statuses() ที่ length=200)
+        rows = _fetch_all_dt_rows(_fetch_page, page_size=1000)
         report = {}
         for row in rows:
             tn = (row.get("track_no") or "").strip()

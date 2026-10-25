@@ -330,6 +330,117 @@ class TestParseIshipStatusRows(unittest.TestCase):
         self.assertEqual(edd._parse_iship_status_rows([]), {})
 
 
+class TestFetchAllDtRows(unittest.TestCase):
+    """เพิ่ม 2026-10-25 — พบจริงว่า _iship_get_shipment_statuses() (และ iship_api.py ตัวจริง)
+    เดิมดึงแค่หน้าแรก length=200 ของ endpoint สไตล์ DataTables ของ iShip เสมอ ไม่เคยวนหน้าต่อ
+    เลย ทำให้ร้านที่มี shipments เกิน 200 แถวในช่วง days_back (พบจริง 451 แถวใน 90 วัน)
+    tracking ที่เลยลำดับ 200 ไปไม่ถูกเช็คสถานะอีกเลยไม่ว่าจะรัน sync กี่เช้าก็ตาม"""
+
+    def test_paginates_across_multiple_pages(self):
+        all_rows = [{"id": i} for i in range(451)]
+
+        def fetch_page(start, length):
+            return all_rows[start:start + length]
+
+        result = edd._fetch_all_dt_rows(fetch_page, page_size=200)
+        self.assertEqual(len(result), 451)
+        self.assertEqual(result[0]["id"], 0)
+        self.assertEqual(result[-1]["id"], 450)
+
+    def test_terminates_when_last_page_exactly_full(self):
+        all_rows = [{"id": i} for i in range(400)]
+
+        def fetch_page(start, length):
+            return all_rows[start:start + length]
+
+        result = edd._fetch_all_dt_rows(fetch_page, page_size=200)
+        self.assertEqual(len(result), 400)
+
+    def test_first_page_failure_raises(self):
+        def fetch_page(start, length):
+            raise RuntimeError("boom")
+
+        with self.assertRaises(RuntimeError):
+            edd._fetch_all_dt_rows(fetch_page, page_size=200)
+
+    def test_later_page_failure_returns_partial_results(self):
+        calls = {"n": 0}
+
+        def fetch_page(start, length):
+            calls["n"] += 1
+            if calls["n"] == 1:
+                return [{"id": i} for i in range(200)]
+            raise RuntimeError("boom on page 2")
+
+        result = edd._fetch_all_dt_rows(fetch_page, page_size=200)
+        self.assertEqual(len(result), 200)
+
+    def test_single_short_page_no_loop(self):
+        def fetch_page(start, length):
+            return [{"id": 1}, {"id": 2}] if start == 0 else []
+
+        result = edd._fetch_all_dt_rows(fetch_page, page_size=200)
+        self.assertEqual(len(result), 2)
+
+
+class TestParseIshipCodDetailRows(unittest.TestCase):
+    """เพิ่ม 2026-10-25 ตามคำขอ user ("COD...ทำได้มั้ย" → อัตโนมัติ) — พอร์ต
+    iship_api.get_cod_transfers()'s _fetch_detail() มาแยกเป็นฟังก์ชัน pure"""
+
+    def test_extracts_fields_per_row(self):
+        rows = [{"track_no": "TH111", "cod_amount": "500", "cod_balance": 485}]
+        result = edd._parse_iship_cod_detail_rows(rows, "WD1", "2026-10-20", 1000)
+        self.assertEqual(result, {
+            "TH111": {"wd_id": "WD1", "date": "2026-10-20", "cod_amount": "500",
+                      "net": 485, "status": "ชำระเงินสำเร็จ"},
+        })
+
+    def test_uses_batch_net_when_cod_balance_missing(self):
+        rows = [{"track_no": "TH222", "cod_amount": "300"}]
+        result = edd._parse_iship_cod_detail_rows(rows, "WD2", "2026-10-21", 999)
+        self.assertEqual(result["TH222"]["net"], 999)
+
+    def test_uses_real_status_name_when_present(self):
+        rows = [{"track_no": "TH333", "status_name": "โอนเงินสำเร็จ"}]
+        result = edd._parse_iship_cod_detail_rows(rows, "WD3", "2026-10-22", 0)
+        self.assertEqual(result["TH333"]["status"], "โอนเงินสำเร็จ")
+
+    def test_missing_track_no_skipped(self):
+        rows = [{"track_no": "", "cod_amount": "100"}]
+        result = edd._parse_iship_cod_detail_rows(rows, "WD4", "2026-10-23", 0)
+        self.assertEqual(result, {})
+
+    def test_empty_rows_returns_empty_dict(self):
+        self.assertEqual(edd._parse_iship_cod_detail_rows([], "WD5", "2026-10-24", 0), {})
+
+
+class TestParseIshipShippingReportRows(unittest.TestCase):
+    """เพิ่ม 2026-10-25 — พอร์ต iship_api.get_shipping_report()'s row-parsing มาแยกเป็น
+    ฟังก์ชัน pure"""
+
+    def test_extracts_fields_per_row(self):
+        rows = [{"track_no": "TH444", "discount_price": "89.5", "actual_weight": "2.3",
+                 "status_name": "จัดส่งสำเร็จ"}]
+        result = edd._parse_iship_shipping_report_rows(rows)
+        self.assertEqual(result, {
+            "TH444": {"discount_price": 89.5, "actual_weight": 2.3, "status_name": "จัดส่งสำเร็จ"},
+        })
+
+    def test_missing_track_no_skipped(self):
+        rows = [{"track_no": "", "discount_price": "50"}]
+        self.assertEqual(edd._parse_iship_shipping_report_rows(rows), {})
+
+    def test_zero_discount_price_kept_not_dropped(self):
+        # discount_price=0 หมายถึง "ยังไม่ชั่งน้ำหนักจริง" ไม่ใช่ "ฟรี" — ฝั่งเรียกใช้
+        # (_sync_iship_actual_costs) ต้องเป็นคนกรอง >0 เอง ฟังก์ชัน parse นี้ไม่ควรกรองลับๆ
+        rows = [{"track_no": "TH555", "discount_price": 0, "actual_weight": 0, "status_name": "รอเข้ารับ"}]
+        result = edd._parse_iship_shipping_report_rows(rows)
+        self.assertEqual(result["TH555"]["discount_price"], 0.0)
+
+    def test_empty_rows_returns_empty_dict(self):
+        self.assertEqual(edd._parse_iship_shipping_report_rows([]), {})
+
+
 class _FakeQuery:
     """ปลอม query builder ของ supabase-py แบบขั้นต่ำ — เก็บ data คงที่ไว้ ทุก chained method
     (select/eq/order/range ฯลฯ) คืน self ไปเรื่อยๆ จนกว่าจะ .execute() แล้วได้ data กลับ"""

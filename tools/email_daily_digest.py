@@ -15,12 +15,28 @@
 (เดิมมีเช็คอีเมลแจ้งยอดบัตรเครดิต/statement จากธนาคารด้วย — เอาออกแล้ว 2026-09-21 ตามคำขอ
 user "เอาเรื่องแจ้งยอดบัตรเครดิตออกก่อน" — โค้ดเดิมยังอยู่ใน git history ถ้าจะเอากลับมาทีหลัง)
 
-ก่อนสร้างสรุป ยัง sync สถานะจัดส่ง (delivery_status) ของ shipments ที่ยังไม่จบจาก iShip ให้
-อัตโนมัติด้วย (`_sync_iship_delivery_statuses`, เพิ่ม 2026-09-21 ตามคำขอ user "มันดึงทุกเช้า
-ได้เองมั้ย") — เหมือนกดปุ่ม "🚚 สถานะส่ง" ใน shipment_history_ui.py ทุกประการ แค่รันอัตโนมัติ
-ทุกเช้าแทน ต้องมี ISHIP_PHONE/ISHIP_PASSWORD ใน .env/secrets ด้วย (คนละตัวกับ ISHIP_TOKEN ที่
-ใช้สร้างออเดอร์ — นี่คือ login เว็บ iShip ตรงๆ) ไม่ critical ถ้า sync ล้มเหลว (เช่น iShip
-เปลี่ยนรหัสผ่าน) — แค่ print แจ้งเตือนแล้วรัน digest ส่วนที่เหลือต่อตามปกติ
+ก่อนสร้างสรุป ยัง sync 3 อย่างจาก iShip เข้า Supabase ให้อัตโนมัติด้วย (เหมือนกดปุ่มที่ตรงกัน
+ใน shipment_history_ui.py ทุกประการ แค่รันอัตโนมัติทุกเช้าแทน): **สถานะจัดส่ง**
+(`_sync_iship_delivery_statuses`, เพิ่ม 2026-09-21), **COD โอนแล้ว+mark จ่ายแล้ว**
+(`_sync_iship_cod_transferred`) และ **ยอดค่าส่งจริงหลังชั่งน้ำหนัก**
+(`_sync_iship_actual_costs`) — 2 ตัวหลังเพิ่ม 2026-10-25 ตามคำขอ user ("ถ้าอยากดึงข้อมูล
+ค่าส่ง และสถานะ และ COD โดยไม่ต้องกดปุ่ม ทั้ง 3 ทำได้มั้ย" → เลือกอัตโนมัติทั้ง 2 อย่าง) ต้องมี
+ISHIP_PHONE/ISHIP_PASSWORD ใน .env/secrets ด้วย (คนละตัวกับ ISHIP_TOKEN ที่ใช้สร้างออเดอร์ —
+นี่คือ login เว็บ iShip ตรงๆ) ไม่มีตัวไหน critical ถ้า sync ล้มเหลว (เช่น iShip เปลี่ยน
+รหัสผ่าน) — แค่ print แจ้งเตือนแล้วรัน digest ส่วนที่เหลือต่อตามปกติ
+
+**บั๊กจริงที่เจอ+แก้พร้อมกัน 2026-10-25** (user รายงาน "ถึงจะดึงแล้วทุกเช้า แต่ในตารางประวัติ
+การส่ง ยังไม่แสดงผลนะ" หลังใช้ฟีเจอร์สถานะจัดส่งอัตโนมัติมาสักพัก): `_iship_get_shipment_statuses()`
+(และ `iship_api.get_shipment_statuses()` ตัวจริงที่ปุ่ม "🚚 สถานะส่ง" เรียก) เดิม fetch
+endpoint สไตล์ DataTables ของ iShip แค่หน้าแรก `length=200` เสมอ ไม่เคยวนหน้าต่อเลย — เช็ค
+ข้อมูลจริงพบร้านนี้มี shipments 451 แถวใน 90 วัน (`days_back` ที่ใช้) เรียงใหม่สุดก่อนเสมอ
+(`order[0][dir]: desc`) ทำให้ tracking ที่เลยลำดับที่ ~200 ไป (มีจริง พบค้างสถานะ "ชำระเงิน
+สำเร็จ" ตั้งแต่ก.ย. ไม่เคยอัปเดตเลย) ไม่ถูกเช็คสถานะอีกเลยไม่ว่าจะรัน sync กี่เช้าก็ตาม — sync
+"ทำงาน" จริงทุกวันแต่ใช้ได้แค่กับ shipments ~200 รายการล่าสุดเท่านั้น แก้ด้วย `_fetch_all_dt_rows()`
+(พอร์ตจาก `iship_api._fetch_all_dt_rows()` ตัวใหม่ — วนหน้าด้วย `start`/`length` จนกว่าหน้า
+จะมาไม่เต็มแล้วหยุด เหมือน `_fetch_all_sb()` แต่สำหรับ endpoint ฝั่ง iShip เอง ไม่ใช่ Supabase)
+ใช้ร่วมกันทั้ง 3 ฟังก์ชัน sync ใหม่นี้ + แก้ `iship_api.py` ตัวจริงด้วย (ปุ่มกดเองในแอปก็เจอ
+บั๊กเดียวกัน ไม่ใช่แค่ script นี้)
 
 **Shopee ยืนยันจากอีเมลจริงแล้ว** (2026-09-19, ดู `ecom_calc.parse_shopee_return_emails`)
 — แกะเลขคำสั่งซื้อ/บริษัทขนส่ง/เลขติดตามพัสดุได้ครบ บันทึกลง Supabase ตาราง
@@ -44,9 +60,12 @@ import os
 import re
 import sys
 import json
+import uuid
 import imaplib
 import email
 import html as html_mod
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from email.header import decode_header
 from datetime import datetime, timedelta, timezone
 from urllib.parse import unquote
@@ -255,6 +274,32 @@ def _parse_iship_status_rows(rows: list[dict]) -> dict[str, str]:
     return statuses
 
 
+def _fetch_all_dt_rows(fetch_page, page_size: int = 200, max_pages: int = 25) -> list[dict]:
+    """เหมือน iship_api._fetch_all_dt_rows() ทุกประการ — วน fetch endpoint สไตล์ DataTables
+    ของ iShip (start/length) จนกว่าหน้าจะมาไม่เต็มแล้วหยุด แทนดึงแค่หน้าแรกเสมอเหมือนที่เป็น
+    บั๊กจริงมาก่อน (ดูคอมเมนต์เต็มใน iship_api.py — พบจริง 2026-10-25: ร้านนี้มี shipments
+    451 แถวใน 90 วัน แต่ _iship_get_shipment_statuses เดิม fetch แค่ length=200 หน้าแรกเสมอ
+    ทำให้ tracking ที่เลยลำดับ 200 ไป (เรียงใหม่สุดก่อน) ไม่ถูกเช็คสถานะอีกเลยไม่ว่าจะรัน sync
+    กี่เช้าก็ตาม — คัดลอกมาไว้ที่นี่แทนการ import iship_api.py เหตุผลเดียวกับฟังก์ชันอื่นๆ
+    ในไฟล์นี้ (ดู docstring บนสุดของไฟล์))"""
+    rows: list[dict] = []
+    start = 0
+    for i in range(max_pages):
+        try:
+            page_rows = fetch_page(start, page_size)
+        except Exception:
+            if i == 0:
+                raise
+            break
+        if not page_rows:
+            break
+        rows += page_rows
+        if len(page_rows) < page_size:
+            break
+        start += page_size
+    return rows
+
+
 def _iship_get_shipment_statuses(days_back: int = 90) -> dict:
     """เหมือน iship_api.get_shipment_statuses() ทุกประการ แต่ใช้ _iship_login() (ไม่แคช
     session) แทน คืน {"statuses": {track_no: status_text}, "error": str|None}"""
@@ -289,32 +334,377 @@ def _iship_get_shipment_statuses(days_back: int = 90) -> dict:
         ("cancel_btn", "", True, True),
         ("detail_btn", "", True, True),
     ]
-    params = {
-        "draw": 1, "start": 0, "length": 200,
-        "order[0][column]": 1, "order[0][dir]": "desc",
-        "search[value]": "", "search[regex]": "false",
-        "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
-        "order_print": 3, "courier_filter": "all",
-    }
-    for i, (data, name, searchable, orderable) in enumerate(_cols):
-        params[f"columns[{i}][data]"] = data
-        params[f"columns[{i}][name]"] = name
-        params[f"columns[{i}][searchable]"] = "true" if searchable else "false"
-        params[f"columns[{i}][orderable]"] = "true" if orderable else "false"
-        params[f"columns[{i}][search][value]"] = ""
-        params[f"columns[{i}][search][regex]"] = "false"
 
-    try:
+    def _fetch_page(start, length):
+        params = {
+            "draw": 1, "start": start, "length": length,
+            "order[0][column]": 1, "order[0][dir]": "desc",
+            "search[value]": "", "search[regex]": "false",
+            "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
+            "order_print": 3, "courier_filter": "all",
+        }
+        for i, (data, name, searchable, orderable) in enumerate(_cols):
+            params[f"columns[{i}][data]"] = data
+            params[f"columns[{i}][name]"] = name
+            params[f"columns[{i}][searchable]"] = "true" if searchable else "false"
+            params[f"columns[{i}][orderable]"] = "true" if orderable else "false"
+            params[f"columns[{i}][search][value]"] = ""
+            params[f"columns[{i}][search][regex]"] = "false"
         r = sess.get(f"{ISHIP_WEB_BASE}/getdt-new-shipment", headers=hdrs, params=params, timeout=15)
         if r.status_code != 200 or not r.text.strip():
-            return {"statuses": {}, "error": f"HTTP {r.status_code}: {r.text[:200]}"}
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
         try:
-            rows = r.json().get("data", [])
+            return r.json().get("data", [])
         except Exception:
-            return {"statuses": {}, "error": f"JSON parse failed: {r.text[:300]}"}
+            raise RuntimeError(f"JSON parse failed: {r.text[:300]}")
+
+    try:
+        rows = _fetch_all_dt_rows(_fetch_page)
         return {"statuses": _parse_iship_status_rows(rows), "error": None}
     except Exception as e:
         return {"statuses": {}, "error": str(e)}
+
+
+def _parse_iship_cod_detail_rows(rows: list[dict], txn_id: str, wd_date: str, net) -> dict[str, dict]:
+    """แกะ {tracking_no: {wd_id,date,cod_amount,net,status}} จากแถวดิบของ iShip's
+    getdt-report-cod/<txn_id> API — เหมือน iship_api.get_cod_transfers()'s _fetch_detail()
+    ทุกประการ (แยก pure ส่วนนี้ออกมาต่างหากให้ทดสอบได้โดยไม่ต้องปลอม HTTP session)"""
+    result: dict[str, dict] = {}
+    for row in rows:
+        tn = row.get("track_no", "")
+        if tn:
+            result[tn] = {
+                "wd_id": txn_id,
+                "date": wd_date,
+                "cod_amount": row.get("cod_amount", ""),
+                "net": row.get("cod_balance", net),
+                "status": row.get("status_name", "ชำระเงินสำเร็จ"),
+            }
+    return result
+
+
+def _iship_get_cod_transfers(days_back: int = 90) -> dict:
+    """เหมือน iship_api.get_cod_transfers() ทุกประการ แต่ใช้ _iship_login() (ไม่แคช session)
+    คืน {"transfers": {track_no: {...}}, "error": str|None}"""
+    sess, login_msg = _iship_login()
+    if not sess:
+        return {"transfers": {}, "error": login_msg}
+
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days_back)
+
+    sess.get(f"{ISHIP_WEB_BASE}/report/withdraw", timeout=10)
+    xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
+    hdrs = {
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Referer": f"{ISHIP_WEB_BASE}/report/withdraw",
+        "X-XSRF-TOKEN": xsrf,
+    }
+    _cols = ["datetime", "txn_id", "withdraw_type", "bank_name", "bank_account_name",
+             "bank_account_number", "amount", "non_vat", "vat", "fee", "service_fee",
+             "transfer_fee", "net_total_amount", "wd_remark", "txn_id"]
+
+    def _list_fetch_page(start, length):
+        _p = {
+            "draw": 1, "start": start, "length": length,
+            "start_date": str(start_date), "end_date": str(end_date),
+            "order[0][column]": 0, "order[0][dir]": "desc",
+            "search[value]": "", "search[regex]": "false",
+        }
+        for i, col in enumerate(_cols):
+            _p[f"columns[{i}][data]"] = col
+            _p[f"columns[{i}][name]"] = ""
+            _p[f"columns[{i}][searchable]"] = "true"
+            _p[f"columns[{i}][orderable]"] = "true"
+            _p[f"columns[{i}][search][value]"] = ""
+            _p[f"columns[{i}][search][regex]"] = "false"
+        r = sess.get(f"{ISHIP_WEB_BASE}/getdt-withdraw", headers=hdrs, timeout=15, params=_p)
+        if r.status_code != 200 or not r.text.strip():
+            raise RuntimeError(f"list HTTP {r.status_code}: {r.text[:200]}")
+        try:
+            return r.json().get("data", [])
+        except Exception:
+            raise RuntimeError(f"JSON parse failed: {r.text[:300]}")
+
+    try:
+        batches = _fetch_all_dt_rows(_list_fetch_page)
+
+        def _make_sess():
+            s = requests.Session()
+            s.cookies.update(sess.cookies)
+            s.headers.update(sess.headers)
+            return s
+
+        _det_cols = ["created_at", "pickedup_date", "courier_code", "track_no",
+                     "dst_name", "dst_phone", "cod_amount", "cod_fee",
+                     "cod_balance", "updated_at"]
+
+        def _det_fetch_page(_s, hdrs2, txn_id, start, length):
+            _p = {"draw": 1, "start": start, "length": length,
+                  "order[0][column]": 0, "order[0][dir]": "desc",
+                  "search[value]": "", "search[regex]": "false"}
+            for _i, _c in enumerate(_det_cols):
+                _p[f"columns[{_i}][data]"] = _c
+                _p[f"columns[{_i}][name]"] = ""
+                _p[f"columns[{_i}][searchable]"] = "true"
+                _p[f"columns[{_i}][orderable]"] = "true"
+                _p[f"columns[{_i}][search][value]"] = ""
+                _p[f"columns[{_i}][search][regex]"] = "false"
+            r = _s.get(f"{ISHIP_WEB_BASE}/getdt-report-cod/{txn_id}", headers=hdrs2, timeout=15, params=_p)
+            if r.status_code != 200 or not r.text.strip():
+                raise RuntimeError(f"status={r.status_code}")
+            try:
+                return r.json().get("data", [])
+            except Exception:
+                raise RuntimeError(f"JSON fail: {r.text[:200]}")
+
+        def _fetch_detail(batch):
+            txn_id = batch.get("txn_id", "")
+            wd_date = batch.get("datetime", "")[:10]
+            net = batch.get("net_total_amount", 0)
+            if not txn_id:
+                return {}
+            _s = _make_sess()
+            hdrs2 = {**hdrs, "Referer": f"{ISHIP_WEB_BASE}/report/withdraw/{txn_id}"}
+            try:
+                rows = _fetch_all_dt_rows(lambda start, length: _det_fetch_page(_s, hdrs2, txn_id, start, length))
+            except Exception:
+                return {}
+            return _parse_iship_cod_detail_rows(rows, txn_id, wd_date, net)
+
+        transfers: dict[str, dict] = {}
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [pool.submit(_fetch_detail, b) for b in batches]
+            for fut in as_completed(futures):
+                transfers.update(fut.result())
+        return {"transfers": transfers, "error": None}
+    except Exception as e:
+        return {"transfers": {}, "error": str(e)}
+
+
+def _parse_iship_shipping_report_rows(rows: list[dict]) -> dict[str, dict]:
+    """แกะ {tracking_no: {discount_price,actual_weight,status_name}} จากแถวดิบของ iShip's
+    getdt-shipping-report API — เหมือน iship_api.get_shipping_report() ทุกประการ"""
+    report: dict[str, dict] = {}
+    for row in rows:
+        tn = (row.get("track_no") or "").strip()
+        if not tn:
+            continue
+        report[tn] = {
+            "discount_price": float(row.get("discount_price") or 0),
+            "actual_weight": float(row.get("actual_weight") or 0),
+            "status_name": row.get("status_name", "") or "",
+        }
+    return report
+
+
+def _iship_get_shipping_report(days_back: int = 90) -> dict:
+    """เหมือน iship_api.get_shipping_report() ทุกประการ แต่ใช้ _iship_login() (ไม่แคช session)
+    คืน {"report": {track_no: {...}}, "error": str|None}"""
+    sess, login_msg = _iship_login()
+    if not sess:
+        return {"report": {}, "error": login_msg}
+
+    end_date = datetime.now().date()
+    start_date = end_date - timedelta(days=days_back)
+
+    sess.get(f"{ISHIP_WEB_BASE}/report/shipping", timeout=10)
+    xsrf = unquote(sess.cookies.get("XSRF-TOKEN", ""))
+    hdrs = {
+        "X-Requested-With": "XMLHttpRequest",
+        "Accept": "application/json, text/javascript, */*; q=0.01",
+        "Referer": f"{ISHIP_WEB_BASE}/report/shipping",
+        "X-XSRF-TOKEN": xsrf,
+    }
+    _cols = ["created_at", "pickedup_date", "delivered_at", "courier_code", "track_no",
+             "custom_order_id", "dst_name", "dst_address", "cod_amount", "size", "box",
+             "actual_weight", "discount_price", "status_name", "remark"]
+
+    def _fetch_page(start, length):
+        params = {
+            "draw": 1, "start": start, "length": length,
+            "order[0][column]": 0, "order[0][dir]": "desc",
+            "search[value]": "", "search[regex]": "false",
+            "status_id": "", "start_date": str(start_date), "end_date": str(end_date),
+            "pickedup_date": "",
+        }
+        for i, c in enumerate(_cols):
+            params[f"columns[{i}][data]"] = c
+            params[f"columns[{i}][name]"] = c
+            params[f"columns[{i}][searchable]"] = "true"
+            params[f"columns[{i}][orderable]"] = "true"
+            params[f"columns[{i}][search][value]"] = ""
+            params[f"columns[{i}][search][regex]"] = "false"
+        r = sess.get(f"{ISHIP_WEB_BASE}/getdt-shipping-report", headers=hdrs, params=params, timeout=15)
+        if r.status_code != 200 or not r.text.strip():
+            raise RuntimeError(f"HTTP {r.status_code}: {r.text[:200]}")
+        try:
+            return r.json().get("data", [])
+        except Exception:
+            raise RuntimeError(f"JSON parse failed: {r.text[:300]}")
+
+    try:
+        rows = _fetch_all_dt_rows(_fetch_page, page_size=1000)
+        return {"report": _parse_iship_shipping_report_rows(rows), "error": None}
+    except Exception as e:
+        return {"report": {}, "error": str(e)}
+
+
+def _get_pending_cod_tracking_sb(sb) -> list[str]:
+    """เหมือน database.get_pending_cod_tracking() ทุกประการ"""
+    rows = _fetch_all_sb(
+        lambda: sb.table("shipments").select("tracking_no")
+        .gt("cod_amount", 0).is_("cod_transferred_at", "null")
+        .not_.is_("tracking_no", "null").neq("tracking_no", "")
+    )
+    return [r["tracking_no"] for r in rows if r.get("tracking_no")]
+
+
+def _mark_cod_transferred_sb(sb, tracking_nos: list[str]) -> None:
+    """เหมือน database.mark_cod_transferred() ทุกประการ (chunk ทีละ 50 ตาม PostgREST .in_()
+    limit — ดูคอมเมนต์เต็มใน database.py)"""
+    if not tracking_nos:
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    for i in range(0, len(tracking_nos), 50):
+        chunk = tracking_nos[i:i + 50]
+        sb.table("shipments").update({"cod_transferred_at": now}) \
+          .in_("tracking_no", chunk).is_("cod_transferred_at", "null").execute()
+
+
+def _mark_cod_paid_sb(sb, tracking_no_to_date: dict[str, str]) -> int:
+    """เหมือน database.mark_cod_paid() ทุกประการ — จับคู่ shipment→transactions ผ่าน
+    product_id ใน items ของ shipment นั้น (fallback เป็นทุก COD transaction ของลูกค้าถ้า
+    items ไม่มี/ไม่ match) แล้ว insert partial_events + update pay_status='COD จ่ายแล้ว'"""
+    if not tracking_no_to_date:
+        return 0
+    ships = _fetch_all_sb(
+        lambda: sb.table("shipments").select("customer_id, tracking_no, items")
+        .in_("tracking_no", list(tracking_no_to_date.keys()))
+    )
+    ships = [s for s in ships if s.get("customer_id")]
+    if not ships:
+        return 0
+
+    cust_ids = list({s["customer_id"] for s in ships})
+    all_cod_txns = []
+    for i in range(0, len(cust_ids), 50):
+        chunk = cust_ids[i:i + 50]
+        all_cod_txns += _fetch_all_sb(
+            lambda: sb.table("transactions").select("id, customer_id, total_amount, product_id")
+            .in_("customer_id", chunk).eq("pay_status", "COD")
+        )
+    txns_by_cust: dict[str, list] = defaultdict(list)
+    for t in all_cod_txns:
+        txns_by_cust[t["customer_id"]].append(t)
+
+    pe_rows = []
+    txn_ids_to_mark = []
+    for s in ships:
+        cust_id = s["customer_id"]
+        tn = s.get("tracking_no")
+        transfer_date = (tracking_no_to_date.get(tn) or "")[:10]
+        if not transfer_date:
+            transfer_date = datetime.now(timezone.utc).date().isoformat()
+
+        all_txns = txns_by_cust.get(cust_id, [])
+        ship_pids = {it.get("product_id") for it in (s.get("items") or []) if it.get("product_id")}
+        if ship_pids:
+            txns = [t for t in all_txns if t.get("product_id") in ship_pids]
+            if not txns:
+                txns = all_txns
+        else:
+            txns = all_txns
+
+        for t in txns:
+            pe_rows.append({
+                "id": str(uuid.uuid4()),
+                "date": transfer_date,
+                "transaction_id": t["id"],
+                "qty_received": 0,
+                "amount_paid": float(t["total_amount"]),
+                "event_type": "จ่ายเงิน",
+                "notes": f"COD โอนจาก iShip ({tn})",
+            })
+            txn_ids_to_mark.append(t["id"])
+
+    count = len(txn_ids_to_mark)
+    for i in range(0, len(pe_rows), 50):
+        sb.table("partial_events").insert(pe_rows[i:i + 50]).execute()
+    for i in range(0, len(txn_ids_to_mark), 50):
+        sb.table("transactions").update({"pay_status": "COD จ่ายแล้ว"}) \
+          .in_("id", txn_ids_to_mark[i:i + 50]).execute()
+    return count
+
+
+def _mark_actual_shipping_costs_sb(sb, tracking_no_to_cost: dict) -> int:
+    """เหมือน database.mark_actual_shipping_costs() ทุกประการ"""
+    if not tracking_no_to_cost:
+        return 0
+    by_cost: dict[float, list[str]] = defaultdict(list)
+    for tn, cost in tracking_no_to_cost.items():
+        if tn and cost:
+            by_cost[float(cost)].append(tn)
+    count = 0
+    for cost, tns in by_cost.items():
+        for i in range(0, len(tns), 50):
+            chunk = tns[i:i + 50]
+            sb.table("shipments").update({"actual_shipping_cost": cost}) \
+              .in_("tracking_no", chunk).execute()
+            count += len(chunk)
+    return count
+
+
+def _sync_iship_cod_transferred(sb) -> None:
+    """sync สถานะ COD โอนแล้ว + mark transactions ที่เกี่ยวข้องเป็น 'COD จ่ายแล้ว' จาก iShip —
+    เหมือนปุ่ม "🔄 ตรวจสอบ COD" ใน shipment_history_ui.py ทุกประการ (db.get_pending_cod_tracking
+    + iship_api.get_cod_transfers + db.mark_cod_transferred + db.mark_cod_paid) แค่รันอัตโนมัติ
+    แทนต้องกดเอง เพิ่ม 2026-10-25 ตามคำขอ user ("ถ้าอยากดึง...COD โดยไม่ต้องกดปุ่ม ทำได้มั้ย" →
+    เลือก "อัตโนมัติทั้ง 2 อย่าง") ไม่ critical ถ้าล้มเหลว — แค่ print แจ้งเตือนแล้วปล่อยให้
+    digest ส่วนที่เหลือทำงานต่อตามปกติ ไม่ทำให้ทั้งฉบับล้มไปด้วย"""
+    try:
+        try:
+            _pending = _get_pending_cod_tracking_sb(sb)
+        except Exception:
+            _pending = None  # column ยังไม่มี — เหมือนปุ่มเดิม ดึงทั้งหมดไปก่อน
+        if _pending is not None and len(_pending) == 0:
+            print("💸 ไม่มี COD ที่รอโอน — ข้าม sync iShip")
+            return
+        _r = _iship_get_cod_transfers(days_back=90)
+        if _r.get("error"):
+            print(f"⚠️ ดึง COD transfer จาก iShip ไม่สำเร็จ: {_r['error']}")
+            return
+        _cod_transfers = _r.get("transfers", {})
+        if not _cod_transfers:
+            print("💸 ยังไม่มี COD ที่โอนแล้วในช่วง 90 วัน")
+            return
+        _mark_cod_transferred_sb(sb, list(_cod_transfers.keys()))
+        _pending_set = set(_pending or [])
+        _newly = {tn: info.get("date", "") for tn, info in _cod_transfers.items() if tn in _pending_set}
+        _n_marked = _mark_cod_paid_sb(sb, _newly)
+        print(f"💸 sync COD จาก iShip แล้ว {len(_cod_transfers)} tracking, mark จ่ายแล้ว {_n_marked} รายการ")
+    except Exception as e:
+        print(f"⚠️ sync COD จาก iShip ล้มเหลว: {e}")
+
+
+def _sync_iship_actual_costs(sb) -> None:
+    """sync actual_shipping_cost (ยอดที่ iShip คิดจริงหลังชั่งน้ำหนัก) จาก iShip — เหมือนปุ่ม
+    "💰 เทียบยอดจริง" ใน shipment_history_ui.py ทุกประการ แค่รันอัตโนมัติแทนต้องกดเอง เพิ่ม
+    2026-10-25 ตามคำขอเดียวกับ _sync_iship_cod_transferred ด้านบน ไม่ critical ถ้าล้มเหลว —
+    แค่ print แจ้งเตือนแล้วปล่อยให้ digest ส่วนที่เหลือทำงานต่อตามปกติ"""
+    try:
+        _br = _iship_get_shipping_report(days_back=90)
+        if _br.get("error"):
+            print(f"⚠️ ดึงยอดค่าส่งจริงจาก iShip ไม่สำเร็จ: {_br['error']}")
+            return
+        _report = _br.get("report", {})
+        _actual_costs = {tn: info.get("discount_price") for tn, info in _report.items()
+                          if float(info.get("discount_price") or 0) > 0}
+        _n = _mark_actual_shipping_costs_sb(sb, _actual_costs)
+        print(f"💰 sync ยอดค่าส่งจริงจาก iShip แล้ว {_n} tracking")
+    except Exception as e:
+        print(f"⚠️ sync ยอดค่าส่งจริงจาก iShip ล้มเหลว: {e}")
 
 
 def _sync_iship_delivery_statuses(sb) -> None:
@@ -737,9 +1127,11 @@ def main():
     if n_saved:
         print(f"💾 บันทึกลง Supabase แล้ว {n_saved} รายการ (ตีกลับ+ออเดอร์ใหม่ รวมกัน)")
 
-    # sync สถานะจัดส่งจาก iShip ก่อน (ดู _sync_iship_delivery_statuses docstring) ให้ ship_rows
-    # ด้านล่างเห็นสถานะสดของวันนี้เลย ไม่ใช่ของเก่าที่ไม่เคย sync
+    # sync สถานะจัดส่ง + COD โอนแล้ว + ยอดค่าส่งจริงจาก iShip ก่อน (ดู docstring ของทั้ง 3
+    # ฟังก์ชัน) ให้ ship_rows ด้านล่างเห็นข้อมูลสดของวันนี้เลย ไม่ใช่ของเก่าที่ไม่เคย sync
     _sync_iship_delivery_statuses(sb)
+    _sync_iship_cod_transferred(sb)
+    _sync_iship_actual_costs(sb)
 
     # ── shipments (ระบบขายของร้านเอง ไม่ใช่ Shopee/e-commerce) — ดึงครั้งเดียวใช้ร่วมกัน 2 จุด:
     # COD ที่รับเงินแล้วแต่ยังไม่เปิดบิล + พัสดุไม่ใช่ COD ที่ค้างส่งเกิน 3 วัน (เหมือน
