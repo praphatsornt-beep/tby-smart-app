@@ -211,6 +211,10 @@ function doPost(e) {
   if (_payMenuCmd) { handlePayMenu_(_payMenuCmd[1].trim(), replyToken); return; }
   var _recvMenuCmd = userMessage.match(/^(.+?)\s+รับของ$/i);
   if (_recvMenuCmd) { handleReceiveMenu_(_recvMenuCmd[1].trim(), replyToken); return; }
+  // ── [ชื่อลูกค้า] check — สรุปคะแนน/ยอดเงิน/สินค้าค้างรับรวมเป็นข้อความเดียว (เพิ่ม
+  // 2026-10-25 — ดูคอมเมนต์ที่ handleCustomerCheck_/buildAndSendCustomerSummary_ ด้านล่าง)
+  var _checkCmd = userMessage.match(/^(.+?)\s+check$/i);
+  if (_checkCmd) { handleCustomerCheck_(_checkCmd[1].trim(), replyToken); return; }
   var _payPickBill = userMessage.match(/^จ่ายเลือกบิล\s+(\S+)\s+(\S+)$/i);
   if (_payPickBill) { handlePayBillChoice_(_payPickBill[1], _payPickBill[2], replyToken); return; }
   var _payPartialStart = userMessage.match(/^จ่ายบางส่วนเลือกบิล\s+(\S+)\s+(\S+)$/i);
@@ -410,7 +414,7 @@ function doPost(e) {
   // ไป loop คำสั่งปกติด้านล่าง ซึ่งตอนนี้ก็เงียบเหมือนกันถ้าไม่ตรงคำสั่งไหนเลย (ดูคอมเมนต์ที่
   // branch "else" ของ loop นั้น) ไม่มี fuzzy-suggest ในเส้นนี้โดยเจตนา กันกรณี Levenshtein
   // ไปจับคำที่ไม่เกี่ยวว่า "ใกล้เคียง" ชื่อจริงโดยบังเอิญ แล้วโผล่ข้อความทั้งที่ควรเงียบ
-  var _KNOWN_BARE_COMMANDS_ = ['ยกเลิก', 'เมนู', 'menu', 'sp', 'myid', 'addcoffee', 'manual', 'out'];
+  var _KNOWN_BARE_COMMANDS_ = ['ยกเลิก', 'เมนู', 'menu', 'sp', 'myid', 'addcoffee', 'manual', 'out', 'check'];
   if (userMessage.indexOf('\n') === -1
       && userMessage.length >= 2
       && !/\d/.test(userMessage)
@@ -448,7 +452,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n0. เมนู → ปุ่มลัดกดใช้ได้ทันที (addcoffee/sp/manual) + วิธีพิมพ์คำสั่งที่ต้องกรอกชื่อ/เลขบิลเอง\n   หรือพิมพ์ชื่อลูกค้าเฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้ (จ่าย/รับของ กดปุ่มได้เลย ส่วนบันทึกขาย/คืนคะแนน พิมพ์ต่อเองตามตัวอย่างในข้อความ)\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)");
+        results.push("📖 คู่มือ:\n0. เมนู → ปุ่มลัดกดใช้ได้ทันที (addcoffee/sp/manual) + วิธีพิมพ์คำสั่งที่ต้องกรอกชื่อ/เลขบิลเอง\n   หรือพิมพ์ชื่อลูกค้าเฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้ (จ่าย/รับของ กดปุ่มได้เลย ส่วนบันทึกขาย/คืนคะแนน พิมพ์ต่อเองตามตัวอย่างในข้อความ)\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)\n8. [ชื่อลูกค้า] check → สรุปคะแนนรอเปิดบิล/ยอดค้างจ่าย/สินค้าค้างรับทั้งหมดของลูกค้าคนนี้รวมในข้อความเดียว");
       } else {
         // ไม่พบคำสั่ง — เงียบไปเลย ไม่ตอบอะไร (เปลี่ยน 2026-10-25 ตามคำขอ "ถ้าคำสั่งไม่ตรง
         // ให้ระบบเงียบๆไป" — เดิมตอบ "⚠️ ไม่พบคำสั่ง: X" ทุกบรรทัดที่พิมพ์ไม่ตรง ซึ่งรวมถึง
@@ -533,6 +537,7 @@ function handleMenu_(replyToken) {
   msg += '👉 กดปุ่มด้านล่างสำหรับคำสั่งที่ไม่ต้องกรอกอะไรเพิ่ม\n\n';
   msg += '✍️ คำสั่งที่ต้องพิมพ์เอง (มีชื่อ/เลขบิล/รหัสสินค้า):\n';
   msg += '• [ชื่อลูกค้า] เฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้\n';
+  msg += '• [ชื่อลูกค้า] check → สรุปคะแนน/ยอดเงิน/สินค้าค้างรับ\n';
   msg += '• [ชื่อลูกค้า] CODE-จำนวน... → บันทึกขาย\n';
   msg += '• [ชื่อลูกค้า] จ่าย → เลือกบิลค้างจ่าย\n';
   msg += '• [ชื่อลูกค้า] รับของ → เลือกบิลค้างรับ\n';
@@ -559,9 +564,127 @@ function handlePersonMenu_(cust, replyToken) {
   msg += '• คืนคะแนน ' + cust.name + ' [เลขบิล] → ผูกคืนคะแนน (ต้องรู้เลขบิลที่เปิดไว้แล้ว)\n';
 
   sendQuickReplyGas(replyToken, msg, [
+    { type: 'action', action: { type: 'message', label: '🔍 Check', text: cust.name + ' check' } },
     { type: 'action', action: { type: 'message', label: '💰 จ่าย', text: cust.name + ' จ่าย' } },
     { type: 'action', action: { type: 'message', label: '📦 รับของ', text: cust.name + ' รับของ' } },
   ]);
+}
+
+// [ชื่อลูกค้า] check — สรุปคะแนน (PV รอเปิดบิล)/ยอดเงิน (ค้างจ่าย)/สินค้า (ค้างรับ) ของลูกค้า
+// คนนี้รวมเป็นข้อความเดียว (เพิ่ม 2026-10-25 ตามคำขอ "เพิ่ม Check คะแนน ยอดเงิน สินค้า" ตามด้วย
+// "หรือ ทั้งหมด" ยืนยันว่าอยากได้รวมเป็นก้อนเดียว ไม่ใช่แยกปุ่ม/แยกคำสั่งตามหัวข้อ) — ปุ่ม
+// "🔍 Check" ในเมนูต่อลูกค้าด้านบนส่งข้อความนี้ตรงๆ ใช้ findOneCustomer_() ตัวเดียวกับ
+// "[ชื่อ] จ่าย"/"[ชื่อ] รับของ" (ตอบชัดเจน/fuzzy-suggest ได้ตามปกติ เพราะคำว่า "check" ต่อ
+// ท้ายบอกเจตนาชัดแล้วว่าส่วนก่อนหน้าต้องเป็นชื่อคน — ต่างจาก fallback พิมพ์ชื่อเฉยๆ ด้านบน)
+function handleCustomerCheck_(name, replyToken) {
+  var cust = findOneCustomer_(name, replyToken, '{name} check');
+  if (!cust) return;
+  buildAndSendCustomerSummary_(cust.id, cust.name, replyToken);
+}
+
+// พอร์ตมาจาก GAS TBY Zhulian Sathu.js's buildAndSendSummary (ใช้ตรรกะเดียวกันทุกจุด เปลี่ยน
+// แค่ _sbGet → _sbGet_/sendReply → replyMessage/numFmt → numFmt_ ให้ตรงชื่อฟังก์ชันของไฟล์นี้)
+// — "คะแนน" = PV รอเปิดบิล (หักส่วนที่เปิดไปแล้วบางส่วนผ่าน bill_open_events ออกก่อน) แยกต่อ
+// เลขบิล, "ยอดเงิน" = ค้างจ่ายสุทธิหลังหัก partial_events ของ 6 เดือนล่าสุด, "สินค้า" = รายการ
+// ที่ยังค้างรับ (qty - initial_qty_received - Σqty_received) ต่อบิล — รวมเป็นข้อความเดียวกัน
+// ทั้งหมดตามที่ user ยืนยัน ("หรือ ทั้งหมด") ไม่แยกเป็นหลายคำสั่ง/ปุ่มย่อย
+function buildAndSendCustomerSummary_(custId, custName, replyToken) {
+  var unbilledTxns = _sbGet_(
+    '/rest/v1/transactions?customer_id=eq.' + custId
+    + '&bill_status=eq.' + encodeURIComponent('ยังไม่เปิดบิล')
+    + '&select=id,bill_no,qty,points_per_unit'
+  ) || [];
+  var unbilledTxnIds = unbilledTxns.map(function(t) { return t.id; });
+  var openEvents = unbilledTxnIds.length > 0 ? (_sbGet_(
+    '/rest/v1/bill_open_events?transaction_id=in.(' + unbilledTxnIds.join(',') + ')&select=transaction_id,qty_opened'
+  ) || []) : [];
+  var openedMap = {};
+  openEvents.forEach(function(e) {
+    openedMap[e.transaction_id] = (openedMap[e.transaction_id] || 0) + parseInt(e.qty_opened || 0, 10);
+  });
+  var billPVMap = {};
+  var unbilledPV = unbilledTxns.reduce(function(s, t) {
+    var unbilledQty = Math.max(0, t.qty - Math.max(0, openedMap[t.id] || 0));
+    var pv = parseFloat(t.points_per_unit || 0) * unbilledQty;
+    var bKey = t.bill_no || '(ไม่มีเลขบิล)';
+    billPVMap[bKey] = (billPVMap[bKey] || 0) + pv;
+    return s + pv;
+  }, 0);
+
+  var cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 6);
+  var cutoffStr = Utilities.formatDate(cutoff, 'Asia/Bangkok', 'yyyy-MM-dd');
+  var txns = _sbGet_(
+    '/rest/v1/transactions?customer_id=eq.' + custId
+    + '&date=gte.' + cutoffStr
+    + '&select=id,product_id,product_name,qty,total_amount,pay_status,points_per_unit,initial_qty_received,bill_no'
+    + '&order=bill_no.desc&limit=50'
+  ) || [];
+
+  var txnIds = txns.map(function(t) { return t.id; });
+  var events = txnIds.length > 0 ? (_sbGet_(
+    '/rest/v1/partial_events?transaction_id=in.(' + txnIds.join(',') + ')&select=transaction_id,amount_paid,qty_received'
+  ) || []) : [];
+
+  var paidMap = {}, receivedMap = {};
+  events.forEach(function(e) {
+    paidMap[e.transaction_id] = (paidMap[e.transaction_id] || 0) + parseFloat(e.amount_paid || 0);
+    receivedMap[e.transaction_id] = (receivedMap[e.transaction_id] || 0) + parseInt(e.qty_received || 0);
+  });
+
+  var totalOutstanding = 0, hasAny = false;
+  var billMap = {}, billOrder = [];
+  txns.forEach(function(t) {
+    var paid = paidMap[t.id] || 0;
+    var outstanding = t.pay_status === 'จ่ายแล้ว' ? 0 : Math.max(0, parseFloat(t.total_amount) - paid);
+    var received = (t.initial_qty_received || 0) + (receivedMap[t.id] || 0);
+    var remaining = t.qty - received;
+    if (outstanding <= 0.01 && remaining <= 0) return;
+    hasAny = true;
+    if (outstanding > 0.01) totalOutstanding += outstanding;
+    var bill = t.bill_no || '(ไม่มีเลขบิล)';
+    if (!billMap[bill]) { billMap[bill] = { outstanding: 0, items: [] }; billOrder.push(bill); }
+    if (outstanding > 0.01) billMap[bill].outstanding += outstanding;
+    if (remaining > 0) billMap[bill].items.push({ t: t, remaining: remaining });
+  });
+
+  Object.keys(billPVMap).forEach(function(bKey) {
+    if (billPVMap[bKey] <= 0) return;
+    if (!billMap[bKey]) { billMap[bKey] = { outstanding: 0, items: [] }; billOrder.push(bKey); }
+    hasAny = true;
+  });
+
+  if (!hasAny && unbilledPV === 0) {
+    replyMessage(replyToken, '✅ สวัสดีค่ะ คุณ' + custName + '\nไม่มียอดค้างชำระค่ะ 🙏');
+    return;
+  }
+
+  var msg = '📊 สรุปยอด คุณ' + custName + '\n─────────────────\n';
+
+  billOrder.forEach(function(bill) {
+    var grp = billMap[bill];
+    msg += '📋 บิล ' + bill + '\n';
+    grp.items.forEach(function(item) {
+      var t = item.t;
+      msg += '  ▫️ [' + (t.product_id || '') + '] ' + t.product_name + ' — ค้างรับ ' + item.remaining + '/' + t.qty + ' ชิ้น\n';
+    });
+    if (grp.outstanding > 0.01) {
+      msg += '  💰 ค้างจ่าย: ฿' + numFmt_(grp.outstanding) + '\n';
+    }
+    if (billPVMap[bill] > 0) {
+      msg += '  ✨ คะแนนรอเปิดบิล: ' + numFmt_(billPVMap[bill]) + ' PV\n';
+    }
+  });
+
+  if (billOrder.length > 0) msg += '─────────────────\n';
+  msg += totalOutstanding > 0
+    ? '💰 ยอดค้างจ่ายรวม: ฿' + numFmt_(totalOutstanding) + '\n'
+    : '💰 ไม่มียอดค้างจ่าย\n';
+  if (unbilledPV > 0) {
+    msg += '✨ คะแนนรอเปิดบิล: ' + numFmt_(unbilledPV) + ' PV\n';
+  }
+
+  replyMessage(replyToken, msg);
 }
 
 // หา "ลูกค้า" แบบเงียบๆ สำหรับ fallback พิมพ์ชื่อเฉยๆ ด้านบนใน doPost โดยเฉพาะ — ต่างจาก
