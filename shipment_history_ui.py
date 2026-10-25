@@ -146,6 +146,32 @@ def render(customers):
         est = float(r.get("shipping_cost") or 0)
         return actual > 0 and est > 0 and (actual - est) > 0
 
+    # ── แจ้งเตือนค่าส่งเกินแบบเด่นๆ — ผู้ใช้ขอ 2026-10-25 ("ค่าส่ง flash โดนบวกเกินเยอะมาก
+    # อยากให้ขึ้นตัวแดงๆ ให้เด่นๆ เพื่อจะได้ทำเคลมให้เร็วที่สุด") เดิมมีแค่คอลัมน์ "💰 เทียบยอด"
+    # ในตาราง (ตัวอักษร "❗-" ธรรมดา) กับ checkbox filter "⚠️ ยอดผิดปกติ" ที่ต้องกดเองก่อนเห็น —
+    # st.data_editor ไม่รองรับ .style สีพื้นหลังเหมือน st.dataframe (ย้อมสีทั้งแถวไม่ได้) จึงทำ
+    # เป็น banner แยกด้านบนแทน ใช้ st.error() ของ Streamlit เอง (แดงอยู่แล้ว ไม่ต้องเขียน CSS เพิ่ม)
+    # โชว์จาก _sh_all ก่อนกรองด้วย checkbox ด้านล่าง เพื่อไม่ให้พลาดเห็นแม้ไม่ได้ติ๊ก filter ไว้
+    _billing_anomalies = [r for r in _sh_all if _is_billing_anomaly(r)]
+    if _billing_anomalies:
+        def _anomaly_diff(r):
+            actual = float(r.get("actual_shipping_cost") or 0)
+            tn = r.get("tracking_no", "") or ""
+            if actual <= 0 and tn in _sh_billing_map:
+                actual = float(_sh_billing_map[tn].get("discount_price") or 0)
+            return actual - float(r.get("shipping_cost") or 0)
+        _anomalies_sorted = sorted(_billing_anomalies, key=_anomaly_diff, reverse=True)
+        _total_over = sum(_anomaly_diff(r) for r in _anomalies_sorted)
+        _lines = "\n".join(
+            f"- {r.get('carrier','')} · {(r.get('customers') or {}).get('name','')} · "
+            f"Tracking {r.get('tracking_no','')} · เกิน **{_anomaly_diff(r):,.0f}฿**"
+            for r in _anomalies_sorted
+        )
+        st.error(
+            f"🔴 **ค่าส่งเกินกว่าที่ประเมิน {len(_anomalies_sorted)} รายการ "
+            f"รวม {_total_over:,.0f}฿ — รีบยื่นเคลมกับขนส่งก่อนเกินกำหนดวันที่เคลมได้**\n\n{_lines}"
+        )
+
     _f1, _f2, _f3 = st.columns(3)
     _filter_delayed = _f1.checkbox("🚚 ล่าช้า (>3 วัน)", key="sh_filter_delayed")
     _filter_cod     = _f2.checkbox("💸 COD ค้างโอน", key="sh_filter_cod")
