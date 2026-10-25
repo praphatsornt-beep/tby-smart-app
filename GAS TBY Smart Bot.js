@@ -245,7 +245,12 @@ function doPost(e) {
     handleCheckAll_(replyToken);
     return;
   }
-  // ── [ชื่อลูกค้า] check — สรุปคะแนน/ยอดเงิน/สินค้าค้างรับรวมเป็นข้อความเดียว (เพิ่ม
+  // ── [ชื่อลูกค้า] check_pv / check_items / check_money / check_all — ปุ่มย่อยจาก
+  // handleCustomerCheck_ ด้านล่าง (ต้องเช็คก่อน _checkCmd ข้างล่าง เพราะ "check_pv" ไม่ตรง
+  // regex /\s+check$/ อยู่แล้วก็จริง แต่วางไว้ก่อนให้ชัดเจนว่าเป็นคนละขั้นตอนกัน)
+  var _checkScopedCmd = userMessage.match(/^(.+?)\s+check_(pv|items|money|all)$/i);
+  if (_checkScopedCmd) { handleCustomerCheckScoped_(_checkScopedCmd[1].trim(), _checkScopedCmd[2].toLowerCase(), replyToken); return; }
+  // ── [ชื่อลูกค้า] check — โชว์เมนูย่อยให้เลือกคะแนน/สินค้า/ยอดเงิน/ทั้งหมด (เพิ่ม
   // 2026-10-25 — ดูคอมเมนต์ที่ handleCustomerCheck_/buildAndSendCustomerSummary_ ด้านล่าง)
   var _checkCmd = userMessage.match(/^(.+?)\s+check$/i);
   if (_checkCmd) { handleCustomerCheck_(_checkCmd[1].trim(), replyToken); return; }
@@ -486,7 +491,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n0. เมนู → ปุ่มลัดกดใช้ได้ทันที (addcoffee/sp/manual) + วิธีพิมพ์คำสั่งที่ต้องกรอกชื่อ/เลขบิลเอง\n   หรือพิมพ์ชื่อลูกค้าเฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้ (จ่าย/รับของ กดปุ่มได้เลย ส่วนบันทึกขาย/คืนคะแนน พิมพ์ต่อเองตามตัวอย่างในข้อความ)\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)\n8. [ชื่อลูกค้า] check → สรุปคะแนนรอเปิดบิล/ยอดค้างจ่าย/สินค้าค้างรับทั้งหมดของลูกค้าคนนี้รวมในข้อความเดียว\n9. check หรือ check ทั้งหมด → สรุปรวมทุกลูกค้าที่มีคะแนน/ยอดค้าง/ของค้างรับอย่างน้อย 1 อย่าง เรียงคนที่ค้างจ่ายเยอะสุดก่อน (โชว์ 15 คนแรก)");
+        results.push("📖 คู่มือ:\n0. เมนู → ปุ่มลัดกดใช้ได้ทันที (addcoffee/sp/manual) + วิธีพิมพ์คำสั่งที่ต้องกรอกชื่อ/เลขบิลเอง\n   หรือพิมพ์ชื่อลูกค้าเฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้ (จ่าย/รับของ กดปุ่มได้เลย ส่วนบันทึกขาย/คืนคะแนน พิมพ์ต่อเองตามตัวอย่างในข้อความ)\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)\n8. [ชื่อลูกค้า] check → เลือกจากปุ่มว่าจะดู ✨คะแนน / 📦สินค้า / 💰ยอดเงิน / 📊ทั้งหมด (รวมในข้อความเดียว) ของลูกค้าคนนี้\n9. check หรือ check ทั้งหมด → สรุปรวมทุกลูกค้าที่มีคะแนน/ยอดค้าง/ของค้างรับอย่างน้อย 1 อย่าง เรียงคนที่ค้างจ่ายเยอะสุดก่อน (โชว์ 15 คนแรก)");
       } else {
         // ไม่พบคำสั่ง — เงียบไปเลย ไม่ตอบอะไร (เปลี่ยน 2026-10-25 ตามคำขอ "ถ้าคำสั่งไม่ตรง
         // ให้ระบบเงียบๆไป" — เดิมตอบ "⚠️ ไม่พบคำสั่ง: X" ทุกบรรทัดที่พิมพ์ไม่ตรง ซึ่งรวมถึง
@@ -571,7 +576,7 @@ function handleMenu_(replyToken) {
   msg += '👉 กดปุ่มด้านล่างสำหรับคำสั่งที่ไม่ต้องกรอกอะไรเพิ่ม\n\n';
   msg += '✍️ คำสั่งที่ต้องพิมพ์เอง (มีชื่อ/เลขบิล/รหัสสินค้า):\n';
   msg += '• [ชื่อลูกค้า] เฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้\n';
-  msg += '• [ชื่อลูกค้า] check → สรุปคะแนน/ยอดเงิน/สินค้าค้างรับ\n';
+  msg += '• [ชื่อลูกค้า] check → เลือกดูคะแนน/สินค้า/ยอดเงิน/ทั้งหมด\n';
   msg += '• [ชื่อลูกค้า] CODE-จำนวน... → บันทึกขาย\n';
   msg += '• [ชื่อลูกค้า] จ่าย → เลือกบิลค้างจ่าย\n';
   msg += '• [ชื่อลูกค้า] รับของ → เลือกบิลค้างรับ\n';
@@ -605,25 +610,45 @@ function handlePersonMenu_(cust, replyToken) {
   ]);
 }
 
-// [ชื่อลูกค้า] check — สรุปคะแนน (PV รอเปิดบิล)/ยอดเงิน (ค้างจ่าย)/สินค้า (ค้างรับ) ของลูกค้า
-// คนนี้รวมเป็นข้อความเดียว (เพิ่ม 2026-10-25 ตามคำขอ "เพิ่ม Check คะแนน ยอดเงิน สินค้า" ตามด้วย
-// "หรือ ทั้งหมด" ยืนยันว่าอยากได้รวมเป็นก้อนเดียว ไม่ใช่แยกปุ่ม/แยกคำสั่งตามหัวข้อ) — ปุ่ม
-// "🔍 Check" ในเมนูต่อลูกค้าด้านบนส่งข้อความนี้ตรงๆ ใช้ findOneCustomer_() ตัวเดียวกับ
-// "[ชื่อ] จ่าย"/"[ชื่อ] รับของ" (ตอบชัดเจน/fuzzy-suggest ได้ตามปกติ เพราะคำว่า "check" ต่อ
-// ท้ายบอกเจตนาชัดแล้วว่าส่วนก่อนหน้าต้องเป็นชื่อคน — ต่างจาก fallback พิมพ์ชื่อเฉยๆ ด้านบน)
+// [ชื่อลูกค้า] check — โชว์เมนูย่อยให้เลือกว่าจะดู คะแนน/สินค้า/ยอดเงิน/ทั้งหมด (เพิ่ม
+// 2026-10-25 ตามคำขอ "หลังเลือก check อยากขึ้นต่อว่า คะแนน สินค้า ยอดเงิน ทั้งหมด" — รอบแรก
+// ตอนเพิ่ม "เพิ่ม Check คะแนน ยอดเงิน สินค้า" ตามด้วย "หรือ ทั้งหมด" เข้าใจว่าให้รวมเป็นก้อน
+// เดียวเสมอ แต่ user กลับมาขอเพิ่มอีกขั้น: ให้เลือกได้ว่าจะดูทีละหัวข้อ หรือดูรวดเดียวทั้งหมด
+// ก็ได้ — ปุ่ม "🔍 Check" ในเมนูต่อลูกค้าด้านบนส่งข้อความนี้ตรงๆ ใช้ findOneCustomer_() ตัว
+// เดียวกับ "[ชื่อ] จ่าย"/"[ชื่อ] รับของ" (ตอบชัดเจน/fuzzy-suggest ได้ตามปกติ เพราะคำว่า
+// "check" ต่อท้ายบอกเจตนาชัดแล้วว่าส่วนก่อนหน้าต้องเป็นชื่อคน — ต่างจาก fallback พิมพ์ชื่อ
+// เฉยๆ ด้านบน) เมื่อเจอลูกค้าแล้ว โชว์ปุ่มย่อย 4 ปุ่ม ส่งต่อไปที่ "[ชื่อ] check_pv" /
+// "check_items" / "check_money" / "check_all" (จับคู่กับ regex ด้านบนใน doPost)
 function handleCustomerCheck_(name, replyToken) {
   var cust = findOneCustomer_(name, replyToken, '{name} check');
   if (!cust) return;
-  buildAndSendCustomerSummary_(cust.id, cust.name, replyToken);
+  sendQuickReplyGas(replyToken, '📊 ดูอะไรของคุณ' + cust.name + ' คะ?', [
+    { type: 'action', action: { type: 'message', label: '✨ คะแนน', text: cust.name + ' check_pv' } },
+    { type: 'action', action: { type: 'message', label: '📦 สินค้า', text: cust.name + ' check_items' } },
+    { type: 'action', action: { type: 'message', label: '💰 ยอดเงิน', text: cust.name + ' check_money' } },
+    { type: 'action', action: { type: 'message', label: '📊 ทั้งหมด', text: cust.name + ' check_all' } },
+  ]);
+}
+
+// [ชื่อลูกค้า] check_pv / check_items / check_money / check_all — มาจากปุ่มย่อยของ
+// handleCustomerCheck_ ด้านบนเท่านั้น (resendTemplate คง scope เดิมไว้ด้วย เผื่อชื่อเจอ
+// หลายคน/fuzzy — กดเลือกคนแล้วต้องได้หัวข้อเดิมที่เลือกไว้ ไม่ใช่กลับไปเริ่มใหม่)
+function handleCustomerCheckScoped_(name, scope, replyToken) {
+  var cust = findOneCustomer_(name, replyToken, '{name} check_' + scope);
+  if (!cust) return;
+  buildAndSendCustomerSummary_(cust.id, cust.name, replyToken, scope);
 }
 
 // พอร์ตมาจาก GAS TBY Zhulian Sathu.js's buildAndSendSummary (ใช้ตรรกะเดียวกันทุกจุด เปลี่ยน
 // แค่ _sbGet → _sbGet_/sendReply → replyMessage/numFmt → numFmt_ ให้ตรงชื่อฟังก์ชันของไฟล์นี้)
 // — "คะแนน" = PV รอเปิดบิล (หักส่วนที่เปิดไปแล้วบางส่วนผ่าน bill_open_events ออกก่อน) แยกต่อ
 // เลขบิล, "ยอดเงิน" = ค้างจ่ายสุทธิหลังหัก partial_events ของ 6 เดือนล่าสุด, "สินค้า" = รายการ
-// ที่ยังค้างรับ (qty - initial_qty_received - Σqty_received) ต่อบิล — รวมเป็นข้อความเดียวกัน
-// ทั้งหมดตามที่ user ยืนยัน ("หรือ ทั้งหมด") ไม่แยกเป็นหลายคำสั่ง/ปุ่มย่อย
-function buildAndSendCustomerSummary_(custId, custName, replyToken) {
+// ที่ยังค้างรับ (qty - initial_qty_received - Σqty_received) ต่อบิล — คำนวณทั้ง 3 อย่างเสมอ
+// (query เดิมทั้งหมด ไม่ได้ลดทอนตาม scope) แค่ตอน "ประกอบข้อความ" ท้ายฟังก์ชันค่อยเลือกโชว์
+// เฉพาะหัวข้อที่ scope ขอ ('pv'/'items'/'money') หรือรวมทุกอย่าง ('all', ค่าเริ่มต้น — พฤติกรรม
+// เดิมก่อนมีเมนูย่อย 2026-10-25)
+function buildAndSendCustomerSummary_(custId, custName, replyToken, scope) {
+  scope = scope || 'all';
   var unbilledTxns = _sbGet_(
     '/rest/v1/transactions?customer_id=eq.' + custId
     + '&bill_status=eq.' + encodeURIComponent('ยังไม่เปิดบิล')
@@ -638,11 +663,13 @@ function buildAndSendCustomerSummary_(custId, custName, replyToken) {
     openedMap[e.transaction_id] = (openedMap[e.transaction_id] || 0) + parseInt(e.qty_opened || 0, 10);
   });
   var billPVMap = {};
+  var pvBillOrder = [];  // เก็บลำดับเลขบิลที่เจอครั้งแรก — ใช้แสดงผล scope 'pv' โดยเฉพาะ
   var unbilledPV = unbilledTxns.reduce(function(s, t) {
     var unbilledQty = Math.max(0, t.qty - Math.max(0, openedMap[t.id] || 0));
     var pv = parseFloat(t.points_per_unit || 0) * unbilledQty;
     var bKey = t.bill_no || '(ไม่มีเลขบิล)';
-    billPVMap[bKey] = (billPVMap[bKey] || 0) + pv;
+    if (!(bKey in billPVMap)) { billPVMap[bKey] = 0; pvBillOrder.push(bKey); }
+    billPVMap[bKey] += pv;
     return s + pv;
   }, 0);
 
@@ -689,6 +716,62 @@ function buildAndSendCustomerSummary_(custId, custName, replyToken) {
     hasAny = true;
   });
 
+  // ✨ เฉพาะคะแนนรอเปิดบิล
+  if (scope === 'pv') {
+    if (unbilledPV <= 0) {
+      replyMessage(replyToken, '✅ คุณ' + custName + ' ไม่มีคะแนนรอเปิดบิลค่ะ');
+      return;
+    }
+    var msgPv = '✨ คะแนนรอเปิดบิล คุณ' + custName + '\n─────────────────\n';
+    pvBillOrder.forEach(function(bKey) {
+      if (billPVMap[bKey] <= 0) return;
+      msgPv += '📋 บิล ' + bKey + ' — ' + numFmt_(billPVMap[bKey]) + ' PV\n';
+    });
+    msgPv += '─────────────────\n✨ รวมทั้งหมด: ' + numFmt_(unbilledPV) + ' PV';
+    replyMessage(replyToken, msgPv);
+    return;
+  }
+
+  // 📦 เฉพาะสินค้าค้างรับ
+  if (scope === 'items') {
+    var itemBills = billOrder.filter(function(b) { return billMap[b].items.length > 0; });
+    if (itemBills.length === 0) {
+      replyMessage(replyToken, '✅ คุณ' + custName + ' ไม่มีสินค้าค้างรับค่ะ');
+      return;
+    }
+    var msgItems = '📦 สินค้าค้างรับ คุณ' + custName + '\n─────────────────\n';
+    var totalItems = 0;
+    itemBills.forEach(function(bill) {
+      msgItems += '📋 บิล ' + bill + '\n';
+      billMap[bill].items.forEach(function(item) {
+        var t = item.t;
+        msgItems += '  ▫️ [' + (t.product_id || '') + '] ' + t.product_name + ' — ค้างรับ ' + item.remaining + '/' + t.qty + ' ชิ้น\n';
+        totalItems += item.remaining;
+      });
+    });
+    msgItems += '─────────────────\n📦 รวมค้างรับ: ' + totalItems + ' ชิ้น';
+    replyMessage(replyToken, msgItems);
+    return;
+  }
+
+  // 💰 เฉพาะยอดค้างจ่าย
+  if (scope === 'money') {
+    if (totalOutstanding <= 0.01) {
+      replyMessage(replyToken, '✅ คุณ' + custName + ' ไม่มียอดค้างจ่ายค่ะ');
+      return;
+    }
+    var msgMoney = '💰 ยอดค้างจ่าย คุณ' + custName + '\n─────────────────\n';
+    billOrder.forEach(function(bill) {
+      if (billMap[bill].outstanding > 0.01) {
+        msgMoney += '📋 บิล ' + bill + ' — ฿' + numFmt_(billMap[bill].outstanding) + '\n';
+      }
+    });
+    msgMoney += '─────────────────\n💰 รวมทั้งหมด: ฿' + numFmt_(totalOutstanding);
+    replyMessage(replyToken, msgMoney);
+    return;
+  }
+
+  // 📊 scope === 'all' (ค่าเริ่มต้น) — พฤติกรรมเดิมก่อนมีเมนูย่อย 4 ตัวเลือกด้านบน
   if (!hasAny && unbilledPV === 0) {
     replyMessage(replyToken, '✅ สวัสดีค่ะ คุณ' + custName + '\nไม่มียอดค้างชำระค่ะ 🙏');
     return;
