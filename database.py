@@ -2782,6 +2782,56 @@ def delete_shipment(shipment_id: str) -> None:
     get_customer_ledger.clear()
 
 
+def find_shipment_by_tracking_no(tracking_no: str) -> dict | None:
+    """หาแถว shipments ที่ tracking_no ตรงเป๊ะ — ใช้ตอน 📷 แพคของ สแกนได้เลขแล้วเช็คว่าเป็น
+    ออเดอร์ iship ของร้านเองไหม (ไม่ cache — ต้องเช็คสดทุกครั้งตอนสแกน ไม่ใช่ของที่ค้างนานได้)"""
+    if not tracking_no:
+        return None
+    rows = _retry(lambda: get_supabase().table("shipments").select("*, customers(name)")
+                  .eq("tracking_no", tracking_no).limit(1).execute()).data
+    return rows[0] if rows else None
+
+
+def get_last_pack_event(tracking_no: str) -> dict | None:
+    """เคยสแกนเลขนี้มาก่อนหรือยัง (ไม่ว่าวันไหน) — ใช้เตือนกันแพคซ้ำ ไม่ block การบันทึก"""
+    if not tracking_no:
+        return None
+    rows = _retry(lambda: get_supabase().table("pack_events").select("*")
+                  .eq("tracking_no", tracking_no).order("packed_at", desc=True).limit(1).execute()).data
+    return rows[0] if rows else None
+
+
+def insert_pack_event(tracking_no: str, source: str = "other",
+                       matched_customer_name: str | None = None,
+                       matched_carrier: str | None = None) -> None:
+    """บันทึก 1 แถวทุกครั้งที่สแกนสำเร็จ — ตั้งใจให้ append-only (ไม่ upsert/dedup ในระดับ DB)
+    เพราะแพคของชิ้นเดียวกันซ้ำ (เช่น สแกนผิดมือ) ก็ยังอยากเห็นเป็นประวัติ ไม่อยากให้หายไปเงียบๆ —
+    การเตือน "เคยสแกนมาก่อน" ทำที่ get_last_pack_event ก่อนเรียกฟังก์ชันนี้แทน"""
+    _retry(lambda: get_supabase().table("pack_events").insert({
+        "tracking_no": tracking_no,
+        "source": source,
+        "matched_customer_name": matched_customer_name,
+        "matched_carrier": matched_carrier,
+    }).execute())
+    get_pack_events_df.clear()
+
+
+@st.cache_data(ttl=20)
+def get_pack_events_df(date_from=None, date_to=None) -> pd.DataFrame:
+    """ประวัติการสแกนแพคของ — ttl สั้น (20s) เพราะหน้า 📷 แพคของ ต้องเห็นรายการที่เพิ่งสแกนไป
+    เกือบจะทันที ไม่ใช่รอ cache เดิมหมดอายุ"""
+    rows = _fetch_all(lambda: get_supabase().table("pack_events").select("*").order("packed_at", desc=True))
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    df["packed_at"] = pd.to_datetime(df["packed_at"])
+    if date_from:
+        df = df[df["packed_at"].dt.date >= pd.to_datetime(date_from).date()]
+    if date_to:
+        df = df[df["packed_at"].dt.date <= pd.to_datetime(date_to).date()]
+    return df.reset_index(drop=True)
+
+
 def count_shipped_by_date_range(date_from: str, date_to: str) -> int:
     """นับ shipments ที่จัดส่งสำเร็จในช่วง date_from..date_to (YYYY-MM-DD, Bangkok time) —
     ใช้ shipment_status.DELIVERED_STATUSES (ไม่ใช่ .eq() ตายตัวคำเดียว) เพราะ iShip เปลี่ยนคำ

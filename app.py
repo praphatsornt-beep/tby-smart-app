@@ -13,6 +13,7 @@ import ecom_ui
 import fin_ui
 import dashboard_ui
 import stock_ui
+import pack_scan_ui
 import master_data_ui
 import record_ui
 import bill_detail_ui
@@ -1285,11 +1286,12 @@ if st.session_state.get("_iship_success_info"):
 #    sub-tabs stay at the top of its content area (unchanged). ─────────────
 _TAB_NAMES = [
     "🏠 หน้าแรก", "📋 บันทึกรายการ", "🗂️ รายละเอียดบิล",
-    "📦 สต๊อก", "💵 การเงิน", "🛒 E-commerce", "⚙️ จัดการข้อมูล",
+    "📦 สต๊อก", "📷 แพคของ", "💵 การเงิน", "🛒 E-commerce", "⚙️ จัดการข้อมูล",
 ]
 _TAB_ICONS = [
     ":material/home:", ":material/shopping_cart:", ":material/receipt_long:",
-    ":material/inventory_2:", ":material/payments:", ":material/storefront:", ":material/settings:",
+    ":material/inventory_2:", ":material/photo_camera:", ":material/payments:",
+    ":material/storefront:", ":material/settings:",
 ]
 
 if "active_tab" not in st.session_state:
@@ -1501,8 +1503,10 @@ elif _active_tab == _TAB_NAMES[2]:
 elif _active_tab == _TAB_NAMES[3]:
     stock_ui.render()
 elif _active_tab == _TAB_NAMES[4]:
-    fin_ui.render()
+    pack_scan_ui.render()
 elif _active_tab == _TAB_NAMES[5]:
-    ecom_ui.render()
+    fin_ui.render()
 elif _active_tab == _TAB_NAMES[6]:
+    ecom_ui.render()
+elif _active_tab == _TAB_NAMES[7]:
     master_data_ui.render()
