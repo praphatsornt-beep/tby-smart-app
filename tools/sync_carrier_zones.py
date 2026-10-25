@@ -3,11 +3,11 @@
 หรือ: python tools/sync_carrier_zones.py
 
 Push โซนพื้นที่พิเศษ/ห่างไกลจาก flash_zones.py (source of truth) เข้าตาราง
-carrier_zones ใน Supabase — ให้ gas_line_webhook.js query สดๆ แทนการ hardcode
+carrier_zones ใน Supabase — ให้ GAS TBY Zhulian Sathu.js query สดๆ แทนการ hardcode
 ลิสต์แยกต่างหาก (root cause ของบั๊ก drift เดิม 2026-07-12)
 
 รันสคริปต์นี้ทุกครั้งที่แก้ FLASH_ZONES/SPX_REMOTE/THAI_POST_SPECIAL/DHL_REMOTE/
-KEX_BULKY_REMOTE ใน flash_zones.py — ไม่งั้น gas_line_webhook.js จะเห็นข้อมูลเก่า
+KEX_BULKY_REMOTE ใน flash_zones.py — ไม่งั้น GAS TBY Zhulian Sathu.js จะเห็นข้อมูลเก่า
 ต้องรัน shipping_zones_reference.sql (สร้างตาราง carrier_zones) ใน Supabase ก่อนครั้งแรก
 """
 import os

@@ -41,7 +41,7 @@ CREATE TABLE customers (
     amphure TEXT,
     province TEXT,
     postal_code TEXT,
-    line_user_id TEXT,  -- ผูกจาก LINE OA "สมัคร <เบอร์โทร>" (gas_line_webhook.js)
+    line_user_id TEXT,  -- ผูกจาก LINE OA "สมัคร <เบอร์โทร>" (GAS TBY Zhulian Sathu.js)
     group_id TEXT       -- LINE group ผูกด้วยคำสั่ง "groupid" (ถ้าอยากแจ้งเตือนเข้ากลุ่มแทน 1:1)
 );
 

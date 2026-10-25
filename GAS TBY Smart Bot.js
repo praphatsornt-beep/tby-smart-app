@@ -1,7 +1,7 @@
 /* ==========================================================================
  * Coffee Log — LINE bot backend (Google Apps Script)
  *
- * แยกระบบต่างหากจาก gas_line_webhook.js โดยสิ้นเชิง — คนละ LINE Official
+ * แยกระบบต่างหากจาก GAS TBY Zhulian Sathu.js โดยสิ้นเชิง — คนละ LINE Official
  * Account, คนละ Google account (บอทนี้อยู่ใต้ praphatsorn.t@gmail.com ส่วน
  * LINE OA "zhulian TBY" หลักของร้านอยู่ใต้ zhulian.ttby@gmail.com), และเขียน
  * ข้อมูลลง Google Sheets โดยตรง (SpreadsheetApp) ไม่แตะ Supabase/ระบบ TBY
@@ -31,7 +31,7 @@
  * ⚠️ security: ต้นฉบับที่ user ส่งมา (2026-09-21) hardcode LINE_ACCESS_TOKEN
  * เป็น plaintext ตรงๆ ในไฟล์ — repo นี้เป็น public GitHub repo จึงห้าม commit
  * token จริงลงไปเด็ดขาด เปลี่ยนมาอ่านจาก PropertiesService Script Properties
- * แทนแล้ว (แพทเทิร์นเดียวกับ gas_line_webhook.js) ต้องไปตั้งค่าใน Apps Script
+ * แทนแล้ว (แพทเทิร์นเดียวกับ GAS TBY Zhulian Sathu.js) ต้องไปตั้งค่าใน Apps Script
  * ตัวจริง: Project Settings → Script Properties → เพิ่มคีย์ LINE_ACCESS_TOKEN
  * ========================================================================== */
 
@@ -43,7 +43,7 @@ function getLineAccessToken_() {
 // บอทนี้ไม่เคยคุยกับ Supabase มาก่อน (เขียนลง Google Sheets อย่างเดียว ดูคอมเมนต์หัว
 // ไฟล์) — ต้องตั้ง Script Properties เพิ่ม 2 ตัวใน Apps Script ตัวจริง: SUPABASE_URL
 // (เช่น https://xxxx.supabase.co), SUPABASE_KEY (anon key จาก Supabase > Settings > API)
-// ใช้ค่าเดียวกับที่ gas_line_webhook.js/tools/*.py ของ TBY SMART APP ใช้อยู่แล้วได้เลย
+// ใช้ค่าเดียวกับที่ GAS TBY Zhulian Sathu.js/tools/*.py ของ TBY SMART APP ใช้อยู่แล้วได้เลย
 function getSupabaseUrl_() { return PropertiesService.getScriptProperties().getProperty('SUPABASE_URL'); }
 function getSupabaseKey_() { return PropertiesService.getScriptProperties().getProperty('SUPABASE_KEY'); }
 function _sbGet_(path) {
@@ -106,7 +106,7 @@ function doPost(e) {
   // digest.py) ถูกย้ายมาส่งเข้า LINE OA นี้ (Coffee Log) แทน OA ลูกค้าหลัก "zhulian TBY"
   // แล้ว (กันข้อมูลภายในปนกับแชทลูกค้า — ดูคอมเมนต์หัวไฟล์/memory coffee-line-oa-separate-
   // system) ดังนั้นคำสั่งยืนยัน "ได้รับพัสดุตีกลับคืนแล้ว" ต้องอยู่ที่นี่ ไม่ใช่
-  // gas_line_webhook.js (เคยเพิ่มผิดไฟล์ไปก่อน แก้ย้ายมาที่นี่) — พิมพ์รหัส order_sn
+  // GAS TBY Zhulian Sathu.js (เคยเพิ่มผิดไฟล์ไปก่อน แก้ย้ายมาที่นี่) — พิมพ์รหัส order_sn
   // ตรงจากบรรทัด "📦 พัสดุ Shopee มีปัญหา/ตีกลับ" ในดิจ (ตัด # นำหน้าออกให้เอง) แล้วตั้ง
   // ecommerce_return_emails.received_back_at ผ่าน Supabase REST ตรงๆ — เหมือนปุ่ม
   // "✅ ยืนยันได้รับของคืนแล้ว" ที่หน้าแรกของแอป (db.mark_ecommerce_return_received)
@@ -141,7 +141,7 @@ function doPost(e) {
   }
 
   // ── พิมพ์ตัวเลขอย่างเดียว หลังกดปุ่ม "✏️ จ่ายบางส่วน" (เมนู "[ชื่อ] จ่าย" ด้านล่าง) —
-  // ใช้เป็นยอดที่จะจ่าย — พอร์ตมาจาก gas_line_webhook.js's 'pp_'+userId cache/_bareAmt
+  // ใช้เป็นยอดที่จะจ่าย — พอร์ตมาจาก GAS TBY Zhulian Sathu.js's 'pp_'+userId cache/_bareAmt
   // (คนละ cache key กับ 'addcoffee_'/'tbyorder_' ของไฟล์นี้ กันชนกัน) ต้องเช็คก่อนเข้า
   // บล็อก addcoffee/tbyorder ด้านล่าง เพราะบล็อกพวกนั้นก็รับ input เป็นตัวเลขได้เหมือนกัน
   // (เช่น addcoffee รอ "จะเพิ่มกี่ลัง?") — เช็คแบบ "มี state settlepay_ ค้างอยู่จริงไหม"
@@ -202,9 +202,9 @@ function doPost(e) {
 
   // ── [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ — เมนูเลือกบิลที่ค้างจ่าย/ค้างรับ โดยไม่ต้อง
   // รู้เลขบิลล่วงหน้า (เพิ่ม 2026-10-18 ตามคำขอ) — เดิมมีคำสั่งคล้ายกันอยู่ใน
-  // gas_line_webhook.js (#staffTag [ชื่อ] จ่าย / เก่า) แต่ตัดสินใจย้ายมาทำที่นี่ทั้งหมด
+  // GAS TBY Zhulian Sathu.js (#staffTag [ชื่อ] จ่าย / เก่า) แต่ตัดสินใจย้ายมาทำที่นี่ทั้งหมด
   // แทน (ลบออกจากไฟล์นั้นแล้ว) เพราะ OA นี้ใช้ภายในอยู่แล้ว ไม่ต้องมี #staffTag นำหน้า —
-  // และ UX ฝั่งรับของปรับเป็นกดปุ่มเลือกสินค้า (เดิมของ gas_line_webhook.js ให้พิมพ์
+  // และ UX ฝั่งรับของปรับเป็นกดปุ่มเลือกสินค้า (เดิมของ GAS TBY Zhulian Sathu.js ให้พิมพ์
   // CODE-จำนวนเอง ซึ่งเสี่ยงพิมพ์รหัสผิด) ปุ่ม "จ่ายเต็ม"/"รับทั้งหมด" ในเมนูนี้ส่งต่อไป
   // ที่คำสั่ง ยืนยัน_จ่ายครบ/ยืนยัน_รับของครบ ด้านบนตรงๆ (ใช้ตรรกะเดียวกัน ไม่เขียนซ้ำ)
   var _payMenuCmd = userMessage.match(/^(.+?)\s+จ่าย$/i);
@@ -234,7 +234,7 @@ function doPost(e) {
   //      ส่วน "รับของ" = ลูกค้าได้ของแล้ว → initial_qty_received=qty เหมือน "รับของแล้ว"
   //      ของแอปหลัก — ดู record_ui.py's receive_now/m_receipt ถ้าตีความผิดแก้ได้ตรงนี้)
   //   2. รูปแบบคำสั่ง: พิมพ์ชื่อ+รายการเฉยๆ แล้วให้บอทถามทีละขั้น (ไม่ใช่คำสั่งสำเร็จรูป
-  //      แบบ เบิก/เบิกจ่าย ของ gas_line_webhook.js)
+  //      แบบ เบิก/เบิกจ่าย ของ GAS TBY Zhulian Sathu.js)
   //   3. ไม่ต้องมี #staffTag นำหน้า — OA นี้ใช้ภายในอยู่แล้ว
   // ไม่มีขั้นยืนยันซ้อนสองรอบ (ตอบปุ่มสุดท้ายแล้วค่อยมีปุ่ม "ยืนยันบันทึก" อีกรอบเดียว)
   var _orderCacheKey  = 'tbyorder_' + _userId;
@@ -569,7 +569,7 @@ function handleEcommerceReturnReceived_(rawCodes, replyToken, confirmed) {
 
 // ── ───────────────────────────────────────────────────────────────────────────
 // ฟังก์ชันสำหรับ "บันทึกรายการขาย/เบิกของเข้า TBY SMART APP" (เพิ่ม 2026-10-18) —
-// พอร์ตมาจาก gas_line_webhook.js's _getProducts/numFmt/_today/_getNextBillNo/
+// พอร์ตมาจาก GAS TBY Zhulian Sathu.js's _getProducts/numFmt/_today/_getNextBillNo/
 // findOneCustomer (ชื่อฟังก์ชันต่อ _ ท้ายกันชนกับต้นฉบับ เผื่อวันหลังก็อปโค้ดชิ้นอื่น
 // มาจากไฟล์นั้นเพิ่มแล้วชื่อซ้ำกัน) — ตัดส่วน COD/ค่าส่ง/iShip ออกหมด เพราะฟีเจอร์นี้
 // แค่ติดสถานะในระบบ ไม่สร้างพัสดุจริง (ยืนยันกับผู้ใช้แล้ว)
@@ -597,7 +597,7 @@ function _todayBkk_() {
 }
 
 // เลขที่บิล YYMMDD-NNN ถัดไป (รูปแบบเดียวกับ database.py get_next_bill_no /
-// gas_line_webhook.js's _getNextBillNo)
+// GAS TBY Zhulian Sathu.js's _getNextBillNo)
 function _getNextBillNo_(dateStr) {
   var prefix = dateStr.replace(/-/g, '').substring(2);
   var rows = _sbGet_('/rest/v1/transactions?bill_no=like.' + prefix + '-*&select=bill_no') || [];
@@ -633,7 +633,7 @@ function _levenshtein_(a, b) {
   return dp[m][n];
 }
 
-// ค้นหาลูกค้า 1 คนจากชื่อ — ต่างจาก gas_line_webhook.js's findOneCustomer 2 จุด:
+// ค้นหาลูกค้า 1 คนจากชื่อ — ต่างจาก GAS TBY Zhulian Sathu.js's findOneCustomer 2 จุด:
 // (1) ตอบข้อความชัดเจนเมื่อไม่พบเลย (ไม่เงียบ) เพราะที่นี่ไม่มีคำสั่งนำหน้าบอกเจตนา
 // ("[ชื่อ] CODE-จำนวน" ธรรมดา) ผู้ใช้ควรรู้ทันทีว่าพิมพ์ชื่อผิดหรือหาไม่เจอ ไม่ใช่เงียบ
 // แล้วงงว่าทำไมบอทไม่ตอบ (2) ถ้าหาไม่เจอเลยทั้ง ilike และตัดช่องว่างเทียบ ลองเสนอชื่อ
@@ -1232,7 +1232,7 @@ function commitSettleBill_(custId, billNo, kind, replyToken) {
 
 // ── ───────────────────────────────────────────────────────────────────────────
 // ฟังก์ชันสำหรับเมนู "[ชื่อ] จ่าย"/"[ชื่อ] รับของ" (เพิ่ม 2026-10-18) — พอร์ตมาจาก
-// gas_line_webhook.js's _getOpenBills/handlePaymentMenu/handlePayBillMenu/
+// GAS TBY Zhulian Sathu.js's _getOpenBills/handlePaymentMenu/handlePayBillMenu/
 // handlePayPartialPrompt/handlePayment (ลบออกจากไฟล์นั้นแล้ว — ย้ายมาที่นี่ทั้งหมด)
 // ── ───────────────────────────────────────────────────────────────────────────
 
@@ -1370,7 +1370,7 @@ function handlePartialPaymentAmount_(custId, billNo, amount, replyToken) {
 }
 
 // ยืนยัน_จ่ายบางส่วน [custId] [bill_no] [amount] — บันทึกจริง แบ่งจ่ายตามลำดับรายการ
-// ในบิล (รายการแรกได้ก่อน เหมือน gas_line_webhook.js's handlePayment เดิม)
+// ในบิล (รายการแรกได้ก่อน เหมือน GAS TBY Zhulian Sathu.js's handlePayment เดิม)
 function commitPartialPayment_(custId, billNo, amount, replyToken) {
   var info = _computeSettleRows_(billNo, 'pay');
   if (!info.found || info.customer_id !== custId || info.rows.length === 0) {

@@ -1784,7 +1784,7 @@ def render(tab1, products, customers, customer_map):
                     # ไม่ใช่เงินสดที่ลูกค้ายื่นมารอทอนจากยอดที่คำนวณได้ — ค่าธรรมเนียม COD
                     # ต้องคิดจากยอดเก็บจริงนี้ (ไม่ใช่จากสินค้า+ค่าส่ง) ยอดโอน/ยอดปลายทาง
                     # จึงเท่ากับเลขนี้ตรงๆ ส่วนที่เหลือหลังหักค่าธรรมเนียม+ค่าส่ง+สินค้าคือเงิน
-                    # ที่ต้องทอนคืนลูกค้า (พอร์ตคู่กับ gas_line_webhook.js's codChange)
+                    # ที่ต้องทอนคืนลูกค้า (พอร์ตคู่กับ GAS TBY Zhulian Sathu.js's codChange)
                     _cod_cash_given = _cr.get("cod_cash_given", -1)
                     if _cr["is_cod"] and _cod_cash_given >= 0:
                         _c_cod_fee = calc_logic.cod_fee(_cod_cash_given)

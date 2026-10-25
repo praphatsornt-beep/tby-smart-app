@@ -1,17 +1,17 @@
 -- ⏳ ยังไม่ได้รัน — ตารางกลางเก็บโซนพื้นที่พิเศษ/ห่างไกลของแต่ละขนส่ง (รันไฟล์นี้ทั้งไฟล์
 -- ใน Supabase SQL Editor เพื่อสร้างตาราง carrier_zones)
 --
--- บริบท: วันที่ 12 ก.ค. 2569 พบว่า gas_line_webhook.js (LINE OA quote bot) มีลิสต์รหัสไปรษณีย์
+-- บริบท: วันที่ 12 ก.ค. 2569 พบว่า GAS TBY Zhulian Sathu.js (LINE OA quote bot) มีลิสต์รหัสไปรษณีย์
 -- พื้นที่ห่างไกลของตัวเองแยกจาก flash_zones.py ในแอปหลัก พอ carrier rate audit วันที่ 10 ก.ค.
--- แก้ไขข้อมูลในแอปหลักแล้ว gas_line_webhook.js ไม่ได้อัปเดตตาม เกิด SPX คำนวณผิด (เช่น 63150
--- ท่าสองยาง) รอบนั้นแก้ gas_line_webhook.js ตรงๆ (ก็อปข้อมูลจาก flash_zones.py ไปแปะ) แต่ยังเป็น
+-- แก้ไขข้อมูลในแอปหลักแล้ว GAS TBY Zhulian Sathu.js ไม่ได้อัปเดตตาม เกิด SPX คำนวณผิด (เช่น 63150
+-- ท่าสองยาง) รอบนั้นแก้ GAS TBY Zhulian Sathu.js ตรงๆ (ก็อปข้อมูลจาก flash_zones.py ไปแปะ) แต่ยังเป็น
 -- 2 ที่เก็บข้อมูลแยกกัน เสี่ยง drift ซ้ำได้อีก — รอบนี้ (2026-07-15) แก้ที่ต้นตอ:
 --
 -- flash_zones.py **ยังคงเป็น hardcoded Python dict/set เหมือนเดิม** (ตั้งใจ — เป็น source of
 -- truth ที่ tests/test_flash_zones.py ต้อง import ได้ทันทีไม่พึ่งเน็ต/Supabase) แต่เพิ่มสคริปต์
 -- tools/sync_carrier_zones.py ที่ push ค่าจาก flash_zones.py เข้าตารางนี้ (เรียก
 -- database.sync_carrier_zones() แบบ full replace) — รันสคริปต์นี้ทุกครั้งที่แก้โซนใน
--- flash_zones.py แล้ว gas_line_webhook.js ก็แก้ให้ query ตารางนี้สดๆ ผ่าน UrlFetchApp แทน
+-- flash_zones.py แล้ว GAS TBY Zhulian Sathu.js ก็แก้ให้ query ตารางนี้สดๆ ผ่าน UrlFetchApp แทน
 -- ลิสต์ hardcode 5 ชุดเดิม (bothRemote/flashOnlyRemote/spxOnlyRemote/touristIslandZips/
 -- touristZips) — ดูฟังก์ชัน _getCarrierZones() ในไฟล์นั้น
 --
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS carrier_zones (
 );
 
 -- ตารางนี้ต้อง disable RLS เหมือน box_presets/commission_records เพราะแอปใช้ SUPABASE_KEY
--- ตัวเดียว ไม่มี auth ต่อผู้ใช้ — gas_line_webhook.js อ่านผ่าน anon key เดียวกันด้วย
+-- ตัวเดียว ไม่มี auth ต่อผู้ใช้ — GAS TBY Zhulian Sathu.js อ่านผ่าน anon key เดียวกันด้วย
 ALTER TABLE carrier_zones DISABLE ROW LEVEL SECURITY;
 
 -- seed ด้วยข้อมูลปัจจุบันทั้งหมด (295 แถว) ณ วันที่ 12 ก.ค. 2569 — sync ซ้ำได้ด้วย

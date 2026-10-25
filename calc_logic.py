@@ -42,7 +42,7 @@ def parse_calc_order(text: str, products: list) -> dict:
 
     "COD1000"/"COD-1000" (เลขติดคำว่า COD) = ลูกค้าจะยื่นเงินสดแบงก์ 1000 ให้คนส่งของ ไม่ใช่
     ยอดที่ต้องเก็บจริง — เก็บไว้ใน cod_cash_given (-1 ถ้าพิมพ์ COD เปล่าๆ ไม่มีตัวเลข) ให้
-    ผู้เรียกคำนวณว่าต้องทอนลูกค้าเท่าไหร่ (พอร์ตคู่กับ gas_line_webhook.js's codCashGiven
+    ผู้เรียกคำนวณว่าต้องทอนลูกค้าเท่าไหร่ (พอร์ตคู่กับ GAS TBY Zhulian Sathu.js's codCashGiven
     ให้บอทกับแท็บนี้อ่านตรงกัน — เพิ่ม 2026-10-18 ตามคำขอ)
     """
     text = _normalize_customer_codes(text)
@@ -130,7 +130,7 @@ def _parse_target_list(raw: str) -> list[int]:
 
 def parse_plan_targets(text: str) -> list[int]:
     """แกะ token 'plan 2500 2500 1000' (หรือลัด 'plan 2500*2 1000') จากข้อความสั่งของแบบ
-    LINE OA เป็นลิสต์เป้าหมาย PV เรียงมากไปน้อย — พอร์ตมาจาก gas_line_webhook.js
+    LINE OA เป็นลิสต์เป้าหมาย PV เรียงมากไปน้อย — พอร์ตมาจาก GAS TBY Zhulian Sathu.js
     (planMatches) ให้ LINE OA กับ Streamlit ใช้กติกาเดียวกัน"""
     m = re.search(r"plan\s+([\d*\s]+)", text.lower())
     return _parse_target_list(m.group(1)) if m else []
@@ -148,7 +148,7 @@ def split_bills_by_pv(items: list, targets: list[int], tolerance: int = 25,
     """แบ่งสินค้าที่สั่ง (แต่ละชิ้นแยกจากกัน ไม่ใช่ทั้งบรรทัด) ออกเป็นหลายบิลย่อยตาม
     targets (เรียงมากไปน้อย) โดยแต่ละบิลพยายามให้ยอด PV ใกล้เคียง target ที่สุด (ไม่เกิน
     target+tolerance) — สุ่มลำดับสินค้าแล้วหยิบใส่บิลแบบ greedy ซ้ำ attempts ครั้ง เลือก
-    ผลลัพธ์ที่ยอด PV ใกล้ target ที่สุดในแต่ละรอบ (พอร์ตจาก gas_line_webhook.js's 'plan'
+    ผลลัพธ์ที่ยอด PV ใกล้ target ที่สุดในแต่ละรอบ (พอร์ตจาก GAS TBY Zhulian Sathu.js's 'plan'
     keyword ทุกประการ รวมพฤติกรรมสุ่ม — ผลลัพธ์จึงไม่ deterministic ข้ามการเรียกเว้นแต่จะ
     ส่ง rng ที่ seed ไว้)
 

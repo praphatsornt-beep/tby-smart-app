@@ -1169,7 +1169,7 @@ def replace_box_presets(presets: list[dict]) -> None:
     get_box_presets.clear()
 
 
-# ─── Carrier zones (โซนพื้นที่พิเศษ/ห่างไกล — mirror ให้ gas_line_webhook.js อ่าน) ────
+# ─── Carrier zones (โซนพื้นที่พิเศษ/ห่างไกล — mirror ให้ GAS TBY Zhulian Sathu.js อ่าน) ────
 # flash_zones.py ยังคงเป็น hardcoded Python source of truth เหมือนเดิม (tests ต้อง
 # import ได้ทันทีไม่พึ่งเน็ต) — ตาราง carrier_zones นี้เป็นแค่ mirror ให้ GAS (ซึ่งไม่มี
 # access โค้ด Python) query สดๆ แทนการ hardcode ลิสต์แยกต่างหากที่เคย drift มาแล้ว
