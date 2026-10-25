@@ -245,6 +245,19 @@ function doPost(e) {
     handleCheckAll_(replyToken);
     return;
   }
+
+  // ── สรุปยอดสั่งของตอนเช้า — สรุปออเดอร์ Shopee วันนี้ต่อร้าน + สินค้าที่ต้องเตรียมส่ง
+  // (เพิ่ม 2026-10-25 ตามคำขอตรงๆ "อยากมี shortcut คำสั่งนี้" — เคยเป็นหนึ่งใน 7 คำสั่งที่
+  // เดาไม่ตรงจากล็อกที่ user ส่งมาก่อนหน้า ("-สรุปยอดสั่งของตอนเช้า") ตอนนั้นยังไม่มีคำสั่งนี้
+  // จริง เลยเงียบไปตามพฤติกรรมใหม่ "คำสั่งไม่ตรงให้เงียบ" — ตอนนี้ทำให้เป็นคำสั่งจริงแล้ว)
+  // พอร์ต query/การจัดกลุ่มมาจาก database.py's get_ecommerce_order_notices_df (ตารางต่อร้าน)
+  // + dashboard_ui.py's "🛍️ สินค้าที่ต้องเตรียมส่งวันนี้" (groupby ข้ามร้าน) — อ่านจากตาราง
+  // ecommerce_order_notices ตรงๆ ผ่าน Supabase (ข้อมูลที่ tools/email_daily_digest.py บันทึก
+  // ไว้ทุกเช้าอยู่แล้ว ไม่ได้ไปแกะอีเมลเองในนี้ — บอทนี้ไม่มีสิทธิ์เข้า Gmail)
+  if (userMessage === 'สรุปยอดสั่งของตอนเช้า') {
+    handleMorningOrderSummary_(replyToken);
+    return;
+  }
   // ── [ชื่อลูกค้า] check_pv / check_items / check_money / check_all — ปุ่มย่อยจาก
   // handleCustomerCheck_ ด้านล่าง (ต้องเช็คก่อน _checkCmd ข้างล่าง เพราะ "check_pv" ไม่ตรง
   // regex /\s+check$/ อยู่แล้วก็จริง แต่วางไว้ก่อนให้ชัดเจนว่าเป็นคนละขั้นตอนกัน)
@@ -491,7 +504,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n0. เมนู → ปุ่มลัดกดใช้ได้ทันที (addcoffee/sp/manual) + วิธีพิมพ์คำสั่งที่ต้องกรอกชื่อ/เลขบิลเอง\n   หรือพิมพ์ชื่อลูกค้าเฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้ (จ่าย/รับของ กดปุ่มได้เลย ส่วนบันทึกขาย/คืนคะแนน พิมพ์ต่อเองตามตัวอย่างในข้อความ)\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)\n8. [ชื่อลูกค้า] check → เลือกจากปุ่มว่าจะดู ✨คะแนน / 📦สินค้า / 💰ยอดเงิน / 📊ทั้งหมด (รวมในข้อความเดียว) ของลูกค้าคนนี้\n9. check หรือ check ทั้งหมด → สรุปรวมทุกลูกค้าที่มีคะแนน/ยอดค้าง/ของค้างรับอย่างน้อย 1 อย่าง เรียงคนที่ค้างจ่ายเยอะสุดก่อน (โชว์ 15 คนแรก)");
+        results.push("📖 คู่มือ:\n0. เมนู → ปุ่มลัดกดใช้ได้ทันที (addcoffee/sp/manual) + วิธีพิมพ์คำสั่งที่ต้องกรอกชื่อ/เลขบิลเอง\n   หรือพิมพ์ชื่อลูกค้าเฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้ (จ่าย/รับของ กดปุ่มได้เลย ส่วนบันทึกขาย/คืนคะแนน พิมพ์ต่อเองตามตัวอย่างในข้อความ)\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)\n8. [ชื่อลูกค้า] check → เลือกจากปุ่มว่าจะดู ✨คะแนน / 📦สินค้า / 💰ยอดเงิน / 📊ทั้งหมด (รวมในข้อความเดียว) ของลูกค้าคนนี้\n9. check หรือ check ทั้งหมด → สรุปรวมทุกลูกค้าที่มีคะแนน/ยอดค้าง/ของค้างรับอย่างน้อย 1 อย่าง เรียงคนที่ค้างจ่ายเยอะสุดก่อน (โชว์ 15 คนแรก)\n10. สรุปยอดสั่งของตอนเช้า → สรุปออเดอร์ Shopee วันนี้ต่อร้าน (COD/โอนแล้ว/ยกเลิก) + รายการสินค้าที่ต้องเตรียมส่งวันนี้รวมข้ามร้าน");
       } else {
         // ไม่พบคำสั่ง — เงียบไปเลย ไม่ตอบอะไร (เปลี่ยน 2026-10-25 ตามคำขอ "ถ้าคำสั่งไม่ตรง
         // ให้ระบบเงียบๆไป" — เดิมตอบ "⚠️ ไม่พบคำสั่ง: X" ทุกบรรทัดที่พิมพ์ไม่ตรง ซึ่งรวมถึง
@@ -588,6 +601,7 @@ function handleMenu_(replyToken) {
     { type: 'action', action: { type: 'message', label: '📦 addcoffee', text: 'addcoffee' } },
     { type: 'action', action: { type: 'message', label: '📮 sp', text: 'sp' } },
     { type: 'action', action: { type: 'message', label: '📊 check ทั้งหมด', text: 'check ทั้งหมด' } },
+    { type: 'action', action: { type: 'message', label: '📦 สรุปยอดสั่งของตอนเช้า', text: 'สรุปยอดสั่งของตอนเช้า' } },
     { type: 'action', action: { type: 'message', label: '📖 manual', text: 'manual' } },
   ]);
 }
@@ -906,6 +920,95 @@ function handleCheckAll_(replyToken) {
   msg += '─────────────────\n';
   msg += '💰 ยอดค้างจ่ายรวมทั้งหมด: ฿' + numFmt_(totalOwe) + '\n';
   msg += '✨ คะแนนรอเปิดบิลรวมทั้งหมด: ' + numFmt_(totalPv) + ' PV';
+
+  replyMessage(replyToken, msg);
+}
+
+// สรุปยอดสั่งของตอนเช้า — สรุปออเดอร์ Shopee "วันนี้" ต่อร้าน (COD/โอนแล้ว/ยกเลิก) +
+// สินค้าที่ต้องเตรียมส่งวันนี้ (รวมข้ามร้าน) (เพิ่ม 2026-10-25) — พอร์ตตรรกะการจัดกลุ่มมาจาก
+// database.py's get_ecommerce_order_notices_df (ตาราง ecommerce_order_notices, กรอง
+// first_seen_at ด้วย string-prefix เทียบวันที่ ไม่ parse เป็น timestamp จริง — เหตุผลเดียวกับ
+// ต้นฉบับ: อีเมล Shopee ใช้ format วันที่ไม่คงที่) + dashboard_ui.py's "🛍️ สินค้าที่ต้อง
+// เตรียมส่งวันนี้" (groupby รหัสสินค้า/สินค้า/ตัวเลือก ข้ามร้าน) — อ่านข้อมูลที่
+// tools/email_daily_digest.py บันทึกไว้ทุกเช้าอยู่แล้วตรงๆ ผ่าน Supabase ไม่ได้แกะอีเมลเอง
+// (บอทนี้ไม่มีสิทธิ์เข้า Gmail) ใช้ _sbGetAll_ ไม่ใช่ _sbGet_ ธรรมดา เพราะ query ไม่กรอง
+// ตามลูกค้า สเกลตามจำนวนออเดอร์ทั้งระบบ (เหตุผลเดียวกับ handleCheckAll_ ด้านบน)
+function handleMorningOrderSummary_(replyToken) {
+  var today = _todayBkk_();
+  var rows = _sbGetAll_(
+    '/rest/v1/ecommerce_order_notices?platform=eq.shopee'
+    + '&select=shop_name,status,order_type,total_amount,items,first_seen_at'
+  ).filter(function(r) { return (r.first_seen_at || '').substring(0, 10) === today; });
+
+  if (rows.length === 0) {
+    replyMessage(replyToken, '✅ วันนี้ยังไม่มีออเดอร์ Shopee เข้ามาเลยค่ะ (หรือ digest เช้านี้ยังไม่รัน)');
+    return;
+  }
+
+  var mapRows = _sbGetAll_(
+    '/rest/v1/ecommerce_product_map?platform=eq.shopee_notice&select=platform_item_id,product_id,units_per_pack'
+  );
+  var noticeMap = {};
+  mapRows.forEach(function(m) { noticeMap[m.platform_item_id] = m; });
+
+  var shopStats = {}, shopOrder = [];
+  var productAgg = {}, productOrder = [];  // ข้ามร้าน — ตรงกับ dashboard_ui.py's groupby
+  var totalConfirmed = 0, totalCancelled = 0;
+
+  rows.forEach(function(r) {
+    var shop = r.shop_name || '-';
+    if (!shopStats[shop]) {
+      shopStats[shop] = { cod: 0, transfer: 0, cancelled: 0 };
+      shopOrder.push(shop);
+    }
+    var s = shopStats[shop];
+    if (r.status === 'ยกเลิก') { s.cancelled++; totalCancelled++; return; }
+    totalConfirmed++;
+    if (r.order_type === 'cod') s.cod++;
+    else if (r.order_type === 'transfer') s.transfer++;
+
+    (r.items || []).forEach(function(it) {
+      var name = it.name || '-';
+      var variant = it.variant || '';
+      var key = variant ? (name + ' :: ' + variant) : name;
+      var mapEntry = noticeMap[key];
+      var code = (mapEntry && mapEntry.product_id) || '-';
+      var pack = parseFloat((mapEntry && mapEntry.units_per_pack) || 1);
+      if (!productAgg[key]) {
+        productAgg[key] = { code: code, name: name, variant: variant, qty: 0 };
+        productOrder.push(key);
+      }
+      productAgg[key].qty += (parseInt(it.qty || 0, 10) * pack);
+    });
+  });
+
+  var products = productOrder.map(function(k) { return productAgg[k]; })
+    .sort(function(a, b) { return b.qty - a.qty; });
+
+  var msg = '📦 สรุปยอดสั่งของตอนเช้า (' + today + ')\n─────────────────\n';
+  shopOrder.forEach(function(shop) {
+    var s = shopStats[shop];
+    var totalOrders = s.cod + s.transfer;
+    var line = 'ร้าน ' + shop + ': ' + totalOrders + ' ออเดอร์ (COD ' + s.cod + ' / โอนแล้ว ' + s.transfer + ')';
+    if (s.cancelled > 0) line += ' — ยกเลิก ' + s.cancelled;
+    msg += line + '\n';
+  });
+
+  msg += '─────────────────\n🛍️ สินค้าที่ต้องเตรียมส่งวันนี้:\n';
+  var MAX_PRODUCTS = 20;
+  products.slice(0, MAX_PRODUCTS).forEach(function(p) {
+    var label = '[' + p.code + '] ' + p.name + (p.variant ? (' (' + p.variant + ')') : '');
+    msg += '• ' + label + ' x' + numFmt_(p.qty) + '\n';
+  });
+  if (products.length > MAX_PRODUCTS) {
+    msg += '...และอีก ' + (products.length - MAX_PRODUCTS) + ' รายการ\n';
+  }
+  if (products.some(function(p) { return p.code === '-'; })) {
+    msg += 'ℹ️ รหัสขึ้น "-" = ยังไม่ได้ map ชื่อสินค้านี้ (ไปที่แอป → 🛒 E-commerce)\n';
+  }
+
+  msg += '─────────────────\nรวม ' + totalConfirmed + ' ออเดอร์ยืนยันแล้ว';
+  if (totalCancelled > 0) msg += ' (ยกเลิก ' + totalCancelled + ')';
 
   replyMessage(replyToken, msg);
 }
