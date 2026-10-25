@@ -7,7 +7,11 @@
 CREATE TABLE IF NOT EXISTS pack_events (
   id                     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tracking_no            TEXT NOT NULL,
-  source                 TEXT NOT NULL DEFAULT 'other',  -- 'iship' | 'other' (Shopee/Lazada/ไม่รู้จัก)
+  -- 'iship' = match ตรงกับ shipments.tracking_no ของร้านเอง (รู้แน่นอน)
+  -- 'lazada' = เดาจากคำนำหน้าเลข "LEX" (ขนส่งในเครือ Lazada เอง ไม่มีใน carrier list ของ
+  --            iship เลย — ดู pack_scan_ui.py's _guess_source())
+  -- 'shopee' = ที่เหลือทั้งหมด (เดาดีที่สุดเท่าที่ทำได้ ไม่ใช่ข้อเท็จจริง 100%)
+  source                 TEXT NOT NULL DEFAULT 'shopee',
   matched_customer_name  TEXT,  -- เติมเฉพาะ source='iship' ที่หาเจอใน shipments ตอนสแกน
   matched_carrier        TEXT,  -- เติมเฉพาะ source='iship' เช่นกัน
   packed_at              TIMESTAMPTZ NOT NULL DEFAULT now()

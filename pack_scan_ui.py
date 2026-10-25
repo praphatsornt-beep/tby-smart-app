@@ -2,7 +2,10 @@
 เวลาแพคของแต่ละชิ้น (เพิ่ม 2026-10-25 ตามคำขอ) บันทึกแยกเป็นประวัติการแพค ไม่ผูกกับออเดอร์
 โดยตรง (ยืนยันกับ user แล้ว — Shopee/Lazada ไม่เคยเก็บเลข tracking ไว้ที่ไหนเลย มีแค่
 order_sn เท่านั้น ไม่มีอะไรให้ join) ยกเว้นออเดอร์ iship ที่ shipments.tracking_no มีอยู่แล้ว
-จะ match ชื่อลูกค้า/ขนส่งให้อัตโนมัติตอนสแกน
+จะ match ชื่อลูกค้า/ขนส่งให้อัตโนมัติตอนสแกน — ส่วน "มาจากระบบไหน" (Shopee/Lazada/iship)
+เดาแยก 3 ทางด้วย `_guess_source()`: iship รู้แน่นอนจาก match, Lazada เดาจากคำนำหน้าเลข
+tracking "LEX" (ขนส่งในเครือ Lazada เอง ไม่มีใน carrier list ของ iship เลย), ที่เหลือเดาเป็น
+Shopee (ดีที่สุดเท่าที่ทำได้ — ไม่ใช่ข้อเท็จจริง 100%)
 
 ใช้ st.camera_input() (ถ่ายรูปทีละใบ) แทน live-scan ผ่านกล้องต่อเนื่อง (เช่น streamlit-webrtc)
 โดยตั้งใจ — ไม่มี TURN server ตั้งไว้สำหรับ Streamlit Community Cloud เลย ความเสี่ยงเรื่อง
@@ -15,6 +18,36 @@ import streamlit as st
 from PIL import Image
 
 import database as db
+
+# เลข tracking ที่ขึ้นต้นด้วยคำนำหน้าพวกนี้ = ขนส่งในเครือ Lazada เอง (Lazada eLogistics/"LEX")
+# ยืนยันจากรูปใบปะหน้า Lazada จริง 2026-10-25 (LEXDO0189817323) — ไม่มีอยู่ในลิสต์ขนส่งของ
+# iship เลยสักตัว (ดู carriers.py's _CARRIER_DEFS: Flash/SPX/KEX/DHL/EMS/Inter/J&T เท่านั้น
+# ไม่มี LEX) ฉะนั้นเจอคำนำหน้านี้ = มั่นใจได้ว่าไม่ใช่ออเดอร์ iship ของร้านเองแน่ๆ และน่าจะเป็น
+# Lazada เกือบชัวร์ (ต่างจาก SPX/Flash ที่ทั้ง iship และ Shopee ใช้ร่วมกัน เลขคำนำหน้าแบบนั้น
+# แยกไม่ได้จริงๆ ว่าใครส่ง ต้อง match กับ shipments เท่านั้นถึงจะมั่นใจ)
+_LAZADA_TRACKING_PREFIXES = ("LEX",)
+
+
+def _guess_source(tracking_no: str, shipment: dict | None) -> str:
+    """เดาว่า tracking_no นี้มาจากระบบไหน (เพิ่ม 2026-10-25 ตามคำถาม "พออ่านแล้วจะทราบมั้ยว่า
+    เป็นการบันทึกจากระบบ shopee lazada หรือ iship") — มีแค่กรณี iship เท่านั้นที่ "รู้แน่นอน"
+    (match ตรงกับ shipments.tracking_no ของร้านเอง) ส่วน Lazada เดาจากคำนำหน้า LEX (ดูเหตุผล
+    ที่ _LAZADA_TRACKING_PREFIXES ด้านบน) ที่เหลือ (ไม่ match iship และไม่ใช่คำนำหน้า Lazada)
+    เดาเป็น Shopee เพราะเป็นแพลตฟอร์มที่เหลือที่ใช้งานจริงตอนนี้ — แต่เป็นแค่การเดาที่ดีที่สุด
+    เท่าที่ทำได้ ไม่ใช่ข้อเท็จจริง 100% (เช่น ถ้าวันหลังมีออเดอร์ TikTok มาสแกนด้วย จะโดนเดา
+    เป็น Shopee ผิดไปด้วย — ยังไม่มีเคสจริงให้เช็คตอนนี้)"""
+    if shipment:
+        return "iship"
+    if tracking_no.upper().startswith(_LAZADA_TRACKING_PREFIXES):
+        return "lazada"
+    return "shopee"
+
+
+_SOURCE_LABELS = {
+    "iship": "iship (ของร้านเอง — ยืนยันแล้ว)",
+    "lazada": "Lazada (เดาจากเลข LEX)",
+    "shopee": "Shopee (เดา)",
+}
 
 
 def _decode_codes(image: Image.Image) -> list[str]:
@@ -38,12 +71,11 @@ def _classify_and_save(tracking_no: str) -> dict:
     pack_events — คืน dict สรุปผลให้ render() เอาไปแสดง (query แค่ครั้งเดียว ไม่ query ซ้ำ)"""
     shipment = db.find_shipment_by_tracking_no(tracking_no)
     last_event = db.get_last_pack_event(tracking_no)
+    source = _guess_source(tracking_no, shipment)
     if shipment:
-        source = "iship"
         customer_name = (shipment.get("customers") or {}).get("name")
         carrier = shipment.get("carrier")
     else:
-        source = "other"
         customer_name = None
         carrier = None
     db.insert_pack_event(tracking_no, source, customer_name, carrier)
@@ -58,13 +90,14 @@ def _classify_and_save(tracking_no: str) -> dict:
 
 
 def _show_result(result: dict) -> None:
+    _label = _SOURCE_LABELS.get(result["source"], result["source"])
     if result["source"] == "iship" and result["customer_name"]:
         st.success(
             f"✅ บันทึกแพคแล้ว: **{result['tracking_no']}** "
             f"({result['carrier'] or '-'}) — คุณ{result['customer_name']}"
         )
     else:
-        st.success(f"✅ บันทึกแพคแล้ว: **{result['tracking_no']}**")
+        st.success(f"✅ บันทึกแพคแล้ว: **{result['tracking_no']}** — {_label}")
     if result["already_scanned_before"]:
         st.warning(
             f"⚠️ เคยสแกนเลขนี้มาก่อนแล้ว (ล่าสุด {result['last_scanned_at']}) — "
@@ -119,6 +152,8 @@ def _render_today_log() -> None:
         st.caption("ยังไม่มีการสแกนวันนี้")
         return
     st.caption(f"แพคไปแล้ว {len(df)} ชิ้นวันนี้")
+    df = df.copy()
+    df["source"] = df["source"].map(lambda s: _SOURCE_LABELS.get(s, s))
     _cols = ["packed_at", "tracking_no", "source", "matched_customer_name", "matched_carrier"]
     st.dataframe(
         df[_cols].rename(columns={
