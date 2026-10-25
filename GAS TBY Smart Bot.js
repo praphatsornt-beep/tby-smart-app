@@ -75,6 +75,30 @@ function _sbPost_(table, data) {
   });
 }
 
+// _sbGet_ ธรรมดาโดน PostgREST ตัดที่ 1,000 แถว/คำขอเงียบๆ ไม่มี error (ปัญหาเดียวกับที่เจอ
+// ซ้ำๆ ในฝั่ง database.py/_fetch_all — ดู CLAUDE.md "PostgREST default 1,000-row page cap")
+// — เพิ่ม 2026-10-25 เฉพาะตอนต้อง query ข้าม "ทุกลูกค้า" ไม่กรอง customer_id (เช่น "check
+// ทั้งหมด" ด้านล่าง) เพราะเป็นจุดเดียวในไฟล์นี้ที่สเกลตามจำนวนแถวทั้งตาราง ไม่ใช่ตาม 1
+// ลูกค้า — วนด้วย Range header (items, 1000 แถว/หน้า) จนกว่าหน้าจะมาไม่เต็มแล้วหยุด
+function _sbGetAll_(path) {
+  var pageSize = 1000, start = 0, all = [];
+  for (var i = 0; i < 50; i++) {  // กันลูปไม่รู้จบถ้า PostgREST ตอบแปลกๆ
+    var resp = UrlFetchApp.fetch(getSupabaseUrl_() + path, {
+      headers: {
+        'apikey': getSupabaseKey_(), 'Authorization': 'Bearer ' + getSupabaseKey_(),
+        'Range-Unit': 'items', 'Range': start + '-' + (start + pageSize - 1),
+      },
+      muteHttpExceptions: true,
+    });
+    var page = JSON.parse(resp.getContentText());
+    if (!Array.isArray(page)) break;
+    all = all.concat(page);
+    if (page.length < pageSize) break;
+    start += pageSize;
+  }
+  return all;
+}
+
 // จำนวนห่อต่อ 1 ลัง แยกตามตัวอักษรตัวแรกของรหัส (ตัวเดียวกับที่ใช้เลือกชีท
 // "Coffee" + ตัวอักษรนี้) — B = กาแฟ 40 ซอง (ลังละ 18 ห่อ), S = กาแฟ 84 ซอง
 // (ลังละ 10 ห่อ) เพิ่มเข้ามา 2026-09-21 ตามที่ user ระบุ ตัวอักษรอื่นที่ยังไม่
@@ -211,6 +235,16 @@ function doPost(e) {
   if (_payMenuCmd) { handlePayMenu_(_payMenuCmd[1].trim(), replyToken); return; }
   var _recvMenuCmd = userMessage.match(/^(.+?)\s+รับของ$/i);
   if (_recvMenuCmd) { handleReceiveMenu_(_recvMenuCmd[1].trim(), replyToken); return; }
+  // ── check / check ทั้งหมด — สรุปรวมทุกลูกค้าที่มีคะแนน/ยอดค้าง/ของค้างรับ (เพิ่ม 2026-10-25
+  // ตามคำถามต่อจาก "[ชื่อ] check": "ถ้าจะเอาทั้งหมด มีตัวเลือกมั้ย") — ต้องเช็คก่อนเจอ _checkCmd
+  // ด้านล่าง เพราะ "check" เฉยๆ ไม่มีชื่อนำหน้าจะไม่ตรง regex นั้นอยู่แล้ว (ต้องมีอย่างน้อย 1
+  // ตัวอักษร + เว้นวรรคก่อนคำว่า check) แต่เขียนแยกให้ชัดเจน ไม่ปล่อยให้ fallthrough ไปเงียบ
+  // ที่ loop ท้ายไฟล์ ('check' อยู่ใน _KNOWN_BARE_COMMANDS_ ด้านล่างอยู่แล้ว กัน
+  // _tryBareNameCustomerMenu_ ไปค้นหาลูกค้าชื่อ "check" ด้วย)
+  if (userMessage.toLowerCase() === 'check' || userMessage === 'check ทั้งหมด') {
+    handleCheckAll_(replyToken);
+    return;
+  }
   // ── [ชื่อลูกค้า] check — สรุปคะแนน/ยอดเงิน/สินค้าค้างรับรวมเป็นข้อความเดียว (เพิ่ม
   // 2026-10-25 — ดูคอมเมนต์ที่ handleCustomerCheck_/buildAndSendCustomerSummary_ ด้านล่าง)
   var _checkCmd = userMessage.match(/^(.+?)\s+check$/i);
@@ -452,7 +486,7 @@ function doPost(e) {
           results.push("⚠️ พิมพ์ addcoffee เพียงอย่างเดียว แล้วระบบจะถามทีละขั้น");
         }
       } else if (command === "manual") {
-        results.push("📖 คู่มือ:\n0. เมนู → ปุ่มลัดกดใช้ได้ทันที (addcoffee/sp/manual) + วิธีพิมพ์คำสั่งที่ต้องกรอกชื่อ/เลขบิลเอง\n   หรือพิมพ์ชื่อลูกค้าเฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้ (จ่าย/รับของ กดปุ่มได้เลย ส่วนบันทึกขาย/คืนคะแนน พิมพ์ต่อเองตามตัวอย่างในข้อความ)\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)\n8. [ชื่อลูกค้า] check → สรุปคะแนนรอเปิดบิล/ยอดค้างจ่าย/สินค้าค้างรับทั้งหมดของลูกค้าคนนี้รวมในข้อความเดียว");
+        results.push("📖 คู่มือ:\n0. เมนู → ปุ่มลัดกดใช้ได้ทันที (addcoffee/sp/manual) + วิธีพิมพ์คำสั่งที่ต้องกรอกชื่อ/เลขบิลเอง\n   หรือพิมพ์ชื่อลูกค้าเฉยๆ → โชว์เมนูว่าทำอะไรได้บ้างกับคนนี้ (จ่าย/รับของ กดปุ่มได้เลย ส่วนบันทึกขาย/คืนคะแนน พิมพ์ต่อเองตามตัวอย่างในข้อความ)\n1. addcoffee → ระบบถามทีละขั้น\n   หรือ addcoffee [รหัสเริ่ม] [จำนวนลัง] (B=18 ห่อ/ลัง, S=10 ห่อ/ลัง)\n2. out [ชีท] [วันที่] [เลขสมาชิก] [ชื่อ] [จำนวน]\n(บรรทัดถัดไปพิมพ์แค่ วันที่ เลขสมาชิก ชื่อ จำนวน ได้เลย)\n3. sp → ลิสต์พัสดุ Shopee ตีกลับที่ยังไม่ยืนยันรับคืน เลือกจากเมนูได้เลย\n   หรือ รับคืน CODE [CODE ...] → ยืนยันตรงๆ ด้วยรหัสออเดอร์ (ตามดิจสรุปรายวัน)\n4. [ชื่อลูกค้า] CODE-จำนวน [CODE-จำนวน ...] → บันทึกรายการเข้า TBY SMART APP (ระบบจะถามจ่ายเงิน/รับของ/เปิดบิลทีละขั้น — ตอนถามเปิดบิล เลือก \"บันทึกขาย+คืนคะแนน\" ได้เลยถ้าบิลนี้คือที่ลูกค้าจะใช้คืนคะแนนที่ยืมไว้ หรือเลือก \"บันทึกขาย+ยืมคะแนน\" ถ้าบิลนี้คือที่ลูกค้าขอให้เปิดไปก่อนเพื่อยืมคะแนน ไม่ต้องพิมพ์คำสั่งแยกอีกรอบ)\n5. คืนคะแนน [ชื่อลูกค้า] [เลขบิล] → ผูกบิลที่เปิดแล้วอยู่ก่อนเข้ากับยืมคะแนนที่ค้างคืน (ใช้ตอนบิลนั้นถูกบันทึกไว้แล้วก่อนหน้า)\n6. [ชื่อลูกค้า] จ่าย / [ชื่อลูกค้า] รับของ → ลิสต์บิลที่ค้างจ่าย/ค้างรับทั้งหมดให้เลือกจากปุ่ม ไม่ต้องรู้เลขบิลล่วงหน้า (จ่ายเลือกเต็ม/บางส่วนได้ รับของเลือกรายการเดียวหรือรับทั้งหมดได้)\n7. จ่ายครบ [ชื่อลูกค้า] [เลขบิล] / รับของครบ [ชื่อลูกค้า] [เลขบิล] → ถ้ารู้เลขบิลอยู่แล้ว เคลียร์ยอดค้างจ่าย/ค้างรับที่เหลือทั้งหมดของบิลนั้นให้ครบทันที (ข้ามรายการ COD ที่ยังไม่เก็บเงินปลายทางให้อัตโนมัติ)\n8. [ชื่อลูกค้า] check → สรุปคะแนนรอเปิดบิล/ยอดค้างจ่าย/สินค้าค้างรับทั้งหมดของลูกค้าคนนี้รวมในข้อความเดียว\n9. check หรือ check ทั้งหมด → สรุปรวมทุกลูกค้าที่มีคะแนน/ยอดค้าง/ของค้างรับอย่างน้อย 1 อย่าง เรียงคนที่ค้างจ่ายเยอะสุดก่อน (โชว์ 15 คนแรก)");
       } else {
         // ไม่พบคำสั่ง — เงียบไปเลย ไม่ตอบอะไร (เปลี่ยน 2026-10-25 ตามคำขอ "ถ้าคำสั่งไม่ตรง
         // ให้ระบบเงียบๆไป" — เดิมตอบ "⚠️ ไม่พบคำสั่ง: X" ทุกบรรทัดที่พิมพ์ไม่ตรง ซึ่งรวมถึง
@@ -528,9 +562,9 @@ function preRegisterSerials(ss, sc, boxQty) {
   return "📦 เพิ่มใน " + sheetName + " " + boxQty + " ลัง (" + q + " ห่อ)\n🔢 " + sc.toUpperCase() + " → " + endSerial;
 }
 
-// เมนูลัด — ปุ่มกดได้ทันทีสำหรับคำสั่งที่ไม่ต้องกรอกอะไรเพิ่ม (addcoffee/sp/manual)
-// ส่วนคำสั่งที่ต้องพิมพ์ชื่อ/เลขบิล/รหัสสินค้าเอง แค่โชว์วิธีพิมพ์เป็นข้อความ (กดปุ่มส่ง
-// ข้อความคงที่ไปตรงๆไม่ได้ เพราะไม่มีชื่อ/เลขบิลจริงให้ใส่)
+// เมนูลัด — ปุ่มกดได้ทันทีสำหรับคำสั่งที่ไม่ต้องกรอกอะไรเพิ่ม (addcoffee/sp/check ทั้งหมด/
+// manual) ส่วนคำสั่งที่ต้องพิมพ์ชื่อ/เลขบิล/รหัสสินค้าเอง แค่โชว์วิธีพิมพ์เป็นข้อความ (กดปุ่ม
+// ส่งข้อความคงที่ไปตรงๆไม่ได้ เพราะไม่มีชื่อ/เลขบิลจริงให้ใส่)
 function handleMenu_(replyToken) {
   var msg = '📋 เมนูลัด\n';
   msg += '─────────────────\n';
@@ -548,6 +582,7 @@ function handleMenu_(replyToken) {
   sendQuickReplyGas(replyToken, msg, [
     { type: 'action', action: { type: 'message', label: '📦 addcoffee', text: 'addcoffee' } },
     { type: 'action', action: { type: 'message', label: '📮 sp', text: 'sp' } },
+    { type: 'action', action: { type: 'message', label: '📊 check ทั้งหมด', text: 'check ทั้งหมด' } },
     { type: 'action', action: { type: 'message', label: '📖 manual', text: 'manual' } },
   ]);
 }
@@ -683,6 +718,111 @@ function buildAndSendCustomerSummary_(custId, custName, replyToken) {
   if (unbilledPV > 0) {
     msg += '✨ คะแนนรอเปิดบิล: ' + numFmt_(unbilledPV) + ' PV\n';
   }
+
+  replyMessage(replyToken, msg);
+}
+
+// check / check ทั้งหมด — สรุปรวมทุกลูกค้าที่มีคะแนนรอเปิดบิล/ยอดค้างจ่าย/ของค้างรับอย่างน้อย
+// 1 อย่าง เรียงคนที่ค้างจ่ายเยอะสุดก่อน (เพิ่ม 2026-10-25) — คนละ scope กับ
+// buildAndSendCustomerSummary_ ด้านบน (รายคน) ใช้ _sbGetAll_ (ไม่ใช่ _sbGet_ ธรรมดา) เพราะ
+// query ที่นี่ไม่กรอง customer_id เลย สเกลตามจำนวนแถวทั้งตาราง ไม่ใช่ตาม 1 คน — เสี่ยงโดน
+// PostgREST ตัดที่ 1,000 แถวเงียบๆ ถ้าใช้ _sbGet_ ธรรมดา (ดูคอมเมนต์ที่ _sbGetAll_ ด้านบน)
+// จำกัดแสดงแค่ 15 คนแรกในข้อความ (กัน LINE push-text เกิน 5,000 ตัวอักษรถ้าร้านนี้มีลูกค้า
+// ค้างเยอะมากพร้อมกัน — บทเรียนเดียวกับ _capped_rows ของ tools/email_daily_digest.py)
+function handleCheckAll_(replyToken) {
+  var unbilledTxns = _sbGetAll_(
+    '/rest/v1/transactions?bill_status=eq.' + encodeURIComponent('ยังไม่เปิดบิล')
+    + '&select=id,customer_id,qty,points_per_unit'
+  );
+  var unbilledIds = unbilledTxns.map(function(t) { return t.id; });
+  var openEvents = unbilledIds.length > 0 ? _sbGetAll_(
+    '/rest/v1/bill_open_events?transaction_id=in.(' + unbilledIds.join(',') + ')&select=transaction_id,qty_opened'
+  ) : [];
+  var openedMap = {};
+  openEvents.forEach(function(e) {
+    openedMap[e.transaction_id] = (openedMap[e.transaction_id] || 0) + parseInt(e.qty_opened || 0, 10);
+  });
+  var pvByCust = {};
+  unbilledTxns.forEach(function(t) {
+    var unbilledQty = Math.max(0, t.qty - Math.max(0, openedMap[t.id] || 0));
+    var pv = parseFloat(t.points_per_unit || 0) * unbilledQty;
+    if (pv <= 0) return;
+    pvByCust[t.customer_id] = (pvByCust[t.customer_id] || 0) + pv;
+  });
+
+  // ยอดค้างจ่าย + ของค้างรับ รวมทุกคน ย้อนหลัง 6 เดือน (ขอบเขตเวลาเดียวกับ check รายคน)
+  var cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 6);
+  var cutoffStr = Utilities.formatDate(cutoff, 'Asia/Bangkok', 'yyyy-MM-dd');
+  var txns = _sbGetAll_(
+    '/rest/v1/transactions?date=gte.' + cutoffStr
+    + '&select=id,customer_id,qty,total_amount,pay_status,initial_qty_received'
+  );
+  var txnIds = txns.map(function(t) { return t.id; });
+  var events = txnIds.length > 0 ? _sbGetAll_(
+    '/rest/v1/partial_events?transaction_id=in.(' + txnIds.join(',') + ')&select=transaction_id,amount_paid,qty_received'
+  ) : [];
+  var paidMap = {}, receivedMap = {};
+  events.forEach(function(e) {
+    paidMap[e.transaction_id] = (paidMap[e.transaction_id] || 0) + parseFloat(e.amount_paid || 0);
+    receivedMap[e.transaction_id] = (receivedMap[e.transaction_id] || 0) + parseInt(e.qty_received || 0);
+  });
+
+  var oweByCust = {}, itemsByCust = {};
+  txns.forEach(function(t) {
+    var paid = paidMap[t.id] || 0;
+    var outstanding = t.pay_status === 'จ่ายแล้ว' ? 0 : Math.max(0, parseFloat(t.total_amount || 0) - paid);
+    var received = (t.initial_qty_received || 0) + (receivedMap[t.id] || 0);
+    var remaining = t.qty - received;
+    if (outstanding > 0.01) oweByCust[t.customer_id] = (oweByCust[t.customer_id] || 0) + outstanding;
+    if (remaining > 0) itemsByCust[t.customer_id] = (itemsByCust[t.customer_id] || 0) + remaining;
+  });
+
+  var allIds = {};
+  Object.keys(pvByCust).forEach(function(id) { allIds[id] = true; });
+  Object.keys(oweByCust).forEach(function(id) { allIds[id] = true; });
+  Object.keys(itemsByCust).forEach(function(id) { allIds[id] = true; });
+  var ids = Object.keys(allIds);
+
+  if (ids.length === 0) {
+    replyMessage(replyToken, '✅ ไม่มีลูกค้าคนไหนมียอดค้างจ่าย/คะแนนรอเปิดบิล/ของค้างรับเลยค่ะ');
+    return;
+  }
+
+  var nameRows = _sbGetAll_('/rest/v1/customers?id=in.(' + ids.join(',') + ')&select=id,name');
+  var nameMap = {};
+  nameRows.forEach(function(c) { nameMap[c.id] = c.name; });
+
+  var rows = ids.map(function(id) {
+    return {
+      name: nameMap[id] || id,
+      pv: pvByCust[id] || 0,
+      owe: oweByCust[id] || 0,
+      items: itemsByCust[id] || 0,
+    };
+  });
+  rows.sort(function(a, b) { return b.owe - a.owe; });
+
+  var totalOwe = rows.reduce(function(s, r) { return s + r.owe; }, 0);
+  var totalPv  = rows.reduce(function(s, r) { return s + r.pv; }, 0);
+
+  var MAX_ROWS = 15;
+  var shown = rows.slice(0, MAX_ROWS);
+
+  var msg = '📊 สรุปทั้งหมด (' + rows.length + ' คนมีค้าง)\n─────────────────\n';
+  shown.forEach(function(r) {
+    var parts = [];
+    if (r.owe > 0.01) parts.push('฿' + numFmt_(r.owe));
+    if (r.pv > 0) parts.push(numFmt_(r.pv) + ' PV');
+    if (r.items > 0) parts.push(r.items + ' ชิ้นค้างรับ');
+    msg += '👤 ' + r.name + ' — ' + parts.join(' / ') + '\n';
+  });
+  if (rows.length > MAX_ROWS) {
+    msg += '...และอีก ' + (rows.length - MAX_ROWS) + ' คน (พิมพ์ "[ชื่อ] check" ดูทีละคนค่ะ)\n';
+  }
+  msg += '─────────────────\n';
+  msg += '💰 ยอดค้างจ่ายรวมทั้งหมด: ฿' + numFmt_(totalOwe) + '\n';
+  msg += '✨ คะแนนรอเปิดบิลรวมทั้งหมด: ' + numFmt_(totalPv) + ' PV';
 
   replyMessage(replyToken, msg);
 }
