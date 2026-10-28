@@ -255,8 +255,13 @@ def render(tab1, products, customers, customer_map):
                     if m_customer not in customer_map:
                         st.rerun()  # รอ customers reload หลังเพิ่งเพิ่มใหม่
                     _cid_detect = customer_map[m_customer]["id"]
-                    if st.session_state.get("_prev_shipping_cid") != _cid_detect:
-                        st.session_state["_prev_shipping_cid"] = _cid_detect
+                    # บั๊ก 2026-10-28: เดิมเช็คแค่ "!=" เฉยๆ — ถ้าพิมพ์ที่อยู่ก่อนแล้วค่อยมาเลือก
+                    # ลูกค้าทีหลัง (ยังไม่เคยมี _prev_shipping_cid เลย) เงื่อนไขนี้ก็เป็นจริงไป
+                    # ด้วย (None != id จริง) ทำให้ที่อยู่ที่เพิ่งพิมพ์ไว้โดนล้างทิ้งทันทีตอนกด
+                    # เลือกลูกค้า ทั้งที่ไม่ได้ "สลับลูกค้า" จริงๆ (ยังไม่เคยมีลูกค้าก่อนหน้าเลย) —
+                    # ต้องเคยมีลูกค้าก่อนหน้าแล้วเปลี่ยนเป็นคนอื่นจริงๆ เท่านั้นถึงจะล้าง
+                    _prev_shipping_cid = st.session_state.get("_prev_shipping_cid")
+                    if _prev_shipping_cid and _prev_shipping_cid != _cid_detect:
                         for _k, _v in [
                             ("r_name",  ""),
                             ("r_phone", ""),
@@ -267,6 +272,7 @@ def render(tab1, products, customers, customer_map):
                         ]:
                             st.session_state[_k] = _v
                         st.session_state["_staged_pc"] = ""
+                    st.session_state["_prev_shipping_cid"] = _cid_detect
 
                 # auto-set COD ก่อน render สถานะ
                 _cur_pay = st.session_state.get("m_pay", "ค้างจ่าย")
@@ -1213,12 +1219,17 @@ def render(tab1, products, customers, customer_map):
             # ที่อยู่ของลูกค้าคนก่อนยังค้างอยู่ในฟอร์ม เสี่ยงบันทึกที่อยู่ผิดคนไปกับลูกค้าใหม่
             # เจอตอนไล่เช็คแท็บนี้ซ้ำ 2026-10-25 หลังแก้ validation ที่อยู่/สินค้าหายไปแล้ว
             if _sp_cid:
-                if st.session_state.get("_sp_prev_cid") != _sp_cid:
-                    st.session_state["_sp_prev_cid"] = _sp_cid
+                # บั๊ก 2026-10-28 (เหมือนฝั่งบันทึกขาย): เดิมเช็คแค่ "!=" เฉยๆ — ถ้าพิมพ์ที่อยู่
+                # ก่อนแล้วค่อยเลือกลูกค้าทีหลัง (ยังไม่เคยมี _sp_prev_cid เลย) จะโดนล้างทิ้งทันที
+                # ทั้งที่ไม่ได้สลับลูกค้าจริงๆ — ต้องเคยมีลูกค้าก่อนหน้าแล้วเปลี่ยนเป็นคนอื่นจริง
+                # เท่านั้นถึงจะล้าง
+                _prev_sp_cid = st.session_state.get("_sp_prev_cid")
+                if _prev_sp_cid and _prev_sp_cid != _sp_cid:
                     for _k in ("rname", "rphone", "al", "dt", "am", "pv", "pc"):
                         st.session_state[f"sp_{_k}_v{_sp_av}"] = ""
                     st.session_state.pop(f"sp_dt_searchbox_v{_sp_av}", None)
                     st.session_state.pop(f"sp_am_searchbox_v{_sp_av}", None)
+                st.session_state["_sp_prev_cid"] = _sp_cid
             else:
                 st.session_state.pop("_sp_prev_cid", None)
 
