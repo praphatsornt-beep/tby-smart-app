@@ -1034,12 +1034,14 @@ def _show_carrier_select():
         for _ci, o in enumerate(opts_ok):
             _sur_txt  = f"+{o['surcharge']} ({o['sur_label']})" if o["surcharge"] else "-"
             _fuel_txt = f"+{o['fuel']}" if o["fuel"] else "-"
+            _soft_txt = f"+{o['soft_limit_fee']} (น้ำหนัก/ขนาดเกิน)" if o.get("soft_limit_fee") else "-"
             _cod_txt  = f"+{o['cod_fee']:,}" if o["cod_fee"] else "-"
             _size_txt = f"≤{o['max_cm']}cm" if o.get("max_cm") else "-"
             _pickup_txt = " 🚗 เรียกรถเข้ารับ" if o.get("manual_pickup") else ""
             _cmp.append({"ขนส่ง": ("🥇 " if _ci == 0 else "") + o["name"] + _pickup_txt,
                          "ค่าส่ง": o["base"], "พื้นที่พิเศษ": _sur_txt,
-                         "น้ำมัน": _fuel_txt, "รวม (฿)": o["total"], "📐": _size_txt, "COD": _cod_txt})
+                         "น้ำมัน": _fuel_txt, "ค่าปรับเกิน": _soft_txt,
+                         "รวม (฿)": o["total"], "📐": _size_txt, "COD": _cod_txt})
         _cs_table_evt = st.dataframe(
             pd.DataFrame(_cmp), hide_index=True, width="stretch",
             column_config={"รวม (฿)": st.column_config.NumberColumn("รวม (฿)", format="%d ฿")},

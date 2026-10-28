@@ -352,35 +352,49 @@ def _lookup(table: dict, kg: float, bkk: bool) -> int | None:
 # ก็ตาม — ตัวนี้กระทบจริงเพราะใช้กรองใน _price_one_box, max_cm ใช้แค่โชว์คำเตือนใน app.py)
 # Flash Thunder ไม่มีข้อความยืนยันวงเงิน COD ตรงๆ — ใส่ 50,000 ตามขนส่งตระกูล Flash อื่น
 # ทั้งหมดที่ยืนยันแล้ว (Pro DD/OK/100CM/DD Bulky ล้วน 50,000) ยังไม่ได้ยืนยันแยกต่างหาก
+# soft_limit (field สุดท้าย, เพิ่ม 2026-10-28): (soft_kg, soft_cm_sum, soft_fee) หรือ None —
+# ค่าปรับตายตัวเมื่อเกิน threshold แต่ยังส่งได้ปกติ (ไม่ตัดออกแบบ exceeds_max/max_kg) ดู
+# คอมเมนต์เต็มที่ _price_one_box() — ตอนนี้มีแค่ KEX Bulky ที่ยืนยันแล้วว่าทำงานแบบนี้จริง
+# (เกิน 20 กก. หรือขนาดรวมเกิน 180 ซม. คิดเพิ่ม 350 บาททันที) ตัวอื่นยังเป็น None หมด (ยัง
+# ไม่ยืนยัน แม้ KEX Jumbo/DHL จะมีประโยคคล้ายกันในเอกสาร — ดูรายละเอียดที่ kex_jumbo ด้านล่าง)
 _CARRIER_DEFS = [
-    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True,  4000),
-    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,   _FLASH_PRO_DD_SIZE_CM, True,  50000, True,  4000),
-    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True,  4000),
-    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_100CM_SIZE_CM, True,  50000, True,  4000),
+    ("flash_thunder",     "Flash Thunder",      _FLASH_THUNDER,       50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True,  4000, None),
+    ("flash_pro_dd",      "Flash Pro DD",       _FLASH_PRO_DD,        50,  _flash_pro_dd_sur,       3, 2.14, True,  0,   _FLASH_PRO_DD_SIZE_CM, True,  50000, True,  4000, None),
+    ("flash_pro_ok",      "Flash Pro OK",       _FLASH_PRO_OK,        50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_THUNDER_SIZE_CM, True,  50000, True,  4000, None),
+    ("flash_100cm",       "Flash 100CM",        _FLASH_100CM,         50,  _flash_sur,              3, 2.14, True,  0,   _FLASH_100CM_SIZE_CM, True,  50000, True,  4000, None),
     # max_kg 100→50 (2026-10-28, ดูคอมเมนต์ที่ _FLASH_PRO_DD_BULKY ด้านบน) — ยืนยันจริงแค่
     # ถึง 50kg เท่านั้นหลังแก้ตารางราคาให้ตรงกับ Pro DD Bulky จริง (เดิม 100 เป็นของ Pro OK)
-    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 50,   _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01, 400, True,  50000, True,  6000),
+    ("flash_pro_dd_bulky","Flash Pro DD Bulky", _FLASH_PRO_DD_BULKY, 50,   _flash_pro_dd_bulky_sur, 3, 2.14, False, 5.01, 400, True,  50000, True,  6000, None),
     # เพิ่ม 2026-10-28 (ดูคอมเมนต์ที่ _FLASH_PRO_OK_BULKY ด้านบน) — เงื่อนไขจริงเหมือน Pro DD
     # Bulky ทุกจุดยกเว้น "ไม่มีค่าน้ำมัน" (fuel=0) และยืนยันราคาเต็ม 1-100kg แล้ว (max_kg=100)
-    # — iship_api.COURIER_MAP ยังไม่มี courier_code ของตัวนี้ (ไม่กล้าเดา) ปุ่ม "ส่ง iShip"
-    # ใน app.py จะ disable ไว้เองถ้าเลือกตัวนี้ จนกว่าจะมี courier_code จริงมายืนยัน
-    ("flash_pro_ok_bulky","Flash Pro OK Bulky", _FLASH_PRO_OK_BULKY, 100,  _flash_pro_dd_bulky_sur, 0, 2.14, False, 5.01, 400, True,  50000, True,  6000),
-    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,   180, True,  36000, False, 4000),
-    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,   _KEX_SIZE_CM, True,  50000, False, 4000),
-    ("kex_jumbo",         "KEX Jumbo",          _KEX_JUMBO,           60,  _kex_jumbo_sur,          3, 2.675,False, 0,   400, True,  50000, False, 6000),
-    # min_kg=4 (เอกสาร: "ใช้ได้สำหรับพัสดุที่มีน้ำหนัก 4 กก. ขึ้นไป"), max_kg=20 (เอกสาร:
-    # "รองรับพัสดุน้ำหนักสูงสุดถึง 20 กก." — เกินนี้คิดเพิ่ม 350 บาท ไม่ใช่ราคาปกติ ไม่โมเดล
-    # ค่าปรับนี้ ปล่อยให้ exceeds_max กรองออกแทน) sur_fn ใช้ _no_sur เพราะเงื่อนไขบอกว่า
-    # "คิดค่าพื้นที่ห่างไกล" จริง แต่ไม่มีรายชื่อ/จำนวนที่ยืนยันแยกสำหรับตัวนี้โดยเฉพาะ —
-    # ห้ามใช้ KEX_BULKY_REMOTE (flash_zones.py) ซ้ำ เพราะชุดนั้นน่าจะมาจากเอกสารชุดเดียวกับ
-    # ที่เคยเข้าใจผิดว่าเป็น Bulky (จริงคือของ Jumbo) ไม่ใช่ของตัวนี้
-    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           20,  _no_sur,                 3, 2.675,False, 4,   180, True,  50000, False, 6000),
-    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False, 4000),
-    ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False, 4000),
-    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True,  4000),
-    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True,  4000),
-    ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0,     False, 4000),
-    ("jt_express",        "J&T Express",        _JT_EXPRESS,         100,  _jt_sur,                 0, 2.675,False, 0,   600, True,  10000, False, 6000),
+    # — iship_api.COURIER_MAP มี courier_code ยืนยันแล้ว (FlashLiveBulky, 2026-10-28)
+    ("flash_pro_ok_bulky","Flash Pro OK Bulky", _FLASH_PRO_OK_BULKY, 100,  _flash_pro_dd_bulky_sur, 0, 2.14, False, 5.01, 400, True,  50000, True,  6000, None),
+    ("spx",               "SPX Express",        _SPX,                 20,  _spx_sur,                2, 3.21, True,  0,   180, True,  36000, False, 4000, None),
+    ("kex",               "KEX Express",        _KEX,                 30,  _no_sur,                 3, 2.675,False, 0,   _KEX_SIZE_CM, True,  50000, False, 4000, None),
+    # เอกสารของ KEX Jumbo มีประโยคคล้าย KEX Bulky เป๊ะ ("เกิน 60 กก. หรือขนาดเกิน 400 ซม.
+    # คิดเพิ่ม 350 บาททันที") แต่ _KEX_JUMBO ด้านบนมีราคาจริงยืนยันแค่ถึง 60kg เท่านั้น (ไม่มี
+    # เลขจริงช่วง 61-100kg แม้เอกสารจะบอกว่ารองรับถึง 100kg) — ถ้าเปิด soft_limit ตรงนี้โดยไม่
+    # ขยาย max_kg ไปด้วย เงื่อนไขน้ำหนัก (เกิน 60kg) จะไม่มีทางเกิดขึ้นเลยเพราะ exceeds_max
+    # ตัดออกไปก่อนแล้วเสมอ (แต่เงื่อนไขขนาด >400cm ยังเกิดได้แม้น้ำหนัก ≤60kg) — ยังไม่เปิดให้
+    # ตอนนี้ รอ user ยืนยันขอบเขตก่อน (ไม่ได้ขอรอบนี้ — ขอบเขตคำขอ 2026-10-28 คือ KEX Bulky
+    # เกิน 20kg เท่านั้น)
+    ("kex_jumbo",         "KEX Jumbo",          _KEX_JUMBO,           60,  _kex_jumbo_sur,          3, 2.675,False, 0,   400, True,  50000, False, 6000, None),
+    # max_kg 20→30 + soft_limit (2026-10-28, user: "ค่าส่งที่เกิน 20 กิโล แล้วโดนบวกเพิ่ม
+    # อย่าลืมใส่ในค่าส่งที่คำนวนเลยนะ") — เอกสารจริง: "หากน้ำหนักเกิน 20 กก. หรือขนาดเกิน 180
+    # ซม. จะถูกคิดค่าบริการเพิ่ม 350 บาททันที" = ส่งได้ถึง 30kg จริง (ตาราง _KEX_BULKY ด้านบน
+    # มีราคาจริง 21-30kg รอไว้อยู่แล้วตั้งแต่ตอนที่ได้เอกสารมา) แค่โดนค่าปรับ 350 บาทตายตัว
+    # ทับราคาปกติ ไม่ใช่ตัดออกจากตัวเลือกเลยแบบที่ exceeds_max เคยทำไว้ก่อนแก้รอบนี้ —
+    # min_kg=4 (เอกสาร: "ใช้ได้สำหรับพัสดุที่มีน้ำหนัก 4 กก. ขึ้นไป") sur_fn ใช้ _no_sur เพราะ
+    # เงื่อนไขบอกว่า "คิดค่าพื้นที่ห่างไกล" จริง แต่ไม่มีรายชื่อ/จำนวนที่ยืนยันแยกสำหรับตัวนี้
+    # โดยเฉพาะ — ห้ามใช้ KEX_BULKY_REMOTE (flash_zones.py) ซ้ำ เพราะชุดนั้นน่าจะมาจากเอกสาร
+    # ชุดเดียวกับที่เคยเข้าใจผิดว่าเป็น Bulky (จริงคือของ Jumbo) ไม่ใช่ของตัวนี้
+    ("kex_bulky",         "KEX Bulky",          _KEX_BULKY,           30,  _no_sur,                 3, 2.675,False, 4,   180, True,  50000, False, 6000, (20, 180, 350)),
+    ("dhl",               "DHL eCommerce",      _DHL,                 35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False, 4000, None),
+    ("dhl_next_day",      "DHL Next Day",       _DHL_NEXT_DAY,        35,  _dhl_sur,                0, 3.21, False, 0,   _DHL_SIZE_CM, True,  50000, False, 4000, None),
+    ("thai_post_ems",     "ไปรษณีย์ EMS",        _THAI_POST_EMS,       20,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True,  4000, None),
+    ("thai_post_bulky",   "ไปรษณีย์ EMS Bulky",  _THAI_POST_EMS_BULKY, 30,  _thai_post_sur,          0, 3.21, True,  0,   120, True,  50000, True,  4000, None),
+    ("inter_express",     "Inter Express",      _INTER_EXPRESS,       30,  _no_sur,                 0, 0,    False, 0,     0, False, 0,     False, 4000, None),
+    ("jt_express",        "J&T Express",        _JT_EXPRESS,         100,  _jt_sur,                 0, 2.675,False, 0,   600, True,  10000, False, 6000, None),
 ]
 
 
@@ -418,7 +432,7 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
     ถ้ามีขนาดกล่องครบ (length/width/height > 0) เทียบน้ำหนักจริงกับน้ำหนักตามปริมาตร
     ใช้ตัวที่หนักกว่าคิดราคา (มาตรฐานขนส่งทั่วไป — ยืนยันจากตารางราคาจริงของ Flash แล้ว)
     น้ำหนักขั้นต่ำ (min_kg) ยังเช็คกับน้ำหนักจริงเท่านั้น ไม่เกี่ยวกับปริมาตร"""
-    cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup, vol_divisor = carrier_def
+    cid, name, table, max_kg, sur_fn, fuel, cod_pct, return_free, min_kg, max_cm, supports_cod, max_cod_amt, manual_pickup, vol_divisor, soft_limit = carrier_def
     if weight_kg < min_kg:
         return None  # ไม่แสดงถ้าน้ำหนักต่ำกว่าขั้นต่ำ (เช่น Flash Pro DD Bulky ต้อง >5kg)
     if is_cod and not supports_cod:
@@ -436,7 +450,19 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
     if base is None:
         return None
     sur, sur_label = sur_fn(pc, billed_kg)
-    subtotal = base + sur + fuel
+    # soft_limit: ค่าปรับตายตัวเมื่อน้ำหนัก/ขนาดเกิน threshold หนึ่ง แต่ยังไม่เกิน max_kg จริง
+    # (ต่างจาก exceeds_max ด้านบนที่ตัดออกจากการเทียบราคาไปเลย) — เพิ่ม 2026-10-28 ตามที่
+    # ยืนยันจากเงื่อนไขจริงของ KEX Bulky: "เกิน 20 กก. หรือขนาดเกิน 180 ซม. คิดเพิ่ม 350 บาท
+    # ทันที" (ส่งได้ถึง 30kg แต่โดนค่าปรับ ไม่ใช่ปฏิเสธเลยแบบที่ exceeds_max ทำ) soft_limit
+    # เป็น tuple (soft_kg, soft_cm_sum, soft_fee) หรือ None ถ้าขนส่งนั้นไม่มีพฤติกรรมนี้ —
+    # เช็คขนาดเฉพาะตอนมีข้อมูลขนาดจริงเท่านั้น (ไม่งั้นไม่รู้จะเทียบกับอะไร)
+    soft_fee = 0
+    if soft_limit:
+        _soft_kg, _soft_cm, _fee = soft_limit
+        _dim_sum = length_cm + width_cm + height_cm
+        if billed_kg > _soft_kg or (_dim_sum > 0 and _dim_sum > _soft_cm):
+            soft_fee = _fee
+    subtotal = base + sur + fuel + soft_fee
     cod_fee = ceil(max(subtotal, cod_amount) * cod_pct / 100) if is_cod else 0
     return {
         "id":            cid,
@@ -445,6 +471,7 @@ def _price_one_box(carrier_def: tuple, weight_kg: float, postcode: str,
         "surcharge":     sur,
         "sur_label":     sur_label,
         "fuel":          fuel,
+        "soft_limit_fee": soft_fee,
         "total":         subtotal,
         "cod_fee":       cod_fee,
         "cod_pct":       cod_pct,
