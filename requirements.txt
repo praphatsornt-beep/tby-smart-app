@@ -9,3 +9,4 @@ python-dotenv
 openpyxl>=3.1.0
 xlrd>=2.0.1
 zxing-cpp>=2.2.0
+streamlit-camera-input-live>=0.2.0

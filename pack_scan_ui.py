@@ -7,18 +7,35 @@ order_sn เท่านั้น ไม่มีอะไรให้ join) ย
 tracking "LEX" (ขนส่งในเครือ Lazada เอง ไม่มีใน carrier list ของ iship เลย), ที่เหลือเดาเป็น
 Shopee (ดีที่สุดเท่าที่ทำได้ — ไม่ใช่ข้อเท็จจริง 100%)
 
-ใช้ st.camera_input() (ถ่ายรูปทีละใบ) แทน live-scan ผ่านกล้องต่อเนื่อง (เช่น streamlit-webrtc)
-โดยตั้งใจ — ไม่มี TURN server ตั้งไว้สำหรับ Streamlit Community Cloud เลย ความเสี่ยงเรื่อง
-WebRTC เชื่อมต่อไม่ติดสำหรับผู้ใช้หลังบ้าน NAT สูงกว่าความเร็วที่ได้มา (ดู good_version/
-segfault incident ในอดีต — โปรเจกต์นี้ระวังเรื่อง binary dependency เปราะบางบน Cloud อยู่แล้ว)
+เดิมใช้ st.camera_input() (ถ่ายรูปทีละใบ ต้องกดถ่ายเอง) — เปลี่ยนเป็น live-scan ต่อเนื่องแทน
+2026-10-28 ตามคำขอ (user: "ใช้ในมือถือไม่สะดวก พอเป็นแบบถ่ายรูปมันช้า") ใช้
+`streamlit-camera-input-live` (ไม่ใช่ streamlit-webrtc) — ส่งภาพสแน็ปช็อตเป็น base64 ผ่าน
+ช่องทาง component เดิมของ Streamlit เอง ทุกๆ debounce ms ไม่ได้เปิด WebRTC peer connection
+จริงๆ เลย จึงไม่มีความเสี่ยงเรื่อง TURN server ที่เคยกังวลไว้ตอนเลือก st.camera_input แต่แรก
+(ดู good_version/segfault incident — โปรเจกต์นี้ระวังเรื่อง binary dependency เปราะบางบน
+Cloud อยู่แล้ว เช็คแล้วว่า pure-Python wheel ไม่มี native dependency เพิ่ม) ถอดรหัสทุกเฟรมที่
+ได้มาด้วย `_decode_codes()` (zxing-cpp) เหมือนเดิมทุกจุด — แค่เปลี่ยนตัวป้อนภาพจาก "ถ่าย 1
+ครั้งต่อคลิก" เป็น "สตรีมภาพมาเรื่อยๆ ให้ถอดรหัสเอง" กันกดบันทึกซ้ำเลขเดิมถี่เกินไปตอนพัสดุยัง
+ไม่ทันหยิบออกจากเฟรมด้วย cooldown สั้นๆ ดู `_PACK_SAVE_COOLDOWN_SEC` ด้านล่าง — import
+`camera_input_live` แบบ lazy (ในฟังก์ชัน ไม่ใช่ตอน import โมดูลนี้) เหมือน `zxingcpp` ใน
+`_decode_codes()` ด้วยเหตุผลเดียวกัน: กันแอปทั้งตัวพังตอน boot ถ้า package นี้มีปัญหาบน
+Cloud ที่ไม่คาดคิด ให้พังเฉพาะตอนเปิดแท็บนี้จริงๆ แทน
 """
 import re
+import time
 from datetime import date
 
 import streamlit as st
 from PIL import Image
 
 import database as db
+
+# กันบันทึกซ้ำเลข tracking เดิมถี่เกินไปตอน live-scan — พัสดุชิ้นเดียวอาจยังค้างอยู่ในเฟรม
+# กล้องต่ออีกหลายวินาทีกว่าจะหยิบออก (ต่าง st.camera_input เดิมที่ต้องกดถ่ายใหม่ทุกครั้ง เลย
+# ไม่มีปัญหานี้มาก่อน) ไม่บล็อกถาวร แค่เว้นช่วงพอให้ขยับพัสดุออกจากเฟรมทัน ถ้าสแกนเลขเดิมซ้ำ
+# จริงๆ (เช่น แพคซ้ำจริง) หลังพ้น cooldown แล้วก็ยังบันทึกได้ตามปกติ — insert_pack_event เอง
+# ก็ยัง append-only ไม่ dedup ที่ DB อยู่ดี (ดู docstring ของมันเอง)
+_PACK_SAVE_COOLDOWN_SEC = 6
 
 # เลข tracking ที่ขึ้นต้นด้วยคำนำหน้าพวกนี้ = ขนส่งในเครือ Lazada เอง (Lazada eLogistics/"LEX")
 # ยืนยันจากรูปใบปะหน้า Lazada จริง 2026-10-25 (LEXDO0189817323) — ไม่มีอยู่ในลิสต์ขนส่งของ
@@ -131,25 +148,48 @@ def _show_result(result: dict) -> None:
         )
 
 
+def _try_save(tracking_no: str, order_sn: str | None) -> bool:
+    """บันทึกถ้าไม่ติด cooldown ของเลขเดิม — คืน True ถ้าบันทึกจริง (ให้ caller rerun ต่อ)"""
+    _now = time.monotonic()
+    _last_code = st.session_state.get("_pack_live_last_code")
+    _last_at = st.session_state.get("_pack_live_last_saved_at", 0.0)
+    if tracking_no == _last_code and (_now - _last_at) < _PACK_SAVE_COOLDOWN_SEC:
+        return False
+    st.session_state["_pack_last_result"] = _classify_and_save(tracking_no, order_sn=order_sn)
+    st.session_state["_pack_live_last_code"] = tracking_no
+    st.session_state["_pack_live_last_saved_at"] = _now
+    return True
+
+
 def render():
     st.subheader("📷 แพคของ")
     st.caption(
-        "ถ่ายรูปบาร์โค้ด/QR บนใบปะหน้าพัสดุ เพื่อบันทึกเวลาแพค — รองรับ Shopee/Lazada/iship "
-        "ทั้งหมด (ของ Shopee/Lazada บันทึกเป็นประวัติการแพคเฉยๆ ไม่ผูกกับออเดอร์)"
+        "ส่องกล้องไปที่บาร์โค้ด/QR บนใบปะหน้าพัสดุ — อ่านต่อเนื่องอัตโนมัติ ไม่ต้องกดถ่ายรูป "
+        "รองรับ Shopee/Lazada/iship ทั้งหมด (ของ Shopee/Lazada บันทึกเป็นประวัติการแพคเฉยๆ "
+        "ไม่ผูกกับออเดอร์)"
     )
 
     _last = st.session_state.get("_pack_last_result")
     if _last:
         _show_result(_last)
 
-    _ver = st.session_state.get("_pack_cam_ver", 0)
-    photo = st.camera_input("📸 ถ่ายรูปบาร์โค้ด/QR บนใบปะหน้า", key=f"_pack_cam_{_ver}")
+    # key คงที่ ไม่ versioned แบบ st.camera_input เดิม — component นี้ไม่ใช่ "ถ่ายแล้วค้างรูปไว้"
+    # แต่สตรีมเฟรมใหม่มาเรื่อยๆ เองอยู่แล้ว ไม่ต้อง force-reset widget ทุกครั้งที่บันทึกสำเร็จ
+    # (ถ้า bump key ทุกครั้ง จะรีสตาร์ท component ใหม่ ผู้ใช้ต้องกด "Start capturing" ซ้ำทุกครั้ง
+    # ที่บันทึกของชิ้นนึงเสร็จ — เสียจุดประสงค์ "ไม่ต้องกดอะไรเลย" ไปเลย)
+    try:
+        from camera_input_live import camera_input_live
+    except Exception as e:
+        st.error(f"❌ โหลดกล้องไม่สำเร็จ: {e}")
+        st.divider()
+        _render_today_log()
+        return
+    frame = camera_input_live(key="_pack_cam_live", debounce=700, show_controls=True)
 
-    if photo is not None:
+    if frame is not None:
         try:
-            codes = _decode_codes(Image.open(photo))
-        except Exception as e:
-            st.error(f"❌ ถอดรหัสไม่สำเร็จ: {e}")
+            codes = _decode_codes(Image.open(frame))
+        except Exception:
             codes = []
 
         # แยกรหัสที่ "หน้าตาเหมือนเลขที่ออเดอร์ Shopee" ออกมาต่างหากก่อน (ถ้ามี) — ที่เหลือถึง
@@ -159,26 +199,24 @@ def render():
         _tracking_candidates = [c for c in codes if c != _order_sn]
 
         if not codes:
-            st.error("❌ อ่านไม่ออก — ลองถ่ายใหม่ให้บาร์โค้ด/QR อยู่กลางภาพ คมชัด และไม่สะท้อนแสง")
+            # เฟรมเปล่า/ยังไม่เจอโค้ด — เรื่องปกติของ live-scan (ยังไม่ได้ส่องตรงโค้ด หรือ
+            # กำลังขยับกล้อง) ไม่ต้องขึ้น error ทุกเฟรมเหมือนตอนเป็นถ่ายทีละรูป แค่บอกเฉยๆ ว่า
+            # กำลังหาอยู่ กันข้อความ error กระพริบถี่จนรำคาญ
+            st.caption("👀 กำลังหาบาร์โค้ด/QR...")
         elif len(_tracking_candidates) == 1:
-            st.session_state["_pack_last_result"] = _classify_and_save(
-                _tracking_candidates[0], order_sn=_order_sn
-            )
-            st.session_state["_pack_cam_ver"] = _ver + 1
-            st.rerun()
+            if _try_save(_tracking_candidates[0], _order_sn):
+                st.rerun()
         elif not _tracking_candidates and _order_sn:
-            # เจอแต่เลขที่ออเดอร์ ไม่มีบาร์โค้ด tracking ติดมาด้วยเลย (เช่น ถ่ายมาแค่ครึ่งใบ) —
+            # เจอแต่เลขที่ออเดอร์ ไม่มีบาร์โค้ด tracking ติดมาด้วยเลย (เช่น มุมกล้องเห็นไม่ครบใบ) —
             # ใช้เลขออเดอร์เป็น tracking_no ไปก่อน ยังดีกว่าไม่บันทึกอะไรเลย
-            st.session_state["_pack_last_result"] = _classify_and_save(_order_sn, order_sn=_order_sn)
-            st.session_state["_pack_cam_ver"] = _ver + 1
-            st.rerun()
+            if _try_save(_order_sn, _order_sn):
+                st.rerun()
         else:
             st.warning(f"พบ {len(_tracking_candidates)} รหัสที่อาจเป็นเลข tracking — เลือกอันที่ถูก:")
-            for i, c in enumerate(_tracking_candidates):
-                if st.button(f"✅ {c}", key=f"_pack_pick_{_ver}_{i}", width="stretch"):
-                    st.session_state["_pack_last_result"] = _classify_and_save(c, order_sn=_order_sn)
-                    st.session_state["_pack_cam_ver"] = _ver + 1
-                    st.rerun()
+            for c in _tracking_candidates:
+                if st.button(f"✅ {c}", key=f"_pack_pick_{c}", width="stretch"):
+                    if _try_save(c, _order_sn):
+                        st.rerun()
 
     st.divider()
     _render_today_log()
