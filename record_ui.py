@@ -1413,6 +1413,13 @@ def render(tab1, products, customers, customer_map):
                             _sp_rph_cust = (_sp_rph_addr.get("customers") or {}).get("name", "")
                             if _sp_rph_cust and not st.session_state.get("_sp_cust_picked"):
                                 st.session_state["_sp_cust_picked"] = _sp_rph_cust
+                                # กันบั๊ก 2026-10-28: ถ้าไม่ set ตรงนี้ด้วย รอบ rerun ถัดไปที่
+                                # _sp_cid เปลี่ยนจาก "" เป็น id ลูกค้าที่เพิ่งเจอ จะโดน guard
+                                # "reset recipient fields when customer changes" (ด้านบน) ล้าง
+                                # ชื่อ/เบอร์/ที่อยู่ที่เพิ่ง fill ไปทิ้งทันที (เหมือนพิมพ์เบอร์
+                                # แล้วไม่ขึ้นอะไรเลย) — ต้อง sync _sp_prev_cid ไว้ก่อน เหมือนที่
+                                # ฝั่งบันทึกขาย ทำกับ _prev_shipping_cid (บรรทัดด้านบนในไฟล์นี้)
+                                st.session_state["_sp_prev_cid"] = _sp_rph_addr.get("customer_id", "")
                             st.rerun()
 
                     _sa1, _sa2 = st.columns(2)
