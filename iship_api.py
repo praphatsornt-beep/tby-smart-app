@@ -15,6 +15,10 @@ COURIER_MAP = {
     "Flash Pro OK":        "FlashLive",
     "Flash 100CM":         "FlashExpressC",
     "Flash Pro DD Bulky":  "FlashExpressDBulky",
+    # ยืนยัน 2026-10-28: user สร้างออเดอร์ทดสอบจริงเลือก "Flash Pro OK Bulky" บนเว็บ iShip
+    # เช็คจาก Network tab (request payload ตอนกดสร้างรายการ) ได้ courier_code นี้มาตรงๆ ตรง
+    # pattern ที่เดาไว้ (Flash Pro OK ธรรมดา = "FlashLive" จึงเป็น "FlashLive"+"Bulky")
+    "Flash Pro OK Bulky":  "FlashLiveBulky",
     "SPX Express":         "ShopeeExpress",
     "KEX Express":         "KerryExpress",
     # เดิมชื่อ "KEX Bulky" — แก้เป็น "KEX Jumbo" 2026-08-14 (ตารางราคา/เงื่อนไขที่ผูกกับ
