@@ -1070,7 +1070,7 @@ def _show_carrier_select():
         if _cs_max_cm:
             st.warning(f"📐 {_cs_carrier} — กว้าง+ยาว+สูง รวมไม่เกิน **{_cs_max_cm} cm** (ถึงกล่องเบอร์ {'2B' if _cs_max_cm <= 60 else 'G' if _cs_max_cm <= 100 else '?'})")
         if not _cs_code:
-            st.warning(f"⚠️ ไม่พบ iShip code สำหรับ '{_cs_carrier}'")
+            st.warning(f"⚠️ ยังไม่ยืนยัน iShip code สำหรับ '{_cs_carrier}' — ปุ่ม \"ส่ง iShip\" ถูกปิดไว้ก่อน เลือกขนส่งอื่นแทน")
 
         _cs_is_bulky   = "Bulky" in _cs_carrier or "Jumbo" in _cs_carrier
         _cs_missing_dims = _cs_is_bulky and not (_cs_len and _cs_wid and _cs_hgt)
@@ -1085,7 +1085,7 @@ def _show_carrier_select():
         if _cs_already_sent:
             st.warning("⚠️ รายการนี้ส่ง iShip สำเร็จไปแล้ว — ถ้าหน้าต่างนี้ค้าง กด \"ข้าม\"/ปิดหน้าต่างแล้วเข้าไปดูใน 🚚 ประวัติการส่งแทน (ป้องกันไม่ให้ส่งซ้ำโดยไม่ตั้งใจ)")
         if _btn1.button("📦 ส่ง iShip", type="primary", width="stretch", key="_cs_send",
-                        disabled=_cs_already_sent or _cs_missing_dims):
+                        disabled=_cs_already_sent or _cs_missing_dims or not _cs_code):
             _cs_items       = info.get("items", [])
             _cs_item_codes  = " ".join(
                 f"{(it.get('product_id') or it.get('name','')).upper()}-{it.get('qty',0)}"

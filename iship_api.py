@@ -440,11 +440,21 @@ def create_order(
     length_cm: int = 0, width_cm: int = 0, height_cm: int = 0,
 ) -> dict:
     from math import ceil as _ceil
+    _courier_code = COURIER_MAP.get(carrier)
+    if not _courier_code:
+        # เดิมตรงนี้ fallback เงียบๆ เป็น "FlashExpressA" (Flash Thunder) ถ้าหา carrier ไม่เจอ
+        # ใน COURIER_MAP เลย — อันตรายมาก เพราะ carriers.py โชว์ตัวเลือกในตารางเทียบราคาได้
+        # โดยไม่ต้องมี courier_code ยืนยันแล้วก็ได้ (เช่น "Flash Pro OK Bulky" เพิ่ม 2026-10-28
+        # ที่ยังไม่รู้ code จริง) ถ้าไม่กันตรงนี้ไว้ จะยิงออเดอร์จริงไปเป็น Thunder แบบเงียบๆ
+        # โดยที่ติดป้าย/คิดราคาเป็นขนส่งคนละตัวเลย (เหมือนบั๊ก Pro DD Bulky↔Pro OK Bulky ที่
+        # เพิ่งเจอ แต่แย่กว่าเพราะผิดขนส่งไปเลย ไม่ใช่แค่ผิดราคา) — คืน error แทนเรียก API เลย
+        return {"status": False, "message": f"ไม่พบ iShip courier_code สำหรับ '{carrier}' — ยังไม่ได้ยืนยัน ติดต่อแอดมินก่อนใช้งานขนส่งนี้",
+                "code": 0, "data": None}
     src = _src()
     is_cod = cod_amount > 0
     _weight_int = max(1, _ceil(weight_kg))
     payload = {
-        "courier_code": COURIER_MAP.get(carrier, "FlashExpressA"),
+        "courier_code": _courier_code,
         "src_name":     src["ISHIP_SRC_NAME"],
         "src_phone":    src["ISHIP_SRC_PHONE"],
         "src_address":  src["ISHIP_SRC_ADDRESS"],
