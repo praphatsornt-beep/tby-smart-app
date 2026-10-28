@@ -1151,7 +1151,7 @@ def render(tab1, products, customers, customer_map):
                         "_fsp_rname","_fsp_rphone","_fsp_al",
                         "_sp_prev_pc","sp_date",
                         "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
-                        "_sp_last_rph_fill","_sp_parse_open",
+                        "_sp_last_rph_fill","_sp_parse_open","_sp_phone_match_name",
                         "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search",
                         "_sp_adding_cust","_sp_prev_cust_search"]
             _sp_cart_ver_now = st.session_state.get("_sp_cart_ver", 0)
@@ -1395,6 +1395,15 @@ def render(tab1, products, customers, customer_map):
                         except Exception:
                             _sp_rph_addr = None
                         st.session_state["_sp_last_rph_fill"] = _sp_cur_rph.strip()
+                        # เคยลอง auto-set _sp_cust_picked จากเบอร์ที่เจอ (2026-10-28 รอบแรก) แต่
+                        # user ชี้ว่าไม่อยากให้ระบบ "เปลี่ยนลูกค้าที่เลือก" เงียบๆ แบบนั้น — ที่อยู่
+                        # เบอร์เดียวกันอาจเคยถูกบันทึกไว้ใต้ชื่อลูกค้าคนอื่น (เช่น ฝากส่งบ้านเพื่อน)
+                        # แค่โชว์เป็นข้อมูลให้รู้ว่า "เคยส่งในชื่อลูกค้าคนไหน" พอ ไม่ไปแตะ
+                        # _sp_cust_picked/_sp_cid เองอีกต่อไป — พนักงานเลือกลูกค้าเองถ้าต้องการ
+                        # ผูกจริง ส่วนช่องชื่อ/ที่อยู่ยังเติมให้เหมือนเดิมทุกจุด ไม่เปลี่ยน
+                        st.session_state["_sp_phone_match_name"] = (
+                            (_sp_rph_addr.get("customers") or {}).get("name", "") if _sp_rph_addr else ""
+                        )
                         if _sp_rph_addr:
                             for _k, _v in [(f"sp_rname_v{_sp_av}", _sp_rph_addr.get("recipient_name") or ""),
                                            (f"sp_al_v{_sp_av}",    _sp_rph_addr.get("address_line") or ""),
@@ -1410,22 +1419,15 @@ def render(tab1, products, customers, customer_map):
                                 _sp_rph_pc = _sp_rph_addr["postal_code"]
                                 st.session_state[f"sp_pc_v{_sp_av}"] = _sp_rph_pc
                                 st.session_state["_sp_last_pc"] = _sp_rph_pc
-                            _sp_rph_cust = (_sp_rph_addr.get("customers") or {}).get("name", "")
-                            if _sp_rph_cust and not st.session_state.get("_sp_cust_picked"):
-                                st.session_state["_sp_cust_picked"] = _sp_rph_cust
-                                # กันบั๊ก 2026-10-28: ถ้าไม่ set ตรงนี้ด้วย รอบ rerun ถัดไปที่
-                                # _sp_cid เปลี่ยนจาก "" เป็น id ลูกค้าที่เพิ่งเจอ จะโดน guard
-                                # "reset recipient fields when customer changes" (ด้านบน) ล้าง
-                                # ชื่อ/เบอร์/ที่อยู่ที่เพิ่ง fill ไปทิ้งทันที (เหมือนพิมพ์เบอร์
-                                # แล้วไม่ขึ้นอะไรเลย) — ต้อง sync _sp_prev_cid ไว้ก่อน เหมือนที่
-                                # ฝั่งบันทึกขาย ทำกับ _prev_shipping_cid (บรรทัดด้านบนในไฟล์นี้)
-                                st.session_state["_sp_prev_cid"] = _sp_rph_addr.get("customer_id", "")
-                            st.rerun()
+                        st.rerun()
 
                     _sa1, _sa2 = st.columns(2)
                     _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key=f"sp_rname_v{_sp_av}")
                     _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}")
                     _warn_duplicate_phone(_sp_rphone, _sp_cid)
+                    _sp_phone_match_name = st.session_state.get("_sp_phone_match_name", "")
+                    if _sp_phone_match_name:
+                        st.caption(f"📍 เบอร์นี้เคยส่งที่อยู่นี้ไว้ในชื่อลูกค้า **{_sp_phone_match_name}** — ไม่ได้เปลี่ยนลูกค้าที่เลือกให้ ถ้าจะผูกบิลนี้กับลูกค้าคนนั้น เลือกเองที่ช่องลูกค้าด้านบน")
                     _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key=f"sp_al_v{_sp_av}")
                     _sb1, _sb2, _sb3 = st.columns(3)
                     with _sb1:
