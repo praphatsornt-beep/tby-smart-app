@@ -1149,6 +1149,19 @@ def render(tab1, products, customers, customer_map):
 
         elif _sub_active == "📦 ส่งของ":
             _sp_av   = st.session_state.get("_sp_addr_ver", 0)
+            # กู้คืนค่า widget ที่ Streamlit อาจลืมไป เฉพาะตอนคีย์จริงหายไปจากระบบทั้งหมด
+            # (not in session_state ไม่ใช่แค่ว่าง — ว่างอาจเป็นเพราะ user ลบเองจริงๆ) จากการที่
+            # สคริปต์รอบก่อนหน้าโดน st.rerun() ตัดจบก่อนจะมาถึง widget พวกนี้ (เช่น ปุ่ม "เพิ่ม"
+            # สินค้าด้านบนคอลัมน์เดียวกัน) ทำให้ Streamlit มองว่า widget ไม่ถูกเรียกในรอบนั้นแล้ว
+            # เคลียร์ state ทิ้ง ทั้งที่กล่องบนจอยังค้างโชว์ค่าเดิมอยู่ (เจอจริง 2026-11-04:
+            # พิมพ์ที่อยู่ก่อนค่อยเพิ่มสินค้าทีหลัง ทำให้รหัสไปรษณีย์/จังหวัด/ชื่อผู้รับ/เบอร์โทร/
+            # บ้านเลขที่ หายไปเงียบๆ ฝั่งเซิร์ฟเวอร์ ค่าส่งเลยคำนวณเป็น 0) — ต้องทำก่อนโค้ดอื่นใด
+            # ในแท็บนี้ ก่อนที่ widget จริงจะเคยมีโอกาสถูกเรียกใหม่ด้วยซ้ำ
+            for _sp_field in ("rname", "rphone", "al", "pv", "pc"):
+                _sp_rk = f"sp_{_sp_field}_v{_sp_av}"
+                _sp_shk = f"_sp_shadow_{_sp_field}"
+                if _sp_rk not in st.session_state and _sp_shk in st.session_state:
+                    st.session_state[_sp_rk] = st.session_state[_sp_shk]
             _sp_keys = [f"sp_rname_v{_sp_av}",f"sp_rphone_v{_sp_av}",f"sp_al_v{_sp_av}",
                         f"sp_dt_v{_sp_av}",f"sp_am_v{_sp_av}",f"sp_pv_v{_sp_av}",
                         f"sp_dt_searchbox_v{_sp_av}",f"_sp_dt_searchbox_v{_sp_av}_sig",
@@ -1159,6 +1172,9 @@ def render(tab1, products, customers, customer_map):
                         "_sp_prev_pc","sp_date",
                         "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
                         "_sp_last_rph_fill","_sp_parse_open","_sp_phone_match_name","_sp_phone_match_cid",
+                        "_sp_matched_addr_cid","_sp_matched_addr_phone",
+                        "_sp_shadow_rname","_sp_shadow_rphone","_sp_shadow_al","_sp_shadow_dt",
+                        "_sp_shadow_am","_sp_shadow_pv","_sp_shadow_pc",
                         "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search",
                         "_sp_adding_cust","_sp_prev_cust_search"]
             _sp_cart_ver_now = st.session_state.get("_sp_cart_ver", 0)
@@ -1434,6 +1450,13 @@ def render(tab1, products, customers, customer_map):
                                 _sp_rph_pc = _sp_rph_addr["postal_code"]
                                 st.session_state[f"sp_pc_v{_sp_av}"] = _sp_rph_pc
                                 st.session_state["_sp_last_pc"] = _sp_rph_pc
+                            # เก็บ customer_id/เบอร์ที่แมทช์ไว้แยกต่างหาก ไม่โดนเคลียร์ทิ้งแม้
+                            # พิมพ์เบอร์ใหม่ที่ไม่แมทช์ใครเลยทีหลัง (_sp_phone_match_cid ข้างบนจะ
+                            # กลายเป็น "" ทันทีที่ล็อกอัพครั้งถัดไปไม่เจอ) — ใช้เป็น customer_id
+                            # ให้ปุ่ม "อัปเดตเบอร์โทร" ด้านล่างตอนลูกค้าเปลี่ยนเบอร์แต่ที่อยู่เดิม
+                            # (เพิ่ม 2026-11-04 ตามคำขอ user)
+                            st.session_state["_sp_matched_addr_cid"]   = _sp_rph_addr.get("customer_id", "")
+                            st.session_state["_sp_matched_addr_phone"] = _sp_cur_rph.strip()
                         st.rerun()
 
                     _sa1, _sa2 = st.columns(2)
@@ -1476,6 +1499,44 @@ def render(tab1, products, customers, customer_map):
                                       f"sp_dt_searchbox_v{_sp_av}", f"sp_pc_suggest_v{_sp_av}",
                                       stage_dt="_fsp_dt", stage_am="_fsp_am", stage_pv="_fsp_pv",
                                       am_searchbox_key=f"sp_am_searchbox_v{_sp_av}")
+                    # เก็บ "เงา" ของค่าปัจจุบันไว้คนละคีย์กับ staging เดิม (_fsp_*) — ดูเหตุผล/
+                    # การกู้คืนที่คอมเมนต์ต้นแท็บ (จุดที่ _sp_av ถูกคำนวณ) ห้ามใช้ชื่อคีย์ร่วมกับ
+                    # _fsp_* เพราะลูป "apply staged ก่อน render" ด้านบน pop แล้ว apply แบบไม่มี
+                    # เงื่อนไขทุกครั้งที่เจอคีย์นั้น — ถ้าใช้ร่วมกัน เงาที่เพิ่งเขียนด้วยค่าว่าง (ตอน
+                    # ยังไม่ได้พิมพ์อะไร) จะย้อนไปทับค่าที่เพิ่งพิมพ์สดๆ ในรอบถัดไปได้ (เจอจริงตอนทดสอบ
+                    # แก้บั๊กนี้รอบแรก — กลายเป็นบั๊กใหม่ที่แย่กว่าเดิม)
+                    st.session_state["_sp_shadow_rname"]  = _sp_rname
+                    st.session_state["_sp_shadow_rphone"] = _sp_rphone
+                    st.session_state["_sp_shadow_al"]     = _sp_al
+                    st.session_state["_sp_shadow_dt"]     = _sp_dt
+                    st.session_state["_sp_shadow_am"]     = _sp_am
+                    st.session_state["_sp_shadow_pv"]     = _sp_pv
+                    st.session_state["_sp_shadow_pc"]     = _sp_pc
+                    # เปลี่ยนเบอร์แต่ที่อยู่/รายละเอียดเดิม (ยังไม่ได้กด "✅ ใช่ {name}" ยืนยัน
+                    # ผูกลูกค้า เลย _sp_cid อาจยังว่าง) — ให้กดอัปเดตเบอร์ของที่อยู่เดิมได้เลย
+                    # โดยไม่ต้องเลือกลูกค้าก่อน ใช้ customer_id ที่แมทช์ไว้จากการค้นเบอร์เดิม
+                    # (เพิ่ม 2026-11-04 ตามคำขอ user)
+                    _sp_matched_cid   = st.session_state.get("_sp_matched_addr_cid", "")
+                    _sp_matched_phone = st.session_state.get("_sp_matched_addr_phone", "")
+                    _sp_rphone_now    = _sp_rphone.strip()
+                    if (_sp_matched_cid and _sp_matched_phone and len(_sp_rphone_now) == 10
+                            and _sp_rphone_now != _sp_matched_phone and is_valid_phone(_sp_rphone_now)):
+                        st.caption(f"📞 เบอร์เปลี่ยนจาก {_sp_matched_phone} — ที่อยู่/รายละเอียดเดิม กดอัปเดตเบอร์ได้โดยไม่ต้องเลือกลูกค้า")
+                        if st.button(f"🔄 อัปเดตเบอร์โทรที่อยู่นี้เป็น {_sp_rphone_now}", key="sp_update_phone_addr"):
+                            db.upsert_customer_address({
+                                "id":             str(uuid.uuid4()),
+                                "customer_id":    _sp_matched_cid,
+                                "recipient_name": _sp_rname,
+                                "phone":          _sp_rphone_now,
+                                "address_line":   _sp_al,
+                                "district":       _sp_dt,
+                                "amphure":        _sp_am,
+                                "province":       _sp_pv,
+                                "postal_code":    _sp_pc,
+                            })
+                            st.session_state["_sp_matched_addr_phone"] = _sp_rphone_now
+                            st.success("✅ อัปเดตเบอร์โทรที่อยู่นี้แล้ว")
+
                     if _sp_cid and st.button("💾 บันทึกที่อยู่นี้", key="sp_save_addr"):
                         db.upsert_customer_address({
                             "id":             str(uuid.uuid4()),
