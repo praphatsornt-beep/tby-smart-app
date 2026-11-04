@@ -462,9 +462,12 @@ def _quick_add_customer(key_prefix: str):
     if _state_key in st.session_state:
         with st.form(_form_key):
             _fn = st.text_input("ชื่อลูกค้า")
-            _fp = st.text_input("เบอร์โทร (ถ้ามี)")
+            _fp = st.text_input("เบอร์โทร (ถ้ามี)", max_chars=10)
             _fc1, _fc2 = st.columns(2)
             if _fc1.form_submit_button("💾 บันทึก", type="primary"):
+                if not is_valid_phone(_fp):
+                    st.error("⚠️ เบอร์โทรต้องเป็นตัวเลข 10 หลักเท่านั้น")
+                    st.stop()
                 _all_cids = [c["id"] for c in db.get_customers()]
                 _cmax = max((int(re.match(r'C-(\d+)', x).group(1))
                              for x in _all_cids if re.match(r'C-(\d+)', x)), default=0)
@@ -479,6 +482,17 @@ def _quick_add_customer(key_prefix: str):
                 st.session_state.pop(_state_key, None)
                 st.rerun()
     return None
+
+
+_PHONE_RE = re.compile(r"^\d{10}$")
+
+
+def is_valid_phone(phone: str) -> bool:
+    """เบอร์โทรต้องเป็นตัวเลขล้วน 10 หลักเท่านั้น — ว่างเปล่าถือว่า valid (ไม่บังคับกรอกเบอร์
+    ทุกจุดในแอปนี้) เพิ่ม 2026-11-04 ตามคำขอ "จำกัดกรอกแค่ตัวเลข 10 หลัก เท่านั้น" ใช้ร่วมกัน
+    ทุกจุดที่บันทึกเบอร์โทร (บันทึกขาย/ส่งของ/ส่ง Manual/เพิ่มลูกค้าใหม่/แก้ไขที่อยู่/ลูกค้า)"""
+    phone = (phone or "").strip()
+    return phone == "" or bool(_PHONE_RE.match(phone))
 
 
 def _warn_duplicate_phone(phone: str, current_cid: str):

@@ -9,6 +9,7 @@ import pandas as pd
 from datetime import date
 
 import database as db
+from ui_helpers import is_valid_phone
 
 _MD_TABS = ["🏷️ สินค้า", "👤 ลูกค้า", "📍 ที่อยู่", "📐 ขนาดกล่อง"]
 
@@ -275,6 +276,13 @@ def render():
                     "name":  str(row["ชื่อลูกค้า"]).strip(),
                     "phone": str(row["เบอร์โทร"]).strip() if pd.notna(row["เบอร์โทร"]) else "",
                 } for _, row in valid.iterrows()]
+                # เพิ่ม 2026-11-04 — จำกัดเบอร์โทรให้เป็นตัวเลข 10 หลักเท่านั้น (ว่างได้
+                # ไม่บังคับกรอก) เช็คทั้งชุดก่อนบันทึก ไม่ใช่ทีละแถว เพราะตารางนี้บันทึกเป็น
+                # batch เดียว — ถ้ามีแถวไหนเบอร์ผิดรูปแบบ ไม่บันทึกเลยสักแถว ให้แก้ก่อน
+                _bad_phones = [r["id"] for r in _cust_rows if not is_valid_phone(r["phone"])]
+                if _bad_phones:
+                    st.error(f"⚠️ เบอร์โทรต้องเป็นตัวเลข 10 หลักเท่านั้น — ตรวจสอบรหัสลูกค้า: {', '.join(_bad_phones)}")
+                    st.stop()
                 db.upsert_customers_batch(_cust_rows)
                 st.success(f"✅ บันทึก {len(valid)} รายการแล้ว")
                 st.rerun()
@@ -382,7 +390,7 @@ def render():
             with st.form(_form_key):
                 a1, a2 = st.columns(2)
                 ea3_rn = a1.text_input("ชื่อผู้รับ",    value=_ea.get("recipient_name", ""))
-                ea3_rp = a2.text_input("เบอร์โทร",      value=_ea.get("phone", ""))
+                ea3_rp = a2.text_input("เบอร์โทร",      value=_ea.get("phone", ""), max_chars=10)
                 ea3_al = st.text_input("บ้านเลขที่/ถนน", value=_ea.get("address_line", ""))
                 b1, b2, b3 = st.columns(3)
                 ea3_dt = b1.text_input("ตำบล/แขวง",    value=_ea.get("district", ""))
@@ -394,6 +402,9 @@ def render():
                     _ea_cust_id = next((c["id"] for c in all_custs if c["name"] == _cur_cust), "")
                     if not _ea_cust_id:
                         st.error("กรุณาเลือกลูกค้าก่อนบันทึก")
+                        st.stop()
+                    if not is_valid_phone(ea3_rp):
+                        st.error("⚠️ เบอร์โทรต้องเป็นตัวเลข 10 หลักเท่านั้น")
                         st.stop()
                     try:
                         db.upsert_customer_address({

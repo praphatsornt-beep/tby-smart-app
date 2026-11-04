@@ -11,7 +11,7 @@ import iship_api
 from flash_zones import carrier_fees
 from ui_helpers import (
     _PROVINCES, BOX_WEIGHT_G, _tambon_selectbox, _amphure_selectbox, _postcode_suggest,
-    _warn_duplicate_phone, calc_shipping, raw_weight_g, _parse_iship_address,
+    _warn_duplicate_phone, is_valid_phone, calc_shipping, raw_weight_g, _parse_iship_address,
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
     get_bulky_presets, _render_cart_card, _cart_add_items, _guard_double_submit,
@@ -489,7 +489,7 @@ def render(tab1, products, customers, customer_map):
                                     st.session_state[_wk] = st.session_state.pop(_fk)
                             col_a, col_b = st.columns(2)
                             r_name      = col_a.text_input("ชื่อผู้รับ",   key="r_name")
-                            r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone")
+                            r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone", max_chars=10)
                             _warn_duplicate_phone(r_phone, _cid)
                             r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                             col_c, col_d, col_e = st.columns(3)
@@ -677,6 +677,7 @@ def render(tab1, products, customers, customer_map):
                 if m_pay == "จ่ายบางส่วน" and valid_items and m_partial_amount <= 0:
                     m_errors.append("⚠️ กรุณาระบุจำนวนเงินที่จ่ายมา (ต้องมากกว่า 0)")
                 if m_delivery is None: m_errors.append("⚠️ ยังไม่ได้เลือก การรับของ")
+                if not is_valid_phone(r_phone): m_errors.append("⚠️ เบอร์โทรต้องเป็นตัวเลข 10 หลักเท่านั้น")
                 if valid_items:
                     if m_pay is None:  m_errors.append("⚠️ ยังไม่ได้เลือก การจ่าย")
                     if m_bill is None: m_errors.append("⚠️ ยังไม่ได้เลือก สถานะบิล")
@@ -1434,7 +1435,7 @@ def render(tab1, products, customers, customer_map):
 
                     _sa1, _sa2 = st.columns(2)
                     _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key=f"sp_rname_v{_sp_av}")
-                    _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}")
+                    _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}", max_chars=10)
                     _warn_duplicate_phone(_sp_rphone, _sp_cid)
                     _sp_phone_match_name = st.session_state.get("_sp_phone_match_name", "")
                     if _sp_phone_match_name:
@@ -1511,6 +1512,8 @@ def render(tab1, products, customers, customer_map):
             if _sp_save_clicked:
                 if not _sp_rname.strip():
                     st.error("กรุณากรอกชื่อผู้รับ")
+                elif not is_valid_phone(_sp_rphone):
+                    st.error("⚠️ เบอร์โทรต้องเป็นตัวเลข 10 หลักเท่านั้น")
                 elif not _sp_pc.strip():
                     st.error("กรุณากรอกรหัสไปรษณีย์")
                 elif not _sp_items:
@@ -2183,7 +2186,7 @@ def render(tab1, products, customers, customer_map):
 
                         _lc1, _lc2 = st.columns(2)
                         _lbl_name  = _lc1.text_input("ชื่อผู้รับ", key="_lbl_name")
-                        _lbl_phone = _lc2.text_input("เบอร์โทร", key="_lbl_phone")
+                        _lbl_phone = _lc2.text_input("เบอร์โทร", key="_lbl_phone", max_chars=10)
                         _lbl_addr_line = st.text_input("ที่อยู่ (บ้านเลขที่/ถนน)", key="_lbl_addr_line")
                         _la1, _la2, _la3, _la4 = st.columns(4)
                         with _la1:
@@ -2202,21 +2205,24 @@ def render(tab1, products, customers, customer_map):
 
                         if _lbl_cust_id:
                             if st.button("💾 บันทึกที่อยู่นี้", key="_lbl_save_addr_btn"):
-                                try:
-                                    db.upsert_customer_address({
-                                        "id":             str(uuid.uuid4()),
-                                        "customer_id":    _lbl_cust_id,
-                                        "recipient_name": _lbl_name,
-                                        "phone":          _lbl_phone,
-                                        "address_line":   _lbl_addr_line,
-                                        "district":       _lbl_district,
-                                        "amphure":        _lbl_amphure,
-                                        "province":       _lbl_province,
-                                        "postal_code":    _lbl_zip,
-                                    })
-                                    st.success("✅ บันทึกแล้ว — เลือกจากที่อยู่ที่บันทึกไว้ได้ครั้งถัดไป")
-                                except Exception as _lbl_sa_e:
-                                    st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_lbl_sa_e}")
+                                if not is_valid_phone(_lbl_phone):
+                                    st.error("⚠️ เบอร์โทรต้องเป็นตัวเลข 10 หลักเท่านั้น")
+                                else:
+                                    try:
+                                        db.upsert_customer_address({
+                                            "id":             str(uuid.uuid4()),
+                                            "customer_id":    _lbl_cust_id,
+                                            "recipient_name": _lbl_name,
+                                            "phone":          _lbl_phone,
+                                            "address_line":   _lbl_addr_line,
+                                            "district":       _lbl_district,
+                                            "amphure":        _lbl_amphure,
+                                            "province":       _lbl_province,
+                                            "postal_code":    _lbl_zip,
+                                        })
+                                        st.success("✅ บันทึกแล้ว — เลือกจากที่อยู่ที่บันทึกไว้ได้ครั้งถัดไป")
+                                    except Exception as _lbl_sa_e:
+                                        st.error(f"❌ บันทึกที่อยู่ไม่สำเร็จ: {_lbl_sa_e}")
                         else:
                             st.caption("เลือกลูกค้าด้านบนก่อน จึงจะบันทึกที่อยู่นี้ไว้ใช้ครั้งถัดไปได้")
 
@@ -2271,6 +2277,8 @@ def render(tab1, products, customers, customer_map):
                         if st.button("🖨️ พิมพ์ใบปะหน้า + บันทึกประวัติ", type="primary", key="_lbl_print_btn"):
                             if not _lbl_name or not _lbl_addr_line:
                                 st.error("กรุณากรอกชื่อผู้รับและที่อยู่ก่อน")
+                            elif not is_valid_phone(_lbl_phone):
+                                st.error("⚠️ เบอร์โทรต้องเป็นตัวเลข 10 หลักเท่านั้น")
                             elif not _lbl_rows:
                                 st.error("กรุณาเพิ่มกล่องอย่างน้อย 1 รายการก่อนพิมพ์")
                             else:
