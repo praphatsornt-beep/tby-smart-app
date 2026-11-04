@@ -15,7 +15,7 @@ from ui_helpers import (
     _to_bkk, _to_excel_bytes,
     _style_status, _fmt_note, _guard_double_submit,
     _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
-    merge_bill_family_products, _unbilled_pv_of, _esc,
+    merge_bill_family_products, _unbilled_pv_of, render_unbilled_pv_breakdown, _esc,
 )
 
 
@@ -70,6 +70,11 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
         _sm1.metric("⭐ คะแนนที่ยังไม่เปิด", f"{_l_unbilled_pv:,.0f}")
         _sm2.metric("💰 ค้างเงิน",           f"{_l_owed:,.0f} ฿")
         _sm3.metric("📦 ค้างของ",            f"{_l_pending:,} ชิ้น")
+
+    # ── รายละเอียด PV ค้างเปิดบิล แยกตามวันที่/สินค้า (เพิ่ม 2026-11-04) ──
+    if _l_unbilled_pv > 0:
+        with st.expander(f"📅 รายการค้างเปิดบิล (PV) — รวม {_l_unbilled_pv:,.0f} คะแนน", expanded=False):
+            render_unbilled_pv_breakdown(_l_all_df)
 
     # ── สรุปรายสินค้า ────────────────────────────────────────
     with st.expander("📊 สรุปรายสินค้า", expanded=False):
@@ -856,6 +861,12 @@ def render(products, customers):
                         _sm1.metric("⭐ คะแนนที่ยังไม่เปิด", f"{_unbilled_pv:,.0f}")
                         _sm2.metric("💰 ค้างเงิน",           f"{owed:,.0f} ฿")
                         _sm3.metric("📦 ค้างของ",            f"{pending:,} ชิ้น")
+
+                        # ── รายละเอียด PV ค้างเปิดบิล แยกตามวันที่/สินค้า (เพิ่ม 2026-11-04,
+                        # ดูคอมเมนต์เต็มที่ render_unbilled_pv_breakdown ใน ui_helpers.py) ──
+                        if _unbilled_pv > 0:
+                            with st.expander(f"📅 รายการค้างเปิดบิล (PV) — รวม {_unbilled_pv:,.0f} คะแนน", expanded=False):
+                                render_unbilled_pv_breakdown(grp)
                         st.divider()
 
                         # เลขอ้างอิงบิลหลัก/มีบิลแยกหรือไม่ — ต้องคำนวณก่อนตารางเลือกแถว

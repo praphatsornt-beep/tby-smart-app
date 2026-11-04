@@ -851,6 +851,43 @@ def _unbilled_pv_of(df: pd.DataFrame) -> float:
     return float((df["PV รวม"] * df["ยังไม่เปิด"] / _denom).sum())
 
 
+def render_unbilled_pv_breakdown(df: pd.DataFrame) -> None:
+    """รายละเอียด PV ค้างเปิดบิล แยกตามวันที่/สินค้า — เพิ่ม 2026-11-04 ตามคำขอ user ("ตอน
+    สรุปยอดลูกค้า ส่วนที่เป็นค้างเปิดบิล (เก็บ PV) ให้มีสรุปยอดว่า วันที่ สินค้า จำนวน คะแนน
+    คะแนนรวมวันนั้น และสุดท้ายสรุปด้วยว่าคะแนนรวมทั้งหมดเท่าไหร่ ที่ยังไม่ได้เปิดบิล") รับ df
+    ที่มีคอลัมน์แบบ get_all_transactions_df()/_ledger_to_txn_df() (วันที่/สินค้า/สั่ง/ยังไม่เปิด/
+    PV รวม) — ใช้ร่วมกันทั้งแท็บ 💰 ยอดค้าง (ส่ง `grp` ของลูกค้าคนนั้นมาตรงๆ) และ 👤 บัตรลูกค้า
+    (ส่ง `_l_all_df` มาจาก _render_ledger_panel) ให้สองหน้าตรงกันเป๊ะ ไม่ต้องเขียนซ้ำ
+
+    ใช้คอลัมน์ "ยังไม่เปิด" (ไม่ใช่ "สั่ง" เฉยๆ) เป็นจำนวนที่โชว์ และ prorate PV ตามสัดส่วน
+    เดียวกับ _unbilled_pv_of() เป๊ะ (PV รวม × ยังไม่เปิด ÷ สั่ง) เพื่อให้ยอดรวมท้ายสุดตรงกับ
+    ตัวเลข metric "⭐ คะแนนที่ยังไม่เปิด" ที่โชว์อยู่แล้วด้านบนเสมอ — ถ้าใช้ "สั่ง"/"PV รวม"
+    ตรงๆ จะนับ PV ของแถวที่เปิดบิลไปบางส่วนแล้วซ้ำเข้ามาด้วย (เหมือนบั๊กที่ตาราง "เบิกของ"
+    เดิมมีอยู่แล้วแต่ไม่กระทบที่นั่นเพราะกรองเฉพาะยังไม่จ่ายอยู่แล้ว)"""
+    if df.empty or "PV รวม" not in df.columns or "ยังไม่เปิด" not in df.columns:
+        st.caption("ไม่มีรายการค้างเปิดบิล")
+        return
+    _pv_df = df[df["ยังไม่เปิด"] > 0].copy()
+    if _pv_df.empty:
+        st.caption("ไม่มีรายการค้างเปิดบิล")
+        return
+    _denom = _pv_df["สั่ง"].replace(0, 1)
+    _pv_df["จำนวน"] = _pv_df["ยังไม่เปิด"]
+    _pv_df["คะแนน"] = _pv_df["PV รวม"] * _pv_df["ยังไม่เปิด"] / _denom
+    _grand_total = 0.0
+    for _pv_date, _pv_grp in _pv_df.groupby("วันที่", sort=True):
+        st.markdown(f"**📅 {_pv_date}**")
+        st.dataframe(
+            _pv_grp[["สินค้า", "จำนวน", "คะแนน"]].style.format({"คะแนน": "{:,.0f}"}),
+            width="stretch", hide_index=True,
+        )
+        _day_total = float(_pv_grp["คะแนน"].sum())
+        _grand_total += _day_total
+        st.caption(f"คะแนนรวมวันนั้น: **{_day_total:,.0f}**")
+    st.divider()
+    st.success(f"⭐ คะแนนรวมทั้งหมดที่ยังไม่ได้เปิดบิล: **{_grand_total:,.0f}**")
+
+
 def _bills_from_df(df: pd.DataFrame) -> pd.DataFrame:
     """รวมรายการในแต่ละบิล (groupby เลขที่บิล) คืน DataFrame หนึ่งแถวต่อบิล:
     เลขที่บิล, วันที่, ยอดรวม, จ่ายแล้ว, ค้างจ่าย, ค้างรับ, is_paid, is_partial, is_billed, pv_unbilled
