@@ -369,21 +369,31 @@ def _build_success_info(tracking, tab, customer, dst_name, dst_phone, address,
     return d
 
 
-def goto_customer_ledger(customer_name: str) -> None:
-    """ตั้ง session_state ให้พาไปแท็บ 🗂️ รายละเอียดบิล → 👤 บัตรลูกค้า พร้อมเลือกลูกค้าคนนี้
-    ไว้ให้เลย — ใช้ร่วมกันจากปุ่ม "👤 สรุปยอดลูกค้า" หลังบันทึกขาย/ส่งของสำเร็จ (record_ui.py's
-    _print_popup และ app.py's iShip success dialog) เพิ่ม 2026-10-25 ตามคำขอ user ("พอบันทึก
-    ขาย หรือบันทึกหลังส่งแล้ว ให้มีปุ่มกด ให้ไปหน้าสรุปยอดลูกค้าชื่อคนนี้")
+def goto_customer_bills(customer_name: str) -> None:
+    """ตั้ง session_state ให้พาไปแท็บ 🗂️ รายละเอียดบิล → 💰 ยอดค้าง / จัดการบิล พร้อมเปิดการ์ด
+    ของลูกค้าคนนี้ค้างไว้ให้เลย — ใช้ร่วมกันจากปุ่ม "👤 สรุปยอดลูกค้า" หลังบันทึกขาย/ส่งของสำเร็จ
+    (record_ui.py's _print_popup และ app.py's iShip success dialog) เพิ่ม 2026-10-25 ตามคำขอ
+    user ("พอบันทึกขาย หรือบันทึกหลังส่งแล้ว ให้มีปุ่มกด ให้ไปหน้าสรุปยอดลูกค้าชื่อคนนี้")
+
+    **เปลี่ยนปลายทางจาก 👤 บัตรลูกค้า เป็น 💰 ยอดค้าง / จัดการบิล เมื่อ 2026-11-04** (user: "หน้าที่
+    บันทึกขาย ที่มีให้กด ไปหน้าสรุปยอดลูกค้า อยากให้ไปหน้าจัดการบิลของลูกค้าคนนั้น ไม่ใช่หน้า
+    บัตรลูกค้า") — เดิมชื่อฟังก์ชัน `goto_customer_ledger()` (ไปหน้า ledger/บัตรลูกค้า) เปลี่ยน
+    ชื่อตามปลายทางใหม่ด้วย (เรียกจาก 2 จุด: app.py/record_ui.py — แก้ทั้งคู่) ใช้ `_t5_out_active_cust`
+    key เดียวกับที่หน้า ยอดค้าง เองใช้ตอนคลิกชื่อลูกค้าในลิสต์ (ดู bill_detail_ui.py) แทนที่จะ
+    พึ่งช่องค้นหา — ถ้าลูกค้าคนนี้ไม่มีรายการค้างอะไรเลยในตอนนั้น (ของ/เงินครบ จ่ายครบ เปิดบิล
+    ครบ) จะไม่มีอะไรให้โชว์ (ข้อจำกัดโดยธรรมชาติของหน้านี้ที่ลิสต์แค่คนที่ยังค้างอยู่ — ต่างจาก
+    บัตรลูกค้าที่โชว์ได้แม้ไม่ค้างอะไรเลย)
 
     ผู้เรียกต้องจัดการปิด popup/dialog ของตัวเองเสร็จก่อน (ลบ key ที่ทำให้ popup โชว์อยู่) แล้ว
     ค่อยเรียก st.rerun() เอง — ฟังก์ชันนี้แค่ตั้ง 3 คีย์ที่หน้าเป้าหมายต้องใช้ตามลำดับก่อน
     widget ของมันเองจะ render ในรอบถัดไป (ตาม pattern staging-key เดิมของแอปนี้ — ปลอดภัยเพราะ
     รอบนี้ยังไม่ถึงคิว bill_detail_ui.render() เลย จะไปรันจริงตอน rerun รอบหน้าเท่านั้น):
     `active_tab` (เมนูซ้าย, app.py), `_t5_active_sub` (pills เลือกแท็บย่อยใน bill_detail_ui.py),
-    `t5_ledger_cust` (selectbox เลือกลูกค้าในแท็บบัตรลูกค้า — ต้องตรงชื่อเป๊ะกับ customers.name)"""
+    `_t5_out_active_cust` (บอกแท็บ ยอดค้าง ว่าลูกค้าคนไหน "active" ให้เปิดการ์ดค้างไว้ — ต้อง
+    ตรงชื่อเป๊ะกับ customers.name)"""
     st.session_state["active_tab"] = "🗂️ รายละเอียดบิล"
-    st.session_state["_t5_active_sub"] = "👤 บัตรลูกค้า"
-    st.session_state["t5_ledger_cust"] = customer_name
+    st.session_state["_t5_active_sub"] = "💰 ยอดค้าง / จัดการบิล"
+    st.session_state["_t5_out_active_cust"] = customer_name
 
 
 def _process_old_items_receipt(rx_edit, rx_df, rx_pay_map, pending_rx,

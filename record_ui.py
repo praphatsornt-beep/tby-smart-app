@@ -15,7 +15,7 @@ from ui_helpers import (
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
     get_bulky_presets, _render_cart_card, _cart_add_items, _guard_double_submit,
-    _esc, goto_customer_ledger,
+    _esc, goto_customer_bills,
 )
 import carriers as carr
 
@@ -991,10 +991,10 @@ def render(tab1, products, customers, customer_map):
                             st.session_state.pop("_popup_show_print", None)
                             st.rerun()
                         if _pb6.button("👤 สรุปยอด", key="popup_goto_ledger", width="stretch",
-                                       help="ไปดูสรุปยอด/ประวัติของลูกค้าคนนี้ที่ 👤 บัตรลูกค้า"):
+                                       help="ไปดูยอดค้าง/จัดการบิลของลูกค้าคนนี้"):
                             del st.session_state["_print_popup"]
                             st.session_state.pop("_popup_show_print", None)
-                            goto_customer_ledger(_pd["customer_name"])
+                            goto_customer_bills(_pd["customer_name"])
                             st.rerun()
 
                     if st.session_state.get("_popup_show_print") and st.session_state.get("_print_popup"):
