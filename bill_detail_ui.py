@@ -1032,22 +1032,18 @@ def render(products, customers):
                                     )
                                     event_date  = fc3.date_input("วันที่", value=date.today())
                                     event_notes = st.text_input("หมายเหตุ", key=f"enotes_{txn_id}")
-                                    _also_open_bill = False
                                     _open_bill_no   = ""
                                     _open_qty_input = None
                                     if is_unbilled and evt_type == "ทั้งคู่":
                                         _unopened_qty = int(sel_row["ยังไม่เปิด"]) if "ยังไม่เปิด" in sel_row else int(txn["qty"])
-                                        # เช็คบ็อกซ์กับช่องจำนวนต้องโชว์พร้อมกันเสมอ (ไม่ซ่อนตามค่า
-                                        # เช็คบ็อกซ์) เพราะอยู่ใน st.form — widget ข้างในฟอร์มไม่ rerun
-                                        # ตอนคลิก จะ sync ค่าจริงตอนกด "บันทึก" ทีเดียว ถ้าซ่อนไว้ก่อน
-                                        # ผู้ใช้จะกรอกจำนวนไม่ได้เลยในรอบเดียวกับที่ติ๊ก
-                                        _oc1, _oc2 = st.columns([1, 1])
-                                        _also_open_bill = _oc1.checkbox(
-                                            "📄 เปิดบิลด้วย", value=False,
-                                            key=f"also_open_{txn_id}",
-                                        )
-                                        _open_qty_input = _oc2.number_input(
-                                            "เปิดบิลกี่ชิ้น", min_value=1, max_value=_unopened_qty,
+                                        # ตัดเช็คบ็อกซ์ "เปิดบิลด้วย" ออก 2026-11-04 (user: "พอเลือก
+                                        # รายการเดียว ตรงกำหนดเอง ระบบไม่เปิดบิลให้ ต้องติ๊กเอง แต่ถ้า
+                                        # หลายรายการไม่ต้องติ๊ก... อยากไม่ต้องติ๊ก แต่เลือกจำนวนที่จะ
+                                        # เปิดบิลได้") — ใช้จำนวนเป็นตัวตัดสินใจเหมือนโหมดหลายรายการ
+                                        # ด้านล่างอยู่แล้ว (เติมเต็มจำนวนที่ยังไม่เปิดให้ก่อน, 0 =
+                                        # ไม่เปิดบิลตอนนี้) ไม่ต้องมีเช็คบ็อกซ์แยกอีกชั้น
+                                        _open_qty_input = st.number_input(
+                                            "เปิดบิลกี่ชิ้น (0 = ไม่เปิดบิลตอนนี้)", min_value=0, max_value=_unopened_qty,
                                             value=_unopened_qty, step=1, key=f"also_open_qty_{txn_id}",
                                         )
                                         _open_bill_no = st.text_input(
@@ -1083,10 +1079,9 @@ def render(products, customers):
                                         except Exception as _pe:
                                             st.error(f"❌ DB error: {_pe}")
                                             st.stop()
-                                        if _also_open_bill:
-                                            _open_qty = int(_open_qty_input) if _open_qty_input is not None else int(txn["qty"])
+                                        if _open_qty_input:
                                             db.open_bill_partial(
-                                                txn_id, _open_qty,
+                                                txn_id, int(_open_qty_input),
                                                 note=_open_bill_no.strip() or None, date=str(event_date))
                                         if amount_paid > 0:
                                             _new_total_paid = balance["total_paid"] + amount_paid
