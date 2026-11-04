@@ -232,6 +232,9 @@ def render():
         _TERMINAL_S  = shipment_status.TERMINAL_STATUSES
         _now_utc     = datetime.now(timezone.utc)
         _cutoff      = _now_utc - timedelta(days=3)
+        # ต้นเดือนปัจจุบัน (เวลาไทย) — ใช้กรอง COD เก่าข้ามเดือนด้านล่าง
+        _now_bkk        = _now_utc.astimezone(_BKK)
+        _this_month_start = _now_bkk.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
         # ลูกค้าที่มี COD + ยังไม่เปิดบิล (ดึงจาก outstanding ซึ่งโหลดอยู่แล้ว)
         _cod_unbilled_custs = set()
@@ -262,15 +265,28 @@ def render():
                         "สถานะ":     "💛 รอรับ COD",
                     })
                 elif _cname in _cod_unbilled_custs:
-                    _cod_rows.append({
-                        "ลูกค้า":    _cname,
-                        "สินค้า":    _its,
-                        "COD (฿)":   int(_sh.get("cod_amount") or 0),
-                        "Tracking":  _sh.get("tracking_no", "—"),
-                        "ขนส่ง":     _sh.get("carrier", ""),
-                        "วันที่ส่ง": _date_str,
-                        "สถานะ":     "✅ รับแล้ว — ยังไม่เปิดบิล",
-                    })
+                    # จับคู่ด้วยชื่อลูกค้าเท่านั้น (shipments ไม่มี FK ไปยัง transactions/บิล
+                    # ใดๆ เลย) — เจอจริง 2026-11-04 (user: "COD ของ aime เปิดบิลไปแล้ว
+                    # ยังค้างอยู่ในหน้าแรก... ของเก่าก่อนเดือนนี้นะ"): ลูกค้าที่มี COD เก่า
+                    # (เดือนก่อนๆ) ที่รับเงิน+เปิดบิลเรียบร้อยไปนานแล้ว จะโผล่กลับมาอีกครั้งทุกครั้ง
+                    # ที่ลูกค้าคนเดิมมีออเดอร์ COD ใหม่ที่ยังไม่เปิดบิลเกิดขึ้น เพราะเช็คแค่ "ชื่อ
+                    # ลูกค้านี้มี COD ค้างเปิดบิลอยู่บ้างไหม" ไม่ได้เช็คว่าเป็นบิลเดียวกับพัสดุนี้จริง —
+                    # ลองใช้ cutoff แบบ 30 วันย้อนหลังก่อน แต่ไม่พอจริง (เคสจริง: โอน COD แล้ว
+                    # 13/10, รับเงินยืนยัน 24/10 — ห่างจากวันนี้แค่ 11 วัน ยังไม่เกิน 30 วัน แต่
+                    # ก็เป็นของเดือนที่แล้วที่ปิดจบไปแล้วจริงๆ) เปลี่ยนมากรองแบบ "ข้ามเดือนปฏิทิน"
+                    # แทน ตรงกับที่ user พูดเป๊ะ ("ก่อนเดือนนี้") — รีเซ็ตเองทุกต้นเดือน ไม่ต้องคอย
+                    # ปรับเลขวันเอง
+                    _cod_xfer_dt = _parse_sdt(_sh.get("cod_transferred_at", ""))
+                    if not _cod_xfer_dt or _cod_xfer_dt.astimezone(_BKK) >= _this_month_start:
+                        _cod_rows.append({
+                            "ลูกค้า":    _cname,
+                            "สินค้า":    _its,
+                            "COD (฿)":   int(_sh.get("cod_amount") or 0),
+                            "Tracking":  _sh.get("tracking_no", "—"),
+                            "ขนส่ง":     _sh.get("carrier", ""),
+                            "วันที่ส่ง": _date_str,
+                            "สถานะ":     "✅ รับแล้ว — ยังไม่เปิดบิล",
+                        })
                 # else: COD รับแล้ว + เปิดบิลแล้ว → ไม่แสดง
 
             # ── พัสดุมีปัญหา ────────────────────────────────────────────
