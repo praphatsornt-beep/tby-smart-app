@@ -184,7 +184,38 @@ def render():
         st.divider()
         _render_today_log()
         return
-    frame = camera_input_live(key="_pack_cam_live", debounce=700, show_controls=True)
+
+    # บังคับความสูง/ความกว้างของ iframe ที่ครอบ component นี้ — เจอจริง 2026-11-04 (user:
+    # "ตรงกล้อง ใช้งานในมือถือ ยังไม่สะดวก" → ถามต่อ: "ปุ่ม/จอเล็กเกินไป มือถือดูยาก") ตรวจสอบ
+    # ด้วย Playwright ที่ viewport มือถือจริง พบว่า `streamlit-camera-input-live`'s main.js เรียก
+    # `Streamlit.setFrameHeight(45)` เสมอตอน showControls=True (ไม่ว่าจะส่ง height/width พารามิเตอร์
+    # อะไรเข้าไปก็ตาม — ค่านั้นคุมแค่ความละเอียดภาพที่ capture ส่งเข้า Python ไม่เกี่ยวกับความสูง
+    # ของ iframe เลย) ผลคือ iframe สูงแค่ 45px จริงๆ — เห็นแค่ปุ่ม "Pause capturing" ไม่เห็น
+    # ภาพพรีวิวกล้องเลยแม้แต่น้อย (ยืนยันจาก screenshot จริง ไม่ใช่แค่เดา) ผู้ใช้เล็งกล้องแบบ
+    # "มองไม่เห็น" มาตลอด — นี่คือสาเหตุหลักที่ทำให้ใช้ยาก ไม่ใช่แค่ปุ่มเล็ก ปัญหานี้เกิดทั้งจอ
+    # มือถือและจอปกติเหมือนกัน (component เรียก setFrameHeight(45) แบบ hardcode ไม่สนขนาดจอ)
+    # แก้โดยส่ง CSS !important ทับ inline style ที่ component เซ็ตซ้ำทุกรอบ (ใช้ !important เพราะ
+    # Streamlit.setFrameHeight() เซ็ต iframe.style.height ตรงๆ ทุก rerun ซึ่งมี specificity สูงกว่า
+    # CSS ปกติ แต่ !important ชนะ inline style เสมอไม่ว่า specificity จะเท่าไหร่) เลือก target ด้วย
+    # title attribute เพราะ Streamlit ตั้งให้อัตโนมัติเป็น "<module>.<function>" ของทุก custom
+    # component เสมอ ("camera_input_live.camera_input_live" ในกรณีนี้) ไม่ต้องเดา class ที่
+    # เปลี่ยนไปมาได้ตามเวอร์ชัน Streamlit — ปรับ width/height พารามิเตอร์ของ component เองให้เป็น
+    # สี่เหลี่ยมจัตุรัสขนาดพอดีจอมือถือทั่วไปด้วย (เดิม 704×530 กว้างเกินจอมือถือส่วนใหญ่)
+    st.markdown(
+        """
+        <style>
+        iframe[title="camera_input_live.camera_input_live"] {
+            height: 460px !important;
+            width: 100% !important;
+            max-width: 420px !important;
+            border-radius: 12px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    frame = camera_input_live(key="_pack_cam_live", debounce=700, show_controls=True,
+                               width=400, height=400)
 
     if frame is not None:
         try:
