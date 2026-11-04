@@ -851,6 +851,33 @@ def _unbilled_pv_of(df: pd.DataFrame) -> float:
     return float((df["PV รวม"] * df["ยังไม่เปิด"] / _denom).sum())
 
 
+def unbilled_pv_breakdown_rows(df: pd.DataFrame) -> list[dict]:
+    """คำนวณล้วนๆ (ไม่แตะ Streamlit) ของ render_unbilled_pv_breakdown() ด้านล่าง — แยกออกมา
+    2026-11-04 เพื่อให้ line_api.push_outstanding()'s ข้อความ LINE ใช้ข้อมูลชุดเดียวกันได้โดย
+    ไม่ต้องเขียนตรรกะ prorate ซ้ำ (ผู้ใช้ขอ "ตรงส่วนสรุปให้ลูกค้าทางไลน์ด้วย" ต่อจากที่เพิ่ง
+    เพิ่มในแอปเอง) คืน list เรียงตามวันที่ ของ
+    `{"date": str, "items": [{"product","qty","points"}], "day_total": float}`"""
+    if df.empty or "PV รวม" not in df.columns or "ยังไม่เปิด" not in df.columns:
+        return []
+    _pv_df = df[df["ยังไม่เปิด"] > 0].copy()
+    if _pv_df.empty:
+        return []
+    _denom = _pv_df["สั่ง"].replace(0, 1)
+    _pv_df["จำนวน"] = _pv_df["ยังไม่เปิด"]
+    _pv_df["คะแนน"] = _pv_df["PV รวม"] * _pv_df["ยังไม่เปิด"] / _denom
+    rows = []
+    for _pv_date, _pv_grp in _pv_df.groupby("วันที่", sort=True):
+        rows.append({
+            "date": _pv_date,
+            "items": [
+                {"product": r["สินค้า"], "qty": r["จำนวน"], "points": float(r["คะแนน"])}
+                for _, r in _pv_grp.iterrows()
+            ],
+            "day_total": float(_pv_grp["คะแนน"].sum()),
+        })
+    return rows
+
+
 def render_unbilled_pv_breakdown(df: pd.DataFrame) -> None:
     """รายละเอียด PV ค้างเปิดบิล แยกตามวันที่/สินค้า — เพิ่ม 2026-11-04 ตามคำขอ user ("ตอน
     สรุปยอดลูกค้า ส่วนที่เป็นค้างเปิดบิล (เก็บ PV) ให้มีสรุปยอดว่า วันที่ สินค้า จำนวน คะแนน
@@ -864,26 +891,21 @@ def render_unbilled_pv_breakdown(df: pd.DataFrame) -> None:
     ตัวเลข metric "⭐ คะแนนที่ยังไม่เปิด" ที่โชว์อยู่แล้วด้านบนเสมอ — ถ้าใช้ "สั่ง"/"PV รวม"
     ตรงๆ จะนับ PV ของแถวที่เปิดบิลไปบางส่วนแล้วซ้ำเข้ามาด้วย (เหมือนบั๊กที่ตาราง "เบิกของ"
     เดิมมีอยู่แล้วแต่ไม่กระทบที่นั่นเพราะกรองเฉพาะยังไม่จ่ายอยู่แล้ว)"""
-    if df.empty or "PV รวม" not in df.columns or "ยังไม่เปิด" not in df.columns:
+    _rows = unbilled_pv_breakdown_rows(df)
+    if not _rows:
         st.caption("ไม่มีรายการค้างเปิดบิล")
         return
-    _pv_df = df[df["ยังไม่เปิด"] > 0].copy()
-    if _pv_df.empty:
-        st.caption("ไม่มีรายการค้างเปิดบิล")
-        return
-    _denom = _pv_df["สั่ง"].replace(0, 1)
-    _pv_df["จำนวน"] = _pv_df["ยังไม่เปิด"]
-    _pv_df["คะแนน"] = _pv_df["PV รวม"] * _pv_df["ยังไม่เปิด"] / _denom
     _grand_total = 0.0
-    for _pv_date, _pv_grp in _pv_df.groupby("วันที่", sort=True):
-        st.markdown(f"**📅 {_pv_date}**")
+    for _row in _rows:
+        _pv_grp = pd.DataFrame(_row["items"]).rename(
+            columns={"product": "สินค้า", "qty": "จำนวน", "points": "คะแนน"})
+        st.markdown(f"**📅 {_row['date']}**")
         st.dataframe(
             _pv_grp[["สินค้า", "จำนวน", "คะแนน"]].style.format({"คะแนน": "{:,.0f}"}),
             width="stretch", hide_index=True,
         )
-        _day_total = float(_pv_grp["คะแนน"].sum())
-        _grand_total += _day_total
-        st.caption(f"คะแนนรวมวันนั้น: **{_day_total:,.0f}**")
+        _grand_total += _row["day_total"]
+        st.caption(f"คะแนนรวมวันนั้น: **{_row['day_total']:,.0f}**")
     st.divider()
     st.success(f"⭐ คะแนนรวมทั้งหมดที่ยังไม่ได้เปิดบิล: **{_grand_total:,.0f}**")
 

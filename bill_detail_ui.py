@@ -15,7 +15,8 @@ from ui_helpers import (
     _to_bkk, _to_excel_bytes,
     _style_status, _fmt_note, _guard_double_submit,
     _bills_from_df, _render_bill_panel, _ledger_to_txn_df,
-    merge_bill_family_products, _unbilled_pv_of, render_unbilled_pv_breakdown, _esc,
+    merge_bill_family_products, _unbilled_pv_of, render_unbilled_pv_breakdown,
+    unbilled_pv_breakdown_rows, _esc,
 )
 
 
@@ -1659,7 +1660,7 @@ def render(products, customers):
                             ):
                                 _r = line_api.push_outstanding(
                                     _luid, customer_name, owed, pending, _line_items, _cod_done,
-                                    group_id=_gid,
+                                    group_id=_gid, pv_rows=unbilled_pv_breakdown_rows(grp),
                                 )
                                 if _r.get("ok"):
                                     st.success("✅ ส่ง LINE แล้ว")

@@ -52,8 +52,16 @@ def push_tracking(line_user_id: str, dst_name: str, tracking: str,
 def push_outstanding(line_user_id: str, customer_name: str,
                      outstanding_amount: float, pending_qty: int,
                      items: list, cod_transferred: list = None,
-                     group_id: str = "") -> dict:
-    """ส่งสรุปยอดค้างให้ลูกค้าใน LINE"""
+                     group_id: str = "", pv_rows: list = None) -> dict:
+    """ส่งสรุปยอดค้างให้ลูกค้าใน LINE
+
+    pv_rows (เพิ่ม 2026-11-04 ตามคำขอ user "ตรงส่วนสรุปให้ลูกค้าทางไลน์ด้วย" ต่อจาก
+    📅 รายการค้างเปิดบิล (PV) ที่เพิ่งเพิ่มในแอปเอง) — list จาก
+    `ui_helpers.unbilled_pv_breakdown_rows()` ตรงๆ (`[{"date","items":[{"product","qty",
+    "points"}],"day_total"}]`) แสดงเป็นหมวดแยกต่างหาก เพราะรายการที่จ่ายและรับครบแล้ว
+    (เหลือแค่รอเปิดบิลเพื่อเก็บ PV) จะไม่โผล่ใน `items` เดิมเลย (ฟิลเตอร์ของ `items` คือ
+    ค้างจ่าย>0 หรือค้างรับ>0 เท่านั้น ไม่เกี่ยวกับสถานะบิล) — ไม่งั้นลูกค้าจะไม่เห็นอะไร
+    เลยถ้าทุกอย่างจ่าย/รับครบแล้วเหลือแค่รอเปิดบิล ทั้งที่ควรรู้ว่ายังมี PV ค้างสะสมอยู่"""
     lines = [f"คุณ {customer_name} มียอดค้างดังนี้ค่ะ 🙏"]
     if outstanding_amount > 0:
         lines.append(f"💰 ค้างจ่าย: {outstanding_amount:,.0f} บาท")
@@ -75,6 +83,23 @@ def push_outstanding(line_user_id: str, customer_name: str,
             lines.append(line)
         if len(items) > _max_items:
             lines.append(f"...และอีก {len(items) - _max_items} รายการ")
+    if pv_rows:
+        lines.append("")
+        lines.append("⭐ คะแนนรอเปิดบิล:")
+        _max_pv_dates = 15  # กันข้อความยาวเกินถ้าค้างเปิดบิลสะสมมานาน (เดือน/ปี)
+        _grand_pv = 0.0
+        for _pv_row in pv_rows[:_max_pv_dates]:
+            lines.append(f"📅 {_pv_row['date']}")
+            for _it in _pv_row["items"]:
+                lines.append(f"  • {_it['product']} ×{int(_it['qty'])} = {_it['points']:,.0f} คะแนน")
+            lines.append(f"  (รวมวันนี้ {_pv_row['day_total']:,.0f} คะแนน)")
+            _grand_pv += _pv_row["day_total"]
+        if len(pv_rows) > _max_pv_dates:
+            lines.append(f"...และอีก {len(pv_rows) - _max_pv_dates} วัน")
+            # วันที่เกินลิสต์ไม่ได้รวมในยอดข้างบนแล้ว — รวมยอดจริงทั้งหมดแยกต่างหาก
+            # กันยอดรวมที่โชว์ไม่ตรงกับผลรวมของบรรทัดที่เห็นจริง
+            _grand_pv = sum(r["day_total"] for r in pv_rows)
+        lines.append(f"⭐ รวมคะแนนที่ยังไม่ได้เปิดบิลทั้งหมด: {_grand_pv:,.0f} คะแนน")
     if cod_transferred:
         lines.append("")
         lines.append("✅ COD รับยอดแล้ว — กรุณาติดต่อเปิดบิล:")
