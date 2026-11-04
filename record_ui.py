@@ -1158,7 +1158,7 @@ def render(tab1, products, customers, customer_map):
                         "_fsp_rname","_fsp_rphone","_fsp_al",
                         "_sp_prev_pc","sp_date",
                         "_sp_cart_ver","_sp_cart_base","_sp_quick_items","sp_q_text",
-                        "_sp_last_rph_fill","_sp_parse_open","_sp_phone_match_name",
+                        "_sp_last_rph_fill","_sp_parse_open","_sp_phone_match_name","_sp_phone_match_cid",
                         "_sp_linked_bill_no","_sp_linked_bill_txns","sp_link_search",
                         "_sp_adding_cust","_sp_prev_cust_search"]
             _sp_cart_ver_now = st.session_state.get("_sp_cart_ver", 0)
@@ -1416,6 +1416,9 @@ def render(tab1, products, customers, customer_map):
                         st.session_state["_sp_phone_match_name"] = (
                             (_sp_rph_addr.get("customers") or {}).get("name", "") if _sp_rph_addr else ""
                         )
+                        st.session_state["_sp_phone_match_cid"] = (
+                            _sp_rph_addr.get("customer_id", "") if _sp_rph_addr else ""
+                        )
                         if _sp_rph_addr:
                             for _k, _v in [(f"sp_rname_v{_sp_av}", _sp_rph_addr.get("recipient_name") or ""),
                                            (f"sp_al_v{_sp_av}",    _sp_rph_addr.get("address_line") or ""),
@@ -1437,9 +1440,28 @@ def render(tab1, products, customers, customer_map):
                     _sp_rname  = _sa1.text_input("ชื่อผู้รับ",    key=f"sp_rname_v{_sp_av}")
                     _sp_rphone = _sa2.text_input("เบอร์โทร",      key=f"sp_rphone_v{_sp_av}", max_chars=10)
                     _warn_duplicate_phone(_sp_rphone, _sp_cid)
+                    # เพิ่ม 2026-11-04 — เดิม (2026-10-28) เปลี่ยนจาก auto-pick ลูกค้าเงียบๆ เป็น
+                    # caption เฉยๆ ตามคำขอตอนนั้น แต่ user ชี้ว่าแบบนั้น "แค่บอกว่าเคยส่งให้ใคร
+                    # แต่ไม่ใส่ให้อัตโนมัติ" ไม่มีอะไรให้กดเลย จริงๆ อยากได้ปุ่มกดยืนยัน/เปลี่ยน
+                    # คนส่งแทน — ไม่ auto-set เงียบๆ เหมือนเดิมที่เคยมีปัญหา (เปลี่ยนลูกค้าที่
+                    # เลือกโดยไม่มีใครขอ) แต่ก็ไม่ใช่แค่ข้อความเฉยๆ ให้พนักงานเลือกเอาเอง 2 ทาง
                     _sp_phone_match_name = st.session_state.get("_sp_phone_match_name", "")
-                    if _sp_phone_match_name:
-                        st.caption(f"📍 เบอร์นี้เคยส่งที่อยู่นี้ไว้ในชื่อลูกค้า **{_sp_phone_match_name}** — ไม่ได้เปลี่ยนลูกค้าที่เลือกให้ ถ้าจะผูกบิลนี้กับลูกค้าคนนั้น เลือกเองที่ช่องลูกค้าด้านบน")
+                    if _sp_phone_match_name and not st.session_state.get("_sp_cust_picked"):
+                        st.info(f"📍 เบอร์นี้เคยส่งที่อยู่นี้ไว้ในชื่อลูกค้า **{_sp_phone_match_name}** — ใช่คนนี้ไหมคะ?")
+                        _spm_c1, _spm_c2 = st.columns(2)
+                        if _spm_c1.button(f"✅ ใช่ {_sp_phone_match_name}", key="sp_phone_match_confirm", width="stretch"):
+                            st.session_state["_sp_cust_picked"] = _sp_phone_match_name
+                            # sync _sp_prev_cid ไว้ก่อน กัน guard "reset ที่อยู่ตอนเปลี่ยนลูกค้า"
+                            # (ด้านบน) เข้าใจผิดว่าเป็นการสลับลูกค้าแล้วล้างที่อยู่ที่เพิ่งเติมทิ้ง
+                            # (บั๊กเดียวกับที่เจอ 2026-10-28 ตอน auto-pick แบบเงียบๆ)
+                            st.session_state["_sp_prev_cid"] = st.session_state.get("_sp_phone_match_cid", "")
+                            st.session_state.pop("_sp_phone_match_name", None)
+                            st.session_state.pop("_sp_phone_match_cid", None)
+                            st.rerun()
+                        if _spm_c2.button("🔁 เปลี่ยนคนส่ง", key="sp_phone_match_reject", width="stretch"):
+                            st.session_state.pop("_sp_phone_match_name", None)
+                            st.session_state.pop("_sp_phone_match_cid", None)
+                            st.rerun()
                     _sp_al     = st.text_input("บ้านเลขที่/ถนน",  key=f"sp_al_v{_sp_av}")
                     _sb1, _sb2, _sb3 = st.columns(3)
                     with _sb1:
