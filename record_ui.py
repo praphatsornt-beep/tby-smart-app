@@ -66,7 +66,31 @@ def render(tab1, products, customers, customer_map):
                           "_r_last_dt","_r_last_pc","_fr_dt","_fr_am","_fr_pv",
                           "_fr_rname","_fr_rphone","_fr_al",
                           "r_dt_searchbox","_r_dt_searchbox_sig",
-                          "_prev_cust_search"]
+                          "_prev_cust_search",
+                          "_sale_shadow_r_name","_sale_shadow_r_phone","_sale_shadow_r_al",
+                          "_sale_shadow_r_dt","_sale_shadow_r_am","_sale_shadow_r_pv",
+                          "_sale_shadow_m_postcode","_sale_shadow_m_delivery",
+                          "_sale_shadow_m_pay","_sale_shadow_m_bill"]
+
+            # บั๊ก 2026-11-07 (user report): พิมพ์ที่อยู่ก่อน แล้วไปเลือก/พิมพ์ชื่อลูกค้า
+            # หรือเลือกการจ่ายเงิน/การส่งของ/เปิดบิลไว้ก่อนแล้วไปกรอกที่อยู่/เพิ่มสินค้าทีหลัง
+            # — ที่เลือกไว้ก่อนหน้าหายไปเฉยๆ ต้องทำใหม่ สาเหตุเดียวกับบั๊ก ที่อยู่หายใน
+            # ส่งของ (ดูคอมเมนต์ยาวในแท็บนั้น): widget ที่ยังไม่ถูก declare ในรอบสคริปต์
+            # ที่โดน st.rerun() ตัดจบก่อนถึง (เช่น เลือกลูกค้าจาก selectbox ที่ rerun()
+            # ทันทีตั้งแต่บรรทัดแรกๆ ก่อนถึง radio สถานะ/ช่องที่อยู่เลย) หรือรอบที่ widget
+            # นั้นไม่ได้ถูก render เลยเพราะเงื่อนไข (เช่น สลับ การรับของ ออกจาก "ส่งพัสดุ"
+            # แล้วกลับมา — บล็อกที่อยู่ทั้งก้อนไม่ได้รันเลยรอบนั้น) จะถูก Streamlit ลบค่า
+            # session_state ทิ้งไปเฉยๆ — แก้ด้วย pattern เดียวกับ ส่งของ: echo ค่าจริงไว้ใน
+            # shadow key ทุกครั้งที่ widget render สำเร็จ แล้วตรงนี้ (บนสุดของ branch ก่อน
+            # โค้ดส่วนอื่นที่อาจเรียก st.rerun() ก่อนถึง widget) ค่อยดึงจาก shadow กลับมาใส่
+            # เฉพาะตอน key หายไปเฉยๆ (เช็คด้วย "not in" เท่านั้น ไม่ใช่ falsy — กด "ล้าง"
+            # ฟอร์มเองต้องว่างจริง ไม่ถูกดึงกลับ)
+            for _sale_field in ("r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv", "m_postcode",
+                                 "m_delivery", "m_pay", "m_bill"):
+                _sale_shk = f"_sale_shadow_{_sale_field}"
+                if _sale_field not in st.session_state and _sale_shk in st.session_state:
+                    st.session_state[_sale_field] = st.session_state[_sale_shk]
+
             _cart_ver = st.session_state.get("_cart_version", 0)
             _cart_key = f"m_cart_{_cart_ver}"
 
@@ -294,6 +318,11 @@ def render(tab1, products, customers, customer_map):
                     m_bill = _sc3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], key="m_bill", index=None)
                     m_bill_no = st.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
 
+                # echo ค่าจริงไว้ใน shadow ทันทีหลัง render สำเร็จ — ดูคอมเมนต์ที่ต้น branch
+                st.session_state["_sale_shadow_m_delivery"] = m_delivery
+                st.session_state["_sale_shadow_m_pay"]      = m_pay
+                st.session_state["_sale_shadow_m_bill"]     = m_bill
+
                 # ── เพิ่มสินค้า+ตะกร้า | สรุปยอด ─────────────────────────────
                 with st.container(key="sale_cart_summary_row"):
                     _cart_col, _summary_col = st.columns([1.85, 1.0], gap="small")
@@ -505,6 +534,17 @@ def render(tab1, products, customers, customer_map):
                                               "r_dt_searchbox", "r_pc_suggest",
                                               stage_dt="_fr_dt", stage_am="_fr_am", stage_pv="_fr_pv",
                                               am_searchbox_key="r_am_searchbox")
+                            # echo ค่าจริงไว้ใน shadow ทันทีหลัง widget ทั้งก้อนนี้ render
+                            # สำเร็จ — ดูคอมเมนต์ที่ต้น branch (ป้องกันที่อยู่หายตอนมีอะไร
+                            # เรียก st.rerun() ก่อนถึง widget พวกนี้ในรอบถัดไป เช่น เลือก
+                            # ลูกค้า/เพิ่มสินค้า หรือตอนสลับ การรับของ ออกแล้วกลับมา)
+                            st.session_state["_sale_shadow_r_name"]      = r_name
+                            st.session_state["_sale_shadow_r_phone"]     = r_phone
+                            st.session_state["_sale_shadow_r_al"]        = r_addr_line
+                            st.session_state["_sale_shadow_r_dt"]        = r_district
+                            st.session_state["_sale_shadow_r_am"]        = r_amphure
+                            st.session_state["_sale_shadow_r_pv"]        = r_province
+                            st.session_state["_sale_shadow_m_postcode"]  = m_postcode
                             if m_customer != "— เลือกลูกค้า —":
                                 if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                     try:
