@@ -70,7 +70,9 @@ def render(tab1, products, customers, customer_map):
                           "_sale_shadow_r_name","_sale_shadow_r_phone","_sale_shadow_r_al",
                           "_sale_shadow_r_dt","_sale_shadow_r_am","_sale_shadow_r_pv",
                           "_sale_shadow_m_postcode","_sale_shadow_m_delivery",
-                          "_sale_shadow_m_pay","_sale_shadow_m_bill"]
+                          "_sale_shadow_m_pay","_sale_shadow_m_bill",
+                          "_sale_shadow_m_pv_loan_toggle","_sale_shadow_m_pv_loan_mode",
+                          "m_pv_loan_toggle","m_pv_loan_mode","m_pv_loan_repay_label","m_pv_loan_repay_id"]
 
             # บั๊ก 2026-11-07 (user report): พิมพ์ที่อยู่ก่อน แล้วไปเลือก/พิมพ์ชื่อลูกค้า
             # หรือเลือกการจ่ายเงิน/การส่งของ/เปิดบิลไว้ก่อนแล้วไปกรอกที่อยู่/เพิ่มสินค้าทีหลัง
@@ -86,7 +88,8 @@ def render(tab1, products, customers, customer_map):
             # เฉพาะตอน key หายไปเฉยๆ (เช็คด้วย "not in" เท่านั้น ไม่ใช่ falsy — กด "ล้าง"
             # ฟอร์มเองต้องว่างจริง ไม่ถูกดึงกลับ)
             for _sale_field in ("r_name", "r_phone", "r_al", "r_dt", "r_am", "r_pv", "m_postcode",
-                                 "m_delivery", "m_pay", "m_bill"):
+                                 "m_delivery", "m_pay", "m_bill",
+                                 "m_pv_loan_toggle", "m_pv_loan_mode"):
                 _sale_shk = f"_sale_shadow_{_sale_field}"
                 if _sale_field not in st.session_state and _sale_shk in st.session_state:
                     st.session_state[_sale_field] = st.session_state[_sale_shk]
@@ -317,6 +320,51 @@ def render(tab1, products, customers, customer_map):
                     m_pay  = _sc2.radio("การจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
                     m_bill = _sc3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], key="m_bill", index=None)
                     m_bill_no = st.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
+
+                    # ── ยืม/คืนคะแนนด้วยบิลนี้เลย (2026-11-07) ──────────────────────
+                    # ผูกกับ "เปิดบิลแล้ว" เท่านั้น (ตรงกับเงื่อนไขเดียวกับที่ PV/BV เริ่มนับ
+                    # จริงของบิลนั้น — ดู get_bill_totals/get_customer_opened_bills_df) และ
+                    # เป็น checkbox ปิดอยู่เป็นค่าเริ่มต้นเสมอ ไม่โผล่เลยถ้าไม่ได้เลือกเปิดบิล —
+                    # การขาย/เปิดบิลปกติจึงไม่มีขั้นตอนเพิ่มขึ้นเลย เดิมต้องไปที่ tab 💳 ยืมคะแนน
+                    # แยกต่างหากทีหลัง แล้วเลือกจากบิลที่เปิดไปแล้ว (ย้อนหา) ผู้ใช้สะท้อนว่า
+                    # "ไม่ใช่" อยากให้ทำได้จบในขั้นตอนเดียวตอนเปิดบิลจริงๆ เลย
+                    m_pv_loan_toggle = False
+                    m_pv_loan_mode   = None
+                    if m_bill == "เปิดบิลแล้ว" and m_customer != "— เลือกลูกค้า —":
+                        m_pv_loan_toggle = st.checkbox("🎁 ยืม/คืนคะแนนด้วยบิลนี้", key="m_pv_loan_toggle")
+                        if m_pv_loan_toggle:
+                            m_pv_loan_mode = st.radio(
+                                "โหมด", ["lend", "repay"], key="m_pv_loan_mode", index=None,
+                                format_func=lambda v: ("🎁 ยืมคะแนน (เปิดบิลนี้เพื่อเก็บคะแนนไว้ก่อน)" if v == "lend"
+                                                        else "💰 คืนคะแนน (ใช้บิลนี้คืนยืมคะแนนเก่า)"),
+                            )
+                            st.session_state.pop("m_pv_loan_repay_id", None)
+                            if m_pv_loan_mode == "repay":
+                                _pvl_cid = customer_map[m_customer]["id"]
+                                _pvl_all = db.get_pv_loans_df()
+                                _pvl_open = (_pvl_all[(_pvl_all["customer_id"] == _pvl_cid) & (~_pvl_all["is_settled"])]
+                                             if not _pvl_all.empty else _pvl_all)
+                                if _pvl_open.empty:
+                                    st.info("ลูกค้าคนนี้ไม่มียืมคะแนนค้างอยู่เลย")
+                                elif len(_pvl_open) == 1:
+                                    _pvl_row = _pvl_open.iloc[0]
+                                    st.caption(
+                                        f"จะคืนให้: ยืม {float(_pvl_row['pv_lent']):,.0f} PV "
+                                        f"({_pvl_row['lend_date']}) · ค้างคืนอีก {float(_pvl_row['pv_remaining']):,.0f} PV"
+                                    )
+                                    st.session_state["m_pv_loan_repay_id"] = _pvl_row["id"]
+                                else:
+                                    _pvl_opts = {
+                                        f"ยืม {float(r['pv_lent']):,.0f} PV ({r['lend_date']}) · ค้างคืนอีก {float(r['pv_remaining']):,.0f} PV": r["id"]
+                                        for _, r in _pvl_open.iterrows()
+                                    }
+                                    _pvl_sel = st.selectbox("เลือกยืมคะแนนที่จะคืน", list(_pvl_opts.keys()),
+                                                             key="m_pv_loan_repay_label", index=None,
+                                                             placeholder="เลือกรายการที่ค้างคืน...")
+                                    if _pvl_sel:
+                                        st.session_state["m_pv_loan_repay_id"] = _pvl_opts[_pvl_sel]
+                        st.session_state["_sale_shadow_m_pv_loan_toggle"] = m_pv_loan_toggle
+                        st.session_state["_sale_shadow_m_pv_loan_mode"]   = m_pv_loan_mode
 
                 # echo ค่าจริงไว้ใน shadow ทันทีหลัง render สำเร็จ — ดูคอมเมนต์ที่ต้น branch
                 st.session_state["_sale_shadow_m_delivery"] = m_delivery
@@ -724,6 +772,11 @@ def render(tab1, products, customers, customer_map):
                 if m_delivery == "ส่งพัสดุ":
                     if not r_addr_line.strip(): m_errors.append("⚠️ เลือกส่งพัสดุ แต่ยังไม่ได้กรอกที่อยู่")
                     if not m_postcode.strip():   m_errors.append("⚠️ เลือกส่งพัสดุ แต่ยังไม่ได้กรอกรหัสไปรษณีย์")
+                if m_pv_loan_toggle:
+                    if m_pv_loan_mode is None:
+                        m_errors.append("⚠️ ติ๊กยืม/คืนคะแนนไว้ แต่ยังไม่ได้เลือกโหมด")
+                    elif m_pv_loan_mode == "repay" and not st.session_state.get("m_pv_loan_repay_id"):
+                        m_errors.append("⚠️ ไม่มียืมคะแนนค้างให้คืน หรือยังไม่ได้เลือกรายการที่จะคืน")
 
                 if m_errors:
                     st.markdown(
@@ -816,6 +869,30 @@ def render(tab1, products, customers, customer_map):
                                 db.open_bill_partial(
                                     _row["id"], _row["qty"],
                                     note=m_bill_no.strip() or None, date=str(m_date))
+                        # ── ยืม/คืนคะแนนด้วยบิลที่เพิ่งเปิดนี้เอง (ถ้าติ๊กไว้) ────────────
+                        # ใช้ get_bill_totals(bill_no) แทนการคำนวณ BV เองที่นี่ (BV อยู่แค่ใน
+                        # products.bv_per_unit ไม่ได้คำนวณไว้แล้วในตัวแปรไหนของแท็บนี้) —
+                        # ค่า ฿/PV ที่ query กลับมาตรงกับ total_amt/total_pv ที่คำนวณไว้แล้ว
+                        # ด้านบนเป๊ะอยู่แล้ว (สูตรเดียวกัน) แค่ขอ BV มาด้วยในคราวเดียว
+                        _pvl_msg = ""
+                        if m_bill == "เปิดบิลแล้ว" and m_pv_loan_toggle and m_pv_loan_mode:
+                            _pvl_totals = db.get_bill_totals(bill_no)
+                            if m_pv_loan_mode == "lend":
+                                db.create_pv_loan(
+                                    customer_id=customer["id"], lend_date=str(m_date), lend_bill_no=bill_no,
+                                    pv_lent=_pvl_totals["pv"], bv_lent=_pvl_totals["bv"],
+                                    baht_lent=_pvl_totals["baht"], notes="บันทึกผ่านบันทึกขาย",
+                                )
+                                _pvl_msg = f" | 🎁 ยืมคะแนน {_pvl_totals['pv']:,.0f} PV"
+                            elif m_pv_loan_mode == "repay":
+                                _pvl_loan_id = st.session_state.get("m_pv_loan_repay_id")
+                                if _pvl_loan_id:
+                                    db.add_pv_loan_repayment(
+                                        loan_id=_pvl_loan_id, repay_date=str(m_date), repay_bill_no=bill_no,
+                                        pv_repaid=_pvl_totals["pv"], bv_repaid=_pvl_totals["bv"],
+                                        baht_repaid=_pvl_totals["baht"], notes="บันทึกผ่านบันทึกขาย",
+                                    )
+                                    _pvl_msg = f" | 💰 คืนคะแนน {_pvl_totals['pv']:,.0f} PV"
                         if m_pay == "จ่ายบางส่วน" and m_partial_amount > 0:
                             _alloc_left = m_partial_amount
                             _pe_rows, _paid_full_ids = [], []
@@ -843,6 +920,7 @@ def render(tab1, products, customers, customer_map):
                         if m_cod:       msg += f" | 💸 ค่า COD {cod_amount:.2f} ฿"
                         if m_pay == "จ่ายบางส่วน" and m_partial_amount > 0:
                             msg += f" | 💵 จ่ายมาแล้ว {m_partial_amount:,.0f} ฿ (ค้าง {total_amt - m_partial_amount:,.0f} ฿)"
+                        msg += _pvl_msg
                     else:
                         actual_pay = None
                         bill_no    = None
