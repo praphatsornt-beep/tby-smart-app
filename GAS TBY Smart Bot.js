@@ -175,6 +175,14 @@ function doPost(e) {
     replyMessage(replyToken, '❌ ยกเลิกแล้วค่ะ ยังไม่มีการบันทึกข้อมูล');
     return;
   }
+  // รับของบางส่วน (เพิ่ม 2026-11-07) — cache คนละ key กับ settlepay_ ด้านบน ('recvpartial_')
+  // เผื่อสองสถานะเกิดขึ้นพร้อมกันได้ในทางทฤษฎี (จ่ายบางส่วนบิลหนึ่ง พร้อมรับของบางส่วน
+  // อีกบิลหนึ่ง) ไม่ให้ทับกัน — เช็คยกเลิกก่อนบล็อกตัวเลขเปล่าเหมือนกันทุกประการ
+  if (userMessage === 'ยกเลิก' && _userId && _cache.get('recvpartial_' + _userId)) {
+    _cache.remove('recvpartial_' + _userId);
+    replyMessage(replyToken, '❌ ยกเลิกแล้วค่ะ ยังไม่มีการบันทึกข้อมูล');
+    return;
+  }
   var _bareAmt = userMessage.match(/^(\d+(?:\.\d+)?)$/);
   if (_bareAmt && _userId) {
     var _spRaw = _cache.get('settlepay_' + _userId);
@@ -182,6 +190,13 @@ function doPost(e) {
       var _sp = JSON.parse(_spRaw);
       _cache.remove('settlepay_' + _userId);
       handlePartialPaymentAmount_(_sp.custId, _sp.billNo, parseFloat(_bareAmt[1]), replyToken);
+      return;
+    }
+    var _rpRaw = _cache.get('recvpartial_' + _userId);
+    if (_rpRaw) {
+      var _rp = JSON.parse(_rpRaw);
+      _cache.remove('recvpartial_' + _userId);
+      handleReceivePartialAmount_(_rp.custId, _rp.billNo, _rp.txnId, parseFloat(_bareAmt[1]), replyToken);
       return;
     }
   }
@@ -336,6 +351,10 @@ function doPost(e) {
   if (_recvPickItem) { handleReceiveLineChoice_(_recvPickItem[1], _recvPickItem[2], _recvPickItem[3], replyToken); return; }
   var _recvItemConfirm = userMessage.match(/^ยืนยัน_รับของสินค้า\s+(\S+)\s+(\S+)\s+(\S+)$/i);
   if (_recvItemConfirm) { commitReceiveLine_(_recvItemConfirm[1], _recvItemConfirm[2], _recvItemConfirm[3], replyToken); return; }
+  var _recvPartialStart = userMessage.match(/^รับของบางส่วนเลือกสินค้า\s+(\S+)\s+(\S+)\s+(\S+)$/i);
+  if (_recvPartialStart) { handleReceivePartialPrompt_(_recvPartialStart[1], _recvPartialStart[2], _recvPartialStart[3], replyToken, _userId, _cache); return; }
+  var _recvPartialConfirm = userMessage.match(/^ยืนยัน_รับของบางส่วน\s+(\S+)\s+(\S+)\s+(\S+)\s+(\d+(?:\.\d+)?)$/i);
+  if (_recvPartialConfirm) { commitReceivePartial_(_recvPartialConfirm[1], _recvPartialConfirm[2], _recvPartialConfirm[3], parseFloat(_recvPartialConfirm[4]), replyToken); return; }
 
   // ── บันทึกรายการขาย/เบิกของเข้า TBY SMART APP จากไลน์นี้โดยตรง ─────────────────
   // เพิ่ม 2026-10-18 ตามคำขอ (บอทนี้จะใช้บันทึกข้อมูลหลังร้านต่อไป ไม่ใช่แค่กาแฟ) —
@@ -2020,7 +2039,8 @@ function handleReceiveBillChoice_(custId, billNo, replyToken) {
     sendQuickReplyGas(replyToken,
       '📦 บิล ' + billNo + ' ของคุณ' + custName + ' — ค้างรับ ' + only.product_name + ' ' + numFmt_(only.qty) + ' ชิ้น',
       [
-        { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_รับของครบ ' + custId + ' ' + billNo } },
+        { type: 'action', action: { type: 'message', label: '✅ รับครบ', text: 'ยืนยัน_รับของครบ ' + custId + ' ' + billNo } },
+        { type: 'action', action: { type: 'message', label: '✏️ รับบางส่วน', text: 'รับของบางส่วนเลือกสินค้า ' + custId + ' ' + billNo + ' ' + only.id } },
         { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
       ]);
     return;
@@ -2050,9 +2070,10 @@ function handleReceiveLineChoice_(custId, billNo, txnId, replyToken) {
   if (!row) { replyMessage(replyToken, '❌ ไม่พบรายการนี้แล้วค่ะ (อาจมีคนบันทึกไปก่อนหน้านี้แล้ว)'); return; }
 
   sendQuickReplyGas(replyToken,
-    '📦 ยืนยันรับของ: ' + row.product_name + ' ' + numFmt_(row.qty) + ' ชิ้น (บิล ' + billNo + ')',
+    '📦 ยืนยันรับของ: ' + row.product_name + ' ค้างรับ ' + numFmt_(row.qty) + ' ชิ้น (บิล ' + billNo + ')',
     [
-      { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_รับของสินค้า ' + custId + ' ' + billNo + ' ' + txnId } },
+      { type: 'action', action: { type: 'message', label: '✅ รับครบ', text: 'ยืนยัน_รับของสินค้า ' + custId + ' ' + billNo + ' ' + txnId } },
+      { type: 'action', action: { type: 'message', label: '✏️ รับบางส่วน', text: 'รับของบางส่วนเลือกสินค้า ' + custId + ' ' + billNo + ' ' + txnId } },
       { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
     ]);
 }
@@ -2074,6 +2095,70 @@ function commitReceiveLine_(custId, billNo, txnId, replyToken) {
   var msg = '✅ บันทึกรับของให้คุณ' + custName + ' แล้ว\n';
   msg += row.product_name + ' — รับ ' + numFmt_(row.qty) + ' ชิ้น (บิล ' + billNo + ')\n';
   if (remaining.length > 0) msg += 'ℹ️ ยังเหลือค้างรับอีก ' + remaining.length + ' รายการในบิลนี้ค่ะ';
+  replyMessage(replyToken, msg);
+}
+
+// รับของบางส่วนเลือกสินค้า [custId] [bill_no] [txnId] — ปุ่ม "✏️ รับบางส่วน" จากทั้ง
+// handleReceiveBillChoice_ (บิลมีรายการเดียว) และ handleReceiveLineChoice_ (เลือกรายการ
+// จากบิลที่มีหลายรายการ) ส่งมาที่นี่เหมือนกัน — บอกให้พิมพ์จำนวนชิ้น เก็บ custId/billNo/
+// txnId ไว้ใน CacheService รอรับตัวเลขที่พิมพ์ครั้งต่อไป (เพิ่ม 2026-11-07 ตามคำขอ:
+// "ลูกค้าไม่ได้ต้องการรับสินค้าทั้งหมด ต้องการรับแค่บางส่วน ตอนนี้ยังทำไม่ได้" — พอร์ต
+// pattern เดียวกับ handlePayPartialPrompt_/handlePartialPaymentAmount_ ด้านบนทุกประการ
+// แค่สลับ "จำนวนเงิน" เป็น "จำนวนชิ้น" และ cache คนละ key ('recvpartial_' ไม่ชนกับ
+// 'settlepay_'/'creditcalc_'/'tbyorder_'/'addcoffee_')
+function handleReceivePartialPrompt_(custId, billNo, txnId, replyToken, userId, cache) {
+  var info = _computeSettleRows_(billNo, 'recv');
+  var row = info.found ? info.rows.filter(function(r) { return r.id === txnId; })[0] : null;
+  if (!row) { replyMessage(replyToken, '❌ ไม่พบรายการนี้แล้วค่ะ (อาจมีคนบันทึกไปก่อนหน้านี้แล้ว)'); return; }
+
+  if (userId) cache.put('recvpartial_' + userId, JSON.stringify({ custId: custId, billNo: billNo, txnId: txnId }), 300);
+  replyMessage(replyToken, '✏️ พิมพ์จำนวนชิ้นที่จะรับค่ะ (ค้างรับ ' + row.product_name + ' ' + numFmt_(row.qty) + ' ชิ้น)\n\nพิมพ์ ยกเลิก เพื่อยกเลิก');
+}
+
+// พิมพ์จำนวนชิ้นเข้ามาแล้ว (จาก cache ด้านบน) — แสดง preview ก่อนบันทึกจริง
+function handleReceivePartialAmount_(custId, billNo, txnId, qty, replyToken) {
+  var info = _computeSettleRows_(billNo, 'recv');
+  var row = info.found ? info.rows.filter(function(r) { return r.id === txnId; })[0] : null;
+  if (!row) { replyMessage(replyToken, '⚠️ ไม่พบรายการนี้แล้วค่ะ (อาจรับไปครบก่อนหน้านี้แล้ว)'); return; }
+
+  var overNote = '';
+  var actualQty = qty;
+  if (qty > row.qty) {
+    overNote = '⚠️ ค้างรับมีเพียง ' + numFmt_(row.qty) + ' ชิ้น บันทึกเฉพาะส่วนที่ค้างนะคะ\n';
+    actualQty = row.qty;
+  }
+
+  var custName = _getCustomerNameById_(custId);
+  var preview = overNote;
+  preview += '📋 ตรวจสอบก่อนบันทึก: รับ ' + row.product_name + ' ' + numFmt_(actualQty) + ' ชิ้น ให้คุณ' + custName + ' (บิล ' + billNo + ')\n';
+  preview += '─────────────────\n';
+  preview += '📦 ค้างรับหลังจากนี้: ' + numFmt_(Math.max(0, row.qty - actualQty)) + ' ชิ้น\n';
+  sendQuickReplyGas(replyToken, preview, [
+    { type: 'action', action: { type: 'message', label: '✅ ยืนยันบันทึก', text: 'ยืนยัน_รับของบางส่วน ' + custId + ' ' + billNo + ' ' + txnId + ' ' + actualQty } },
+    { type: 'action', action: { type: 'message', label: '❌ ยกเลิก', text: 'ยกเลิก' } },
+  ]);
+}
+
+// ยืนยัน_รับของบางส่วน [custId] [bill_no] [txnId] [qty] — บันทึกจริง (คำนวณยอดค้างใหม่สด
+// อีกครั้ง ไม่ใช้เลขที่ cache ไว้ตอน preview กันยอดเปลี่ยนไปแล้วระหว่างรอกดยืนยัน — เหมือน
+// commitPartialPayment_)
+function commitReceivePartial_(custId, billNo, txnId, qty, replyToken) {
+  var info = _computeSettleRows_(billNo, 'recv');
+  var row = info.found ? info.rows.filter(function(r) { return r.id === txnId; })[0] : null;
+  if (!row) { replyMessage(replyToken, '❌ ไม่พบรายการนี้แล้วค่ะ (อาจมีคนบันทึกไปก่อนหน้านี้แล้ว)'); return; }
+
+  var actualQty = Math.min(qty, row.qty);
+  _sbPost_('partial_events', {
+    id: Utilities.getUuid(), date: _todayBkk_(), transaction_id: row.id,
+    qty_received: actualQty, amount_paid: 0, event_type: 'รับของ',
+    notes: 'บันทึกผ่าน LINE Coffee Log',
+  });
+
+  var custName = _getCustomerNameById_(custId);
+  var msg = '✅ บันทึกรับของให้คุณ' + custName + ' แล้ว\n';
+  msg += row.product_name + ' — รับ ' + numFmt_(actualQty) + ' ชิ้น (บิล ' + billNo + ')\n';
+  var stillLeft = row.qty - actualQty;
+  if (stillLeft > 0) msg += 'ℹ️ รายการนี้ยังเหลือค้างรับอีก ' + numFmt_(stillLeft) + ' ชิ้นค่ะ';
   replyMessage(replyToken, msg);
 }
 
