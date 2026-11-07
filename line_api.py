@@ -49,10 +49,45 @@ def push_tracking(line_user_id: str, dst_name: str, tracking: str,
     return _push(line_user_id, "\n".join(lines), group_id)
 
 
+def _fmt_pv_lines(pv_rows: list, max_dates: int = 15) -> tuple[list, float]:
+    """บรรทัด "คะแนนรอเปิดบิล" ต่อวัน/สินค้า — แยกออกมาจาก push_outstanding 2026-11-07
+    ให้ push_unbilled_pv (ปุ่มส่งเฉพาะหัวข้อนี้) ใช้ร่วมกันได้โดยไม่ต้องเขียนซ้ำ"""
+    lines, grand = [], 0.0
+    for row in pv_rows[:max_dates]:
+        lines.append(f"📅 {row['date']}")
+        for it in row["items"]:
+            lines.append(f"  • {it['product']} ×{int(it['qty'])} = {it['points']:,.0f} คะแนน")
+        lines.append(f"  (รวมวันนี้ {row['day_total']:,.0f} คะแนน)")
+        grand += row["day_total"]
+    if len(pv_rows) > max_dates:
+        lines.append(f"...และอีก {len(pv_rows) - max_dates} วัน")
+        # วันที่เกินลิสต์ไม่ได้รวมในยอดข้างบนแล้ว — รวมยอดจริงทั้งหมดแยกต่างหาก
+        grand = sum(r["day_total"] for r in pv_rows)
+    return lines, grand
+
+
+def _fmt_loan_lines(loans: list, max_loans: int = 15) -> tuple[list, float]:
+    """บรรทัด "ยืมคะแนนค้างคืน" ต่อก้อน — ใช้ร่วมกันระหว่าง push_outstanding (ส่วนสรุป
+    รวมทั้งหมด) และ push_pv_loan_status (ปุ่มส่งเฉพาะหัวข้อนี้) — loans คือ dict จาก
+    db.get_pv_loans_df() ที่กรองเหลือเฉพาะ is_settled=False แล้วจากฝั่งเรียก"""
+    lines, grand = [], 0.0
+    for ln in loans[:max_loans]:
+        remaining = float(ln.get("pv_remaining") or 0)
+        lines.append(
+            f"🎁 ยืม {float(ln.get('pv_lent') or 0):,.0f} PV ({ln.get('lend_date','')}) "
+            f"— ค้างคืนอีก {remaining:,.0f} PV"
+        )
+        grand += remaining
+    if len(loans) > max_loans:
+        lines.append(f"...และอีก {len(loans) - max_loans} รายการ")
+        grand = sum(float(l.get("pv_remaining") or 0) for l in loans)
+    return lines, grand
+
+
 def push_outstanding(line_user_id: str, customer_name: str,
                      outstanding_amount: float, pending_qty: int,
                      items: list, cod_transferred: list = None,
-                     group_id: str = "", pv_rows: list = None) -> dict:
+                     group_id: str = "", pv_rows: list = None, loan_rows: list = None) -> dict:
     """ส่งสรุปยอดค้างให้ลูกค้าใน LINE
 
     pv_rows (เพิ่ม 2026-11-04 ตามคำขอ user "ตรงส่วนสรุปให้ลูกค้าทางไลน์ด้วย" ต่อจาก
@@ -61,7 +96,11 @@ def push_outstanding(line_user_id: str, customer_name: str,
     "points"}],"day_total"}]`) แสดงเป็นหมวดแยกต่างหาก เพราะรายการที่จ่ายและรับครบแล้ว
     (เหลือแค่รอเปิดบิลเพื่อเก็บ PV) จะไม่โผล่ใน `items` เดิมเลย (ฟิลเตอร์ของ `items` คือ
     ค้างจ่าย>0 หรือค้างรับ>0 เท่านั้น ไม่เกี่ยวกับสถานะบิล) — ไม่งั้นลูกค้าจะไม่เห็นอะไร
-    เลยถ้าทุกอย่างจ่าย/รับครบแล้วเหลือแค่รอเปิดบิล ทั้งที่ควรรู้ว่ายังมี PV ค้างสะสมอยู่"""
+    เลยถ้าทุกอย่างจ่าย/รับครบแล้วเหลือแค่รอเปิดบิล ทั้งที่ควรรู้ว่ายังมี PV ค้างสะสมอยู่
+
+    loan_rows (เพิ่ม 2026-11-07 พร้อมปุ่มส่งแยกหัวข้อใน 👤 บัตรลูกค้า — ดู push_pv_loan_status
+    ด้านล่าง) — list ของ loan ที่ยังไม่ settle (`is_settled=False`) จาก `db.get_pv_loans_df()`
+    กรองแล้วจากฝั่งเรียก ให้ "สรุปรวมทั้งหมด" ครบจริงๆ ไม่ขาดเรื่องยืมคะแนนไป"""
     lines = [f"คุณ {customer_name} มียอดค้างดังนี้ค่ะ 🙏"]
     if outstanding_amount > 0:
         lines.append(f"💰 ค้างจ่าย: {outstanding_amount:,.0f} บาท")
@@ -86,20 +125,15 @@ def push_outstanding(line_user_id: str, customer_name: str,
     if pv_rows:
         lines.append("")
         lines.append("⭐ คะแนนรอเปิดบิล:")
-        _max_pv_dates = 15  # กันข้อความยาวเกินถ้าค้างเปิดบิลสะสมมานาน (เดือน/ปี)
-        _grand_pv = 0.0
-        for _pv_row in pv_rows[:_max_pv_dates]:
-            lines.append(f"📅 {_pv_row['date']}")
-            for _it in _pv_row["items"]:
-                lines.append(f"  • {_it['product']} ×{int(_it['qty'])} = {_it['points']:,.0f} คะแนน")
-            lines.append(f"  (รวมวันนี้ {_pv_row['day_total']:,.0f} คะแนน)")
-            _grand_pv += _pv_row["day_total"]
-        if len(pv_rows) > _max_pv_dates:
-            lines.append(f"...และอีก {len(pv_rows) - _max_pv_dates} วัน")
-            # วันที่เกินลิสต์ไม่ได้รวมในยอดข้างบนแล้ว — รวมยอดจริงทั้งหมดแยกต่างหาก
-            # กันยอดรวมที่โชว์ไม่ตรงกับผลรวมของบรรทัดที่เห็นจริง
-            _grand_pv = sum(r["day_total"] for r in pv_rows)
+        _pv_lines, _grand_pv = _fmt_pv_lines(pv_rows)
+        lines.extend(_pv_lines)
         lines.append(f"⭐ รวมคะแนนที่ยังไม่ได้เปิดบิลทั้งหมด: {_grand_pv:,.0f} คะแนน")
+    if loan_rows:
+        lines.append("")
+        lines.append("💳 ยืมคะแนนค้างคืน:")
+        _loan_lines, _grand_loan = _fmt_loan_lines(loan_rows)
+        lines.extend(_loan_lines)
+        lines.append(f"💳 รวมค้างคืนทั้งหมด: {_grand_loan:,.0f} PV")
     if cod_transferred:
         lines.append("")
         lines.append("✅ COD รับยอดแล้ว — กรุณาติดต่อเปิดบิล:")
@@ -107,6 +141,91 @@ def push_outstanding(line_user_id: str, customer_name: str,
             tn  = c.get("tracking_no", "")
             amt = float(c.get("cod_amount") or 0)
             lines.append(f"• {tn}  {amt:,.0f}฿")
+    return _push(line_user_id, "\n".join(lines), group_id)
+
+
+# ─── ปุ่มส่งสรุปแยกหัวข้อ (เพิ่ม 2026-11-07) ──────────────────────────────
+# user: "ถ้าจะสรุปยอดแค่ ส่วนที่ยังไม่เปิดบิล หรือ ยืมคะแนน คงเหลือ เท่าไหร่ ยังไม่มี
+# ตรงไหนกดส่งให้ลูกค้าได้ ตอนนี้กดที ส่งไปยาวเหยียด งง ไปหมด" — push_outstanding เดิม
+# (ด้านบน) มัดรวม ค้างจ่าย+ค้างรับ+PV+COD เข้าข้อความเดียวจนยาว ตอบคำถามเดียวของลูกค้า
+# ("ของค้างอยู่กี่ชิ้น" / "ยืมคะแนนเหลือเท่าไหร่") ได้ยาก ฟังก์ชันด้านล่างแยกส่งเฉพาะ
+# หัวข้อเดียวตามที่ถูกถาม ใช้คู่กับปุ่มใน 👤 บัตรลูกค้า (bill_detail_ui.py)
+
+
+def push_pending_receipt(line_user_id: str, customer_name: str, items: list, group_id: str = "") -> dict:
+    """ค้างรับของอย่างเดียว — items: [{"bill_no","product","qty"}] (qty = ค้างรับ คือ
+    จำนวนที่ยังไม่ได้เอาไปจริงๆ ต่อรายการ ไม่ใช่จำนวนที่สั่งทั้งหมด — ตรงตามที่ user ขอ
+    "อยากให้แสดงว่า สินค้ารายการนั้น คงเหลือเท่าไหร่ที่ยังไม่ได้เอาไป")"""
+    lines = [f"คุณ {customer_name} มีสินค้าค้างรับดังนี้ค่ะ 🙏", ""]
+    total_qty = 0
+    for it in items:
+        qty = int(it.get("qty") or 0)
+        if qty <= 0:
+            continue
+        total_qty += qty
+        lines.append(f"📦 {it.get('product','')} — ค้างรับ {qty:,} ชิ้น (บิล {it.get('bill_no','')})")
+    lines.append("")
+    lines.append(f"รวมค้างรับทั้งหมด: {total_qty:,} ชิ้น")
+    return _push(line_user_id, "\n".join(lines), group_id)
+
+
+def push_pending_payment(line_user_id: str, customer_name: str, items: list, group_id: str = "") -> dict:
+    """ค้างจ่ายอย่างเดียว — items: [{"bill_no","product","amount"}] (ไม่รวมรายการ COD —
+    เก็บเงินตอนส่งของ ไม่ใช่ยอดค้างแบบนี้ เหมือน push_outstanding เดิม)"""
+    lines = [f"คุณ {customer_name} มียอดค้างจ่ายดังนี้ค่ะ 🙏", ""]
+    total_amt = 0.0
+    for it in items:
+        amt = float(it.get("amount") or 0)
+        if amt <= 0:
+            continue
+        total_amt += amt
+        lines.append(f"💰 บิล {it.get('bill_no','')}: {it.get('product','')} {amt:,.0f}฿")
+    lines.append("")
+    lines.append(f"รวมค้างจ่ายทั้งหมด: {total_amt:,.0f} บาท")
+    return _push(line_user_id, "\n".join(lines), group_id)
+
+
+def push_unbilled_pv(line_user_id: str, customer_name: str, pv_rows: list, group_id: str = "") -> dict:
+    """คะแนนรอเปิดบิลอย่างเดียว — pv_rows จาก ui_helpers.unbilled_pv_breakdown_rows() ตรงๆ
+    เหมือนที่ push_outstanding ใช้ (รูปแบบ `_fmt_pv_lines` เดียวกัน ข้อความตรงกันเป๊ะ)"""
+    lines = [f"คุณ {customer_name} มีคะแนนรอเปิดบิลดังนี้ค่ะ 🙏", ""]
+    pv_lines, grand = _fmt_pv_lines(pv_rows)
+    lines.extend(pv_lines)
+    lines.append(f"⭐ รวมคะแนนที่ยังไม่ได้เปิดบิลทั้งหมด: {grand:,.0f} คะแนน")
+    return _push(line_user_id, "\n".join(lines), group_id)
+
+
+def push_pv_loan_status(line_user_id: str, customer_name: str, loans: list, group_id: str = "") -> dict:
+    """ยืมคะแนนคงเหลืออย่างเดียว — loans ต้องกรองเหลือเฉพาะที่ยังไม่ settle แล้วจากฝั่งเรียก
+    (`db.get_pv_loans_df()` filtered เหมือนปุ่มอื่นๆ ที่เกี่ยวกับ PV loan)"""
+    if not loans:
+        return _push(line_user_id, f"คุณ {customer_name} ไม่มียืมคะแนนค้างคืนแล้วค่ะ 🎉", group_id)
+    lines = [f"คุณ {customer_name} มียืมคะแนนค้างคืนดังนี้ค่ะ 🙏", ""]
+    loan_lines, grand = _fmt_loan_lines(loans)
+    lines.extend(loan_lines)
+    lines.append(f"💳 รวมค้างคืนทั้งหมด: {grand:,.0f} PV")
+    return _push(line_user_id, "\n".join(lines), group_id)
+
+
+def push_pv_loan_repayments(line_user_id: str, customer_name: str, repayments: list, group_id: str = "") -> dict:
+    """ประวัติคืนคะแนนอย่างเดียว — repayments: [{"repay_date","repay_bill_no","pv_repaid",
+    "lend_date"}] ข้ามทุกก้อนที่เคยยืมของลูกค้าคนนี้ (ไม่ใช่แค่ก้อนเดียว) เรียงใหม่สุดก่อน"""
+    if not repayments:
+        return _push(line_user_id, f"คุณ {customer_name} ยังไม่มีประวัติคืนคะแนนเลยค่ะ", group_id)
+    lines = [f"คุณ {customer_name} มีประวัติคืนคะแนนดังนี้ค่ะ", ""]
+    total = 0.0
+    _max = 20
+    for rp in repayments[:_max]:
+        pv = float(rp.get("pv_repaid") or 0)
+        total += pv
+        lines.append(
+            f"💰 {rp.get('repay_date','')} บิล {rp.get('repay_bill_no','')}: "
+            f"คืน {pv:,.0f} PV (จากยืม {rp.get('lend_date','')})"
+        )
+    if len(repayments) > _max:
+        lines.append(f"...และอีก {len(repayments) - _max} รายการ")
+        total = sum(float(r.get("pv_repaid") or 0) for r in repayments)
+    lines.append(f"รวมคืนแล้วทั้งหมด: {total:,.0f} PV")
     return _push(line_user_id, "\n".join(lines), group_id)
 
 

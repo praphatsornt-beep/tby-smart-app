@@ -77,6 +77,93 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
         with st.expander(f"📅 รายการค้างเปิดบิล (PV) — รวม {_l_unbilled_pv:,.0f} คะแนน", expanded=False):
             render_unbilled_pv_breakdown(_l_all_df)
 
+    # ── ปุ่มส่ง LINE แยกหัวข้อ (เพิ่ม 2026-11-07) ─────────────────────────
+    # user: "ถ้าจะสรุปยอดแค่ ส่วนที่ยังไม่เปิดบิล หรือ ยืมคะแนน คงเหลือ เท่าไหร่ ยังไม่มี
+    # ตรงไหนกดส่งให้ลูกค้าได้ ตอนนี้กดที ส่งไปยาวเหยียด งง ไปหมด" — ปุ่ม "📨 แจ้ง LINE"
+    # เดิม (ที่หน้า ยอดค้าง/จัดการบิล) ส่ง push_outstanding() ซึ่งมัดรวมค้างจ่าย+ค้างรับ+
+    # PV+COD เป็นข้อความเดียวยาวๆ — ผู้ใช้ขอแยกปุ่มให้เลือกส่งเฉพาะหัวข้อที่ต้องการแทน
+    # ("ตรงบัตรลูกค้า แต่มีแยกปุ่ม ค้างรับของ ค้างจ่าย ค้างเปิด ยืมคะแนนคงเหลือ รายการ
+    # คืนคะแนน และ สรุปรวมทั้งหมด") โชว์เฉพาะหน้าบัตรลูกค้า (show_cards=True) เท่านั้น —
+    # หน้ายอดค้างมีปุ่ม "แจ้ง LINE" (สรุปรวม) ของตัวเองอยู่แล้วในบริบท bulk-action ของมัน
+    # ไม่ใช่เป้าหมายของคำขอนี้ (ไม่แตะ/ไม่ซ้ำ)
+    if show_cards and line_api.is_configured():
+        _led_luid = cust.get("line_user_id") or ""
+        _led_gid  = cust.get("group_id") or ""
+        if not (_led_luid or _led_gid):
+            st.caption("⚠️ ลูกค้าคนนี้ยังไม่มี LINE ID — ส่งสรุปให้ทาง LINE ไม่ได้")
+        else:
+            with st.expander("📨 ส่ง LINE สรุปยอดให้ลูกค้า", expanded=False):
+                _led_pending_recv = [
+                    {"bill_no": r["เลขที่บิล"],
+                     "product": f"[{r['รหัส']}] {r['สินค้า']}" if r.get("รหัส") else r["สินค้า"],
+                     "qty": int(r["ค้างรับ"])}
+                    for _, r in _l_all_df.iterrows() if int(r["ค้างรับ"]) > 0
+                ] if not _l_all_df.empty else []
+                _led_pending_pay = [
+                    {"bill_no": r["เลขที่บิล"],
+                     "product": f"[{r['รหัส']}] {r['สินค้า']}" if r.get("รหัส") else r["สินค้า"],
+                     "amount": float(r["ค้างจ่าย"])}
+                    for _, r in _l_all_df.iterrows()
+                    if r["สถานะจ่าย"] != "COD" and float(r["ค้างจ่าย"]) > 0
+                ] if not _l_all_df.empty else []
+                _led_pv_rows = unbilled_pv_breakdown_rows(_l_all_df) if not _l_all_df.empty else []
+
+                # ยืมคะแนน: db.get_pv_loans_df() ไม่มีพารามิเตอร์กรองลูกค้า (ตารางเล็ก —
+                # แพทเทิร์นเดียวกับที่ pv_loan_ui.py/record_ui.py ใช้อยู่แล้ว) กรองเองที่นี่
+                _led_loans_df = db.get_pv_loans_df()
+                _led_cust_loans_df = (_led_loans_df[_led_loans_df["customer_id"] == cust["id"]]
+                                       if not _led_loans_df.empty else _led_loans_df)
+                _led_open_loans = (_led_cust_loans_df[~_led_cust_loans_df["is_settled"]].to_dict("records")
+                                    if not _led_cust_loans_df.empty else [])
+                _led_repay_rows = []
+                if not _led_cust_loans_df.empty:
+                    for _, _ln in _led_cust_loans_df.iterrows():
+                        _reps = db.get_pv_loan_repayments_df(_ln["id"])
+                        for _, _rp in _reps.iterrows():
+                            _led_repay_rows.append({
+                                "repay_date": _rp["repay_date"], "repay_bill_no": _rp["repay_bill_no"],
+                                "pv_repaid": float(_rp["pv_repaid"]), "lend_date": _ln["lend_date"],
+                            })
+                _led_repay_rows.sort(key=lambda r: r["repay_date"], reverse=True)
+
+                def _led_send(_res):
+                    if _res.get("ok"):
+                        st.success("✅ ส่ง LINE แล้ว")
+                    else:
+                        st.error(f"❌ {_res.get('error')}")
+
+                _lb1, _lb2, _lb3 = st.columns(3)
+                _lb4, _lb5, _lb6 = st.columns(3)
+                if _lb1.button("📦 ค้างรับของ", key=f"led_recv_{key_prefix}",
+                               disabled=not _led_pending_recv, width="stretch"):
+                    _led_send(line_api.push_pending_receipt(_led_luid, cust["name"], _led_pending_recv, group_id=_led_gid))
+                if _lb2.button("💰 ค้างจ่าย", key=f"led_pay_{key_prefix}",
+                               disabled=not _led_pending_pay, width="stretch"):
+                    _led_send(line_api.push_pending_payment(_led_luid, cust["name"], _led_pending_pay, group_id=_led_gid))
+                if _lb3.button("📅 ค้างเปิดบิล (PV)", key=f"led_pv_{key_prefix}",
+                               disabled=not _led_pv_rows, width="stretch"):
+                    _led_send(line_api.push_unbilled_pv(_led_luid, cust["name"], _led_pv_rows, group_id=_led_gid))
+                if _lb4.button("🎁 ยืมคะแนนคงเหลือ", key=f"led_loan_{key_prefix}",
+                               disabled=not _led_open_loans, width="stretch"):
+                    _led_send(line_api.push_pv_loan_status(_led_luid, cust["name"], _led_open_loans, group_id=_led_gid))
+                if _lb5.button("💳 รายการคืนคะแนน", key=f"led_repay_{key_prefix}",
+                               disabled=not _led_repay_rows, width="stretch"):
+                    _led_send(line_api.push_pv_loan_repayments(_led_luid, cust["name"], _led_repay_rows, group_id=_led_gid))
+                if _lb6.button("📨 สรุปรวมทั้งหมด", key=f"led_all_{key_prefix}",
+                               type="primary", width="stretch"):
+                    _led_all_items = [
+                        {"bill_no": r["เลขที่บิล"],
+                         "product": f"[{r['รหัส']}] {r['สินค้า']}" if r.get("รหัส") else r["สินค้า"],
+                         "amount": 0.0 if r["สถานะจ่าย"] == "COD" else float(r["ค้างจ่าย"]),
+                         "qty": int(r["ค้างรับ"])}
+                        for _, r in _l_all_df.iterrows()
+                        if float(r["ค้างจ่าย"]) > 0 or int(r["ค้างรับ"]) > 0
+                    ] if not _l_all_df.empty else []
+                    _led_send(line_api.push_outstanding(
+                        _led_luid, cust["name"], _l_owed, _l_pending, _led_all_items,
+                        group_id=_led_gid, pv_rows=_led_pv_rows, loan_rows=_led_open_loans,
+                    ))
+
     # ── สรุปรายสินค้า ────────────────────────────────────────
     with st.expander("📊 สรุปรายสินค้า", expanded=False):
         _l_txn_df = _l_all_df
