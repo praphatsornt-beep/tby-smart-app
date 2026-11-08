@@ -236,7 +236,7 @@ def render():
     except Exception as e:
         st.error(f"❌ โหลดกล้องไม่สำเร็จ: {e}")
         st.divider()
-        _render_today_log()
+        _render_history_log()
         return
 
     # component ส่งค่าใหม่ทุกครั้งที่ JS เจอโค้ด (throttle เองฝั่ง JS ไว้แล้ว ~600ms/โค้ดเดิม) —
@@ -285,17 +285,38 @@ def render():
                     st.rerun()
 
     st.divider()
-    _render_today_log()
+    _render_history_log()
 
 
-def _render_today_log() -> None:
-    st.markdown("**📋 ประวัติแพควันนี้**")
-    _today = date.today().isoformat()
-    df = db.get_pack_events_df(date_from=_today, date_to=_today)
+def _render_history_log() -> None:
+    """ประวัติการแพค — ย้อนดูช่วงวันที่ก่อนหน้าได้ด้วย (เพิ่ม 2026-11-08 ตามคำขอ; เดิมโชว์แค่
+    วันนี้วันเดียว ไม่มีทางย้อนดูวันก่อนหน้าเลย)"""
+    st.markdown("**📋 ประวัติแพค**")
+    _today = date.today()
+    _range_key = "_pack_hist_range"
+    if _range_key not in st.session_state:
+        st.session_state[_range_key] = (_today, _today)
+    _range = st.date_input(
+        "ช่วงวันที่", value=st.session_state[_range_key], key=_range_key, format="DD/MM/YYYY",
+    )
+    # st.date_input คืนค่าเป็น tuple 2 ตัวเฉพาะตอนเลือกครบ "ถึงวันที่" แล้ว — ระหว่างเลือกวันแรก
+    # วันเดียวจะคืนเป็น tuple 1 ตัว ต้องกันพังตรงนี้ไม่งั้น unpack ไม่ได้
+    if isinstance(_range, tuple) and len(_range) == 2:
+        _date_from, _date_to = _range
+    elif isinstance(_range, tuple) and len(_range) == 1:
+        _date_from = _date_to = _range[0]
+    else:
+        _date_from = _date_to = _range
+
+    df = db.get_pack_events_df(date_from=_date_from.isoformat(), date_to=_date_to.isoformat())
     if df.empty:
-        st.caption("ยังไม่มีการสแกนวันนี้")
+        st.caption("ไม่มีการสแกนในช่วงที่เลือก")
         return
-    st.caption(f"แพคไปแล้ว {len(df)} ชิ้นวันนี้")
+    _range_label = (
+        "วันนี้" if (_date_from == _today and _date_to == _today)
+        else f"{_date_from.strftime('%d/%m/%Y')} - {_date_to.strftime('%d/%m/%Y')}"
+    )
+    st.caption(f"แพคไปแล้ว {len(df)} ชิ้น ({_range_label})")
     df = df.copy()
     df["source"] = df["source"].map(lambda s: _SOURCE_LABELS.get(s, s))
     _cols = ["packed_at", "tracking_no", "source", "order_sn", "matched_customer_name", "matched_carrier"]
