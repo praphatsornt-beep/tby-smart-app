@@ -1575,6 +1575,17 @@ def render(tab1, products, customers, customer_map):
                             # (เพิ่ม 2026-11-04 ตามคำขอ user)
                             st.session_state["_sp_matched_addr_cid"]   = _sp_rph_addr.get("customer_id", "")
                             st.session_state["_sp_matched_addr_phone"] = _sp_cur_rph.strip()
+                        # บั๊ก 2026-11-08 (user report): "พอกรอกเบอร์ แล้วเจอที่อยู่เก่า พอที่อยู่ขึ้น
+                        # เบอร์ที่กรอกไว้หายไป" — st.rerun() ด้านล่างนี้ตัดจบรอบสคริปต์นี้ "ก่อน"
+                        # จะไปถึง widget จริงของ sp_rphone_v (ประกาศทีหลังด้านล่าง บรรทัด ~1580+)
+                        # เลยโดน Streamlit ลืมค่าทิ้งแบบเดียวกับบั๊กที่อยู่หายเดิม (ดูคอมเมนต์ยาว
+                        # ที่ต้นแท็บนี้) — ต่างกันตรงนี้คือ shadow เดิม (_sp_shadow_rphone, เขียน
+                        # ทีหลังหลัง widget render จริงเท่านั้น) ยังไม่ทันโดนอัปเดตเป็นเบอร์ที่เพิ่ง
+                        # พิมพ์เลยก่อนจะ rerun รอบนี้ ทำให้รอบถัดไปดึง shadow เก่า (ค่าก่อนพิมพ์
+                        # เบอร์นี้) กลับมาใส่แทน เบอร์ที่เพิ่งพิมพ์เลยหายไปเหมือนไม่เคยพิมพ์ — แก้โดย
+                        # sync shadow ให้เป็นเบอร์ปัจจุบัน (_sp_cur_rph ที่เพิ่งอ่านไปแล้วด้านบน)
+                        # ตรงนี้เลยก่อน rerun เพื่อให้รอบถัดไปดึงค่าที่ถูกต้องกลับมา
+                        st.session_state["_sp_shadow_rphone"] = _sp_cur_rph
                         st.rerun()
 
                     _sa1, _sa2 = st.columns(2)
