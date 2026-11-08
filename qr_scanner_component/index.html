@@ -9,9 +9,14 @@
   body { margin: 0; padding: 0; font-family: 'Source Sans Pro', sans-serif; background: transparent; }
   #wrap { width: 100%; }
   #reader { width: 100%; border-radius: 10px; overflow: hidden; }
-  /* html5-qrcode วาดกรอบ/ปุ่มของตัวเองลงใน #reader โดยอัตโนมัติ — ซ่อนปุ่มเลือกกล้อง/
-     ปุ่มหยุดที่มันสร้างเองเพื่อให้ควบคุมผ่าน UI ของเราเองแทน (ปุ่ม start/stop ด้านล่าง) */
-  #reader video { width: 100% !important; border-radius: 10px; }
+  /* html5-qrcode วาดกรอบสแกน (กล่องขาว/เงามืดรอบๆ) เป็น div แยกต่างหากซ้อนทับ <video> โดย
+     คำนวณตำแหน่ง/ขนาดเป็น pixel ตายตัวจากขนาด video ตอนที่มันสร้างเอง — ถ้ามี CSS ภายนอกมา
+     บังคับ resize วิดีโอทีหลัง (เช่น `width:100% !important` ที่เคยใส่ไว้ตรงนี้) กรอบจะไม่ขยับตาม
+     ขนาดวิดีโอที่เปลี่ยนไปด้วย ทำให้กรอบเพี้ยนสัดส่วน (บั๊กที่ user เจอ 2026-11-08 — เป็นรูป
+     สี่เหลี่ยมแบนเตี้ยผิดปกติ ไม่ใช่สี่เหลี่ยมจัตุรัสตามที่ qrbox สั่ง) — ปล่อยให้ library จัดการ
+     ขนาด video เองทั้งหมด (มันวัด #reader.clientWidth ตอน start() อยู่แล้ว ซึ่ง container นี้
+     ก็กว้าง 100% อยู่แล้วจาก CSS ด้านบน ไม่ต้อง override ซ้ำ) ไม่ตั้ง CSS ขนาดบน <video> เองอีก
+     เด็ดขาด — ใช้ overflow:hidden บน #reader (ด้านบน) พอสำหรับมุมโค้งแทน */
   #status { font-size: 13px; color: #666; margin-top: 6px; min-height: 18px; }
   #toggleBtn {
     width: 100%; padding: 10px; margin-top: 8px; border: none; border-radius: 8px;
@@ -77,7 +82,12 @@ function startScan() {
         var size = Math.floor(Math.min(viewW, viewH) * 0.75);
         return { width: size, height: size };
       },
-      aspectRatio: 1.0,
+      // ไม่บังคับ aspectRatio:1.0 อีกต่อไป (พบว่าเป็นอีกสาเหตุนึงของกรอบเพี้ยนสัดส่วน ไม่ใช่
+      // แค่ CSS ด้านบน) — มันเป็นแค่ "ideal" constraint ของ getUserMedia กล้องจริงส่วนใหญ่ไม่
+      // รองรับสตรีมสี่เหลี่ยมจัตุรัสเป๊ะๆ เบราว์เซอร์เลยคืนอัตราส่วนจริง (เช่น 4:3/16:9) มาแทน
+      // แต่ library คำนวณตำแหน่งกรอบจากอัตราส่วนที่ "ขอ" ไว้ ไม่ใช่อัตราส่วนจริงที่ negotiate
+      // ได้ ปล่อยให้กล้องใช้อัตราส่วนธรรมชาติของมันเอง แล้วให้ qrbox function ด้านบนคำนวณกรอบ
+      // สี่เหลี่ยมจัตุรัสจากขนาด viewfinder จริงแทน จะตรงกับที่เห็นบนจอเสมอ
       // html5-qrcode ส่ง advanced constraints พวกนี้ต่อให้ getUserMedia เอง — ตัวกล้องมือถือ
       // ส่วนใหญ่จะเปิด continuous autofocus ให้เองถ้า video track ยังเปิดสตรีมค้างไว้ (ต่างจาก
       // การ snapshot ทีละภาพที่กล้องไม่มีโอกาสโฟกัสใหม่ทัน) — นี่คือจุดที่คาดว่าจะแก้ปัญหา
