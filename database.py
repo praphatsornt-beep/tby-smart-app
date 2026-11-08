@@ -2120,7 +2120,15 @@ def get_ecommerce_return_emails_df(platform: str = "shopee") -> pd.DataFrame:
     2026-09-20 ว่า 4 บัญชีอีเมลผูก 1 ต่อ 1 กับร้านจริง อีเมลตีกลับเองไม่มีชื่อร้าน/สินค้าให้
     parse เลย) ส่วนสินค้า join กับ ecommerce_order_notices ก่อน (บันทึกทุกวันจากอีเมลยืนยัน
     ออเดอร์ ไม่ต้องรอไฟล์ยอดขาย) ถ้าไม่เจอค่อย fallback ไป ecommerce_sales (ไฟล์ที่อัปโหลด)
-    — ถ้าไม่เจอทั้งคู่ก็ยังโชว์แถวนั้นได้ แค่ไม่มีชื่อสินค้า"""
+    — ถ้าไม่เจอทั้งคู่ก็ยังโชว์แถวนั้นได้ แค่ไม่มีชื่อสินค้า
+
+    "วันที่สั่งซื้อ" (เพิ่ม 2026-11-08 ตามคำขอ "ให้ระบุวันที่ด้วย" — เดิมมีแต่ "เจอครั้งแรก/
+    เจอล่าสุด" ซึ่งคือเวลาที่ระบบเห็นอีเมลแจ้งเตือน ไม่ใช่วันที่ลูกค้าสั่งซื้อจริง บอกอายุออเดอร์
+    ไม่ได้) ใช้หลักการเดียวกับ "สินค้า" ด้านบน — เอาจาก order_notices.order_date ก่อน (มาไว
+    กว่า บันทึกทุกวันจากอีเมลยืนยันออเดอร์) ถ้าไม่เจอค่อย fallback ไป sales.sale_date (แม่นกว่า
+    แต่ต้องรอไฟล์ยอดขายรายเดือนอัปโหลด) — order_date เป็นข้อความดิบจากอีเมล รูปแบบไม่คงที่
+    (ดูเหตุผลที่ปกติเลี่ยงใช้ที่อื่นในคอมเมนต์ของ get_ecommerce_order_notices_df) แต่พอใช้
+    "แสดงผลเฉยๆ" ตรงนี้ได้ ไม่ได้เอาไป filter/sort เป็นวันที่จริง"""
     emails = _fetch_all(
         lambda: get_supabase().table("ecommerce_return_emails").select("*").eq("platform", platform).order("id")
     )
@@ -2134,12 +2142,12 @@ def get_ecommerce_return_emails_df(platform: str = "shopee") -> pd.DataFrame:
     for i in range(0, len(order_sns), 50):
         chunk = order_sns[i:i + 50]
         notice_rows = _retry(lambda _c=chunk: db.table("ecommerce_order_notices").select(
-            "order_sn,shop_name,items"
+            "order_sn,shop_name,items,order_date"
         ).eq("platform", platform).in_("order_sn", _c).execute()).data
         for r in notice_rows:
             notices_by_order.setdefault(r["order_sn"], r)
         sale_rows = _retry(lambda _c=chunk: db.table("ecommerce_sales").select(
-            "order_sn,shop_name,product_id,item_name,products(name)"
+            "order_sn,shop_name,product_id,item_name,products(name),sale_date"
         ).eq("platform", platform).in_("order_sn", _c).execute()).data
         for r in sale_rows:
             sales_by_order.setdefault(r["order_sn"], r)  # แถวแรกพอ (แค่ต้องการร้าน/สินค้าคร่าวๆ)
@@ -2153,8 +2161,10 @@ def get_ecommerce_return_emails_df(platform: str = "shopee") -> pd.DataFrame:
         else:
             product_name = ((sale or {}).get("products") or {}).get("name") or (sale or {}).get("item_name") or "-"
         shop_name = r.get("shop_name") or (notice or {}).get("shop_name") or (sale or {}).get("shop_name") or "-"
+        order_date = (notice or {}).get("order_date") or (sale or {}).get("sale_date") or "-"
         out.append({
             "เลขออเดอร์": r["order_sn"],
+            "วันที่สั่งซื้อ": order_date,
             "ร้าน": shop_name,
             "สินค้า": product_name,
             "ขนส่ง": r.get("carrier_name") or "",
