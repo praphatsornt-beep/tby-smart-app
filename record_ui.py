@@ -72,7 +72,8 @@ def render(tab1, products, customers, customer_map):
                           "_sale_shadow_m_postcode","_sale_shadow_m_delivery",
                           "_sale_shadow_m_pay","_sale_shadow_m_bill",
                           "_sale_shadow_m_pv_loan_toggle","_sale_shadow_m_pv_loan_mode",
-                          "m_pv_loan_toggle","m_pv_loan_mode","m_pv_loan_repay_label","m_pv_loan_repay_id"]
+                          "m_pv_loan_toggle","m_pv_loan_mode","m_pv_loan_repay_label","m_pv_loan_repay_id",
+                          "_phone_match_name","_phone_match_cid","_matched_addr_cid","_matched_addr_phone"]
 
             # บั๊ก 2026-11-07 (user report): พิมพ์ที่อยู่ก่อน แล้วไปเลือก/พิมพ์ชื่อลูกค้า
             # หรือเลือกการจ่ายเงิน/การส่งของ/เปิดบิลไว้ก่อนแล้วไปกรอกที่อยู่/เพิ่มสินค้าทีหลัง
@@ -319,52 +320,57 @@ def render(tab1, products, customers, customer_map):
                     m_delivery = _sc1.radio("การรับของ", _delivery_opts, key="m_delivery", index=None)
                     m_pay  = _sc2.radio("การจ่าย", ["ค้างจ่าย", "จ่ายแล้ว", "COD", "จ่ายบางส่วน"], key="m_pay", index=None)
                     m_bill = _sc3.radio("สถานะบิล", ["ยังไม่เปิดบิล", "เปิดบิลแล้ว"], key="m_bill", index=None)
-                    m_bill_no = st.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
 
-                    # ── ยืม/คืนคะแนนด้วยบิลนี้เลย (2026-11-07) ──────────────────────
+                    # ── ยืม/คืนคะแนนด้วยบิลนี้เลย (2026-11-07, ย้ายมาไว้ใต้ "สถานะบิล" ใน
+                    # คอลัมน์เดียวกันแทนเดิมที่อยู่เต็มความกว้างด้านล่าง 2026-11-08 ตามคำขอ
+                    # user: "เอาไปไว้ใกล้ ตรง ให้เลือกเปิดบิล หรือ ยังไม่เปิดบิล") ───────────
                     # ผูกกับ "เปิดบิลแล้ว" เท่านั้น (ตรงกับเงื่อนไขเดียวกับที่ PV/BV เริ่มนับ
                     # จริงของบิลนั้น — ดู get_bill_totals/get_customer_opened_bills_df) และ
                     # เป็น checkbox ปิดอยู่เป็นค่าเริ่มต้นเสมอ ไม่โผล่เลยถ้าไม่ได้เลือกเปิดบิล —
                     # การขาย/เปิดบิลปกติจึงไม่มีขั้นตอนเพิ่มขึ้นเลย เดิมต้องไปที่ tab 💳 ยืมคะแนน
                     # แยกต่างหากทีหลัง แล้วเลือกจากบิลที่เปิดไปแล้ว (ย้อนหา) ผู้ใช้สะท้อนว่า
-                    # "ไม่ใช่" อยากให้ทำได้จบในขั้นตอนเดียวตอนเปิดบิลจริงๆ เลย
+                    # "ไม่ใช่" อยากให้ทำได้จบในขั้นตอนเดียวตอนเปิดบิลจริงๆ เลย — ใช้ _sc3 ซ้ำได้
+                    # (column object ยังรับ element เพิ่มได้แม้ปิด with-block ของแถวเดิมไปแล้ว)
                     m_pv_loan_toggle = False
                     m_pv_loan_mode   = None
                     if m_bill == "เปิดบิลแล้ว" and m_customer != "— เลือกลูกค้า —":
-                        m_pv_loan_toggle = st.checkbox("🎁 ยืม/คืนคะแนนด้วยบิลนี้", key="m_pv_loan_toggle")
-                        if m_pv_loan_toggle:
-                            m_pv_loan_mode = st.radio(
-                                "โหมด", ["lend", "repay"], key="m_pv_loan_mode", index=None,
-                                format_func=lambda v: ("🎁 ยืมคะแนน (เปิดบิลนี้เพื่อเก็บคะแนนไว้ก่อน)" if v == "lend"
-                                                        else "💰 คืนคะแนน (ใช้บิลนี้คืนยืมคะแนนเก่า)"),
-                            )
-                            st.session_state.pop("m_pv_loan_repay_id", None)
-                            if m_pv_loan_mode == "repay":
-                                _pvl_cid = customer_map[m_customer]["id"]
-                                _pvl_all = db.get_pv_loans_df()
-                                _pvl_open = (_pvl_all[(_pvl_all["customer_id"] == _pvl_cid) & (~_pvl_all["is_settled"])]
-                                             if not _pvl_all.empty else _pvl_all)
-                                if _pvl_open.empty:
-                                    st.info("ลูกค้าคนนี้ไม่มียืมคะแนนค้างอยู่เลย")
-                                elif len(_pvl_open) == 1:
-                                    _pvl_row = _pvl_open.iloc[0]
-                                    st.caption(
-                                        f"จะคืนให้: ยืม {float(_pvl_row['pv_lent']):,.0f} PV "
-                                        f"({_pvl_row['lend_date']}) · ค้างคืนอีก {float(_pvl_row['pv_remaining']):,.0f} PV"
-                                    )
-                                    st.session_state["m_pv_loan_repay_id"] = _pvl_row["id"]
-                                else:
-                                    _pvl_opts = {
-                                        f"ยืม {float(r['pv_lent']):,.0f} PV ({r['lend_date']}) · ค้างคืนอีก {float(r['pv_remaining']):,.0f} PV": r["id"]
-                                        for _, r in _pvl_open.iterrows()
-                                    }
-                                    _pvl_sel = st.selectbox("เลือกยืมคะแนนที่จะคืน", list(_pvl_opts.keys()),
-                                                             key="m_pv_loan_repay_label", index=None,
-                                                             placeholder="เลือกรายการที่ค้างคืน...")
-                                    if _pvl_sel:
-                                        st.session_state["m_pv_loan_repay_id"] = _pvl_opts[_pvl_sel]
+                        with _sc3:
+                            m_pv_loan_toggle = st.checkbox("🎁 ยืม/คืนคะแนนด้วยบิลนี้", key="m_pv_loan_toggle")
+                            if m_pv_loan_toggle:
+                                m_pv_loan_mode = st.radio(
+                                    "โหมด", ["lend", "repay"], key="m_pv_loan_mode", index=None,
+                                    format_func=lambda v: ("🎁 ยืมคะแนน (เปิดบิลนี้เพื่อเก็บคะแนนไว้ก่อน)" if v == "lend"
+                                                            else "💰 คืนคะแนน (ใช้บิลนี้คืนยืมคะแนนเก่า)"),
+                                )
+                                st.session_state.pop("m_pv_loan_repay_id", None)
+                                if m_pv_loan_mode == "repay":
+                                    _pvl_cid = customer_map[m_customer]["id"]
+                                    _pvl_all = db.get_pv_loans_df()
+                                    _pvl_open = (_pvl_all[(_pvl_all["customer_id"] == _pvl_cid) & (~_pvl_all["is_settled"])]
+                                                 if not _pvl_all.empty else _pvl_all)
+                                    if _pvl_open.empty:
+                                        st.info("ลูกค้าคนนี้ไม่มียืมคะแนนค้างอยู่เลย")
+                                    elif len(_pvl_open) == 1:
+                                        _pvl_row = _pvl_open.iloc[0]
+                                        st.caption(
+                                            f"จะคืนให้: ยืม {float(_pvl_row['pv_lent']):,.0f} PV "
+                                            f"({_pvl_row['lend_date']}) · ค้างคืนอีก {float(_pvl_row['pv_remaining']):,.0f} PV"
+                                        )
+                                        st.session_state["m_pv_loan_repay_id"] = _pvl_row["id"]
+                                    else:
+                                        _pvl_opts = {
+                                            f"ยืม {float(r['pv_lent']):,.0f} PV ({r['lend_date']}) · ค้างคืนอีก {float(r['pv_remaining']):,.0f} PV": r["id"]
+                                            for _, r in _pvl_open.iterrows()
+                                        }
+                                        _pvl_sel = st.selectbox("เลือกยืมคะแนนที่จะคืน", list(_pvl_opts.keys()),
+                                                                 key="m_pv_loan_repay_label", index=None,
+                                                                 placeholder="เลือกรายการที่ค้างคืน...")
+                                        if _pvl_sel:
+                                            st.session_state["m_pv_loan_repay_id"] = _pvl_opts[_pvl_sel]
                         st.session_state["_sale_shadow_m_pv_loan_toggle"] = m_pv_loan_toggle
                         st.session_state["_sale_shadow_m_pv_loan_mode"]   = m_pv_loan_mode
+
+                    m_bill_no = st.text_input("เลขที่บิลจริง (ถ้ามี — ไม่บังคับ)", key="m_bill_no") if m_bill == "เปิดบิลแล้ว" else ""
 
                 # echo ค่าจริงไว้ใน shadow ทันทีหลัง render สำเร็จ — ดูคอมเมนต์ที่ต้น branch
                 st.session_state["_sale_shadow_m_delivery"] = m_delivery
@@ -539,6 +545,16 @@ def render(tab1, products, customers, customer_map):
                                 except Exception:
                                     _rph_addr = None
                                 st.session_state["_last_rph_fill"] = _cur_rph.strip()
+                                # ไม่ auto-set _cust_picked เงียบๆ อีกต่อไป (เหมือน ส่งของ ตั้งแต่
+                                # 2026-10-28/2026-11-04) — ที่อยู่เบอร์เดียวกันอาจเคยถูกบันทึกไว้ใต้
+                                # ชื่อลูกค้าคนอื่น (เช่น ฝากส่งบ้านเพื่อน) แค่โชว์ให้พนักงานยืนยัน/
+                                # เปลี่ยนเองด้านล่าง ไม่เปลี่ยนลูกค้าที่เลือกไว้แบบไม่มีใครขอ
+                                st.session_state["_phone_match_name"] = (
+                                    (_rph_addr.get("customers") or {}).get("name", "") if _rph_addr else ""
+                                )
+                                st.session_state["_phone_match_cid"] = (
+                                    _rph_addr.get("customer_id", "") if _rph_addr else ""
+                                )
                                 if _rph_addr:
                                     for _k, _v in [
                                         ("r_name", _rph_addr.get("recipient_name") or ""),
@@ -554,10 +570,10 @@ def render(tab1, products, customers, customer_map):
                                         st.session_state["r_am_searchbox"] = _rph_addr["amphure"]
                                     if _rph_addr.get("postal_code"):
                                         st.session_state["m_postcode"] = _rph_addr["postal_code"]
-                                    _rph_cust = (_rph_addr.get("customers") or {}).get("name", "")
-                                    if _rph_cust and not st.session_state.get("_cust_picked"):
-                                        st.session_state["_cust_picked"] = _rph_cust
-                                        st.session_state["_prev_shipping_cid"] = _rph_addr.get("customer_id", "")
+                                    # เก็บ customer_id/เบอร์ที่แมทช์แยกไว้ต่างหาก ให้ปุ่ม "อัปเดต
+                                    # เบอร์โทร" ด้านล่างใช้ได้แม้ยังไม่ได้กดยืนยันผูกลูกค้า
+                                    st.session_state["_matched_addr_cid"]   = _rph_addr.get("customer_id", "")
+                                    st.session_state["_matched_addr_phone"] = _cur_rph.strip()
                             # apply staged address fill ก่อน render ทุก widget
                             for _fk, _wk in [("_fr_rname","r_name"),("_fr_rphone","r_phone"),("_fr_al","r_al"),
                                               ("_fr_dt","r_dt"),("_fr_am","r_am"),("_fr_pv","r_pv"),
@@ -568,6 +584,23 @@ def render(tab1, products, customers, customer_map):
                             r_name      = col_a.text_input("ชื่อผู้รับ",   key="r_name")
                             r_phone     = col_b.text_input("เบอร์โทร",     key="r_phone", max_chars=10)
                             _warn_duplicate_phone(r_phone, _cid)
+                            _phone_match_name = st.session_state.get("_phone_match_name", "")
+                            if _phone_match_name and not st.session_state.get("_cust_picked"):
+                                st.info(f"📍 เบอร์นี้เคยส่งที่อยู่นี้ไว้ในชื่อลูกค้า **{_phone_match_name}** — ใช่คนนี้ไหมคะ?")
+                                _pm_c1, _pm_c2 = st.columns(2)
+                                if _pm_c1.button(f"✅ ใช่ {_phone_match_name}", key="phone_match_confirm", width="stretch"):
+                                    st.session_state["_cust_picked"] = _phone_match_name
+                                    # sync _prev_shipping_cid ไว้ก่อน กัน guard "reset ที่อยู่ตอน
+                                    # เปลี่ยนลูกค้า" ด้านบนเข้าใจผิดว่าเป็นการสลับลูกค้าแล้วล้างที่อยู่
+                                    # ที่เพิ่งเติมทิ้ง (บั๊กเดียวกับที่เจอตอน auto-pick แบบเงียบๆ เดิม)
+                                    st.session_state["_prev_shipping_cid"] = st.session_state.get("_phone_match_cid", "")
+                                    st.session_state.pop("_phone_match_name", None)
+                                    st.session_state.pop("_phone_match_cid", None)
+                                    st.rerun()
+                                if _pm_c2.button("🔁 เปลี่ยนคนส่ง", key="phone_match_reject", width="stretch"):
+                                    st.session_state.pop("_phone_match_name", None)
+                                    st.session_state.pop("_phone_match_cid", None)
+                                    st.rerun()
                             r_addr_line = st.text_input("บ้านเลขที่/ถนน", key="r_al")
                             col_c, col_d, col_e = st.columns(3)
                             with col_c:
@@ -593,6 +626,29 @@ def render(tab1, products, customers, customer_map):
                             st.session_state["_sale_shadow_r_am"]        = r_amphure
                             st.session_state["_sale_shadow_r_pv"]        = r_province
                             st.session_state["_sale_shadow_m_postcode"]  = m_postcode
+                            # เปลี่ยนเบอร์แต่ที่อยู่/รายละเอียดเดิม (ยังไม่ได้กด "✅ ใช่ {name}"
+                            # ยืนยันผูกลูกค้า เลย m_customer อาจยังเป็น "— เลือกลูกค้า —") — ให้กด
+                            # อัปเดตเบอร์ของที่อยู่เดิมได้เลยโดยไม่ต้องเลือกลูกค้าก่อน
+                            _matched_cid   = st.session_state.get("_matched_addr_cid", "")
+                            _matched_phone = st.session_state.get("_matched_addr_phone", "")
+                            _r_phone_now   = r_phone.strip()
+                            if (_matched_cid and _matched_phone and len(_r_phone_now) == 10
+                                    and _r_phone_now != _matched_phone and is_valid_phone(_r_phone_now)):
+                                st.caption(f"📞 เบอร์เปลี่ยนจาก {_matched_phone} — ที่อยู่/รายละเอียดเดิม กดอัปเดตเบอร์ได้โดยไม่ต้องเลือกลูกค้า")
+                                if st.button(f"🔄 อัปเดตเบอร์โทรที่อยู่นี้เป็น {_r_phone_now}", key="update_phone_addr"):
+                                    db.upsert_customer_address({
+                                        "id":             str(uuid.uuid4()),
+                                        "customer_id":    _matched_cid,
+                                        "recipient_name": r_name,
+                                        "phone":          _r_phone_now,
+                                        "address_line":   r_addr_line,
+                                        "district":       r_district,
+                                        "amphure":        r_amphure,
+                                        "province":       r_province,
+                                        "postal_code":    m_postcode,
+                                    })
+                                    st.session_state["_matched_addr_phone"] = _r_phone_now
+                                    st.success("✅ อัปเดตเบอร์โทรที่อยู่นี้แล้ว")
                             if m_customer != "— เลือกลูกค้า —":
                                 if st.button("💾 บันทึกที่อยู่นี้", key="save_addr_btn"):
                                     try:
