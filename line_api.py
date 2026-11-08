@@ -56,8 +56,10 @@ def _fmt_pv_lines(pv_rows: list, max_dates: int = 15) -> tuple[list, float]:
     for row in pv_rows[:max_dates]:
         lines.append(f"📅 {row['date']}")
         for it in row["items"]:
-            lines.append(f"  • {it['product']} ×{int(it['qty'])} = {it['points']:,.0f} คะแนน")
-        lines.append(f"  (รวมวันนี้ {row['day_total']:,.0f} คะแนน)")
+            _label = f"[{it['code']}] {it['product']}" if it.get("code") else it["product"]
+            lines.append(f"  • {_label} ×{int(it['qty'])} = {it['points']:,.0f} คะแนน")
+        lines.append(f"  (รวม {row['day_total']:,.0f} คะแนน)")
+        lines.append("")  # เว้นบรรทัดระหว่างแต่ละวัน ให้อ่านง่ายขึ้น (เพิ่ม 2026-11-08 ตามคำขอ)
         grand += row["day_total"]
     if len(pv_rows) > max_dates:
         lines.append(f"...และอีก {len(pv_rows) - max_dates} วัน")

@@ -876,7 +876,10 @@ def unbilled_pv_breakdown_rows(df: pd.DataFrame) -> list[dict]:
     2026-11-04 เพื่อให้ line_api.push_outstanding()'s ข้อความ LINE ใช้ข้อมูลชุดเดียวกันได้โดย
     ไม่ต้องเขียนตรรกะ prorate ซ้ำ (ผู้ใช้ขอ "ตรงส่วนสรุปให้ลูกค้าทางไลน์ด้วย" ต่อจากที่เพิ่ง
     เพิ่มในแอปเอง) คืน list เรียงตามวันที่ ของ
-    `{"date": str, "items": [{"product","qty","points"}], "day_total": float}`"""
+    `{"date": str, "items": [{"product","code","qty","points"}], "day_total": float}` —
+    "code" (รหัสสินค้า) เพิ่ม 2026-11-08 ตามคำขอ "เพิ่มรหัสสินค้าในใบสรุป" (ใบพิมพ์/LINE push
+    มีแต่ชื่อสินค้า ไม่มีรหัสเหมือนรายการ ค้างรับ/ค้างจ่าย ที่อื่นในหน้านี้) — อาจเป็นสตริงว่าง
+    ถ้า df ที่ส่งมาไม่มีคอลัมน์ "รหัส" เลย"""
     if df.empty or "PV รวม" not in df.columns or "ยังไม่เปิด" not in df.columns:
         return []
     _pv_df = df[df["ยังไม่เปิด"] > 0].copy()
@@ -890,7 +893,8 @@ def unbilled_pv_breakdown_rows(df: pd.DataFrame) -> list[dict]:
         rows.append({
             "date": _pv_date,
             "items": [
-                {"product": r["สินค้า"], "qty": r["จำนวน"], "points": float(r["คะแนน"])}
+                {"product": r["สินค้า"], "code": r.get("รหัส", ""),
+                 "qty": r["จำนวน"], "points": float(r["คะแนน"])}
                 for _, r in _pv_grp.iterrows()
             ],
             "day_total": float(_pv_grp["คะแนน"].sum()),
@@ -918,10 +922,10 @@ def render_unbilled_pv_breakdown(df: pd.DataFrame) -> None:
     _grand_total = 0.0
     for _row in _rows:
         _pv_grp = pd.DataFrame(_row["items"]).rename(
-            columns={"product": "สินค้า", "qty": "จำนวน", "points": "คะแนน"})
+            columns={"product": "สินค้า", "code": "รหัส", "qty": "จำนวน", "points": "คะแนน"})
         st.markdown(f"**📅 {_row['date']}**")
         st.dataframe(
-            _pv_grp[["สินค้า", "จำนวน", "คะแนน"]].style.format({"คะแนน": "{:,.0f}"}),
+            _pv_grp[["รหัส", "สินค้า", "จำนวน", "คะแนน"]].style.format({"คะแนน": "{:,.0f}"}),
             width="stretch", hide_index=True,
         )
         _grand_total += _row["day_total"]
