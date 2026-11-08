@@ -278,14 +278,25 @@ def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
                       items: list, total_amount: float, pay_status: str,
                       paid_amount: float = None, outstanding_amount: float = None,
                       group_id: str = "") -> dict:
-    """ส่งสรุปบิลให้ลูกค้าใน LINE"""
+    """ส่งสรุปบิลให้ลูกค้าใน LINE — items[i]["remaining"] (ถ้ามี) คือจำนวนที่ยัง
+    ไม่ได้รับจริงต่อรายการ (ค้างรับ) แยกจาก qty (จำนวนที่สั่งทั้งหมด) ใส่ต่อท้ายบรรทัด
+    เมื่อ > 0 ไม่งั้นข้อความนี้จะดูเหมือนบิลปิดครบแล้วทั้งที่ยังมีของค้างส่งมอบอยู่
+    (user report 2026-11-08: ใช้ตอนลูกค้ามารับของเก่า แต่สรุปไม่บอกว่าค้างรับเท่าไหร่)"""
     lines = [f"📋 สรุปบิล {bill_no}", f"คุณ {customer_name}", ""]
+    total_remaining = 0
     for it in items[:10]:
-        lines.append(f"• {it['name']} ×{it['qty']} = {float(it['total']):,.0f}฿")
+        remaining = int(it.get("remaining") or 0)
+        line = f"• {it['name']} ×{it['qty']} = {float(it['total']):,.0f}฿"
+        if remaining > 0:
+            total_remaining += remaining
+            line += f" (ค้างรับ {remaining:,} ชิ้น)"
+        lines.append(line)
     lines += ["", f"💰 รวม: {total_amount:,.0f} บาท"]
     if paid_amount is not None and outstanding_amount is not None and outstanding_amount > 0.01:
         lines.append(f"✅ จ่ายแล้ว: {paid_amount:,.0f} บาท")
         lines.append(f"⏳ ค้างจ่าย: {outstanding_amount:,.0f} บาท")
     else:
         lines.append(f"สถานะ: {pay_status}")
+    if total_remaining > 0:
+        lines.append(f"📦 รวมค้างรับ: {total_remaining:,} ชิ้น")
     return _push(line_user_id, "\n".join(lines), group_id)

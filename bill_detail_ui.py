@@ -639,7 +639,8 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
                     disabled=not (_bl_luid or _bl_gid),
                 ):
                     _bl_items = [
-                        {"name": r["สินค้า"], "qty": int(r["สั่ง"]), "total": float(r["ยอดรวม"])}
+                        {"name": r["สินค้า"], "qty": int(r["สั่ง"]), "total": float(r["ยอดรวม"]),
+                         "remaining": int(r.get("ค้างรับ", 0))}
                         for _, r in _bill_rows.iterrows()
                     ]
                     _bl_total = float(_bill_rows["ยอดรวม"].sum())

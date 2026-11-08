@@ -1216,7 +1216,8 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
     _t7_cust_id   = cust_map_p.get(_t7_cust_name, {}).get("id", "")
     _t7_line_uid, _t7_gid = db.get_customer_line_ids(_t7_cust_id) if _t7_cust_id else ("", "")
     _t7_items = [{"name": r["สินค้า"], "qty": int(r["สั่ง"]),
-                  "total": float(r["ยอดรวม"])} for _, r in show_p.iterrows()]
+                  "total": float(r["ยอดรวม"]),
+                  "remaining": int(r.get("ค้างรับ", 0))} for _, r in show_p.iterrows()]
     _t7_pay = show_p.iloc[0].get("สถานะบิล", "") if not show_p.empty else ""
     _t7_col1, _t7_col2 = st.columns([1, 2])
     if _t7_col1.button("📨 ส่งสรุปบิล LINE", key=f"{key_prefix}_line_btn",
