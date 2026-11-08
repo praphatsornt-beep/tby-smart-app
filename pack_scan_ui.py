@@ -318,6 +318,9 @@ def _render_history_log() -> None:
     )
     st.caption(f"แพคไปแล้ว {len(df)} ชิ้น ({_range_label})")
     df = df.copy()
+    # packed_at เก็บเป็น UTC ใน DB (+00:00) — get_pack_events_df() แปลงเป็น pd.to_datetime ให้
+    # แล้ว (tz-aware) แปลงเป็นเวลาไทยก่อนโชว์ (ของเดิมโชว์ UTC ดิบๆ user แจ้งว่าอยากได้เวลาไทย)
+    df["packed_at"] = df["packed_at"].dt.tz_convert("Asia/Bangkok").dt.strftime("%Y-%m-%d %H:%M:%S")
     df["source"] = df["source"].map(lambda s: _SOURCE_LABELS.get(s, s))
     _cols = ["packed_at", "tracking_no", "source", "order_sn", "matched_customer_name", "matched_carrier"]
     _cols = [c for c in _cols if c in df.columns]
