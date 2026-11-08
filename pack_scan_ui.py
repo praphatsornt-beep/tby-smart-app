@@ -46,7 +46,7 @@ import `streamlit.components.v1` ตรงนี้เลย (ไม่ lazy เ
 import os
 import re
 import time
-from datetime import date
+from datetime import date, datetime, timezone
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -67,6 +67,14 @@ _PACK_QR_WINDOW_SEC = 1.8
 # ไม่มีปัญหานี้มาก่อน) ไม่บล็อกถาวร แค่เว้นช่วงพอให้ขยับพัสดุออกจากเฟรมทัน ถ้าสแกนเลขเดิมซ้ำ
 # จริงๆ (เช่น แพคซ้ำจริง) หลังพ้น cooldown แล้วก็ยังบันทึกได้ตามปกติ — insert_pack_event เอง
 # ก็ยัง append-only ไม่ dedup ที่ DB อยู่ดี (ดู docstring ของมันเอง)
+#
+# **บั๊กจริงพบ 2026-11-08** (user report: สแกนโค้ดเดิมค้างในเฟรม ได้แถวซ้ำ 4 แถว เวลาเดียวกัน
+# เป๊ะ) — cooldown ด้านบนเดิมเช็คจาก `st.session_state` อย่างเดียว (in-memory ของ session นั้นๆ)
+# ซึ่งรีเซ็ตได้ทุกครั้งที่ WebSocket ของมือถือหลุด/reconnect (สลับแอป, จอดับ, เน็ตสะดุด — พบบ่อย
+# ระหว่างส่องกล้องค้างไว้นานๆ) ทำให้ cooldown ถูกลืมและบันทึกซ้ำได้ทันทีทุกครั้งที่ reconnect แม้
+# โค้ดจะยังเป็นอันเดิมอยู่ในเฟรมก็ตาม — เสริมด้วยเช็คจาก DB จริง (`get_last_pack_event`, ดู
+# `_classify_and_save`) เป็นด่านสุดท้ายที่ session reset เอาชนะไม่ได้ ใน-memory check ด้านบนยัง
+# เก็บไว้เป็นด่านแรก (เร็วกว่า ไม่ query DB ทุกครั้งที่เจอโค้ดเดิมในเฟรมเดียวกัน)
 _PACK_SAVE_COOLDOWN_SEC = 6
 
 # เลข tracking ที่ขึ้นต้นด้วยคำนำหน้าพวกนี้ = ขนส่งในเครือ Lazada เอง (Lazada eLogistics/"LEX")
@@ -112,39 +120,73 @@ _SOURCE_LABELS = {
 }
 
 
+def _last_event_within_cooldown(last_event: dict | None) -> bool:
+    """เช็คจากเวลาจริงใน DB (ไม่ใช่ session_state) ว่า tracking_no นี้เพิ่งถูกบันทึกไปเมื่อครู่นี้
+    เอง — ด่านสุดท้ายกัน insert ซ้ำตอน session_state cooldown ใน `_try_save` โดนลืมไปเพราะ
+    WebSocket reconnect (ดูคอมเมนต์ยาวที่ `_PACK_SAVE_COOLDOWN_SEC` ด้านบน)"""
+    if not last_event or not last_event.get("packed_at"):
+        return False
+    try:
+        _ts = str(last_event["packed_at"]).replace("Z", "+00:00")
+        _last_dt = datetime.fromisoformat(_ts)
+        if _last_dt.tzinfo is None:
+            _last_dt = _last_dt.replace(tzinfo=timezone.utc)
+    except (ValueError, TypeError):
+        return False
+    return (datetime.now(timezone.utc) - _last_dt).total_seconds() < _PACK_SAVE_COOLDOWN_SEC
+
+
 def _classify_and_save(tracking_no: str, order_sn: str | None = None) -> dict:
     """เช็คว่า tracking_no นี้ตรงกับ shipments (ออเดอร์ iship ของร้านเอง) ไหม แล้วบันทึกลง
     pack_events — คืน dict สรุปผลให้ render() เอาไปแสดง (query แค่ครั้งเดียว ไม่ query ซ้ำ)
     order_sn (ถ้ามี — มาจากบาร์โค้ดเลขที่ออเดอร์ Shopee แยกที่สแกนเจอในภาพเดียวกัน) ทำให้รู้
-    แน่นอนว่าเป็น Shopee เลย ไม่ต้องพึ่ง _guess_source แบบเดาที่เหลือทั้งหมดอีกต่อไป"""
+    แน่นอนว่าเป็น Shopee เลย ไม่ต้องพึ่ง _guess_source แบบเดาที่เหลือทั้งหมดอีกต่อไป
+
+    ข้าม insert ถ้า `get_last_pack_event` บอกว่าเพิ่งบันทึกเลขนี้ไปเมื่อครู่นี้เอง (ภายใน
+    `_PACK_SAVE_COOLDOWN_SEC`) — ด่าน DB-backed กันซ้ำ ไม่พึ่ง session_state อย่างเดียว (ดู
+    คอมเมนต์ที่ `_PACK_SAVE_COOLDOWN_SEC`)"""
     shipment = db.find_shipment_by_tracking_no(tracking_no)
     last_event = db.get_last_pack_event(tracking_no)
+    _skip_dup = _last_event_within_cooldown(last_event)
     if shipment:
         source = "iship"
     elif order_sn:
         source = "shopee"
+    elif _skip_dup:
+        source = last_event.get("source") or "shopee"
     else:
         source = _guess_source(tracking_no, shipment)
     if shipment:
         customer_name = (shipment.get("customers") or {}).get("name")
         carrier = shipment.get("carrier")
+    elif _skip_dup:
+        customer_name = last_event.get("matched_customer_name")
+        carrier = last_event.get("matched_carrier")
     else:
         customer_name = None
         carrier = None
-    db.insert_pack_event(tracking_no, source, customer_name, carrier, order_sn)
+    if not _skip_dup:
+        db.insert_pack_event(tracking_no, source, customer_name, carrier, order_sn)
     return {
         "tracking_no": tracking_no,
         "source": source,
-        "order_sn": order_sn,
+        "order_sn": order_sn or ((last_event or {}).get("order_sn") if _skip_dup else None),
         "customer_name": customer_name,
         "carrier": carrier,
         "already_scanned_before": last_event is not None,
         "last_scanned_at": last_event.get("packed_at") if last_event else None,
+        "skipped_duplicate": _skip_dup,
     }
 
 
 def _show_result(result: dict) -> None:
     _label = _SOURCE_LABELS.get(result["source"], result["source"])
+    if result.get("skipped_duplicate"):
+        st.info(
+            f"ℹ️ เพิ่งบันทึกเลข **{result['tracking_no']}** ไปแล้วเมื่อครู่นี้เอง — ข้ามไม่บันทึกซ้ำ "
+            "(ขยับพัสดุออกจากกล้องก่อนสแกนชิ้นถัดไป)"
+        )
+        return
     if result["source"] == "iship" and result["customer_name"]:
         st.success(
             f"✅ บันทึกแพคแล้ว: **{result['tracking_no']}** "

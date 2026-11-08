@@ -1435,6 +1435,64 @@ if st.session_state["_sidebar_compact"]:
         unsafe_allow_html=True,
     )
 
+# ── Phone-width rail — even narrower than the 88px tablet/manual-compact
+#    rail above (88px eats ~20-23% of a ~380-420px phone screen, leaving too
+#    little room to judge proportions of whatever's on the page — user
+#    report 2026-11-08 while screenshotting 📷 แพคของ's camera box). Placed
+#    AFTER both the @media(1100px) auto-rail rule above and the manual
+#    _sidebar_compact block above (same selectors, same !important — later
+#    in the DOM wins at equal specificity) so this wins regardless of
+#    whether the user is on auto-compact or has also tapped the manual
+#    toggle; rendered unconditionally (not gated on _sidebar_compact) since
+#    phones are always below the 1100px auto-breakpoint anyway. ──
+st.markdown(
+    """
+    <style>
+    @media (max-width: 480px) {
+        [data-testid="stSidebar"] {
+            width: 64px !important;
+            min-width: 64px !important;
+            max-width: 64px !important;
+        }
+        [data-testid="stMain"] {
+            left: 64px !important;
+            width: calc(100% - 64px) !important;
+        }
+        [data-testid="stSidebarContent"] {
+            padding-left: 4px !important;
+            padding-right: 4px !important;
+        }
+        [data-testid="stSidebar"] .tby-sidebar-brand > div:first-child {
+            width: 30px !important;
+            height: 30px !important;
+            border-radius: 9px !important;
+            font-size: 0.7rem !important;
+        }
+        [class*="st-key-_sidebar_compact_toggle"] button {
+            padding: 2px 4px !important;
+        }
+        [class*="st-key-_sidebar_compact_toggle"] button p {
+            font-size: 0.9rem !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button {
+            padding: 6px 0 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button[kind="primary"],
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button[kind="secondary"] {
+            width: 36px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            border-radius: 11px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"] button [data-testid="stIconMaterial"] {
+            font-size: 1.1rem !important;
+        }
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 # ── Force the sidebar to stay "expanded" at all times, even on narrow
 #    windows — Streamlit has its own native auto-collapse below ~768px
 #    viewport width that fully hides the sidebar (independent of our CSS
