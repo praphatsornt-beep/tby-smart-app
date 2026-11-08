@@ -84,23 +84,13 @@ def _fmt_loan_lines(loans: list, max_loans: int = 15) -> tuple[list, float]:
     return lines, grand
 
 
-def push_outstanding(line_user_id: str, customer_name: str,
-                     outstanding_amount: float, pending_qty: int,
-                     items: list, cod_transferred: list = None,
-                     group_id: str = "", pv_rows: list = None, loan_rows: list = None) -> dict:
-    """ส่งสรุปยอดค้างให้ลูกค้าใน LINE
-
-    pv_rows (เพิ่ม 2026-11-04 ตามคำขอ user "ตรงส่วนสรุปให้ลูกค้าทางไลน์ด้วย" ต่อจาก
-    📅 รายการค้างเปิดบิล (PV) ที่เพิ่งเพิ่มในแอปเอง) — list จาก
-    `ui_helpers.unbilled_pv_breakdown_rows()` ตรงๆ (`[{"date","items":[{"product","qty",
-    "points"}],"day_total"}]`) แสดงเป็นหมวดแยกต่างหาก เพราะรายการที่จ่ายและรับครบแล้ว
-    (เหลือแค่รอเปิดบิลเพื่อเก็บ PV) จะไม่โผล่ใน `items` เดิมเลย (ฟิลเตอร์ของ `items` คือ
-    ค้างจ่าย>0 หรือค้างรับ>0 เท่านั้น ไม่เกี่ยวกับสถานะบิล) — ไม่งั้นลูกค้าจะไม่เห็นอะไร
-    เลยถ้าทุกอย่างจ่าย/รับครบแล้วเหลือแค่รอเปิดบิล ทั้งที่ควรรู้ว่ายังมี PV ค้างสะสมอยู่
-
-    loan_rows (เพิ่ม 2026-11-07 พร้อมปุ่มส่งแยกหัวข้อใน 👤 บัตรลูกค้า — ดู push_pv_loan_status
-    ด้านล่าง) — list ของ loan ที่ยังไม่ settle (`is_settled=False`) จาก `db.get_pv_loans_df()`
-    กรองแล้วจากฝั่งเรียก ให้ "สรุปรวมทั้งหมด" ครบจริงๆ ไม่ขาดเรื่องยืมคะแนนไป"""
+def build_outstanding_text(customer_name: str, outstanding_amount: float, pending_qty: int,
+                           items: list, cod_transferred: list = None,
+                           pv_rows: list = None, loan_rows: list = None) -> str:
+    """สร้างข้อความ "สรุปรวมทั้งหมด" เดียวกับที่ push_outstanding ส่งทาง LINE เป๊ะๆ แต่คืนเป็น
+    text เฉยๆ ไม่ส่ง — แยกออกมา 2026-11-08 ให้ bill_detail_ui.py เอาไปใช้พิมพ์/แคปจอได้ด้วย
+    สำหรับลูกค้าที่ยังไม่มี LINE ID (กดส่ง LINE ไม่ได้เลย แต่ยังอยากได้สรุปเดียวกันนี้ไปส่งเอง
+    ทางอื่น) — เนื้อหาต้องตรงกับที่ลูกค้าคนอื่นที่มี LINE ID ได้รับเป๊ะ ไม่ใช่สรุปคนละแบบ"""
     lines = [f"คุณ {customer_name} มียอดค้างดังนี้ค่ะ 🙏"]
     if outstanding_amount > 0:
         lines.append(f"💰 ค้างจ่าย: {outstanding_amount:,.0f} บาท")
@@ -141,7 +131,21 @@ def push_outstanding(line_user_id: str, customer_name: str,
             tn  = c.get("tracking_no", "")
             amt = float(c.get("cod_amount") or 0)
             lines.append(f"• {tn}  {amt:,.0f}฿")
-    return _push(line_user_id, "\n".join(lines), group_id)
+    return "\n".join(lines)
+
+
+def push_outstanding(line_user_id: str, customer_name: str,
+                     outstanding_amount: float, pending_qty: int,
+                     items: list, cod_transferred: list = None,
+                     group_id: str = "", pv_rows: list = None, loan_rows: list = None) -> dict:
+    """ส่งสรุปยอดค้างให้ลูกค้าใน LINE — เนื้อหาสร้างจาก build_outstanding_text() ด้านบน
+    (แยกออกมาเป็นฟังก์ชันเดียวเพื่อให้ปุ่มพิมพ์สำหรับลูกค้าที่ไม่มี LINE ID ใช้ข้อความ
+    เดียวกันเป๊ะได้ ดูคำอธิบาย pv_rows/loan_rows ที่ build_outstanding_text())"""
+    text = build_outstanding_text(
+        customer_name, outstanding_amount, pending_qty, items,
+        cod_transferred=cod_transferred, pv_rows=pv_rows, loan_rows=loan_rows,
+    )
+    return _push(line_user_id, text, group_id)
 
 
 # ─── ปุ่มส่งสรุปแยกหัวข้อ (เพิ่ม 2026-11-07) ──────────────────────────────

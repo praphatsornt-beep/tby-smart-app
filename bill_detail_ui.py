@@ -86,11 +86,55 @@ def _render_ledger_panel(cust: dict, products: list, key_prefix: str, show_cards
     # คืนคะแนน และ สรุปรวมทั้งหมด") โชว์เฉพาะหน้าบัตรลูกค้า (show_cards=True) เท่านั้น —
     # หน้ายอดค้างมีปุ่ม "แจ้ง LINE" (สรุปรวม) ของตัวเองอยู่แล้วในบริบท bulk-action ของมัน
     # ไม่ใช่เป้าหมายของคำขอนี้ (ไม่แตะ/ไม่ซ้ำ)
-    if show_cards and line_api.is_configured():
+    if show_cards:
         _led_luid = cust.get("line_user_id") or ""
         _led_gid  = cust.get("group_id") or ""
-        if not (_led_luid or _led_gid):
-            st.caption("⚠️ ลูกค้าคนนี้ยังไม่มี LINE ID — ส่งสรุปให้ทาง LINE ไม่ได้")
+        _led_has_line = bool((_led_luid or _led_gid) and line_api.is_configured())
+        if not _led_has_line:
+            # ลูกค้าไม่มี LINE ID (หรือร้านยังไม่ได้ตั้งค่า LINE_CHANNEL_ACCESS_TOKEN) — ส่งทาง
+            # LINE ไม่ได้เลย เพิ่มปุ่มพิมพ์แทน 2026-11-08 ตามคำขอ user ("ถ้าไม่มีปุ่มแจ้งไลน์
+            # ให้มีกดปริ้น เพื่อแคปจอส่งให้ลูกค้า") — ใช้ build_outstanding_text() เดียวกับที่
+            # ปุ่ม "📨 สรุปรวมทั้งหมด" ด้านล่างส่งทาง LINE เป๊ะๆ (แค่ print แทน push) ลูกค้าที่มี/
+            # ไม่มี LINE ID จะได้เห็นเนื้อหาเดียวกัน ไม่ใช่สรุปคนละแบบ
+            st.caption("⚠️ ลูกค้าคนนี้ยังไม่มี LINE ID — ส่งสรุปให้ทาง LINE ไม่ได้ (พิมพ์แทนได้ด้านล่าง)")
+            with st.expander("🖨️ พิมพ์สรุปยอดให้ลูกค้า", expanded=False):
+                _led_print_items = [
+                    {"bill_no": r["เลขที่บิล"],
+                     "product": f"[{r['รหัส']}] {r['สินค้า']}" if r.get("รหัส") else r["สินค้า"],
+                     "amount": 0.0 if r["สถานะจ่าย"] == "COD" else float(r["ค้างจ่าย"]),
+                     "qty": int(r["ค้างรับ"])}
+                    for _, r in _l_all_df.iterrows()
+                    if float(r["ค้างจ่าย"]) > 0 or int(r["ค้างรับ"]) > 0
+                ] if not _l_all_df.empty else []
+                _led_print_pv_rows = unbilled_pv_breakdown_rows(_l_all_df) if not _l_all_df.empty else []
+                _led_print_loans_df = db.get_pv_loans_df()
+                _led_print_cust_loans_df = (
+                    _led_print_loans_df[_led_print_loans_df["customer_id"] == cust["id"]]
+                    if not _led_print_loans_df.empty else _led_print_loans_df
+                )
+                _led_print_open_loans = (
+                    _led_print_cust_loans_df[~_led_print_cust_loans_df["is_settled"]].to_dict("records")
+                    if not _led_print_cust_loans_df.empty else []
+                )
+                _led_print_text = line_api.build_outstanding_text(
+                    cust["name"], _l_owed, _l_pending, _led_print_items,
+                    pv_rows=_led_print_pv_rows, loan_rows=_led_print_open_loans,
+                )
+                _led_print_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+html,body{{background:#fff!important;color:#000!important}}
+body{{font-family:'Prompt',sans-serif;padding:16px;font-size:14px}}
+h1{{font-size:16px;font-weight:700;border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px}}
+pre{{white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:14px;line-height:1.6}}
+.btn{{display:block;margin:0 0 12px;padding:6px 22px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:13px}}
+@media print{{.btn{{display:none}}@page{{size:A5 portrait;margin:10mm}}}}
+</style></head><body>
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์สรุปยอด</button>
+<h1>สรุปยอด — {_esc(cust['name'])}</h1>
+<pre>{_esc(_led_print_text)}</pre>
+</body></html>"""
+                st.iframe(_led_print_html, height=430)
         else:
             with st.expander("📨 ส่ง LINE สรุปยอดให้ลูกค้า", expanded=False):
                 _led_pending_recv = [
