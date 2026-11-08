@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0; font-family: 'Source Sans Pro', sans-serif; background: transparent; }
+  #wrap { width: 100%; }
+  #reader { width: 100%; border-radius: 10px; overflow: hidden; }
+  /* html5-qrcode วาดกรอบ/ปุ่มของตัวเองลงใน #reader โดยอัตโนมัติ — ซ่อนปุ่มเลือกกล้อง/
+     ปุ่มหยุดที่มันสร้างเองเพื่อให้ควบคุมผ่าน UI ของเราเองแทน (ปุ่ม start/stop ด้านล่าง) */
+  #reader video { width: 100% !important; border-radius: 10px; }
+  #status { font-size: 13px; color: #666; margin-top: 6px; min-height: 18px; }
+  #toggleBtn {
+    width: 100%; padding: 10px; margin-top: 8px; border: none; border-radius: 8px;
+    background: #ff4b4b; color: #fff; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  #toggleBtn.stopped { background: #31333f; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="reader"></div>
+  <div id="status">กำลังเปิดกล้อง...</div>
+  <button id="toggleBtn" onclick="toggleScan()">⏸️ หยุดกล้องชั่วคราว</button>
+</div>
+<script>
+// ── สะพานเชื่อม Streamlit component protocol (เขียนเองตรงๆ ไม่พึ่ง streamlit-component-lib
+// เพราะ component นี้เป็น static HTML ล้วน ไม่มี build step — protocol คือ postMessage ธรรมดา
+// กับ parent window, มี isStreamlitMessage:true + type กำกับเสมอ (ยืนยันจาก source ของ
+// streamlit-component-lib เอง และโพสต์ชุมชนที่ยืนยันตรงกัน 2026-11) ──
+function sendToStreamlit(type, extra) {
+  window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, extra || {}), "*");
+}
+function setComponentValue(value) {
+  sendToStreamlit("streamlit:setComponentValue", { value: value, dataType: "json" });
+}
+function setFrameHeight() {
+  sendToStreamlit("streamlit:setFrameHeight", { height: document.getElementById("wrap").scrollHeight + 10 });
+}
+sendToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+window.addEventListener("message", function (event) {
+  if (event.data && event.data.type === "streamlit:render") {
+    // ไม่ได้ใช้ args จาก Python ฝั่งนี้เลย (ไม่มีค่าที่ต้องรับจาก Python) — แค่ยืนยันว่า
+    // component ถูก mount แล้วพร้อมส่งความสูงกลับให้ Streamlit จัด layout ให้ถูก
+    setFrameHeight();
+  }
+});
+
+// ── ตัวสแกน — ใช้ html5-qrcode เดียวกับที่ liff/app.html ของ waka tournament ใช้
+// (ยืนยันว่าใช้งานได้จริงบนมือถือมาก่อนแล้ว) สแกนต่อเนื่อง ไม่หยุดหลังเจอโค้ด (ตรงข้ามกับ
+// เดิมที่ต้องถ่ายรูปทีละใบ) — ทุกครั้งที่เจอโค้ด ส่งค่ากลับ Python ทันที ให้ Python เป็นคน
+// ตัดสินใจเรื่อง cooldown/dedup/การแยกเลขออเดอร์ Shopee เหมือนเดิมทั้งหมด (ไม่ย้าย logic
+// ธุรกิจมาไว้ฝั่ง JS) — จำกัด formatsToSupport แค่ QR_CODE(0) กับ CODE_128(5) ให้ตรงกับที่
+// ใบปะหน้าจริงใช้จริง (บาร์โค้ด tracking เป็น Code128, ส่วน QR คือโค้ดอื่นๆ) การจำกัด format
+// ให้แคบลงยังช่วยให้ decode ไวขึ้นต่อเฟรมด้วย (เอกสาร html5-qrcode แนะนำไว้)
+var scanner = null;
+var running = false;
+
+function onScanSuccess(decodedText) {
+  setComponentValue({ code: decodedText, ts: Date.now() });
+}
+
+function startScan() {
+  if (running) return;
+  scanner = new Html5Qrcode("reader", { formatsToSupport: [0, 5], verbose: false });
+  document.getElementById("status").textContent = "กำลังเปิดกล้อง...";
+  scanner.start(
+    { facingMode: "environment" },
+    {
+      fps: 10,
+      // qrbox ใหญ่ชัดเจน (กว้าง 90% ของจอ มือถือทั่วไป ~320-400px) แก้ปัญหา "ช่องเล็ก" ที่
+      // user แจ้ง — เดิม streamlit-camera-input-live บังคับ iframe แค่ 400x400 ตายตัว
+      qrbox: function (viewW, viewH) {
+        var size = Math.floor(Math.min(viewW, viewH) * 0.75);
+        return { width: size, height: size };
+      },
+      aspectRatio: 1.0,
+      // html5-qrcode ส่ง advanced constraints พวกนี้ต่อให้ getUserMedia เอง — ตัวกล้องมือถือ
+      // ส่วนใหญ่จะเปิด continuous autofocus ให้เองถ้า video track ยังเปิดสตรีมค้างไว้ (ต่างจาก
+      // การ snapshot ทีละภาพที่กล้องไม่มีโอกาสโฟกัสใหม่ทัน) — นี่คือจุดที่คาดว่าจะแก้ปัญหา
+      // "ไม่โฟกัส" ที่ user แจ้ง เทียบกับของเดิม
+    },
+    onScanSuccess,
+    function () { /* เฟรมนี้ยังไม่เจอโค้ด — ปกติของการสแกนต่อเนื่อง ไม่ต้องทำอะไร */ }
+  ).then(function () {
+    running = true;
+    document.getElementById("status").textContent = "👀 กำลังหาบาร์โค้ด/QR...";
+    document.getElementById("toggleBtn").textContent = "⏸️ หยุดกล้องชั่วคราว";
+    document.getElementById("toggleBtn").classList.remove("stopped");
+    setFrameHeight();
+  }).catch(function (err) {
+    document.getElementById("status").textContent = "❌ เปิดกล้องไม่ได้: " + err;
+    running = false;
+  });
+}
+
+function stopScan() {
+  if (!scanner || !running) return;
+  scanner.stop().then(function () {
+    running = false;
+    document.getElementById("status").textContent = "⏸️ หยุดกล้องชั่วคราวแล้ว";
+    document.getElementById("toggleBtn").textContent = "▶️ เปิดกล้องต่อ";
+    document.getElementById("toggleBtn").classList.add("stopped");
+  }).catch(function () { running = false; });
+}
+
+function toggleScan() {
+  if (running) stopScan(); else startScan();
+}
+
+startScan();
+setTimeout(setFrameHeight, 500);
+</script>
+</body>
+</html>

@@ -7,28 +7,60 @@ order_sn เท่านั้น ไม่มีอะไรให้ join) ย
 tracking "LEX" (ขนส่งในเครือ Lazada เอง ไม่มีใน carrier list ของ iship เลย), ที่เหลือเดาเป็น
 Shopee (ดีที่สุดเท่าที่ทำได้ — ไม่ใช่ข้อเท็จจริง 100%)
 
-เดิมใช้ st.camera_input() (ถ่ายรูปทีละใบ ต้องกดถ่ายเอง) — เปลี่ยนเป็น live-scan ต่อเนื่องแทน
-2026-10-28 ตามคำขอ (user: "ใช้ในมือถือไม่สะดวก พอเป็นแบบถ่ายรูปมันช้า") ใช้
-`streamlit-camera-input-live` (ไม่ใช่ streamlit-webrtc) — ส่งภาพสแน็ปช็อตเป็น base64 ผ่าน
-ช่องทาง component เดิมของ Streamlit เอง ทุกๆ debounce ms ไม่ได้เปิด WebRTC peer connection
-จริงๆ เลย จึงไม่มีความเสี่ยงเรื่อง TURN server ที่เคยกังวลไว้ตอนเลือก st.camera_input แต่แรก
-(ดู good_version/segfault incident — โปรเจกต์นี้ระวังเรื่อง binary dependency เปราะบางบน
-Cloud อยู่แล้ว เช็คแล้วว่า pure-Python wheel ไม่มี native dependency เพิ่ม) ถอดรหัสทุกเฟรมที่
-ได้มาด้วย `_decode_codes()` (zxing-cpp) เหมือนเดิมทุกจุด — แค่เปลี่ยนตัวป้อนภาพจาก "ถ่าย 1
-ครั้งต่อคลิก" เป็น "สตรีมภาพมาเรื่อยๆ ให้ถอดรหัสเอง" กันกดบันทึกซ้ำเลขเดิมถี่เกินไปตอนพัสดุยัง
-ไม่ทันหยิบออกจากเฟรมด้วย cooldown สั้นๆ ดู `_PACK_SAVE_COOLDOWN_SEC` ด้านล่าง — import
-`camera_input_live` แบบ lazy (ในฟังก์ชัน ไม่ใช่ตอน import โมดูลนี้) เหมือน `zxingcpp` ใน
-`_decode_codes()` ด้วยเหตุผลเดียวกัน: กันแอปทั้งตัวพังตอน boot ถ้า package นี้มีปัญหาบน
-Cloud ที่ไม่คาดคิด ให้พังเฉพาะตอนเปิดแท็บนี้จริงๆ แทน
+เดิมใช้ st.camera_input() (ถ่ายรูปทีละใบ ต้องกดถ่ายเอง) → เปลี่ยนเป็น live-scan ต่อเนื่องด้วย
+`streamlit-camera-input-live` 2026-10-28 (user: "ใช้ในมือถือไม่สะดวก พอเป็นแบบถ่ายรูปมันช้า")
+→ **เปลี่ยนอีกรอบ 2026-11-08** มาเป็น custom component ที่เขียนเอง (`qr_scanner_component/`,
+ห่อ `html5-qrcode` JS library) หลัง user แจ้งปัญหาที่ตัวเดิมแก้ไม่ได้จริงๆ: "ช่องเล็ก กล้องไม่
+โฟกัส QR หรือ barcode" — root cause คือ `streamlit-camera-input-live` ไม่เปิดให้ปรับ video
+constraints เลยจาก Python (มีแค่ key/debounce/show_controls/width/height) และกลไก "สแน็ปช็อต
+ทีละเฟรมส่งมาถอดรหัสฝั่ง Python" ไม่ได้ให้เวลากล้องโฟกัสต่อเนื่องเท่าการเปิด <video> stream
+ค้างไว้จริงๆ แบบที่ html5-qrcode ทำ — เห็นตัวอย่างใช้งานจริงบนมือถือสำเร็จแล้วใน LIFF ของ
+โปรเจกต์อื่น (`waka tournament/liff/app.html`) เลยเอาวิธีเดียวกันมาใช้ที่นี่ แทนที่จะหา Python
+wrapper package สำเร็จรูป (เช็คแล้ว `streamlit-qrcode-scanner` บน PyPI มีแค่ ~11 ดาว ไม่ยืนยัน
+ว่ารองรับ Code128 ด้วยหรือเปล่า เสี่ยงเกินไปเทียบกับเขียน component เองที่คุมพฤติกรรมได้เต็มที่)
+
+`qr_scanner_component/index.html` เป็น **static component แบบ no-build** (ไม่มี React/Webpack)
+— เขียน Streamlit component postMessage protocol เองตรงๆ (`streamlit:componentReady`/
+`streamlit:render`/`streamlit:setComponentValue`/`streamlit:setFrameHeight`, ทุกข้อความมี
+`isStreamlitMessage:true` กำกับ) แทนที่จะพึ่ง `streamlit-component-lib` (เป็น npm package
+สำหรับ build pipeline ปกติ ไม่เหมาะกับไฟล์ HTML เดี่ยวๆ แบบนี้) ฝั่ง JS สแกนต่อเนื่องด้วย
+`Html5Qrcode.start()` จำกัด `formatsToSupport:[0,5]` (QR_CODE, CODE_128 เท่านั้น — ตรงกับที่
+ใบปะหน้าจริงใช้ และ decode ไวขึ้นเพราะไม่ต้องลองทุก format) ส่งค่ากลับ Python ทุกครั้งที่เจอโค้ด
+ผ่าน `setComponentValue({code, ts})` — ฝั่ง JS throttle การส่งค่าเองไว้ที่ ~600ms/โค้ดเดิม (กัน
+ยิง rerun รัวเกินไปตอนโค้ดเดิมค้างอยู่ในเฟรม เทียบเท่ากับ debounce=700 ของตัวเดิมที่เคยใช้)
+ไม่ได้ย้าย business logic (คัดเลข order_sn ของ Shopee, cooldown กันบันทึกซ้ำ) ไปไว้ฝั่ง JS เลย
+— ยังคงทำทั้งหมดฝั่ง Python เหมือนเดิมทุกจุด มีแค่ชั้นถอดรหัสภาพที่เปลี่ยน
+
+**พฤติกรรมที่ต้องรักษาไว้ให้เหมือนเดิม**: ใบปะหน้าบางแบบ (เช่น SPX) มีทั้งบาร์โค้ด tracking
+และ QR เส้นทางภายในที่ไม่ใช่เลข tracking ปนอยู่ในใบเดียว — ของเดิมถอดรหัสทั้งภาพทีเดียวเห็น
+ทุกโค้ดพร้อมกัน เลยรู้ได้ว่า "เจอ 2 โค้ด ให้เลือกเอง" แต่ `Html5Qrcode.start()`'s callback ส่ง
+กลับมาทีละโค้ดต่อครั้งที่เจอ ไม่ใช่ทุกโค้ดในเฟรมพร้อมกัน — จำลองพฤติกรรมเดิมด้วย "rolling
+window" ฝั่ง Python แทน (`_PACK_QR_WINDOW_SEC`): เก็บโค้ดทุกตัวที่เพิ่งเห็นภายในช่วงเวลาสั้นๆ
+ไว้ใน session_state ถ้ามีมากกว่า 1 โค้ดที่ไม่ใช่ order_sn ปรากฏพร้อมกันในหน้าต่างเวลานี้ ก็ยัง
+ถามผู้ใช้เลือกเหมือนเดิม — ไม่ได้แปลว่าต้องเห็นพร้อมกันในเฟรมเป๊ะๆ แต่ในทางปฏิบัติกล้องจะส่าย
+เจอสลับไปมาระหว่าง 2 โค้ดในช่วง 1-2 วินาทีที่ส่องค้างอยู่อยู่ดี เลยยังจับคู่ได้เหมือนเดิม
+
+import `streamlit.components.v1` ตรงนี้เลย (ไม่ lazy เหมือน `zxingcpp`/`camera_input_live`
+เดิม) เพราะเป็นส่วนหนึ่งของ Streamlit เองอยู่แล้ว ไม่ใช่ third-party wheel ที่เสี่ยง build พัง
 """
+import os
 import re
 import time
 from datetime import date
 
 import streamlit as st
-from PIL import Image
+import streamlit.components.v1 as components
 
 import database as db
+
+_QR_COMPONENT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qr_scanner_component")
+_qr_scanner = components.declare_component("qr_scanner", path=_QR_COMPONENT_DIR)
+
+# หน้าต่างเวลา (วินาที) ที่ถือว่าโค้ดที่เพิ่งสแกนเจอ "ยังอยู่ในรอบเดียวกัน" — ถ้ามีมากกว่า 1 โค้ด
+# (ไม่นับ order_sn) ปรากฏภายในช่วงนี้ ถือว่าใบเดียวกันมีหลายโค้ดปนกัน ต้องถามผู้ใช้เลือก (ดู
+# คำอธิบายยาวด้านบน) — สั้นไปจะพลาดจับคู่ 2 โค้ดที่ส่ายกล้องเจอห่างกันหน่อย ยาวไปจะค้างโค้ดเก่าที่
+# เลื่อนพ้นเฟรมไปแล้วให้ดูเหมือนยังอยู่
+_PACK_QR_WINDOW_SEC = 1.8
 
 # กันบันทึกซ้ำเลข tracking เดิมถี่เกินไปตอน live-scan — พัสดุชิ้นเดียวอาจยังค้างอยู่ในเฟรม
 # กล้องต่ออีกหลายวินาทีกว่าจะหยิบออก (ต่าง st.camera_input เดิมที่ต้องกดถ่ายใหม่ทุกครั้ง เลย
@@ -78,22 +110,6 @@ _SOURCE_LABELS = {
     "lazada": "Lazada (เดาจากเลข LEX)",
     "shopee": "Shopee (เดา)",
 }
-
-
-def _decode_codes(image: Image.Image) -> list[str]:
-    """ถอดรหัสบาร์โค้ด/QR ทั้งหมดที่เจอในภาพเดียว คืนลิสต์ข้อความไม่ซ้ำ เรียงตามลำดับที่เจอ —
-    แยกเป็นฟังก์ชันล้วน (ไม่แตะ Streamlit) ให้เทสได้โดยไม่ต้องง้อกล้องจริง ใบปะหน้าบางแบบ
-    (เช่น SPX) มีทั้งบาร์โค้ด tracking + QR เส้นทางภายในของขนส่งที่ไม่ใช่เลข tracking อยู่ใน
-    ภาพเดียวกัน — ถ้าเจอมากกว่า 1 รหัส ให้ผู้เรียกถามผู้ใช้เลือกเอง ไม่เดาให้
-    import zxingcpp แบบ lazy (ไม่ใช่ตอน import โมดูลนี้) กันแอปทั้งตัวพังตอน boot ถ้า wheel
-    นี้มีปัญหาบนแพลตฟอร์มไหนที่ไม่คาดคิด — ให้พังเฉพาะตอนกดใช้ฟีเจอร์นี้จริงๆ แทน"""
-    import zxingcpp
-    results = zxingcpp.read_barcodes(image.convert("RGB"))
-    codes = []
-    for r in results:
-        if r.text and r.text not in codes:
-            codes.append(r.text)
-    return codes
 
 
 def _classify_and_save(tracking_no: str, order_sn: str | None = None) -> dict:
@@ -173,81 +189,58 @@ def render():
     if _last:
         _show_result(_last)
 
-    # key คงที่ ไม่ versioned แบบ st.camera_input เดิม — component นี้ไม่ใช่ "ถ่ายแล้วค้างรูปไว้"
-    # แต่สตรีมเฟรมใหม่มาเรื่อยๆ เองอยู่แล้ว ไม่ต้อง force-reset widget ทุกครั้งที่บันทึกสำเร็จ
-    # (ถ้า bump key ทุกครั้ง จะรีสตาร์ท component ใหม่ ผู้ใช้ต้องกด "Start capturing" ซ้ำทุกครั้ง
-    # ที่บันทึกของชิ้นนึงเสร็จ — เสียจุดประสงค์ "ไม่ต้องกดอะไรเลย" ไปเลย)
     try:
-        from camera_input_live import camera_input_live
+        result = _qr_scanner(key="_pack_qr_scanner")
     except Exception as e:
         st.error(f"❌ โหลดกล้องไม่สำเร็จ: {e}")
         st.divider()
         _render_today_log()
         return
 
-    # บังคับความสูง/ความกว้างของ iframe ที่ครอบ component นี้ — เจอจริง 2026-11-04 (user:
-    # "ตรงกล้อง ใช้งานในมือถือ ยังไม่สะดวก" → ถามต่อ: "ปุ่ม/จอเล็กเกินไป มือถือดูยาก") ตรวจสอบ
-    # ด้วย Playwright ที่ viewport มือถือจริง พบว่า `streamlit-camera-input-live`'s main.js เรียก
-    # `Streamlit.setFrameHeight(45)` เสมอตอน showControls=True (ไม่ว่าจะส่ง height/width พารามิเตอร์
-    # อะไรเข้าไปก็ตาม — ค่านั้นคุมแค่ความละเอียดภาพที่ capture ส่งเข้า Python ไม่เกี่ยวกับความสูง
-    # ของ iframe เลย) ผลคือ iframe สูงแค่ 45px จริงๆ — เห็นแค่ปุ่ม "Pause capturing" ไม่เห็น
-    # ภาพพรีวิวกล้องเลยแม้แต่น้อย (ยืนยันจาก screenshot จริง ไม่ใช่แค่เดา) ผู้ใช้เล็งกล้องแบบ
-    # "มองไม่เห็น" มาตลอด — นี่คือสาเหตุหลักที่ทำให้ใช้ยาก ไม่ใช่แค่ปุ่มเล็ก ปัญหานี้เกิดทั้งจอ
-    # มือถือและจอปกติเหมือนกัน (component เรียก setFrameHeight(45) แบบ hardcode ไม่สนขนาดจอ)
-    # แก้โดยส่ง CSS !important ทับ inline style ที่ component เซ็ตซ้ำทุกรอบ (ใช้ !important เพราะ
-    # Streamlit.setFrameHeight() เซ็ต iframe.style.height ตรงๆ ทุก rerun ซึ่งมี specificity สูงกว่า
-    # CSS ปกติ แต่ !important ชนะ inline style เสมอไม่ว่า specificity จะเท่าไหร่) เลือก target ด้วย
-    # title attribute เพราะ Streamlit ตั้งให้อัตโนมัติเป็น "<module>.<function>" ของทุก custom
-    # component เสมอ ("camera_input_live.camera_input_live" ในกรณีนี้) ไม่ต้องเดา class ที่
-    # เปลี่ยนไปมาได้ตามเวอร์ชัน Streamlit — ปรับ width/height พารามิเตอร์ของ component เองให้เป็น
-    # สี่เหลี่ยมจัตุรัสขนาดพอดีจอมือถือทั่วไปด้วย (เดิม 704×530 กว้างเกินจอมือถือส่วนใหญ่)
-    st.markdown(
-        """
-        <style>
-        iframe[title="camera_input_live.camera_input_live"] {
-            height: 460px !important;
-            width: 100% !important;
-            max-width: 420px !important;
-            border-radius: 12px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-    frame = camera_input_live(key="_pack_cam_live", debounce=700, show_controls=True,
-                               width=400, height=400)
+    # component ส่งค่าใหม่ทุกครั้งที่ JS เจอโค้ด (throttle เองฝั่ง JS ไว้แล้ว ~600ms/โค้ดเดิม) —
+    # เช็ค ts กันประมวลผลค่าเดิมซ้ำตอน rerun ด้วยสาเหตุอื่นที่ไม่ใช่โค้ดใหม่จริง (เช่น กดปุ่ม
+    # เลือกโค้ดด้านล่าง ก็ทำให้ render() รันใหม่ทั้งฟังก์ชัน ค่าจาก component จะเป็นค่าเดิมค้างอยู่)
+    if result and result.get("code") and result.get("ts") != st.session_state.get("_pack_qr_last_ts"):
+        st.session_state["_pack_qr_last_ts"] = result["ts"]
+        _now = time.monotonic()
+        _recent = {c: t for c, t in st.session_state.get("_pack_qr_recent", {}).items()
+                   if _now - t < _PACK_QR_WINDOW_SEC}
+        _recent[result["code"]] = _now
+        st.session_state["_pack_qr_recent"] = _recent
 
-    if frame is not None:
-        try:
-            codes = _decode_codes(Image.open(frame))
-        except Exception:
-            codes = []
+    _now = time.monotonic()
+    _recent = {c: t for c, t in st.session_state.get("_pack_qr_recent", {}).items()
+               if _now - t < _PACK_QR_WINDOW_SEC}
+    st.session_state["_pack_qr_recent"] = _recent
+    codes = list(_recent.keys())
 
-        # แยกรหัสที่ "หน้าตาเหมือนเลขที่ออเดอร์ Shopee" ออกมาต่างหากก่อน (ถ้ามี) — ที่เหลือถึง
-        # ไปตีความเป็น "เลข tracking" ตามปกติ กันกรณีใบ Shopee มีทั้ง 2 บาร์โค้ดอยู่ในภาพเดียว
-        # (ยืนยันจากใบจริง) ไม่ให้ผู้ใช้ต้องมานั่งเลือกเองว่าอันไหนคือ tracking อันไหนคือเลขออเดอร์
-        _order_sn = next((c for c in codes if _looks_like_shopee_order_sn(c)), None)
-        _tracking_candidates = [c for c in codes if c != _order_sn]
+    # แยกรหัสที่ "หน้าตาเหมือนเลขที่ออเดอร์ Shopee" ออกมาต่างหากก่อน (ถ้ามี) — ที่เหลือถึง
+    # ไปตีความเป็น "เลข tracking" ตามปกติ กันกรณีใบ Shopee มีทั้ง 2 บาร์โค้ดอยู่ในภาพเดียว
+    # (ยืนยันจากใบจริง) ไม่ให้ผู้ใช้ต้องมานั่งเลือกเองว่าอันไหนคือ tracking อันไหนคือเลขออเดอร์
+    _order_sn = next((c for c in codes if _looks_like_shopee_order_sn(c)), None)
+    _tracking_candidates = [c for c in codes if c != _order_sn]
 
-        if not codes:
-            # เฟรมเปล่า/ยังไม่เจอโค้ด — เรื่องปกติของ live-scan (ยังไม่ได้ส่องตรงโค้ด หรือ
-            # กำลังขยับกล้อง) ไม่ต้องขึ้น error ทุกเฟรมเหมือนตอนเป็นถ่ายทีละรูป แค่บอกเฉยๆ ว่า
-            # กำลังหาอยู่ กันข้อความ error กระพริบถี่จนรำคาญ
-            st.caption("👀 กำลังหาบาร์โค้ด/QR...")
-        elif len(_tracking_candidates) == 1:
-            if _try_save(_tracking_candidates[0], _order_sn):
-                st.rerun()
-        elif not _tracking_candidates and _order_sn:
-            # เจอแต่เลขที่ออเดอร์ ไม่มีบาร์โค้ด tracking ติดมาด้วยเลย (เช่น มุมกล้องเห็นไม่ครบใบ) —
-            # ใช้เลขออเดอร์เป็น tracking_no ไปก่อน ยังดีกว่าไม่บันทึกอะไรเลย
-            if _try_save(_order_sn, _order_sn):
-                st.rerun()
-        else:
-            st.warning(f"พบ {len(_tracking_candidates)} รหัสที่อาจเป็นเลข tracking — เลือกอันที่ถูก:")
-            for c in _tracking_candidates:
-                if st.button(f"✅ {c}", key=f"_pack_pick_{c}", width="stretch"):
-                    if _try_save(c, _order_sn):
-                        st.rerun()
+    if not codes:
+        # ยังไม่เจอโค้ดเลย/โค้ดที่เคยเห็นหลุดพ้นหน้าต่างเวลาไปแล้ว — เรื่องปกติของ live-scan
+        # ไม่ต้องขึ้น error ทุกครั้งเหมือนตอนเป็นถ่ายทีละรูป แค่บอกเฉยๆ ว่ากำลังหาอยู่
+        st.caption("👀 กำลังหาบาร์โค้ด/QR...")
+    elif len(_tracking_candidates) == 1:
+        if _try_save(_tracking_candidates[0], _order_sn):
+            st.session_state.pop("_pack_qr_recent", None)
+            st.rerun()
+    elif not _tracking_candidates and _order_sn:
+        # เจอแต่เลขที่ออเดอร์ ไม่มีบาร์โค้ด tracking ติดมาด้วยเลย (เช่น มุมกล้องเห็นไม่ครบใบ) —
+        # ใช้เลขออเดอร์เป็น tracking_no ไปก่อน ยังดีกว่าไม่บันทึกอะไรเลย
+        if _try_save(_order_sn, _order_sn):
+            st.session_state.pop("_pack_qr_recent", None)
+            st.rerun()
+    else:
+        st.warning(f"พบ {len(_tracking_candidates)} รหัสที่อาจเป็นเลข tracking — เลือกอันที่ถูก:")
+        for c in _tracking_candidates:
+            if st.button(f"✅ {c}", key=f"_pack_pick_{c}", width="stretch"):
+                if _try_save(c, _order_sn):
+                    st.session_state.pop("_pack_qr_recent", None)
+                    st.rerun()
 
     st.divider()
     _render_today_log()
