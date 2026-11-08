@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta, timezone
 import database as db
 import iship_api
 import shipment_status
-from ui_helpers import _to_bkk, BOX_WEIGHT_G, _esc
+from ui_helpers import _to_bkk, BOX_WEIGHT_G, _esc, parse_manual_box_notes
 
 
 def render(customers):
@@ -356,16 +356,7 @@ def render(customers):
                     _pr_m_row = _pr_manual_rows[_pr_m_labels.index(_pr_m_sel)]
                     _src   = iship_api._src()
                     _notes = _pr_m_row.get("notes") or ""
-                    _box_rows = []
-                    _bm = re.search(r"\[กล่อง:\s*(.*?)\]", _notes)
-                    if _bm:
-                        for _part in _bm.group(1).split(";"):
-                            _pm = re.match(r"\s*(\d+)x(\d+)x(\d+)cm\s+([\d.]+)kg\s+x(\d+)", _part)
-                            if _pm:
-                                _l, _w, _h, _wt, _qty = _pm.groups()
-                                _box_rows.append({"l": int(_l), "w": int(_w), "h": int(_h),
-                                                   "weight_kg": float(_wt), "qty": int(_qty)})
-                    _extra_notes = _notes.split("]", 1)[1].strip() if "]" in _notes else ""
+                    _box_rows, _extra_notes = parse_manual_box_notes(_notes)
                     _total_boxes = sum(r["qty"] for r in _box_rows)
                     _box_rows_html = "".join(
                         f"<tr><td>{r['l']}×{r['w']}×{r['h']} ซม.</td>"

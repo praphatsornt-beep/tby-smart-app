@@ -40,6 +40,26 @@ def _esc(text) -> str:
     พิมพ์มาเอง (เช่นผ่าน LINE OA) แล้วพนักงานคัดลอกมาคำนวณ/ปริ้นต่อ"""
     return html.escape(str(text), quote=True)
 
+
+def parse_manual_box_notes(notes: str) -> tuple[list[dict], str]:
+    """แกะรายการกล่อง (ขนาด/น้ำหนัก/จำนวน) ที่ถูกฝังไว้เป็น tag `[กล่อง: LxWxHcm WTkg xQTY; ...]`
+    ใน shipments.notes ตอนบันทึกจาก 📮 ส่ง Manual (ดู record_ui.py's "🖨️ พิมพ์ใบปะหน้า +
+    บันทึกประวัติ") — ใช้ร่วมกันทั้ง shipment_history_ui.py (ปริ้นใบปะหน้าซ้ำ) และ record_ui.py
+    (ใบแปะใบขนส่งสรุปรวมหลายที่อยู่) กันแยก regex คนละชุดแล้ว drift — คืน (box_rows, extra_notes)
+    extra_notes คือข้อความหมายเหตุอื่นที่พิมพ์เพิ่มต่อท้าย tag (ถ้ามี)"""
+    notes = notes or ""
+    box_rows = []
+    m = re.search(r"\[กล่อง:\s*(.*?)\]", notes)
+    if m:
+        for part in m.group(1).split(";"):
+            pm = re.match(r"\s*(\d+)x(\d+)x(\d+)cm\s+([\d.]+)kg\s+x(\d+)", part)
+            if pm:
+                l, w, h, wt, qty = pm.groups()
+                box_rows.append({"l": int(l), "w": int(w), "h": int(h),
+                                  "weight_kg": float(wt), "qty": int(qty)})
+    extra_notes = notes.split("]", 1)[1].strip() if "]" in notes else ""
+    return box_rows, extra_notes
+
 _TAMBON_PREFIXES = ["ตำบล", "ต.", "แขวง"]
 _AMPHURE_PREFIXES = ["อำเภอ", "อ.", "เขต"]
 

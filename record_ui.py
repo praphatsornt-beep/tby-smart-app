@@ -15,7 +15,7 @@ from ui_helpers import (
     _quick_add_customer, _extract_tracking, _build_success_info,
     _process_old_items_receipt, _pick_carrier, _parse_quick_order,
     get_bulky_presets, _render_cart_card, _cart_add_items, _guard_double_submit,
-    _esc, goto_customer_bills,
+    _esc, goto_customer_bills, _to_bkk, parse_manual_box_notes,
 )
 import carriers as carr
 
@@ -2869,4 +2869,101 @@ align-items:center;gap:0.22in;overflow:hidden}}
 </body></html>"""
                                 st.iframe(_sticker_html, height=650)
                                 st.caption(f"พิมพ์ {_sticker_total} ใบ (1 ใบ/กล่อง) ขนาด A6 — ตัดแยกแล้วแปะหน้ากล่องแต่ละใบ")
+
+            # ── ใบแปะใบขนส่ง (สรุปรวมหลายที่อยู่) ──────────────────────────────
+            # คนละใบกับ "ใบปะหน้า"/"ใบปะหน้ากล่องแบบใหญ่" ด้านบน (ต่อ 1 ที่อยู่/บิล) — ใบนี้
+            # ดึงประวัติ manual shipment ที่เคยบันทึกไว้แล้วหลายใบมารวมเป็นสรุปเดียว ให้เลือกเอง
+            # ว่าจะรวมใบไหนบ้าง (ยืนยันกับ user ผ่าน AskUserQuestion 2026-11-08 — ไม่ auto scope
+            # "วันนี้" ให้เลือกเอง) บอกว่าแต่ละที่อยู่มีกล่องขนาดไหนกี่ใบ รวมกี่กล่องทั้งหมด
+            # เอาไปแปะบนใบนำส่งของขนส่งตอนไปที่เคาน์เตอร์ Inter Express — ไม่ผูกกับการพิมพ์/
+            # คำนวณกล่องด้านบนเลย ทำงานอิสระจาก session ปัจจุบัน อ่านจาก shipments ล้วนๆ
+            st.divider()
+            st.subheader("📑 ใบแปะใบขนส่ง (สรุปรวมหลายที่อยู่)")
+            st.caption("รวมหลายใบปะหน้าที่เคยพิมพ์ + บันทึกประวัติไว้แล้ว (ปุ่ม \"🖨️ พิมพ์ใบปะหน้า + "
+                       "บันทึกประวัติ\" ด้านบน) เป็นใบสรุปเดียว — บอกว่าแต่ละที่อยู่มีกล่องขนาดไหนกี่ใบ "
+                       "รวมกี่กล่องทั้งหมด เอาไปแปะบนใบนำส่งของขนส่งตอนไปที่เคาน์เตอร์")
+
+            _wbs_all = [s for s in db.get_shipments() if s.get("source") == "manual"]
+            if not _wbs_all:
+                st.info("ยังไม่มีประวัติการส่งแบบ manual เลย — พิมพ์ \"ใบปะหน้า + บันทึกประวัติ\" อย่างน้อย 1 ใบก่อน")
+            else:
+                # get_shipments() เรียง created_at desc มาแล้ว — ตัดโชว์แค่ 50 ใบล่าสุดกันลิสต์
+                # ยาวเกินจำเป็น (เพียงพอสำหรับงานสะสมหลายวันแล้ว ไม่ใช่แค่วันเดียว)
+                _wbs_all = _wbs_all[:50]
+                _wbs_opts = {}
+                for _s in _wbs_all:
+                    _wbs_rows, _ = parse_manual_box_notes(_s.get("notes") or "")
+                    _wbs_box_cnt = sum(r["qty"] for r in _wbs_rows)
+                    _wbs_lbl = f"{_to_bkk(_s.get('created_at') or '')} · {_s.get('recipient_name','')} · {_wbs_box_cnt} กล่อง"
+                    _wbs_opts[_wbs_lbl] = _s
+
+                _wbs_sel_labels = st.multiselect(
+                    "เลือกใบที่จะรวม (50 ใบล่าสุด — เลือกได้หลายใบ)",
+                    list(_wbs_opts.keys()), key="_wbs_sel",
+                )
+
+                if _wbs_sel_labels and st.button("🖨️ ปริ้นใบแปะใบขนส่ง (สรุปรวม)", type="primary", key="_wbs_print_btn"):
+                    _wbs_sel_rows = [_wbs_opts[_l] for _l in _wbs_sel_labels]
+                    _src3 = iship_api._src()
+                    _addr_blocks = ""
+                    _grand_total_boxes = 0
+                    _size_totals: dict = {}  # (l,w,h) -> qty รวมทุกที่อยู่ (สรุปท้ายใบ)
+                    for _s in _wbs_sel_rows:
+                        _wbs_rows, _wbs_extra = parse_manual_box_notes(_s.get("notes") or "")
+                        _addr_total = sum(r["qty"] for r in _wbs_rows)
+                        _grand_total_boxes += _addr_total
+                        _box_lines = ""
+                        for r in _wbs_rows:
+                            _size_key = (r["l"], r["w"], r["h"])
+                            _size_totals[_size_key] = _size_totals.get(_size_key, 0) + r["qty"]
+                            _box_lines += (f"<tr><td>{r['l']}×{r['w']}×{r['h']} ซม.</td>"
+                                           f"<td style='text-align:center'>{r['weight_kg']:.2f} kg</td>"
+                                           f"<td style='text-align:center'>{r['qty']}</td></tr>")
+                        _addr_full = " ".join(filter(None, [
+                            _s.get("address_line", ""), _s.get("district", ""), _s.get("amphure", ""),
+                            _s.get("province", ""), _s.get("postal_code", ""),
+                        ]))
+                        _addr_blocks += f"""<div class="addr-block">
+<div class="addr-head"><b>👤 {_esc(_s.get('recipient_name',''))}</b> · โทร. {_esc(_s.get('phone',''))}</div>
+<div class="addr-line">{_esc(_addr_full)}</div>
+<table><tr><th>ขนาด</th><th>น้ำหนัก/กล่อง</th><th>จำนวน</th></tr>{_box_lines}</table>
+<div class="addr-total">รวมที่อยู่นี้: {_addr_total} กล่อง</div>
+</div>"""
+                    _size_rows_html = "".join(
+                        f"<tr><td>{l}×{w}×{h} ซม.</td><td style='text-align:center'>{qty}</td></tr>"
+                        for (l, w, h), qty in sorted(_size_totals.items(), key=lambda x: -x[1])
+                    )
+                    _wbs_html = f"""<!DOCTYPE html><html><head><meta charset='UTF-8'>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+html,body{{background:#fff!important;color:#000!important}}
+body{{font-family:'Prompt',sans-serif;padding:16px;font-size:13px}}
+.header{{border-bottom:2px solid #000;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}}
+.header h1{{font-size:18px;font-weight:700}}
+.header-right{{text-align:right;font-size:13px;font-weight:600}}
+.addr-block{{margin:10px 0;padding:8px 0;border-bottom:1px dashed #999}}
+.addr-head{{font-size:14px;margin-bottom:2px}}
+.addr-line{{font-size:12px;color:#333;margin-bottom:4px}}
+.addr-total{{font-size:12px;font-weight:700;margin-top:4px;text-align:right}}
+table{{width:100%;border-collapse:collapse;margin:4px 0;border:1px solid #000}}
+th{{background:#000;color:#fff;padding:4px 6px;font-size:11px;text-align:left;border:1px solid #000}}
+td{{padding:3px 6px;border:1px solid #aaa;font-size:11px;color:#000}}
+tr:nth-child(even) td{{background:#f0f0f0}}
+.grand{{margin-top:16px;padding-top:10px;border-top:2px solid #000;font-size:15px;font-weight:700}}
+.btn{{display:block;margin:0 0 12px;padding:6px 22px;background:#c0392b;color:#fff;border:none;cursor:pointer;border-radius:5px;font-size:13px}}
+@media print{{.btn{{display:none}} @page{{size:A4 portrait;margin:12mm}} *{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} th{{background:#000!important;color:#fff!important}} tr:nth-child(even) td{{background:#eee!important}}}}
+</style></head><body>
+<button class='btn' onclick='window.print()'>🖨️ พิมพ์ใบแปะใบขนส่ง</button>
+<div class="header">
+<div><h1>ใบแปะใบขนส่ง — Inter Express ({len(_wbs_sel_rows)} ที่อยู่)</h1></div>
+<div class="header-right">ผู้ส่ง: {_esc(_src3.get('ISHIP_SRC_NAME',''))}<br>วันที่พิมพ์: {date.today().strftime('%d/%m/%Y')}</div>
+</div>
+{_addr_blocks}
+<div class="grand">
+📦 รวมทั้งหมด: {len(_wbs_sel_rows)} ที่อยู่ &nbsp;·&nbsp; {_grand_total_boxes} กล่อง
+<table style="margin-top:8px"><tr><th>ขนาดกล่อง</th><th>รวมจำนวน</th></tr>{_size_rows_html}</table>
+</div>
+</body></html>"""
+                    st.iframe(_wbs_html, height=600)
+                    st.caption(f"รวม {len(_wbs_sel_rows)} ที่อยู่ · {_grand_total_boxes} กล่อง")
 
