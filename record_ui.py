@@ -2277,6 +2277,16 @@ def render(tab1, products, customers, customer_map):
                             _line_btn_slot.caption("👤 ยังไม่มี LINE ID")
 
         elif _sub_active == "📮 ส่ง Manual":
+            # กู้คืน widget ที่อาจโดน Streamlit ลืมทิ้งถ้ามีอะไรเรียก st.rerun() ก่อนถึง
+            # widget พวกนี้ในบางรอบ (เช่น ตอนเพิ่งเปิด "ปริ้นใบปะหน้า" ใหม่หลังจากเคยกรอกไว้
+            # ก่อนปิด, หรือกดเพิ่มกล่อง/รหัสสินค้าก่อนที่อยู่จะ render) — pattern เดียวกับ
+            # 📝 บันทึกขาย/📦 ส่งของ ดูคอมเมนต์ยาวที่ต้นแท็บ ส่งของ
+            for _lbl_wk in ("_lbl_name", "_lbl_phone", "_lbl_addr_line", "_lbl_district",
+                             "_lbl_amphure", "_lbl_province", "_lbl_zip"):
+                _lbl_shk = f"_lbl_shadow_{_lbl_wk}"
+                if _lbl_wk not in st.session_state and _lbl_shk in st.session_state:
+                    st.session_state[_lbl_wk] = st.session_state[_lbl_shk]
+
             st.subheader("📦 แบ่งกล่อง + ปริ้นใบปะหน้า — Inter Express")
             st.caption("พิมพ์รหัสสินค้าแบบ LINE OA แล้วกดคำนวณ — เอาไปส่งที่เคาน์เตอร์ Inter Express "
                        "เองโดยตรง เรทเดียวทั่วประเทศ ไม่ต้องใส่รหัสไปรษณีย์ปลายทาง (ไม่มีค่าพื้นที่ห่างไกล) "
@@ -2415,46 +2425,166 @@ def render(tab1, products, customers, customer_map):
                             if _lfk in st.session_state:
                                 st.session_state[_lwk] = st.session_state.pop(_lfk)
 
-                        _lbl_cust_opts = ["-- พิมพ์เอง --"] + sorted(customer_map.keys(), key=str.casefold)
-                        _lbl_cust_sel  = st.selectbox("ลูกค้า/ผู้รับ", _lbl_cust_opts, key="_lbl_cust_sel")
-                        _lbl_cust_id  = None
-                        _lbl_addr_sig = None
-                        _lbl_seed     = {}
-                        if _lbl_cust_sel != "-- พิมพ์เอง --":
-                            _lbl_cust_obj = customer_map[_lbl_cust_sel]
-                            _lbl_cust_id  = _lbl_cust_obj["id"]
-                            _lbl_addrs = db.get_customer_addresses(_lbl_cust_id)
-                            if _lbl_addrs:
-                                _lbl_addr_labels = [
-                                    f"{a.get('recipient_name','')} · {a.get('phone','')} · "
-                                    f"{a.get('address_line','')} {a.get('district','')} {a.get('amphure','')} {a.get('province','')} {a.get('postal_code','')}"
-                                    for a in _lbl_addrs
-                                ]
-                                _lbl_addr_sel = st.selectbox("ที่อยู่ที่บันทึกไว้", _lbl_addr_labels, key="_lbl_addr_sel")
-                                _lbl_seed     = _lbl_addrs[_lbl_addr_labels.index(_lbl_addr_sel)]
-                                _lbl_addr_sig = (_lbl_cust_id, _lbl_addr_sel)
-                            else:
-                                st.caption("ลูกค้านี้ยังไม่มีที่อยู่บันทึกไว้ — กรอกเองด้านล่าง")
+                        # ── เลือกลูกค้า/ผู้รับ — ทำเหมือน 📦 ส่งของ เป๊ะๆ ตามคำขอ user
+                        # 2026-11-08 (เดิมหน้านี้มีแค่ selectbox เดียว "ลูกค้า/ผู้รับ" +
+                        # เลือกที่อยู่ที่บันทึกไว้แบบ dropdown ธรรมดา ไม่มี quick-add/ค้นเบอร์
+                        # อัตโนมัติ/ยืนยันคนส่งเหมือน 2 แท็บโน้นเลย) ──────────────────────
+                        _lbl_picked = st.session_state.get("_lbl_cust_picked", "")
+                        if _lbl_picked:
+                            _lblx, _lbly = st.columns([5, 1])
+                            _lblx.success(f"👤 **{_lbl_picked}**")
+                            if _lbly.button("✕ เปลี่ยน", key="_lbl_cust_clear"):
+                                st.session_state.pop("_lbl_cust_picked", None)
+                                st.session_state.pop("lbl_cust_search", None)
+                                st.rerun()
+                            _lbl_cust_name = _lbl_picked
+                        else:
+                            _lbl_cust_opts = sorted(customer_map.keys(), key=str.casefold)
+                            _lbl_cust_sel  = st.selectbox(
+                                "ลูกค้า/ผู้รับ", _lbl_cust_opts, index=None,
+                                placeholder="เลือกลูกค้า หรือพิมพ์ค้นหา... (เว้นว่างได้ถ้าจะพิมพ์ผู้รับเอง)",
+                                key="lbl_cust_search",
+                            )
+                            _lbl_cust_name = "— เลือกลูกค้า —"
+                            if _lbl_cust_sel:
+                                st.session_state["_lbl_cust_picked"] = _lbl_cust_sel
+                                st.rerun()
+                            _quick_add_customer("lbl_")
+                        _lbl_cust_id = (customer_map[_lbl_cust_name]["id"]
+                                        if _lbl_cust_name != "— เลือกลูกค้า —" else None)
 
-                        # ที่อยู่ที่เลือกเปลี่ยนไปจากเดิม → stage แล้ว rerun เพื่อเติมให้ widget ด้านล่าง
-                        if _lbl_addr_sig is not None and _lbl_addr_sig != st.session_state.get("_lbl_addr_applied"):
-                            st.session_state["_lbl_addr_applied"] = _lbl_addr_sig
-                            st.session_state["_lbl_fr_name"]  = _lbl_seed.get("recipient_name", "") or ""
-                            st.session_state["_lbl_fr_phone"] = _lbl_seed.get("phone", "") or ""
-                            st.session_state["_lbl_fr_al"]    = _lbl_seed.get("address_line", "") or ""
-                            st.session_state["_lbl_fr_dt"]    = _lbl_seed.get("district", "") or ""
-                            st.session_state["_lbl_fr_am"]    = _lbl_seed.get("amphure", "") or ""
-                            st.session_state["_lbl_fr_pv"]    = _lbl_seed.get("province", "") or ""
-                            st.session_state["_lbl_fr_zip"]   = _lbl_seed.get("postal_code", "") or ""
-                            # ตั้งค่า searchbox ของตำบลตรงๆ (ไม่ใช้ value= เฉยๆ เพราะถ้า
-                            # key นี้เคยมีอยู่แล้ว Streamlit จะไม่ยอมอัปเดตค่าที่แสดงให้)
-                            st.session_state["_lbl_dt_searchbox"] = _lbl_seed.get("district", "") or ""
-                            st.session_state["_lbl_amphure_searchbox"] = _lbl_seed.get("amphure", "") or ""
-                            st.rerun()
+                        # ── reset ที่อยู่เมื่อสลับลูกค้าจริงๆ (ไม่ใช่ครั้งแรกที่เลือก) ──
+                        if _lbl_cust_id:
+                            _lbl_prev_cid = st.session_state.get("_lbl_prev_cid")
+                            if _lbl_prev_cid and _lbl_prev_cid != _lbl_cust_id:
+                                for _k in ("_lbl_name", "_lbl_phone", "_lbl_addr_line", "_lbl_district",
+                                           "_lbl_amphure", "_lbl_province", "_lbl_zip"):
+                                    st.session_state[_k] = ""
+                                st.session_state.pop("_lbl_dt_searchbox", None)
+                                st.session_state.pop("_lbl_amphure_searchbox", None)
+                            st.session_state["_lbl_prev_cid"] = _lbl_cust_id
+                        else:
+                            st.session_state.pop("_lbl_prev_cid", None)
+
+                        # ── ที่อยู่เดิมของลูกค้านี้ — auto-fill ถ้ามีแค่ 1 รายการ, expander
+                        # ให้เลือกถ้ามี 2+ (เหมือน ส่งของ/บันทึกขาย) ──────────────────────
+                        if _lbl_cust_id:
+                            try:
+                                _lbl_saved = db.get_customer_addresses(customer_id=_lbl_cust_id)
+                            except Exception as _lbl_load_e:
+                                _lbl_saved = []
+                                st.caption(f"⚠️ โหลดที่อยู่เดิมไม่สำเร็จ: {_lbl_load_e}")
+                            if len(_lbl_saved) == 1 and st.session_state.get("_lbl_addr_auto_cid") != _lbl_cust_id:
+                                _sa = _lbl_saved[0]
+                                st.session_state["_lbl_addr_auto_cid"] = _lbl_cust_id
+                                st.session_state["_lbl_fr_name"]  = _sa.get("recipient_name", "") or ""
+                                st.session_state["_lbl_fr_phone"] = _sa.get("phone", "") or ""
+                                st.session_state["_lbl_fr_al"]    = _sa.get("address_line", "") or ""
+                                st.session_state["_lbl_fr_dt"]    = _sa.get("district", "") or ""
+                                st.session_state["_lbl_fr_am"]    = _sa.get("amphure", "") or ""
+                                st.session_state["_lbl_fr_pv"]    = _sa.get("province", "") or ""
+                                st.session_state["_lbl_fr_zip"]   = _sa.get("postal_code", "") or ""
+                                st.session_state["_lbl_dt_searchbox"] = _sa.get("district", "") or ""
+                                st.session_state["_lbl_amphure_searchbox"] = _sa.get("amphure", "") or ""
+                                st.session_state["_lbl_last_rph_fill"] = _sa.get("phone", "") or ""
+                                st.rerun()
+                            elif len(_lbl_saved) > 1:
+                                with st.expander(f"⚡ ที่อยู่เดิม ({len(_lbl_saved)} รายการ)", expanded=False):
+                                    for _sa in _lbl_saved:
+                                        _sa_lbl = (f"📍 {_sa.get('recipient_name','')}  {_sa.get('phone','')}  "
+                                                   f"{_sa.get('address_line','')} {_sa.get('district','')} "
+                                                   f"{_sa.get('amphure','')} {_sa.get('province','')} {_sa.get('postal_code','')}")
+                                        if st.button(_sa_lbl, key=f"_lbl_qa_{_sa['id']}", width="content"):
+                                            st.session_state["_lbl_fr_name"]  = _sa.get("recipient_name", "") or ""
+                                            st.session_state["_lbl_fr_phone"] = _sa.get("phone", "") or ""
+                                            st.session_state["_lbl_fr_al"]    = _sa.get("address_line", "") or ""
+                                            st.session_state["_lbl_fr_dt"]    = _sa.get("district", "") or ""
+                                            st.session_state["_lbl_fr_am"]    = _sa.get("amphure", "") or ""
+                                            st.session_state["_lbl_fr_pv"]    = _sa.get("province", "") or ""
+                                            st.session_state["_lbl_fr_zip"]   = _sa.get("postal_code", "") or ""
+                                            st.session_state["_lbl_dt_searchbox"] = _sa.get("district", "") or ""
+                                            st.session_state["_lbl_amphure_searchbox"] = _sa.get("amphure", "") or ""
+                                            st.session_state["_lbl_addr_auto_cid"] = _lbl_cust_id
+                                            st.session_state["_lbl_last_rph_fill"] = _sa.get("phone", "") or ""
+                                            st.rerun()
+
+                        # ── แยกที่อยู่อัตโนมัติจากข้อความ LINE ───────────────────────
+                        if st.button("📍 แยกที่อยู่อัตโนมัติ", key="_lbl_parse_open_btn"):
+                            st.session_state["_lbl_parse_open"] = not st.session_state.get("_lbl_parse_open", False)
+                        if st.session_state.get("_lbl_parse_open"):
+                            _lbl_paste = st.text_area(
+                                "วางที่อยู่จาก LINE (iShip format)", key="_lbl_paste_addr", height=100,
+                                placeholder="Boo Mee\nสวนหลวง/ Suan Luang,\nกรุงเทพมหานคร/ Bangkok,\n10250  14 Rama IX Soi 41\n0617490976",
+                            )
+                            _lblpc1, _lblpc2 = st.columns([1, 1])
+                            if _lblpc1.button("✅ ตกลง", key="_lbl_parse_btn", type="primary"):
+                                _lbl_parsed = _parse_iship_address(_lbl_paste)
+                                st.session_state["_lbl_fr_name"]  = _lbl_parsed.get("dst_name", "")
+                                st.session_state["_lbl_fr_phone"] = _lbl_parsed.get("dst_phone", "")
+                                st.session_state["_lbl_fr_al"]    = _lbl_parsed.get("address_line", "")
+                                st.session_state["_lbl_fr_dt"]    = _lbl_parsed.get("district", "")
+                                st.session_state["_lbl_fr_am"]    = _lbl_parsed.get("amphure", "")
+                                st.session_state["_lbl_fr_pv"]    = _lbl_parsed.get("province", "")
+                                st.session_state["_lbl_fr_zip"]   = _lbl_parsed.get("zipcode", "")
+                                st.session_state["_lbl_dt_searchbox"] = _lbl_parsed.get("district", "")
+                                st.session_state["_lbl_amphure_searchbox"] = _lbl_parsed.get("amphure", "")
+                                st.session_state["_lbl_parse_open"] = False
+                                st.rerun()
+                            if _lblpc2.button("ยกเลิก", key="_lbl_parse_cancel"):
+                                st.session_state["_lbl_parse_open"] = False
+                                st.rerun()
+                        st.divider()
+
+                        # ── ค้นหาที่อยู่จากเบอร์โทรอัตโนมัติ ─────────────────────────
+                        _lbl_cur_phone = st.session_state.get("_lbl_phone", "")
+                        if len(_lbl_cur_phone.strip()) == 10 and st.session_state.get("_lbl_last_rph_fill") != _lbl_cur_phone.strip():
+                            try:
+                                _lbl_rph_addr = db.get_address_by_phone(_lbl_cur_phone.strip())
+                            except Exception:
+                                _lbl_rph_addr = None
+                            st.session_state["_lbl_last_rph_fill"] = _lbl_cur_phone.strip()
+                            st.session_state["_lbl_phone_match_name"] = (
+                                (_lbl_rph_addr.get("customers") or {}).get("name", "") if _lbl_rph_addr else ""
+                            )
+                            st.session_state["_lbl_phone_match_cid"] = (
+                                _lbl_rph_addr.get("customer_id", "") if _lbl_rph_addr else ""
+                            )
+                            if _lbl_rph_addr:
+                                for _k, _v in [
+                                    ("_lbl_name",     _lbl_rph_addr.get("recipient_name") or ""),
+                                    ("_lbl_addr_line",_lbl_rph_addr.get("address_line") or ""),
+                                    ("_lbl_district", _lbl_rph_addr.get("district") or ""),
+                                    ("_lbl_amphure",  _lbl_rph_addr.get("amphure") or ""),
+                                    ("_lbl_province", _lbl_rph_addr.get("province") or ""),
+                                ]:
+                                    if _v: st.session_state[_k] = _v
+                                if _lbl_rph_addr.get("district"):
+                                    st.session_state["_lbl_dt_searchbox"] = _lbl_rph_addr["district"]
+                                if _lbl_rph_addr.get("amphure"):
+                                    st.session_state["_lbl_amphure_searchbox"] = _lbl_rph_addr["amphure"]
+                                if _lbl_rph_addr.get("postal_code"):
+                                    st.session_state["_lbl_zip"] = _lbl_rph_addr["postal_code"]
+                                st.session_state["_lbl_matched_addr_cid"]   = _lbl_rph_addr.get("customer_id", "")
+                                st.session_state["_lbl_matched_addr_phone"] = _lbl_cur_phone.strip()
 
                         _lc1, _lc2 = st.columns(2)
                         _lbl_name  = _lc1.text_input("ชื่อผู้รับ", key="_lbl_name")
                         _lbl_phone = _lc2.text_input("เบอร์โทร", key="_lbl_phone", max_chars=10)
+                        _warn_duplicate_phone(_lbl_phone, _lbl_cust_id or "")
+                        _lbl_phone_match_name = st.session_state.get("_lbl_phone_match_name", "")
+                        if _lbl_phone_match_name and not st.session_state.get("_lbl_cust_picked"):
+                            st.info(f"📍 เบอร์นี้เคยส่งที่อยู่นี้ไว้ในชื่อลูกค้า **{_lbl_phone_match_name}** — ใช่คนนี้ไหมคะ?")
+                            _lblm_c1, _lblm_c2 = st.columns(2)
+                            if _lblm_c1.button(f"✅ ใช่ {_lbl_phone_match_name}", key="_lbl_phone_match_confirm", width="stretch"):
+                                st.session_state["_lbl_cust_picked"] = _lbl_phone_match_name
+                                st.session_state["_lbl_prev_cid"] = st.session_state.get("_lbl_phone_match_cid", "")
+                                st.session_state.pop("_lbl_phone_match_name", None)
+                                st.session_state.pop("_lbl_phone_match_cid", None)
+                                st.rerun()
+                            if _lblm_c2.button("🔁 เปลี่ยนคนส่ง", key="_lbl_phone_match_reject", width="stretch"):
+                                st.session_state.pop("_lbl_phone_match_name", None)
+                                st.session_state.pop("_lbl_phone_match_cid", None)
+                                st.rerun()
                         _lbl_addr_line = st.text_input("ที่อยู่ (บ้านเลขที่/ถนน)", key="_lbl_addr_line")
                         _la1, _la2, _la3, _la4 = st.columns(4)
                         with _la1:
@@ -2470,6 +2600,39 @@ def render(tab1, products, customers, customer_map):
                                           "_lbl_dt_searchbox", "_lbl_pc_suggest",
                                           stage_dt="_lbl_fr_dt", stage_am="_lbl_fr_am", stage_pv="_lbl_fr_pv",
                                           am_searchbox_key="_lbl_amphure_searchbox")
+
+                        # echo ค่าจริงไว้ใน shadow ทันทีหลัง widget ทั้งก้อนนี้ render สำเร็จ —
+                        # ป้องกันค่าหายตอนมีอะไรเรียก st.rerun() ก่อนถึง widget พวกนี้ในรอบถัดไป
+                        st.session_state["_lbl_shadow__lbl_name"]       = _lbl_name
+                        st.session_state["_lbl_shadow__lbl_phone"]      = _lbl_phone
+                        st.session_state["_lbl_shadow__lbl_addr_line"] = _lbl_addr_line
+                        st.session_state["_lbl_shadow__lbl_district"]  = _lbl_district
+                        st.session_state["_lbl_shadow__lbl_amphure"]   = _lbl_amphure
+                        st.session_state["_lbl_shadow__lbl_province"]  = _lbl_province
+                        st.session_state["_lbl_shadow__lbl_zip"]       = _lbl_zip
+
+                        # เปลี่ยนเบอร์แต่ที่อยู่/รายละเอียดเดิม — อัปเดตเบอร์ของที่อยู่เดิมได้เลย
+                        # โดยไม่ต้องเลือกลูกค้าก่อน (เหมือน ส่งของ)
+                        _lbl_matched_cid   = st.session_state.get("_lbl_matched_addr_cid", "")
+                        _lbl_matched_phone = st.session_state.get("_lbl_matched_addr_phone", "")
+                        _lbl_phone_now     = _lbl_phone.strip()
+                        if (_lbl_matched_cid and _lbl_matched_phone and len(_lbl_phone_now) == 10
+                                and _lbl_phone_now != _lbl_matched_phone and is_valid_phone(_lbl_phone_now)):
+                            st.caption(f"📞 เบอร์เปลี่ยนจาก {_lbl_matched_phone} — ที่อยู่/รายละเอียดเดิม กดอัปเดตเบอร์ได้โดยไม่ต้องเลือกลูกค้า")
+                            if st.button(f"🔄 อัปเดตเบอร์โทรที่อยู่นี้เป็น {_lbl_phone_now}", key="_lbl_update_phone_addr"):
+                                db.upsert_customer_address({
+                                    "id":             str(uuid.uuid4()),
+                                    "customer_id":    _lbl_matched_cid,
+                                    "recipient_name": _lbl_name,
+                                    "phone":          _lbl_phone_now,
+                                    "address_line":   _lbl_addr_line,
+                                    "district":       _lbl_district,
+                                    "amphure":        _lbl_amphure,
+                                    "province":       _lbl_province,
+                                    "postal_code":    _lbl_zip,
+                                })
+                                st.session_state["_lbl_matched_addr_phone"] = _lbl_phone_now
+                                st.success("✅ อัปเดตเบอร์โทรที่อยู่นี้แล้ว")
 
                         if _lbl_cust_id:
                             if st.button("💾 บันทึกที่อยู่นี้", key="_lbl_save_addr_btn"):
@@ -2622,8 +2785,15 @@ tr:nth-child(even) td{{background:#f0f0f0}}
                                     "notes":         _full_notes,
                                     "source":        "manual",
                                 })
-                                st.session_state["_lbl_box_rows"] = []
-                                st.success("✅ บันทึกประวัติการส่งแล้ว — ดูได้ที่แท็บ 🚚 ประวัติการส่ง")
+                                # เดิมล้าง _lbl_box_rows ทิ้งทันทีหลังบันทึก — ทำให้กดปุ่มนี้
+                                # แล้วจะกด "🏷️ ปริ้นใบปะหน้ากล่อง (แบบใหญ่)" ต่อ รายการกล่อง/
+                                # ที่อยู่ที่เพิ่งกรอกหายไปหมด ต้องเพิ่มกล่องใหม่ซ้ำ (user report
+                                # 2026-11-08) — ทั้งที่ปุ่มใบใหญ่ตั้งใจให้พิมพ์ต่อจากข้อมูลชุดเดียวกัน
+                                # นี้อยู่แล้ว (ดูคอมเมนต์ที่ปุ่มนั้นด้านล่าง) ไม่ล้างอีกต่อไป — ไว้ให้
+                                # staff กด "🗑️ ล้างรายการกล่องทั้งหมด" เองตอนจะเริ่มบิล/ที่อยู่ใหม่จริงๆ
+                                st.success("✅ บันทึกประวัติการส่งแล้ว — ดูได้ที่แท็บ 🚚 ประวัติการส่ง "
+                                           "(รายการกล่อง/ที่อยู่ยังอยู่ — พิมพ์ใบปะหน้ากล่องแบบใหญ่ต่อได้เลย "
+                                           "หรือกด 🗑️ ล้างรายการกล่องทั้งหมด ถ้าจะเริ่มบิลใหม่)")
 
                         # ── ใบปะหน้ากล่อง (แบบใหญ่ — แปะหน้ากล่องสินค้า) ──────
                         # ขนส่ง Inter ต้องใช้ใบปะหน้า 2 แบบ: แบบละเอียด (ด้านบน,
