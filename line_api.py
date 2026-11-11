@@ -313,5 +313,9 @@ def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
     if total_remaining > 0:
         lines.append(f"📦 รวมค้างรับ: {total_remaining:,} ชิ้น")
     if unbilled_pv > 0.01:
-        lines.append(f"⭐ คะแนนรอเปิดบิล: {unbilled_pv:,.0f} PV")
+        # ระบุคำว่า "ยังไม่เปิดบิล" ตรงๆ ในบรรทัดนี้ (ไม่ใช่แค่ตัวเลข PV เฉยๆ) ตามคำขอ user
+        # 2026-11-11 ("ให้มีสถานะ ยังไม่เปิดบิล กี่คะแนน") — จำเป็นเพราะบรรทัด "สถานะ: {pay_status}"
+        # ด้านบนถูกข้ามไปเลยเมื่อมี paid_amount/outstanding_amount (โชว์ ✅ จ่ายแล้ว/⏳ ค้างจ่าย
+        # แทน) ลูกค้าจะไม่เห็นคำว่า "ยังไม่เปิดบิล" ที่ไหนเลยถ้าไม่พูดซ้ำตรงนี้
+        lines.append(f"🧾 สถานะบิล: ยังไม่เปิดบิล — ⭐ รอคะแนน {unbilled_pv:,.0f} PV")
     return _push(line_user_id, "\n".join(lines), group_id)
