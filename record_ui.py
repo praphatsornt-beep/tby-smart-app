@@ -1048,6 +1048,7 @@ def render(tab1, products, customers, customer_map):
                             "total_pv":    total_pv,
                             "bill_status": m_bill,
                             "pay_status":  actual_pay,
+                            "receive_now": receive_now,
                             "old_items":   _rx_old_items,
                             "old_total":   _rx_total_pay,
                             "grand_total": total_amt + _rx_total_pay,
@@ -1142,9 +1143,12 @@ def render(tab1, products, customers, customer_map):
                                        disabled=not bool(_popup_line_uid or _popup_gid),
                                        width="stretch",
                                        help="ส่งสรุปบิลให้ลูกค้าใน LINE" if (_popup_line_uid or _popup_gid) else "ลูกค้าไม่มี LINE ID"):
-                            _line_items = [{"name": f"{it['product_id']} {it['name']}", "qty": it["qty"], "total": it["total"]}
+                            _new_remaining_qty = 0 if _pd.get("receive_now") else None  # ไม่ received_now → ค้างรับเต็มจำนวน
+                            _line_items = [{"name": f"{it['product_id']} {it['name']}", "qty": it["qty"], "total": it["total"],
+                                            "remaining": it["qty"] if _new_remaining_qty is None else 0}
                                            for it in _pd.get("items", [])]
-                            _line_items += [{"name": f"{it['product_id']} {it['name']} (เก่า)", "qty": it["qty"], "total": it["amount"]}
+                            _line_items += [{"name": f"{it['product_id']} {it['name']} (เก่า)", "qty": it["qty"], "total": it["amount"],
+                                             "remaining": 0}
                                             for it in _old_items]
                             _pb_total = _pd["total_amt"] + _old_total
                             _pb_paid  = _pb_total if _pd["pay_status"] in ("จ่ายแล้ว", "COD จ่ายแล้ว") else 0.0
