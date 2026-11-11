@@ -1153,6 +1153,7 @@ def render(tab1, products, customers, customer_map):
                                 _line_items, _pb_total, _pd["pay_status"],
                                 paid_amount=_pb_paid, outstanding_amount=_pb_total - _pb_paid,
                                 group_id=_popup_gid,
+                                unbilled_pv=_pd["total_pv"] if _pd["bill_status"] == "ยังไม่เปิดบิล" else 0,
                             )
                             if _res["ok"]:
                                 st.toast("✅ ส่ง LINE แล้ว")

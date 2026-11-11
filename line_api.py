@@ -283,11 +283,18 @@ def push_text(line_user_id: str, text: str, group_id: str = "") -> dict:
 def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
                       items: list, total_amount: float, pay_status: str,
                       paid_amount: float = None, outstanding_amount: float = None,
-                      group_id: str = "") -> dict:
+                      group_id: str = "", unbilled_pv: float = 0) -> dict:
     """ส่งสรุปบิลให้ลูกค้าใน LINE — items[i]["remaining"] (ถ้ามี) คือจำนวนที่ยัง
     ไม่ได้รับจริงต่อรายการ (ค้างรับ) แยกจาก qty (จำนวนที่สั่งทั้งหมด) ใส่ต่อท้ายบรรทัด
     เมื่อ > 0 ไม่งั้นข้อความนี้จะดูเหมือนบิลปิดครบแล้วทั้งที่ยังมีของค้างส่งมอบอยู่
-    (user report 2026-11-08: ใช้ตอนลูกค้ามารับของเก่า แต่สรุปไม่บอกว่าค้างรับเท่าไหร่)"""
+    (user report 2026-11-08: ใช้ตอนลูกค้ามารับของเก่า แต่สรุปไม่บอกว่าค้างรับเท่าไหร่)
+
+    unbilled_pv (เพิ่ม 2026-11-11 ตามคำขอ "สรุปบิลให้ลูกค้า ถ้ายังไม่ได้เปิดบิล ให้สรุป PV
+    ในไลน์ที่ส่งให้ลูกค้าด้วย") — PV ของบิลนี้เฉพาะตอนบิลยังไม่เปิด (คะแนนยังไม่ถูกนับ)
+    ผู้เรียกเป็นคนตัดสินใจว่าจะส่งค่าอะไรมา (0 เมื่อบิลเปิดแล้ว ไม่ต้องบอกซ้ำว่า PV รออยู่
+    ทั้งที่นับไปแล้วจริง) — ฟังก์ชันนี้แค่โชว์ถ้า > 0 เท่านั้น ไม่ได้ไปเช็ค pay_status/bill
+    status เองจากพารามิเตอร์อื่น เพราะ pay_status ในบางจุดที่เรียกจริงถูกส่งเป็นสถานะบิล
+    ไม่ใช่สถานะจ่าย (ไม่คงที่พอจะเช็คในนี้) — ให้ผู้เรียกกรองมาเองแทน"""
     lines = [f"📋 สรุปบิล {bill_no}", f"คุณ {customer_name}", ""]
     total_remaining = 0
     for it in items[:10]:
@@ -305,4 +312,6 @@ def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
         lines.append(f"สถานะ: {pay_status}")
     if total_remaining > 0:
         lines.append(f"📦 รวมค้างรับ: {total_remaining:,} ชิ้น")
+    if unbilled_pv > 0.01:
+        lines.append(f"⭐ คะแนนรอเปิดบิล: {unbilled_pv:,.0f} PV")
     return _push(line_user_id, "\n".join(lines), group_id)

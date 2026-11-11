@@ -682,7 +682,7 @@ pre{{white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:14
                         _bl_luid, cust["name"], _bl_bill_label,
                         _bl_items, _bl_total, _bv["bill_status"],
                         paid_amount=_bl_paid, outstanding_amount=_b_owed,
-                        group_id=_bl_gid,
+                        group_id=_bl_gid, unbilled_pv=_pv_unbilled,
                     )
                     if _bl_res.get("ok"):
                         st.success("✅ ส่ง LINE แล้ว")

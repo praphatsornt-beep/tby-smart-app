@@ -1252,6 +1252,7 @@ def _render_bill_panel(sel_p, cust_map_p, all_txn_cache, customers_p, key_prefix
             _t7_items, total_amount, _t7_pay,
             paid_amount=total_paid, outstanding_amount=total_outstanding,
             group_id=_t7_gid,
+            unbilled_pv=unbilled_pv if _t7_pay == "ยังไม่เปิดบิล" else 0,
         )
         if _r7["ok"]:
             st.success("✅ ส่ง LINE แล้ว")
