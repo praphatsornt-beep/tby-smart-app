@@ -317,5 +317,6 @@ def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
         # 2026-11-11 ("ให้มีสถานะ ยังไม่เปิดบิล กี่คะแนน") — จำเป็นเพราะบรรทัด "สถานะ: {pay_status}"
         # ด้านบนถูกข้ามไปเลยเมื่อมี paid_amount/outstanding_amount (โชว์ ✅ จ่ายแล้ว/⏳ ค้างจ่าย
         # แทน) ลูกค้าจะไม่เห็นคำว่า "ยังไม่เปิดบิล" ที่ไหนเลยถ้าไม่พูดซ้ำตรงนี้
-        lines.append(f"🧾 สถานะบิล: ยังไม่เปิดบิล — ⭐ รอคะแนน {unbilled_pv:,.0f} PV")
+        lines.append("🧾 สถานะบิล: ยังไม่เปิดบิล")
+        lines.append(f"⭐ คะแนน {unbilled_pv:,.0f} PV")
     return _push(line_user_id, "\n".join(lines), group_id)
