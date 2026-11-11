@@ -306,7 +306,10 @@ def push_bill_summary(line_user_id: str, customer_name: str, bill_no: str,
         lines.append(line)
     lines += ["", f"💰 รวม: {total_amount:,.0f} บาท"]
     if paid_amount is not None and outstanding_amount is not None and outstanding_amount > 0.01:
-        lines.append(f"✅ จ่ายแล้ว: {paid_amount:,.0f} บาท")
+        # ข้าม "✅ จ่ายแล้ว: 0 บาท" ถ้ายังไม่ได้จ่ายอะไรเลย — user แจ้ง 2026-11-11 ว่าลูกค้า
+        # งง เห็นเครื่องหมายถูก ✅ คู่กับ "จ่ายแล้ว" ทั้งที่ยอดเป็น 0 ดูเหมือนยืนยันว่าจ่ายแล้ว
+        if paid_amount > 0.01:
+            lines.append(f"✅ จ่ายแล้ว: {paid_amount:,.0f} บาท")
         lines.append(f"⏳ ค้างจ่าย: {outstanding_amount:,.0f} บาท")
     else:
         lines.append(f"สถานะ: {pay_status}")
