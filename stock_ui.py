@@ -1,4 +1,5 @@
 """UI สำหรับแท็บ 📦 สต๊อก — แยกจาก app.py"""
+import time
 import uuid
 
 import streamlit as st
@@ -7,9 +8,88 @@ from datetime import date
 
 import database as db
 import stock_import
+import pack_scan_ui
+
+# กันล็อกรหัสเดิมซ้ำทันทีหลังเพิ่งบันทึกไป — บาร์โค้ดอาจยังค้างอยู่ในเฟรมกล้องต่ออีกไม่กี่
+# วินาทีกว่าจะขยับสินค้า/กล้องออก (เหตุผลเดียวกับ _PACK_SAVE_COOLDOWN_SEC ใน pack_scan_ui.py)
+_STOCKSCAN_COOLDOWN_SEC = 5
 
 
 _T6_TABS = ["📦 สต๊อก", "🔑 ค้างคีย์", "📋 ของฝาก"]
+
+
+def _render_barcode_scan_count(products: list[dict]) -> None:
+    """สแกนบาร์โค้ดบนตัวสินค้า (สติ๊กเกอร์บริษัท เช่น "TU 3312" ใต้บาร์โค้ด) แล้วกรอกจำนวนที่
+    นับได้บันทึกทันที — เพิ่ม 2026-11-11 ตามคำขอ (ดู stock_count_barcode_scan_plan.md memory
+    ที่วางแผนไว้ก่อนหน้านี้) รหัสที่สแกนได้ต้องตรง (เทียบแบบ strip+ตัดช่องว่าง+upper) กับ
+    "รหัส" สินค้า (products.id) ตรงๆ — ยืนยันจากรูปตัวอย่างสติ๊กเกอร์จริงที่ user ส่งมาว่า
+    ใช้รหัสเดียวกับที่พิมพ์กำกับไว้ใต้บาร์โค้ดเป๊ะ (เช่น "TU 3312" → TU3312) ไม่ได้ใช้บาร์โค้ด
+    มาตรฐานของผู้ผลิต ไม่ต้องมี mapping table แยก
+
+    บวกสะสม ไม่ทับ (ใช้ db.add_stock_count_physical) — รองรับสินค้าตัวเดียวกันวางไว้หลายจุด
+    สแกนนับซ้ำรหัสเดิมได้ในวันเดียวกัน (user ขอ "อาจจะกรอกซ้ำรหัสเดิมได้ในวันเดียวกัน เพราะว่า
+    บางสินค้า วางไว้ 2 จุด") ทุกครั้งที่บันทึกจะบวกเข้ากับยอดของวันนี้ ไม่เขียนทับ
+
+    ล็อกรหัสที่สแกนเจอไว้รอกรอกจำนวน+กดยืนยัน (ไม่ auto-save เหมือน 📷 แพคของ เพราะต้อง
+    ถามจำนวนจากคนก่อนเสมอ) — ระหว่างล็อกอยู่ ไม่รับโค้ดใหม่จากกล้อง กันคนละจุดสลับกันระหว่าง
+    กรอกจำนวนค้างอยู่ หลังบันทึก/ยกเลิกจะมี cooldown สั้นๆ กันรหัสเดิมที่ยังค้างในเฟรมล็อกซ้ำ
+    ทันที (เหมือน _PACK_SAVE_COOLDOWN_SEC ใน pack_scan_ui.py)"""
+    _prod_by_code = {p["id"].strip().upper(): p for p in products}
+
+    with st.expander("📷 สแกนบาร์โค้ดนับสต๊อก", expanded=False):
+        st.caption(
+            "ส่องกล้องไปที่บาร์โค้ดบนตัวสินค้า อ่านต่อเนื่องอัตโนมัติ — สแกนรหัสเดิมซ้ำได้ใน"
+            "วันเดียวกัน (เช่น สินค้าวางไว้ 2 จุด) จำนวนจะบวกสะสมกัน ไม่ทับของเดิม"
+        )
+        _locked = st.session_state.get("_stockscan_locked_code")
+
+        if _locked:
+            _prod = _prod_by_code.get(_locked)
+            if not _prod:
+                st.error(f"❌ ไม่พบสินค้ารหัส **{_locked}** ในระบบ")
+                if st.button("✕ ปิด", key="_stockscan_unknown_close"):
+                    st.session_state.pop("_stockscan_locked_code", None)
+                    st.session_state["_stockscan_last_code"] = _locked
+                    st.session_state["_stockscan_last_at"] = time.monotonic()
+                    st.rerun()
+            else:
+                st.success(f"📦 {_prod['id']} — {_prod['name']}")
+                _qc1, _qc2, _qc3 = st.columns([2, 1, 1])
+                _qty = _qc1.number_input(
+                    "จำนวนที่นับได้ตรงนี้", min_value=1, step=1, value=1,
+                    key=f"_stockscan_qty_{_locked}",
+                )
+                if _qc2.button("➕ บันทึก", key="_stockscan_confirm", type="primary", width="stretch"):
+                    _new_total = db.add_stock_count_physical(_prod["id"], str(date.today()), int(_qty))
+                    st.toast(f"✅ {_prod['name']}: +{int(_qty)} (รวมวันนี้ {_new_total} ชิ้น)")
+                    st.session_state.pop("_stockscan_locked_code", None)
+                    st.session_state["_stockscan_last_code"] = _locked
+                    st.session_state["_stockscan_last_at"] = time.monotonic()
+                    st.rerun()
+                if _qc3.button("✕ ยกเลิก", key="_stockscan_cancel", width="stretch"):
+                    st.session_state.pop("_stockscan_locked_code", None)
+                    st.session_state["_stockscan_last_code"] = _locked
+                    st.session_state["_stockscan_last_at"] = time.monotonic()
+                    st.rerun()
+            st.divider()
+
+        try:
+            result = pack_scan_ui._qr_scanner(key="_stockscan_qr_scanner")
+        except Exception as e:
+            st.error(f"❌ โหลดกล้องไม่สำเร็จ: {e}")
+            return
+
+        if not _locked and result and result.get("code") and result.get("ts") != st.session_state.get("_stockscan_qr_last_ts"):
+            st.session_state["_stockscan_qr_last_ts"] = result["ts"]
+            _code = result["code"].strip().upper().replace(" ", "")
+            _last_code = st.session_state.get("_stockscan_last_code")
+            _last_at = st.session_state.get("_stockscan_last_at", 0.0)
+            if not (_code == _last_code and (time.monotonic() - _last_at) < _STOCKSCAN_COOLDOWN_SEC):
+                st.session_state["_stockscan_locked_code"] = _code
+                st.rerun()
+
+        if not _locked:
+            st.caption("👀 กำลังหาบาร์โค้ด...")
 
 
 def render():
@@ -77,6 +157,8 @@ def render():
 
     elif _t6_active == "📦 สต๊อก":
         st.subheader("สรุปสต๊อก")
+
+        _render_barcode_scan_count(db.get_products())
 
         with st.expander("📥 นำเข้า \"คอม\" จากรายงานบริษัท (.xls)"):
             st.caption(

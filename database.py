@@ -1234,6 +1234,40 @@ def insert_stock_count(data: dict) -> None:
     get_latest_stock_counts.clear()
 
 
+def add_stock_count_physical(product_id: str, count_date: str, qty_delta: int) -> int:
+    """บวกสะสม "นับจริง" ของสินค้าหนึ่งตัวในวันนี้ (ไม่ทับ) — ใช้กับสแกนบาร์โค้ดนับสต๊อก
+    ที่สินค้าตัวเดียวกันอาจวางไว้หลายจุด สแกนนับซ้ำรหัสเดิมได้ในวันเดียวกัน จำนวนจะบวก
+    สะสมกัน (user ขอ 2026-11-11: "อาจจะกรอกซ้ำรหัสเดิมได้ในวันเดียวกัน เพราะว่าบางสินค้า
+    วางไว้ 2 จุด") ต่างจาก upsert_stock_count/_batch ที่ทับค่าเก่าทั้งแถวเสมอ (ใช้กับฟอร์ม
+    นับทั้งหมดทีเดียวตอนจบวัน)
+
+    ถ้ายังไม่มีแถวของ count_date นี้เลย (ยังไม่เคยสแกน/บันทึกอะไรวันนี้มาก่อน) จะเริ่มนับ
+    "นับจริง" ใหม่จาก 0 (ไม่ใช่สืบทอดจากวันก่อนหน้า — ถือเป็นการนับจริงรอบใหม่) แต่ "คอม"
+    (qty_system) ยังสืบทอดจากแถวล่าสุดเท่าที่มี (เหมือน parsing คอมจากไฟล์บริษัทที่อื่นทำ) —
+    ถ้ามีแถวของวันนี้อยู่แล้ว (สแกนซ้ำรหัสเดิมในวันเดียวกัน) จะบวกเข้ากับนับจริงของวันนี้ตรงๆ
+    ไม่แตะคอมที่มีอยู่แล้ว คืนค่านับจริงใหม่หลังบวกแล้ว"""
+    db = get_supabase()
+    _today_rows = _retry(lambda: db.table("stock_counts").select("*")
+                          .eq("product_id", product_id).eq("count_date", count_date)
+                          .execute()).data
+    if _today_rows:
+        cur_phys = int(_today_rows[0].get("qty_physical") or 0)
+        cur_sys = int(_today_rows[0].get("qty_system") or 0)
+    else:
+        cur_phys = 0
+        cur_sys = int(get_latest_stock_counts().get(product_id, {}).get("qty_system", 0) or 0)
+    new_phys = cur_phys + int(qty_delta)
+    data = {
+        "id": str(uuid.uuid4()), "product_id": product_id, "count_date": count_date,
+        "qty_system": cur_sys, "qty_physical": new_phys, "notes": "สแกนบาร์โค้ด",
+    }
+    _retry(lambda: db.table("stock_counts").delete()
+           .eq("product_id", product_id).eq("count_date", count_date).execute())
+    _retry(lambda: db.table("stock_counts").insert(data).execute())
+    get_latest_stock_counts.clear()
+    return new_phys
+
+
 @st.cache_data(ttl=120)
 def get_stock_deposits() -> list[dict]:
     return get_supabase().table("stock_deposits").select("*, products(name)").eq("is_returned", False).execute().data
